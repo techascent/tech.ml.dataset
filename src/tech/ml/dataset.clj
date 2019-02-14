@@ -395,7 +395,7 @@ the correct type."
                                                 (first nonzero-entries) (keys inverse-map))
                                         {:entry-label (first nonzero-entries)
                                          :label-map label-map}))))))))
-      (let [column-values (-> (columns dataset src-column)
+      (let [column-values (-> (column dataset src-column)
                               ds-col/column-values)
             inverse-map (c-set/map-invert label-map)]
         (->> column-values

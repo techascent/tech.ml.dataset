@@ -109,9 +109,9 @@
 (def-etl-operator
   replace-missing
 
-  {:missing-value (double (math-ops/eval-expr {:dataset dataset
-                                               :column-name column-name}
-                                              (first op-args)))}
+  {:missing-value (math-ops/eval-expr {:dataset dataset
+                                       :column-name column-name}
+                                      (first op-args))}
 
   (ds/update-column
    dataset column-name

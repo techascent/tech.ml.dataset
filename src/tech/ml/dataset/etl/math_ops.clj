@@ -123,6 +123,8 @@
     math-expr
     (number? math-expr)
     math-expr
+    (boolean? math-expr)
+    math-expr
     (sequential? math-expr)
     (let [fn-name (first math-expr)
           ;;Force errors early
