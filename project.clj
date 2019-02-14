@@ -1,6 +1,6 @@
-(defproject techascent/tech.ml.dataset "0.1-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+(defproject techascent/tech.ml.dataset "0.1"
+  :description "Dataset and ETL pipeline for machine learning"
+  :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
