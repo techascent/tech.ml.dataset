@@ -360,6 +360,56 @@ the correct type."
     :classification))
 
 
+(defn- is-one-hot-label-map?
+  [label-map]
+  (let [[col-val col-entry] (first label-map)]
+    (not (number? col-entry))))
+
+
+(defn column-values->categorical
+  [dataset src-column {:keys [label-map] :as options}]
+  (if-let [label-map (get label-map src-column)]
+    (if (is-one-hot-label-map? label-map)
+      (let [inverse-map (c-set/map-invert label-map)
+            colname-seq (->> inverse-map
+                             keys
+                             (map first)
+                             distinct)]
+        (->> (select dataset colname-seq :all)
+             index-value-seq
+             (map (fn [[col-idx col-values]]
+                    (let [nonzero-entries
+                          (->> (map (fn [col-name col-val]
+                                      (when-not (= 0 (long col-val))
+                                        [col-name (long col-val)]))
+                                    colname-seq col-values)
+                               (remove nil?))]
+                      (when-not (= 1 (count nonzero-entries))
+                        (throw (ex-info (format "Multiple (or zero) nonzero entries detected at index %s: %s"
+                                                col-idx nonzero-entries)
+                                        {:column-name src-column
+                                         :label-map label-map})))
+                      (if-let [colval (get inverse-map (first nonzero-entries))]
+                        colval
+                        (throw (ex-info (format "Failed to find column entry %s: %s"
+                                                (first nonzero-entries) (keys inverse-map))
+                                        {:entry-label (first nonzero-entries)
+                                         :label-map label-map}))))))))
+      (let [column-values (-> (columns dataset src-column)
+                              ds-col/column-values)
+            inverse-map (c-set/map-invert label-map)]
+        (->> column-values
+             (mapv (fn [col-val]
+                     (if-let [col-label (get inverse-map (long col-val))]
+                       col-label
+                       (throw (ex-info (format "Failed to find label for column value %s" col-val)
+                                       {:inverse-label-map inverse-map}))))))))
+    (throw (ex-info (format "Failed to find column %s in label map %s"
+                            src-column (keys label-map))
+                    {:column-name src-column
+                     :label-map label-map}))))
+
+
 (defn labels
   "Given a dataset and an options map, generate a sequence of labels.
   If label count is 1, then if there is a label-map associated with column
@@ -369,17 +419,10 @@ the correct type."
     (throw (ex-info "No label columns indicated" {})))
   (if-let [label-column (when (= (count label-columns) 1)
                           (first label-columns))]
-    (let [column-values (-> (column dataset label-column)
-                            ds-col/column-values)]
-      (if-let [label-map (get label-map label-column)]
-        (let [inverse-map (c-set/map-invert label-map)]
-          (->> column-values
-               (mapv (fn [col-val]
-                       (if-let [col-label (get inverse-map (long col-val))]
-                         col-label
-                         (throw (ex-info (format "Failed to find label for column value %s" col-val)
-                                         {:inverse-label-map inverse-map})))))))
-        column-values))
+    (if (contains? label-map label-column)
+      (column-values->categorical dataset label-column options)
+      (-> (column dataset label-column)
+          ds-col/column-values))
     (->> (->row-major dataset {:labels label-columns} options)
          (map :labels))))
 
