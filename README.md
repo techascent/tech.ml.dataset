@@ -1,5 +1,9 @@
 # tech.ml.dataset
 
+
+[![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
+
+
 Dataset and ETL pipeline for machine learning.
 
 
