@@ -1,0 +1,12 @@
+language: clojure
+lein: 2.8.1
+
+addons:
+  apt:
+    packages:
+    - libopenblas-dev
+    - liblapack3
+
+
+before_script:
+ - ./scripts/get-data.sh
