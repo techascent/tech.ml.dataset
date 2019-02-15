@@ -17,9 +17,7 @@
   (:refer-clojure :exclude [remove])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
-            PETLMultipleColumnOperator]
-           [smile.clustering KMeans PartitionClustering]
-           [smile.imputation KMeansImputation]))
+            PETLMultipleColumnOperator]))
 
 
 (defonce ^:dynamic *etl-operator-registry* (atom {}))
@@ -439,7 +437,8 @@
               context-map-seq (map #(get context %) column-name-seq)
               min-values (ct/->tensor (mapv :min context-map-seq) :datatype etl-dtype)
               max-values (ct/->tensor (mapv :max context-map-seq) :datatype etl-dtype)
-              col-ranges (ct/binary-op! (ct/clone min-values) 1.0 max-values 1.0 min-values :-)
+              col-ranges (ct/binary-op! (ct/clone min-values) 1.0 max-values
+                                        1.0 min-values :-)
               [range-min range-max] (if (seq op-args)
                                       (first op-args)
                                       [-1 1])
@@ -447,7 +446,8 @@
               range-max (double range-max)
               target-range (- range-max
                               range-min)
-              divisor (ct/binary-op! (ct/clone col-ranges) 1.0 col-ranges 1.0 target-range :/)]
+              divisor (ct/binary-op! (ct/clone col-ranges) 1.0 col-ranges
+                                     1.0 target-range :/)]
           (sub-divide-bias dataset column-name-seq min-values divisor range-min))
         ;;No columns, noop.
         dataset))))
@@ -491,7 +491,8 @@
                            (ct/->tensor (mapv :mean context-map-seq) :datatype etl-dtype)
                            0)
              std-values (if use-std?
-                          (ct/->tensor (mapv :standard-deviation context-map-seq) :datatype etl-dtype)
+                          (ct/->tensor (mapv :standard-deviation context-map-seq)
+                                       :datatype etl-dtype)
                           1.0)]
          (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
        ;;no columns, noop
@@ -512,11 +513,20 @@
                          (ds/k-means dataset
                                      (:k argmap)
                                      (:max-iterations argmap)
+                                     false))
+         :g-means (assoc argmap :row-major-centroids
+                         (ds/g-means dataset
+                                     (:max-k argmap)
+                                     false))
+         :x-means (assoc argmap :row-major-centroids
+                         (ds/x-means dataset
+                                     (:max-k argmap)
                                      false)))))
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
      (let [columns-with-missing (->> column-name-seq
-                                     ;;For the columns that actually have something missing that we care about...
+                                     ;;For the columns that actually have something
+                                     ;;missing that we care about...
                                      (filter #(> (count (ds-col/missing
                                                          (ds/column dataset %)))
                                                  0)))]
@@ -531,5 +541,6 @@
            (->> columns-with-missing
                 (reduce (fn [dataset colname]
                           (ds/update-column dataset colname
-                                            (constantly (ds/column imputed-dataset colname))))
+                                            (constantly (ds/column imputed-dataset
+                                                                   colname))))
                         dataset))))))))

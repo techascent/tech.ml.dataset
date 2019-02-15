@@ -13,7 +13,7 @@
             [clojure.core.matrix :as m]
             [clojure.core.matrix.macros :refer [c-for]]
             [clojure.set :as c-set])
-  (:import [smile.clustering KMeans PartitionClustering]))
+  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
 (set! *warn-on-reflection* true)
@@ -502,6 +502,30 @@ the correct type."
   (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
                     (int (or k 5))
                     (int (or max-iterations 100)))
+      (.centroids)))
+
+
+(defn g-means
+  "Nan-aware g-means.
+  Returns array of centroids in row-major array-of-array-of-doubles format."
+  ^"[[D" [dataset & [max-k error-on-missing?]]
+  ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
+  ;;values will throw exceptions and it won't be as efficient as if we build the
+  ;;datastructure with a-priori knowledge
+  (-> (GMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
+               (int (or max-k 5)))
+      (.centroids)))
+
+
+(defn x-means
+  "Nan-aware x-means.
+  Returns array of centroids in row-major array-of-array-of-doubles format."
+  ^"[[D" [dataset & [max-k error-on-missing?]]
+  ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
+  ;;values will throw exceptions and it won't be as efficient as if we build the
+  ;;datastructure with a-priori knowledge
+  (-> (XMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
+               (int (or max-k 5)))
       (.centroids)))
 
 

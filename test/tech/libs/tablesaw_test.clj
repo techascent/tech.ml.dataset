@@ -473,17 +473,19 @@
                 ds/columns
                 (map (fn [col]
                        (when (seq (ds-col/missing col))
-                         (assoc (ds-col/metadata col) :missing (count (ds-col/missing col))))))
+                         (assoc (ds-col/metadata col)
+                                :missing (count (ds-col/missing col))))))
                 (remove nil?)
                 seq)))))
 
 
-(deftest impute-missing
+(deftest impute-missing-k-means
   (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
         largest-missing-column (->> (ds/columns src-dataset)
                                     (sort-by (comp count ds-col/missing) >)
                                     ;;Numeric
-                                    (filter #((set unsigned/datatypes) (dtype/get-datatype %)))
+                                    (filter #((set unsigned/datatypes)
+                                              (dtype/get-datatype %)))
                                     first)
         missing-name (ds-col/column-name largest-missing-column)
         missing-count (count (ds-col/missing largest-missing-column))
@@ -504,6 +506,92 @@
                         stats-vec)
                   0.01))
 
+    ;;Because k-means random initialization, the mean drifts by roughly 0.5 all the time.
+    (is (m/equals [70.886 21.0 313.0]
+                  (mapv (-> (ds/column dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  1))
+
+    (is (m/equals [70.886 21.0 313.0]
+                  (mapv (-> (ds/column infer-dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  1))
+    (is (= 0 (count (ds-col/missing (ds/column dataset missing-name)))))
+    (is (= 0 (count (ds-col/missing (ds/column infer-dataset missing-name)))))))
+
+
+(deftest impute-missing-g-means
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+        largest-missing-column (->> (ds/columns src-dataset)
+                                    (sort-by (comp count ds-col/missing) >)
+                                    ;;Numeric
+                                    (filter #((set unsigned/datatypes)
+                                              (dtype/get-datatype %)))
+                                    first)
+        missing-name (ds-col/column-name largest-missing-column)
+        missing-count (count (ds-col/missing largest-missing-column))
+        src-pipeline '[[remove "Id"]
+                       ;;Replace missing values or just empty csv values with NA
+                       [replace-missing string? "NA"]
+                       [replace-string string? "" "NA"]
+                       [replace-missing boolean? false]
+                       [impute-missing [not target?] {:method :g-means}]]
+        {:keys [pipeline dataset options]} (etl/apply-pipeline src-dataset src-pipeline
+                                                               {:target "SalePrice"})
+        infer-dataset (:dataset (etl/apply-pipeline src-dataset pipeline
+                                                    {:inference? true}))
+        stats-vec [:mean :min :max]]
+    ;;The source stats
+    (is (m/equals [70.049 21.0 313.0]
+                  (mapv (-> (ds/column src-dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  0.01))
+    ;;Because k-means random initialization, the mean drifts by roughly 0.5 all the time.
+    (is (m/equals [70.886 21.0 313.0]
+                  (mapv (-> (ds/column dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  1))
+
+    (is (m/equals [70.886 21.0 313.0]
+                  (mapv (-> (ds/column infer-dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  1))
+    (is (= 0 (count (ds-col/missing (ds/column dataset missing-name)))))
+    (is (= 0 (count (ds-col/missing (ds/column infer-dataset missing-name)))))))
+
+
+(deftest impute-missing-x-means
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+        largest-missing-column (->> (ds/columns src-dataset)
+                                    (sort-by (comp count ds-col/missing) >)
+                                    ;;Numeric
+                                    (filter #((set unsigned/datatypes)
+                                              (dtype/get-datatype %)))
+                                    first)
+        missing-name (ds-col/column-name largest-missing-column)
+        missing-count (count (ds-col/missing largest-missing-column))
+        src-pipeline '[[remove "Id"]
+                       ;;Replace missing values or just empty csv values with NA
+                       [replace-missing string? "NA"]
+                       [replace-string string? "" "NA"]
+                       [replace-missing boolean? false]
+                       [impute-missing [not target?] {:method :x-means}]]
+        {:keys [pipeline dataset options]} (etl/apply-pipeline src-dataset src-pipeline
+                                                               {:target "SalePrice"})
+        infer-dataset (:dataset (etl/apply-pipeline src-dataset pipeline
+                                                    {:inference? true}))
+        stats-vec [:mean :min :max]]
+    ;;The source stats
+    (is (m/equals [70.049 21.0 313.0]
+                  (mapv (-> (ds/column src-dataset missing-name)
+                            (ds-col/stats stats-vec))
+                        stats-vec)
+                  0.01))
     ;;Because k-means random initialization, the mean drifts by roughly 0.5 all the time.
     (is (m/equals [70.886 21.0 313.0]
                   (mapv (-> (ds/column dataset missing-name)
