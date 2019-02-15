@@ -9,11 +9,17 @@
             [tech.ml.utils :as utils]
             [tech.compute.tensor :as ct]
             [tech.compute.tensor.operations :as ct-ops]
-            [clojure.set :as c-set])
+            [clojure.set :as c-set]
+            [clojure.core.matrix.protocols :as mp]
+            [clojure.core.matrix.macros :refer [c-for]]
+            [tech.parallel :as parallel]
+            [clojure.core.matrix :as m])
   (:refer-clojure :exclude [remove])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
-            PETLMultipleColumnOperator]))
+            PETLMultipleColumnOperator]
+           [smile.clustering KMeans PartitionClustering]
+           [smile.imputation KMeansImputation]))
 
 
 (defonce ^:dynamic *etl-operator-registry* (atom {}))
@@ -378,7 +384,7 @@
       (+ bias-val))."
   [dataset column-name-seq sub-val divide-val bias-val]
   (let [src-data (ds/select dataset column-name-seq :all)
-        [src-rows src-cols] (ct/shape src-data)
+        [src-cols src-rows] (ct/shape src-data)
         colseq (ds/columns src-data)
         etl-dtype (etl-datatype)
         ;;Storing data column-major so the row is incremention fast.
@@ -490,3 +496,40 @@
          (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
        ;;no columns, noop
        dataset))))
+
+
+
+(register-etl-operator!
+ :impute-missing
+ (reify PETLMultipleColumnOperator
+   (build-etl-context-columns [op dataset column-name-seq op-args]
+     (let [dataset (ds/select dataset column-name-seq :all)
+           argmap (or (first op-args) {:method :k-means
+                                       :k 5
+                                       :max-iterations 100})]
+       (case (:method argmap)
+         :k-means (assoc argmap :row-major-centroids
+                         (ds/k-means dataset
+                                     (:k argmap)
+                                     (:max-iterations argmap)
+                                     false)))))
+
+   (perform-etl-columns [op dataset column-name-seq op-args context]
+     (let [columns-with-missing (->> column-name-seq
+                                     ;;For the columns that actually have something missing that we care about...
+                                     (filter #(> (count (ds-col/missing
+                                                         (ds/column dataset %)))
+                                                 0)))]
+       ;;Attempt a fast-out.
+       (if-not (seq columns-with-missing)
+         dataset
+         (let [imputed-dataset
+               (case (:method context)
+                 :k-means (ds/impute-missing-by-centroid-averages
+                           (ds/select dataset column-name-seq :all)
+                           (:row-major-centroids context)))]
+           (->> columns-with-missing
+                (reduce (fn [dataset colname]
+                          (ds/update-column dataset colname
+                                            (constantly (ds/column imputed-dataset colname))))
+                        dataset))))))))

@@ -61,6 +61,10 @@ which cannot be simply coerced to the datatype are an error.")
     "Return a new column of this supertype with these values")
   (clone [col]
     "Return a clone of this column.")
+  (to-double-array [col error-on-missing?]
+    "Convert to a java primitive array of a given datatype.  For strings,
+an implicit string->double mapping is expected.  For booleans, true=1 false=0.
+Finally, any missing values should be indicated by a NaN of the expected type.")
   (math-context [col]))
 
 

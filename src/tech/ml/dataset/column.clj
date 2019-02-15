@@ -158,6 +158,14 @@ which cannot be simply coerced to the datatype are an error."
   (col-proto/clone col))
 
 
+(defn to-double-array
+  "Convert to a java primitive array of a given datatype.  For strings,
+  an implicit string->double mapping is expected.  For booleans, true=1 false=0.
+  Finally, any missing values should be indicated by a NaN of the expected type."
+  ^doubles [col & [error-on-missing?]]
+  (col-proto/to-double-array col error-on-missing?))
+
+
 (defn math-context
   "Return an implementation of PColumnMathContext for operating items of this
   column type."

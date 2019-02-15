@@ -95,11 +95,13 @@
 
   mp/PDimensionInfo
   (dimensionality [m] (count (mp/get-shape m)))
+  ;;Shape reflects the fact that we are column major.  Hence n-columns
+  ;;comes before n-rows.
   (get-shape [m]
-    [(if-let [first-col (first (vals colmap))]
+    [(count column-names)
+     (if-let [first-col (first (vals colmap))]
        (mp/element-count first-col)
-       0)
-     (count column-names)])
+       0)])
   (is-scalar? [m] false)
   (is-vector? [m] true)
   (dimension-count [m dimension-number]

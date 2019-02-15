@@ -215,6 +215,14 @@
      metadata
      cache))
 
+  (to-double-array [this error-missing?]
+    (when (and error-missing?
+               (> (.countMissing col) 0))
+      (throw (ex-info (format "Missing values detected: %s - %s"
+                              (col-proto/column-name this)
+                              (.countMissing col)))))
+    (mp/to-double-array col))
+
   (math-context [this]
     (compute-math-context/->ComputeTensorMathContext))
 
@@ -251,7 +259,15 @@
   (->array-copy [src] (primitive/->array-copy col))
 
   mp/PElementCount
-  (element-count [item] (mp/element-count col)))
+  (element-count [item] (mp/element-count col))
+
+  mp/PDoubleArrayOutput
+  (to-double-array [item] (mp/to-double-array col))
+  (as-double-array [item] (mp/as-double-array col))
+
+  mp/PObjectArrayOutput
+  (to-object-array [item] (mp/to-object-array col))
+  (as-object-array [item] (mp/as-object-array col)))
 
 
 ;;Enable this to be used directly as a tensor.  This adds protocols telling the compute

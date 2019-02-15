@@ -89,9 +89,19 @@
                     {:object-type (type col)})))
   (.get ^Field (double-data-field) col))
 
+(defn string-col-cast ^StringColumn [item] item)
+(def string-data-field
+  (memoize
+   (fn []
+     (doto (.getDeclaredField StringColumn "data")
+         (.setAccessible true)))))
 
-
-
+(defn boolean-col-cast ^BooleanColumn [item] item)
+(def boolean-data-field
+  (memoize
+   (fn []
+     (doto (.getDeclaredField BooleanColumn "data")
+         (.setAccessible true)))))
 
 
 (defmacro datatype->column-cast-fn
@@ -101,7 +111,9 @@
     :int32 `(int-col-cast ~item)
     :int64 `(long-col-cast ~item)
     :float32 `(float-col-cast ~item)
-    :float64 `(double-col-cast ~item)))
+    :float64 `(double-col-cast ~item)
+    :string `(string-col-cast ~item)
+    :boolean `(boolean-col-cast ~item)))
 
 
 (defmacro datatype->column-data-cast-fn
@@ -112,7 +124,6 @@
     :int64 `(long-col-data ~item)
     :float32 `(float-col-data ~item)
     :float64 `(double-col-data ~item)))
-
 
 
 (defmacro extend-tablesaw-type
@@ -174,7 +185,15 @@
 
      mp/PElementCount
      {:element-count (fn [item#]
-                       (.size (datatype->column-cast-fn ~datatype item#)))}))
+                       (.size (datatype->column-cast-fn ~datatype item#)))}
+
+     mp/PDoubleArrayOutput
+     {:to-double-array (fn [item#] (.asDoubleArray (datatype->column-cast-fn ~datatype item#)))
+      :as-double-array (fn [item#] (when (= ~datatype :float64) (primitive/->array item#)))}
+
+     mp/PObjectArrayOutput
+     {:to-object-array (fn [item#] (.asObjectArray (datatype->column-cast-fn ~datatype item#)))
+      :as-object-array (fn [item#] nil)}))
 
 
 (extend-tablesaw-type ShortColumn :int16)
@@ -217,7 +236,15 @@
 
      mp/PElementCount
      {:element-count (fn [item#]
-                       (.size ^Column item#))}))
+                       (.size ^Column item#))}
+
+     mp/PDoubleArrayOutput
+     {:to-double-array (fn [item#] (.asDoubleArray (datatype->column-cast-fn ~datatype item#)))
+      :as-double-array (fn [item#] (when (= ~datatype :float64) (primitive/->array item#)))}
+
+     mp/PObjectArrayOutput
+     {:to-object-array (fn [item#] (.asObjectArray (datatype->column-cast-fn ~datatype item#)))
+      :as-object-array (fn [item#] nil)}))
 
 (extend-non-numeric-tablesaw-column StringColumn :string str)
 (extend-non-numeric-tablesaw-column BooleanColumn :boolean #(boolean %))
