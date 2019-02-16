@@ -42,6 +42,23 @@
   [dataset]
   (ds-proto/columns dataset))
 
+
+(defn columns-with-missing-seq
+  "Return a sequence of:
+  {:column-name column-name
+   :missing-count missing-count
+  }
+  or nil of no columns are missing data."
+  [dataset]
+  (->> (columns dataset)
+       (map (fn [col]
+              (let [missing-count (count (ds-col/missing col))]
+                (when-not (= 0 missing-count)
+                  {:column-name (ds-col/column-name col)
+                   :missing-count missing-count}))))
+       (remove nil?)
+       seq))
+
 (defn add-column
   "Add a new column. Error if name collision"
   [dataset column]
@@ -512,25 +529,34 @@ the correct type."
           (.centroids)))))
 
 
+(defn- ensure-no-missing!
+  [dataset msg-begin]
+  (when-let [cols-miss (columns-with-missing-seq dataset)]
+    (throw (ex-info msg-begin
+                    {:missing-columns cols-miss}))))
+
+
 (defn g-means
-  "Nan-aware g-means.
+  "g-means. Not NAN aware, missing is an error.
   Returns array of centroids in row-major array-of-array-of-doubles format."
   ^"[[D" [dataset & [max-k error-on-missing?]]
   ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
+  (ensure-no-missing! dataset "G-Means - dataset cannot have missing values")
   (-> (GMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
                (int (or max-k 5)))
       (.centroids)))
 
 
 (defn x-means
-  "Nan-aware x-means.
+  "x-means. Not NAN aware, missing is an error.
   Returns array of centroids in row-major array-of-array-of-doubles format."
   ^"[[D" [dataset & [max-k error-on-missing?]]
   ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
+  (ensure-no-missing! dataset "X-Means - dataset cannot have missing values")
   (-> (XMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
                (int (or max-k 5)))
       (.centroids)))
@@ -666,7 +692,8 @@ the correct type."
   [dataset row-major-centroids {:keys [centroid-means global-means]}]
   (let [columns-with-missing (->> (columns dataset)
                                   (map-indexed vector)
-                                  ;;For the columns that actually have something missing that we care about...
+                                  ;;For the columns that actually have something missing
+                                  ;;that we care about...
                                   (filter #(> (count (ds-col/missing (second %)))
                                               0)))]
     (if-not (seq columns-with-missing)
@@ -697,7 +724,9 @@ the correct type."
                                (if (Double/isNaN (aget src-doubles row-idx))
                                  (aset col-doubles row-idx
                                        (double
-                                        (or (non-nan-column-mean centroid-groupings centroid-means row-idx col-idx)
+                                        (or (non-nan-column-mean centroid-groupings
+                                                                 centroid-means
+                                                                 row-idx col-idx)
                                             (aget global-means col-idx))))
                                  (aset col-doubles row-idx (aget src-doubles row-idx))))
                               new-col)))))
