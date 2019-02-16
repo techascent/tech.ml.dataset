@@ -521,6 +521,23 @@
     (is (= 0 (count (ds-col/missing (ds/column infer-dataset missing-name)))))))
 
 
+(defn cause-g-means-error
+  "The root of this is that g/x means are not setup to work with nan values."
+  []
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+        src-pipeline '[[remove "Id"]
+                       ;;Replace missing values or just empty csv values with NA
+                       [replace-missing string? "NA"]
+                       [replace-string string? "" "NA"]
+                       [replace-missing boolean? false]]
+        preprocessed-dataset (-> (etl/apply-pipeline
+                                  src-dataset
+                                  src-pipeline
+                                  {:target "SalePrice"})
+                                 :dataset)]
+    (ds/g-means preprocessed-dataset)))
+
+
 (deftest ^:disabled impute-missing-g-means
   (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
         largest-missing-column (->> (ds/columns src-dataset)

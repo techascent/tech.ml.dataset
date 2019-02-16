@@ -507,21 +507,24 @@
      (let [dataset (ds/select dataset column-name-seq :all)
            argmap (or (first op-args) {:method :k-means
                                        :k 5
-                                       :max-iterations 100})]
-       (case (:method argmap)
-         :k-means (assoc argmap :row-major-centroids
-                         (ds/k-means dataset
-                                     (:k argmap)
-                                     (:max-iterations argmap)
-                                     false))
-         :g-means (assoc argmap :row-major-centroids
-                         (ds/g-means dataset
-                                     (:max-k argmap)
-                                     false))
-         :x-means (assoc argmap :row-major-centroids
-                         (ds/x-means dataset
-                                     (:max-k argmap)
-                                     false)))))
+                                       :max-iterations 100
+                                       :runs 5})
+           ;; compute centroids.
+           row-major-centroids (case (:method argmap)
+                                 :k-means (ds/k-means dataset
+                                                      (:k argmap)
+                                                      (:max-iterations argmap)
+                                                      (:runs argmap)
+                                                      false)
+                                 :g-means (ds/g-means dataset
+                                                      (:max-k argmap)
+                                                      false)
+                                 :x-means (ds/x-means dataset
+                                                      (:max-k argmap)
+                                                      false))]
+       (merge {:row-major-centroids row-major-centroids
+               :method :centroids}
+              (ds/compute-centroid-and-global-means dataset row-major-centroids))))
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
      (let [columns-with-missing (->> column-name-seq
@@ -533,11 +536,11 @@
        ;;Attempt a fast-out.
        (if-not (seq columns-with-missing)
          dataset
-         (let [imputed-dataset
-               (case (:method context)
-                 :k-means (ds/impute-missing-by-centroid-averages
-                           (ds/select dataset column-name-seq :all)
-                           (:row-major-centroids context)))]
+         (let [imputed-dataset (case (:method context)
+                                 :centroids (ds/impute-missing-by-centroid-averages
+                                             (ds/select dataset column-name-seq :all)
+                                             (:row-major-centroids context)
+                                             context))]
            (->> columns-with-missing
                 (reduce (fn [dataset colname]
                           (ds/update-column dataset colname

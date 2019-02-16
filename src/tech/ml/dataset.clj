@@ -495,14 +495,21 @@ the correct type."
 (defn k-means
   "Nan-aware k-means.
   Returns array of centroids in row-major array-of-array-of-doubles format."
-  ^"[[D" [dataset & [k max-iterations error-on-missing?]]
+  ^"[[D" [dataset & [k max-iterations num-runs error-on-missing?]]
   ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
-  (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
-                    (int (or k 5))
-                    (int (or max-iterations 100)))
-      (.centroids)))
+  (let [num-runs (int (or num-runs 1))]
+    (if (= num-runs 1)
+      (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
+                        (int (or k 5))
+                        (int (or max-iterations 100)))
+          (.centroids))
+      (-> (KMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
+                   (int (or k 5))
+                   (int (or max-iterations 100))
+                   (int num-runs))
+          (.centroids)))))
 
 
 (defn g-means
@@ -614,20 +621,41 @@ the correct type."
          (group-by :centroid-idx))))
 
 
+(defn compute-centroid-and-global-means
+  "Return a map of:
+  centroid-means - centroid-index -> (double array) column means.
+  global-means - global means (double array) for the dataset."
+  [dataset ^"[[D" row-major-centroids]
+  {:centroid-means (->> (group-rows-by-nearest-centroid dataset row-major-centroids false)
+                        (map (fn [[centroid-idx grouping]]
+                               [centroid-idx (->> (map :row-data grouping)
+                                                  (into-array (Class/forName "[D"))
+                                                  ;;Make column major
+                                                  transpose-double-array-of-arrays
+                                                  (pmap nan-aware-mean)
+                                                  double-array)]))
+                        (into {}))
+   :global-means (->> (columns dataset)
+                      (pmap (comp nan-aware-mean
+                                  #(ds-col/to-double-array % false)))
+                      double-array)})
+
+
 (defn- non-nan-column-mean
   "Return the column mean, if it exists in the groupings else return nan."
-  [column-mean-groupings row-idx col-idx]
-  (let [applicable-means (->> column-mean-groupings
+  [centroid-groupings centroid-means row-idx col-idx]
+  (let [applicable-means (->> centroid-groupings
                               (filter #(contains? (:row-indexes %) row-idx))
                               seq)]
     (when-not (< (count applicable-means) 2)
       (throw (ex-info "Programmer Error...Multiple applicable means seem to apply"
                       {:applicable-mean-count (count applicable-means)
                        :row-idx row-idx})))
-    (when-let [{:keys [column-means]} (first applicable-means)]
-      (let [col-mean (aget ^doubles column-means (int col-idx))]
-        (when-not (Double/isNaN col-mean)
-          col-mean)))))
+    (when-let [{:keys [centroid-idx]} (first applicable-means)]
+      (when-let [centroid-means (get centroid-means centroid-idx)]
+        (let [col-mean (aget ^doubles centroid-means (int col-idx))]
+          (when-not (Double/isNaN col-mean)
+            col-mean))))))
 
 
 (defn impute-missing-by-centroid-averages
@@ -635,7 +663,7 @@ the correct type."
   mean.  In the case where the grouping for a given centroid contains all NaN's, use the
   global dataset mean.  In the case where this is NaN, this algorithm will fail to
   replace the missing values with meaningful values.  Return a new dataset."
-  [dataset ^"[[D" row-major-centroids]
+  [dataset row-major-centroids {:keys [centroid-means global-means]}]
   (let [columns-with-missing (->> (columns dataset)
                                   (map-indexed vector)
                                   ;;For the columns that actually have something missing that we care about...
@@ -644,23 +672,14 @@ the correct type."
     (if-not (seq columns-with-missing)
       dataset
       (let [;;Partition data based on all possible columns
-            nearest-groupings
+            centroid-groupings
             (->> (group-rows-by-nearest-centroid dataset row-major-centroids false)
                  (mapv (fn [[centroid-idx grouping]]
                          {:centroid-idx centroid-idx
-                          :row-indexes (set (map :row-idx grouping))
-                          :column-means (->> (map :row-data grouping)
-                                             (into-array (Class/forName "[D"))
-                                             ;;Make column major
-                                             transpose-double-array-of-arrays
-                                             (pmap nan-aware-mean)
-                                             double-array)})))
-            ^doubles global-column-means (->> (columns dataset)
-                                              (pmap (comp nan-aware-mean
-                                                          #(ds-col/to-double-array % false)))
-                                              double-array)
+                          :row-indexes (set (map :row-idx grouping))})))
             [n-cols n-rows] (m/shape dataset)
-            n-rows (int n-rows)]
+            n-rows (int n-rows)
+            ^doubles global-means global-means]
         (->> columns-with-missing
              (reduce (fn [dataset [col-idx source-column]]
                        (let [col-idx (int col-idx)]
@@ -678,8 +697,8 @@ the correct type."
                                (if (Double/isNaN (aget src-doubles row-idx))
                                  (aset col-doubles row-idx
                                        (double
-                                        (or (non-nan-column-mean nearest-groupings row-idx col-idx)
-                                            (aget global-column-means col-idx))))
+                                        (or (non-nan-column-mean centroid-groupings centroid-means row-idx col-idx)
+                                            (aget global-means col-idx))))
                                  (aset col-doubles row-idx (aget src-doubles row-idx))))
                               new-col)))))
                      dataset))))))
