@@ -7,4 +7,6 @@
                  [techascent/tech.compute "3.7"]
                  [camel-snake-kebab "0.4.0"]
                  [tech.tablesaw/tablesaw-core "0.30.2"]
-                 [com.github.haifengl/smile-core "1.5.2"]])
+                 [com.github.haifengl/smile-core "1.5.2"]]
+
+  :test-selectors {:default (complement :disabled)})

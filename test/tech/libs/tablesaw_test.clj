@@ -494,8 +494,7 @@
                        [replace-missing string? "NA"]
                        [replace-string string? "" "NA"]
                        [replace-missing boolean? false]
-                       [impute-missing [not target?] {:method :k-means
-                                                      :k 5}]]
+                       [impute-missing [not target?] {:method :k-means}]]
         {:keys [pipeline dataset options]} (etl/apply-pipeline src-dataset src-pipeline {:target "SalePrice"})
         infer-dataset (:dataset (etl/apply-pipeline src-dataset pipeline {:inference? true}))
         stats-vec [:mean :min :max]]
@@ -522,7 +521,7 @@
     (is (= 0 (count (ds-col/missing (ds/column infer-dataset missing-name)))))))
 
 
-(deftest impute-missing-g-means
+(deftest ^:disabled impute-missing-g-means
   (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
         largest-missing-column (->> (ds/columns src-dataset)
                                     (sort-by (comp count ds-col/missing) >)
@@ -565,7 +564,7 @@
     (is (= 0 (count (ds-col/missing (ds/column infer-dataset missing-name)))))))
 
 
-(deftest impute-missing-x-means
+(deftest ^:disabled impute-missing-x-means
   (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
         largest-missing-column (->> (ds/columns src-dataset)
                                     (sort-by (comp count ds-col/missing) >)
