@@ -87,17 +87,19 @@ user> (def pipeline-result (etl/apply-pipeline (mapseq-fruit-dataset)
                                                {:target :fruit-name}))
 #'user/pipeline-result
 user> (:options pipeline-result)
+
+user> (:options pipeline-result)
 {:dataset-column-metadata {:post-pipeline [{:categorical? true,
                                             :datatype :float64,
                                             :name :fruit-name,
                                             :size 59,
                                             :target? true}
-                                           {:datatype :float64, :name :mass, :size 236}
-                                           {:datatype :float64, :name :width, :size 177}
+                                           {:datatype :float64, :name :mass, :size 59}
+                                           {:datatype :float64, :name :width, :size 59}
                                            {:datatype :float64, :name :height, :size 59}
                                            {:datatype :float64,
                                             :name :color-score,
-                                            :size 118}],
+                                            :size 59}],
                            :pre-pipeline [{:datatype :float32,
                                            :name :fruit-label,
                                            :size 59}
