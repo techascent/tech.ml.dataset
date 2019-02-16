@@ -49,3 +49,13 @@
               (reset! next-item-atom (next-item-fn))
               entry)
             (throw (NoSuchElementException.))))))))
+
+
+(defn set-slf4j-log-level
+  "Set the slf4j log level.  Safe to call if slf4j is not in the
+  classpath."
+  [level]
+  (try
+    ((parallel/require-resolve 'tech.ml.utils.slf4j-log-level/set-log-level) level)
+    (catch Throwable e
+      :exception)))
