@@ -379,8 +379,10 @@
   "Perform the operation:
   (-> col
       (- sub-val)
-      (* mult-val)
-      (+ bias-val))."
+      (/ divide-val)
+      (+ bias-val))
+  across the dataset.
+  return a new dataset."
   [dataset column-name-seq sub-val divide-val bias-val]
   (let [src-data (ds/select dataset column-name-seq :all)
         [src-cols src-rows] (ct/shape src-data)
@@ -516,12 +518,6 @@
                                                       (:k argmap)
                                                       (:max-iterations argmap)
                                                       (:runs argmap)
-                                                      false)
-                                 :g-means (ds/g-means dataset
-                                                      (:max-k argmap)
-                                                      false)
-                                 :x-means (ds/x-means dataset
-                                                      (:max-k argmap)
                                                       false))]
        (merge {:row-major-centroids row-major-centroids
                :method :centroids}
