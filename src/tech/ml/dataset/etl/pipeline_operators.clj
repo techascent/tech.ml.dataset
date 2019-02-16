@@ -3,6 +3,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.etl :as etl-proto]
             [tech.datatype :as dtype]
+            [tech.datatype.java-primitive :as primitive]
             [tech.ml.dataset.etl.column-filters :as column-filters]
             [tech.ml.dataset.etl.defaults :refer [etl-datatype]]
             [tech.ml.dataset.etl.math-ops :as math-ops]

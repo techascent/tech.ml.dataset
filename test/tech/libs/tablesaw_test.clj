@@ -331,6 +331,11 @@
                               (map ds-col/column-name)))
         non-categorical (col-filters/execute-column-filter dataset [:not :categorical?])]
 
+    (is (= #{59}
+           (->> (ds/columns dataset)
+                (map m/ecount)
+                set)))
+
     ;;Column names can be keywords.
     (is (= (set (keys (first (mapseq-fruit-dataset))))
            (set (->> (ds/columns src-ds)
