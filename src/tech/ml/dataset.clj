@@ -244,7 +244,7 @@ the correct type."
               :or {randomize-dataset? true}
               :as options}]
   (let [dataset (->dataset dataset options)
-        [n-rows n-cols] (m/shape dataset)
+        [n-cols n-rows] (m/shape dataset)
         indexes (cond-> (range n-rows)
                   randomize-dataset? shuffle)
         fold-size (inc (quot (long n-rows) k))
@@ -261,7 +261,7 @@ the correct type."
                  train-fraction 0.7}
             :as options}]
   (let [dataset (->dataset dataset options)
-        [n-rows n-cols] (m/shape dataset)
+        [n-cols n-rows] (m/shape dataset)
         indexes (cond-> (range n-rows)
                   randomize-dataset? shuffle)
         n-elems (long n-rows)
