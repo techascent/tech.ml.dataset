@@ -7,7 +7,8 @@
             [tech.parallel :as parallel]
             [clojure.core.matrix :as m]
             [clojure.core.matrix.macros :refer [c-for]]
-            [clojure.set :as c-set])
+            [clojure.set :as c-set]
+            [tech.ml.dataset.categorical :as categorical])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -27,10 +28,7 @@
 (defn column
   "Return the column or throw if it doesn't exist."
   [dataset column-name]
-  (if-let [retval (maybe-column dataset column-name)]
-    retval
-    (throw (ex-info (format "Failed to find column: %s" column-name)
-                    {:column-name column-name}))))
+  (ds-proto/column dataset column-name))
 
 (defn columns
   "Return sequence of all columns in dataset."
@@ -72,6 +70,15 @@
   transformation.  Error if column does not exist."
   [dataset col-name update-fn]
   (ds-proto/update-column dataset col-name update-fn))
+
+
+(defn update-columns
+  "Update a sequence of columns."
+  [dataset column-name-seq update-fn]
+  (reduce (fn [dataset colname]
+            (update-column dataset colname update-fn))
+          dataset
+          column-name-seq))
 
 
 (defn add-or-update-column
@@ -256,87 +263,13 @@ the correct type."
     :regression
     :classification))
 
-(defn- is-one-hot-label-map?
-  [label-map]
-  (let [[col-val col-entry] (first label-map)]
-    (not (number? col-entry))))
-
-
-(defn- inverse-map-one-hot-column-values-fn
-  [src-column column-label-map]
-  (let [inverse-map (c-set/map-invert column-label-map)
-        colname-seq (->> inverse-map
-                         keys
-                         (map first)
-                         distinct)]
-    (fn [col-idx col-values]
-      (let [nonzero-entries
-            (->> (map (fn [col-name col-val]
-                        (when-not (= 0 (long col-val))
-                          [col-name (long col-val)]))
-                      colname-seq col-values)
-                 (remove nil?))]
-        (when-not (= 1 (count nonzero-entries))
-          (throw (ex-info
-                  (format "Multiple (or zero) nonzero entries detected:[%s]%s"
-                          col-idx nonzero-entries)
-                  {:column-name src-column
-                   :label-map column-label-map})))
-        (if-let [colval (get inverse-map (first nonzero-entries))]
-          colval
-          (throw (ex-info (format "Failed to find column entry %s: %s"
-                                  (first nonzero-entries)
-                                  (keys inverse-map))
-                          {:entry-label (first nonzero-entries)
-                           :label-map column-label-map})))))))
-
-
-(defn- inverse-map-one-hot-columns
-  [dataset src-column column-label-map]
-  (let [colname-seq (->> column-label-map
-                         vals
-                         (map first)
-                         distinct)]
-    (->> (select dataset colname-seq :all)
-         index-value-seq
-         (map (inverse-map-one-hot-column-values-fn column-label-map)))))
-
-
-(defn- inverse-map-string->number-col-fn
-  [src-column column-label-map]
-  (let [inverse-map (c-set/map-invert column-label-map)]
-    (fn [col-val]
-      (if-let [col-label (get inverse-map (long col-val))]
-        col-label
-        (throw (ex-info
-                (format "Failed to find label for column value %s"
-                        col-val)
-                {:inverse-label-map inverse-map}))))))
-
-
-(defn- inverse-map-string->number-columns
-  [dataset src-column column-label-map]
-  (let [column-values (-> (column dataset src-column)
-                          ds-col/column-values)
-        inverse-map (c-set/map-invert column-label-map)]
-    (->> column-values
-         (mapv (inverse-map-string->number-col-fn src-column column-label-map)))))
-
 
 (defn column-values->categorical
   "Given a column encoded via either string->number or one-hot, reverse
   map to the a sequence of the original string column values."
-  [dataset src-column {:keys [label-map] :as options}]
-  (when-not (contains? label-map src-column)
-    (throw (ex-info (format "Failed to find column %s in label map %s"
-                            src-column (keys label-map))
-                    {:column-name src-column
-                     :label-map label-map})))
-
-  (let [label-map (get label-map src-column)]
-    (if (is-one-hot-label-map? label-map)
-      (inverse-map-one-hot-columns dataset src-column label-map)
-      (inverse-map-string->number-columns dataset src-column label-map))))
+  [dataset src-column options]
+  (categorical/column-values->categorical dataset src-column
+                                          (options->label-map options)))
 
 
 (defn ->flyweight

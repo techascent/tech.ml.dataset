@@ -59,3 +59,29 @@
     ((parallel/require-resolve 'tech.ml.utils.slf4j-log-level/set-log-level) level)
     (catch Throwable e
       :exception)))
+
+
+(defn column-safe-name
+  ^String [item-name]
+  (cond
+    (and (or (keyword? item-name)
+             (symbol? item-name))
+         (namespace item-name))
+    (str (namespace item-name) "/" (name item-name))
+    (boolean? item-name)
+    (if item-name "true" "false")
+    :else
+    (str item-name)))
+
+
+(defn extend-column-name
+  [src-name dst-name]
+  (let [dst-name (if (or (keyword? dst-name)
+                         (symbol? dst-name))
+                   (name dst-name)
+                   (str dst-name))
+        new-name (str (column-safe-name src-name) "-" dst-name)]
+    (cond
+      (keyword? src-name) (keyword new-name)
+      (symbol? src-name) (symbol new-name)
+      :else src-name)))

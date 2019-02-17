@@ -3,7 +3,8 @@
   (:require [tech.datatype.base :as base]
             [tech.datatype.java-primitive :as primitive]
             [clojure.core.matrix.protocols :as mp]
-            [tech.libs.tablesaw.datatype.fastutil :as dtype-fastutil])
+            [tech.libs.tablesaw.datatype.fastutil :as dtype-fastutil]
+            [tech.ml.utils :refer [column-safe-name]])
   (:import [tech.tablesaw.api ShortColumn IntColumn LongColumn
             FloatColumn DoubleColumn StringColumn BooleanColumn]
            [tech.tablesaw.columns Column]
@@ -261,15 +262,6 @@
     elem-count-or-seq
     (.isArray ^Class (type elem-count-or-seq))
     (into-array item-cls (map coerce-fn elem-count-or-seq))))
-
-
-(defn column-safe-name
-  ^String [item-name]
-  (if (and (or (keyword? item-name)
-               (symbol? item-name))
-           (namespace item-name))
-    (str (namespace item-name) "/" (name item-name))
-    (str item-name)))
 
 
 (defn make-column

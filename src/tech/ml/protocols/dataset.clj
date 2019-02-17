@@ -36,3 +36,10 @@ duplicate values.")
     "Create a new dataset that is the same type as this one but with a potentially
 different table name and column sequence.  Take care that the columns are all of
 the correct type."))
+
+(defn column
+  [dataset column-name]
+  (if-let [retval (maybe-column dataset column-name)]
+    retval
+    (throw (ex-info (format "Failed to find column: %s" column-name)
+                    {:column-name column-name}))))

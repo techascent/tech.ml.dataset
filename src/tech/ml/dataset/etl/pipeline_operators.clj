@@ -14,7 +14,8 @@
             [clojure.core.matrix.protocols :as mp]
             [clojure.core.matrix.macros :refer [c-for]]
             [tech.parallel :as parallel]
-            [clojure.core.matrix :as m])
+            [clojure.core.matrix :as m]
+            [tech.ml.dataset.categorical :as categorical])
   (:refer-clojure :exclude [remove])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
@@ -74,12 +75,13 @@
 
 (defmacro def-etl-operator
   [op-symbol op-context-code op-code]
-  `(do (register-etl-operator! ~(keyword (name op-symbol))
-                               (reify PETLSingleColumnOperator
-                                 (build-etl-context [~'op ~'dataset ~'column-name ~'op-args]
-                                   ~op-context-code)
-                                 (perform-etl [~'op ~'dataset ~'column-name ~'op-args ~'context]
-                                   ~op-code)))
+  `(do (register-etl-operator!
+        ~(keyword (name op-symbol))
+        (reify PETLSingleColumnOperator
+          (build-etl-context [~'op ~'dataset ~'column-name ~'op-args]
+            ~op-context-code)
+          (perform-etl [~'op ~'dataset ~'column-name ~'op-args ~'context]
+            ~op-code)))
        (defn ~op-symbol
          [dataset# col-selector# & op-args#]
          (-> (apply-pipeline-operator
@@ -122,33 +124,11 @@
    dataset column-name
    (fn [col]
      (let [missing-indexes (ds-col/missing col)]
-       (let [retval
-             (ds-col/set-values col (map vector
-                                         (seq missing-indexes)
-                                         (repeat (:missing-value context))))]
-         retval)))))
-
-
-(defn- make-string-table-from-args
-  [op-args]
-  (let [used-indexes (->> op-args
-                          (map (fn [item]
-                                 (if (string? item)
-                                   nil
-                                   (second item))))
-                          (clojure.core/remove nil?)
-                          set)]
-    (->> op-args
-         (reduce (fn [[lookup-table used-indexes] item]
-                   (if (string? item)
-                     (let [next-idx (first (clojure.core/remove used-indexes (range)))]
-                       [(assoc lookup-table item next-idx)
-                        (conj used-indexes next-idx)])
-                     (let [[item-name item-idx] item]
-                       [(assoc lookup-table item-name item-idx)
-                        (conj used-indexes item-idx)])))
-                 [{} used-indexes])
-         first)))
+       (if (> (count missing-indexes) 0)
+         (ds-col/set-values col (map vector
+                                     (seq missing-indexes)
+                                     (repeat (:missing-value context))))
+         col)))))
 
 
 (register-etl-operator!
@@ -157,154 +137,27 @@
    (build-etl-context-columns [op dataset column-name-seq op-args]
      ;;Label maps are special and used outside of this context do we have
      ;;treat them separately
-     (let [provided-table (when-let [table-vals (seq (first op-args))]
-                            (make-string-table-from-args table-vals))]
-       {:label-map (->> column-name-seq
-                        (map (fn [column-name]
-                               [column-name (if provided-table
-                                              provided-table
-                                              (make-string-table-from-args (ds-col/unique
-                                                                            (ds/column
-                                                                             dataset column-name))))]))
-                        (into {}))}))
+     {:label-map (categorical/build-categorical-map
+                  dataset column-name-seq (first op-args))})
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
-     (->> column-name-seq
-          (reduce (fn [dataset column-name]
-                    (ds/update-column
-                     dataset column-name
-                     (fn [col]
-                       (let [existing-values (ds-col/column-values col)
-                             str-table (get-in context [:label-map column-name])
-                             new-col-dtype (etl-datatype)
-                             data-values (dtype/make-array-of-type
-                                          new-col-dtype
-                                          (->> existing-values
-                                               (map (fn [item-val]
-                                                      (if-let [lookup-val (get str-table item-val)]
-                                                        lookup-val
-                                                        (throw (ex-info (format "Failed to find lookup for value %s"
-                                                                                item-val)
-                                                                        {:item-value item-val
-                                                                         :possible-values (set (keys str-table))
-                                                                         :column-name column-name}))))))
-                                          {:unchecked? true})
-                             retval (ds-col/new-column col new-col-dtype data-values)]
-                         retval))))
-                  dataset)))))
-
-
-(defn- extend-column-name
-  [src-name dst-name]
-  (let [dst-name (if (keyword dst-name)
-                   (name dst-name)
-                   (str dst-name))]
-    (cond
-      (keyword? src-name)
-      (keyword (str (name src-name) "-" dst-name))
-      :else
-      (str src-name "-" dst-name))))
+     (ds/update-columns dataset column-name-seq
+                        (partial categorical/column-categorical-map
+                                 (:label-map context) (etl-datatype))))))
 
 
 (register-etl-operator!
  :one-hot
  (reify PETLMultipleColumnOperator
    (build-etl-context-columns [op dataset column-name-seq op-args]
-     (let [one-hot-arg (first op-args)]
-       {:label-map
-        (->> column-name-seq
-             (map (fn [colname]
-                    (when-not (= :string (dtype/get-datatype (ds/column dataset colname)))
-                      (throw (ex-info (format "One hot applied to non string column: %s(%s)"
-                                              colname (dtype/get-datatype (ds/column dataset colname)))
-                                      {})))
-                    (let [col-vals (ds-col/unique (ds/column dataset colname))
-                          one-hot-arg (or one-hot-arg (vec col-vals))]
-                      [colname
-                       (cond
-                         (sequential? one-hot-arg)
-                         (->> one-hot-arg
-                              (map (fn [argval]
-                                     [argval [(extend-column-name colname argval) 1]]))
-                              (into {}))
-                         (map? one-hot-arg)
-                         (let [valseq (->> (vals one-hot-arg)
-                                           (mapcat (fn [arglist]
-                                                     (if (keyword? arglist)
-                                                       [arglist]
-                                                       arglist))))
-                               contains-rest? (->> valseq
-                                                   (filter #(= :rest %))
-                                                   first)
-                               stated-vals (->> valseq
-                                                (clojure.core/remove #(= :rest %))
-                                                set)
-                               leftover (c-set/difference col-vals stated-vals)]
-                           (when-not (or (not= (count leftover) 0)
-                                         contains-rest?)
-                             (throw (ex-info (format "Column values not accounted for: %s"
-                                                     (vec leftover))
-                                             {:stated-values stated-vals
-                                              :leftover leftover})))
-                           (->> one-hot-arg
-                                (mapcat (fn [[arg-key argval-seq]]
-                                          (let [argval-seq (->> (if (= :rest argval-seq)
-                                                                  [argval-seq]
-                                                                  argval-seq)
-                                                                (mapcat (fn [argval]
-                                                                          (if (= :rest argval)
-                                                                            (vec leftover)
-                                                                            [argval]))))
-                                                local-colname (extend-column-name colname arg-key)]
-                                            (->> argval-seq
-                                                 (map-indexed (fn [idx argval]
-                                                                [argval [local-colname (inc idx)]]))))))
-                                (into {})))
-                         :else
-                         (throw (ex-info (format "Unrecognized one hot argument: %s"
-                                                 one-hot-arg) {})))])))
-             (into {}))}))
+     {:label-map (categorical/build-one-hot-map
+                  dataset column-name-seq (first op-args))})
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
      (->> column-name-seq
-          (reduce
-           (fn [dataset colname]
-             (let [column (ds/column dataset colname)
-                   dataset (ds/remove-column dataset colname)
-                   context (get-in context [:label-map colname])
-                   col-values (ds-col/column-values column)
-                   etl-dtype (etl-datatype)
-                   new-column-map (->> context
-                                       (map (fn [[argval [new-colname colval]]]
-                                              [new-colname (ds-col/new-column
-                                                            column etl-dtype
-                                                            (dtype/ecount column)
-                                                            (assoc
-                                                             (select-keys (ds-col/metadata column)
-                                                                          [:categorical?
-                                                                           :target?])
-                                                             :name new-colname))]))
-                                       (into {}))]
-               (->> col-values
-                    (map-indexed
-                     (fn [idx col-val]
-                       (if-let [table-entry (get context col-val)]
-                         (let [[new-colname new-colval] table-entry]
-                           (if-let [new-col (get new-column-map new-colname)]
-                             (dtype/set-value! new-col idx new-colval)
-                             (throw (ex-info (format "Failed to find new column: %s" new-colname)
-                                             {:new-columns (keys new-column-map)}))))
-                         (throw (ex-info (format "Failed to find string table value: %s"
-                                                 col-val)
-                                         {:column-value col-val
-                                          :string-table context})))))
-                    dorun)
-               (->> (vals new-column-map)
-                    (reduce #(ds/add-column %1 %2)
-                            dataset))))
-
-           ;;Its confusing but this is the initial argument to the outer reduce
-           dataset)))))
+          (reduce (partial categorical/column-one-hot-map
+                           dataset (:label-map context) (etl-datatype))
+                  dataset)))))
 
 
 (def-etl-operator
@@ -392,13 +245,16 @@
         backing-store (ct/new-tensor [src-cols src-rows]
                                      :datatype etl-dtype
                                      :init-value nil)
-        _ (dtype/copy-raw->item! (->> colseq
-                                      (map (fn [col]
-                                             (when-not (= (int src-rows) (ct/ecount col))
-                                               (throw (ex-info "Column is wrong size; ragged tables not supported." {})))
-                                             (ds-col/column-values col))))
-                                 (ct/tensor->buffer backing-store)
-                                 0 {:unchecked? true})
+        _ (dtype/copy-raw->item!
+           (->> colseq
+                (map
+                 (fn [col]
+                   (when-not (= (int src-rows) (ct/ecount col))
+                     (throw (ex-info "Column is wrong size; ragged table not supported."
+                                     {})))
+                   (ds-col/column-values col))))
+           (ct/tensor->buffer backing-store)
+           0 {:unchecked? true})
 
         backing-store (-> backing-store
                           (ct-ops/- (->row-broadcast sub-val))
@@ -524,23 +380,15 @@
               (ds/compute-centroid-and-global-means dataset row-major-centroids))))
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
-     (let [columns-with-missing (->> column-name-seq
-                                     ;;For the columns that actually have something
-                                     ;;missing that we care about...
-                                     (filter #(> (count (ds-col/missing
-                                                         (ds/column dataset %)))
-                                                 0)))]
+     (let [dataset (ds/select dataset column-name-seq :all)
+           columns-with-missing (ds/columns-with-missing-seq dataset)]
        ;;Attempt a fast-out.
-       (if-not (seq columns-with-missing)
+       (if-not columns-with-missing
          dataset
          (let [imputed-dataset (case (:method context)
                                  :centroids (ds/impute-missing-by-centroid-averages
                                              (ds/select dataset column-name-seq :all)
                                              (:row-major-centroids context)
                                              context))]
-           (->> columns-with-missing
-                (reduce (fn [dataset colname]
-                          (ds/update-column dataset colname
-                                            (constantly (ds/column imputed-dataset
-                                                                   colname))))
-                        dataset))))))))
+           (ds/update-columns dataset columns-with-missing
+                              #(ds/column imputed-dataset %))))))))
