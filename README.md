@@ -180,6 +180,10 @@ The current system is built on top of support for the [tech.datatype](https://gi
 which is described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see the datatype-level bindings
 to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj) and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).
 
+
+Thanks to the integration of datatype, tech.compute, and jna, most operations are
+optimized.  Especially [math and transformations](https://github.com/techascent/tech.ml.dataset/blob/9739d72a81350ae5b8688ee9109290a04586b772/src/tech/ml/dataset/etl/pipeline_operators.clj#L228).
+
 The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the generic table support and as
 such they do not use the actual tablesaw 'table' datatype.
 
