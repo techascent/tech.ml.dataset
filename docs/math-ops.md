@@ -17,12 +17,12 @@ The canonical file for math operations is [math_ops.clj](../src/tech/ml/dataset/
 Unary operators take one double argument and return one double value.
 
 * math - `[log1p ceil floor sqrt abs -]`
-  * log1p (log (+ 1 val))
-  * ceil
-  * floor
-  * sqrt
-  * abs
-  * - (unary negation)
+  * `log1p` (log (+ 1 val))
+  * `ceil`
+  * `floor`
+  * `sqrt`
+  * `abs`
+  * `-` (unary negation)
 
 * stats - `[mean
             variance
