@@ -53,7 +53,7 @@ Binary operators take 2 arguments and return one double value.
 
 ## Extensions
 
-The math subsystem is based on the [tech.compute](https://github.com/techascent/tech.compute] [tensor](https://github.com/techascent/tech.compute/blob/master/docs/tensor.md) library.
+The math subsystem is based on the [tech.compute](https://github.com/techascent/tech.compute) [tensor](https://github.com/techascent/tech.compute/blob/master/docs/tensor.md) library.
 
 
 To add a new operation, you must first determine if the operation is supported by the compute tensor's cpu backend.
