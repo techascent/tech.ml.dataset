@@ -65,8 +65,7 @@ Binary operations are listed [here](https://github.com/techascent/tech.compute/b
 
 ### Adding op to compute.tensor
 
-Adding a new operation that is not supported by the tensor subsystem involves first adding it to the tensor
-subsystem.
+Adding a new operation that is not supported by the tensor subsystem is simple.
 
 You can see an example of adding operations to the compute subsystem [here](https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/ml/dataset/compute_math_context.clj#L10).  Basically you reify/proxy the appropriate interface and
 call the appropriate compute tensor registration function with the keyword name of the operation.
@@ -75,7 +74,7 @@ call the appropriate compute tensor registration function with the keyword name 
 ### Adding op to etl/math-ops
 
 
-Once your new operation is supported by the compute tensor subsystem already, you can
+Once your new operation is supported by the compute tensor subsystem, you can
 add it with math-ops/register-math-op!.
 
 The api of the math op is `(defn new-op [op-env & op-args] ...)`.
