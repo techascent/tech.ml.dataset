@@ -4,7 +4,10 @@
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
 
-Dataset and ETL pipeline for machine learning.
+Dataset and ETL pipeline for machine learning.  Datasets are currently in-memory
+columnwise databases.  The backing store behind tech.ml.dataset is
+[tablesaw](https://github.com/jtablesaw/tablesaw).  Further support is intended in the
+near future for [Apache Arrow](https://github.com/apache/arrow).
 
 
 ## Dataset Pipeline Processing
@@ -147,6 +150,39 @@ user> (clojure.pprint/print-table (->> (dataset/->flyweight (:dataset pipeline-r
 |         0.0 | -0.32867132867132864 | -0.15789482930359944 |  -0.07692307692307687 |  0.7894735686336514 |
 nil
 ```
+
+
+## ETL Language Design
+
+
+The ETL language is current an implicit piping of a list of dataset->dataset transformations.
+
+Each operator involves a column selection and then an operation, thus there are three sub-languages defined:
+
+
+* Column Selection - [column-filters.md](docs/column-filters.md).
+* Math Operations - [math-ops.md](docs/math-ops.md).
+* Pipeline Operators - [pipeline-operators.md](docs/pipeline-operators.md).
+
+
+## Extension
+
+
+There is an extensive protocol hierarchy for supporting different data stores.  You can buy into the hierarchy at
+several levels:
+
+* [dataset](src/tech/ml/protocols/dataset.clj).
+* [column](src/tech/ml/protocols/column.clj) and then use the generic table
+  [implementation](src/ml/tech/dataset/generic_columnar_dataset.clj).
+
+
+The current system is built on top of support for the [tech.datatype](https://github.com/techascent/tech.datatype) subsystem
+which is described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see the datatype-level bindings
+to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj) and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).
+
+The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the generic table support and as
+such they do not use the actual tablesaw 'table' datatype.
+
 
 ## License
 
