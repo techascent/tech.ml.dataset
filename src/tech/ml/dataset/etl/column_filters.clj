@@ -11,6 +11,12 @@
 
 
 (defn register-column-filter!
+  "The column filters namepsace contains an API function, `registing-column-filter!`.
+  The symbol column filter name is converted to a keyword and looked up in a global map.
+
+The filter-function has an api of `(dataset & arguments)` where the arguments are passed
+  after evaluation to the filter function.  The return value is expected to be either a
+  sequence of column names or a set of column names."
   [name-kwd filter-fn]
   (-> (swap! *column-filter-fns* assoc name-kwd filter-fn)
       keys))
