@@ -6,6 +6,7 @@
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.svm :as ds-svm]
+            [tech.ml.dataset.options :as ds-opts]
             [tech.datatype :as dtype]
             [tech.datatype.java-unsigned :as unsigned]
             [clojure.core.matrix :as m]
@@ -349,8 +350,19 @@
     (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
            (ds/labels dataset options)))
 
+    (is (= {:fruit-name :classification}
+           (ds/options->model-type options)))
+
+    (is (= {:fruit-name :classification,
+            :mass :regression,
+            :width :regression,
+            :height :regression,
+            :color-score :regression}
+           (ds-opts/model-type-map options (->> (ds/columns dataset)
+                                                (map ds-col/column-name)))))
+
     (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
-           (->> (ds/->flyweight dataset :label-map (get options :label-map))
+           (->> (ds/->flyweight dataset :options options)
                 (mapv :fruit-name))))
 
     ;; Ensure range map works
@@ -363,12 +375,11 @@
                           [(long col-min) (long col-max)]))))))
 
     ;;Concatenation should work
-
     (is (= (mapv (comp name :fruit-name)
                  (concat (mapseq-fruit-dataset)
                          (mapseq-fruit-dataset)))
            (->> (-> (ds/ds-concat dataset dataset)
-                    (ds/->flyweight :label-map (get options :label-map)))
+                    (ds/->flyweight :options options))
                 (mapv :fruit-name))))))
 
 
@@ -377,9 +388,7 @@
     (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
                      [one-hot :fruit-name {:main ["apple" "mandarin"]
                                            :other :rest}]
-                     [string->number string?]
-                     ;;Range numeric data to -1 1
-                     [range-scaler (not categorical?)]]
+                     [string->number string?]]
           src-ds (mapseq-fruit-dataset)
           {:keys [dataset pipeline options]}
           (etl/apply-pipeline src-ds pipeline
@@ -399,14 +408,27 @@
                   (mapv (comp name :fruit-name)))
              (->> (ds/column-values->categorical dataset :fruit-name options)
                   (take 20)
-                  vec)))))
+                  vec)))
+      ;;Check that flyweight conversion is correct.
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :options options)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+           (ds-opts/model-type-map options (->> (ds/columns dataset)
+                                                (map ds-col/column-name)))))))
 
   (testing "one hot-figure it out"
     (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
                      [one-hot :fruit-name]
-                     [string->number string?]
-                     ;;Range numeric data to -1 1
-                     [range-scaler (not categorical?)]]
+                     [string->number string?]]
           src-ds (mapseq-fruit-dataset)
           {:keys [dataset pipeline options]}
           (etl/apply-pipeline src-ds pipeline
@@ -427,14 +449,28 @@
                   (mapv (comp name :fruit-name)))
              (->> (ds/column-values->categorical dataset :fruit-name options)
                   (take 20)
-                  vec)))))
+                  vec)))
+
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :options options)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
+
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+             (ds-opts/model-type-map options (->> (ds/columns dataset)
+                                                  (map ds-col/column-name)))))))
 
   (testing "one hot - defined values"
     (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
                      [one-hot :fruit-name ["apple" "mandarin" "orange" "lemon"]]
-                     [string->number string?]
-                     ;;Range numeric data to -1 1
-                     [range-scaler (not categorical?)]]
+                     [string->number string?]]
           src-ds (mapseq-fruit-dataset)
           {:keys [dataset pipeline options]}
           (etl/apply-pipeline src-ds pipeline
@@ -455,7 +491,23 @@
                   (mapv (comp name :fruit-name)))
              (->> (ds/column-values->categorical dataset :fruit-name options)
                   (take 20)
-                  vec))))))
+                  vec)))
+
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :options options)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
+
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+             (ds-opts/model-type-map options (->> (ds/columns dataset)
+                                                  (map ds-col/column-name))))))))
 
 
 (deftest svm-missing-regression

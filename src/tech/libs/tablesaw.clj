@@ -323,7 +323,7 @@
                            table-name]
                     :or {scan-depth 100
                          table-name "_unnamed"}
-                    :as options}]
+                    :as options}   ]
 
   (let [column-definitions
         (if column-definitions

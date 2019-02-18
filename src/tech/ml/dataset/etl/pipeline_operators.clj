@@ -15,7 +15,8 @@
             [clojure.core.matrix.macros :refer [c-for]]
             [tech.parallel :as parallel]
             [clojure.core.matrix :as m]
-            [tech.ml.dataset.categorical :as categorical])
+            [tech.ml.dataset.categorical :as categorical]
+            [tech.ml.dataset.options :as options])
   (:refer-clojure :exclude [remove])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
@@ -55,12 +56,7 @@
                             (let [context
                                   (etl-proto/build-etl-context-columns
                                    op-impl dataset col-seq op-args)]
-                              [context (if (:label-map context)
-                                         (update options
-                                                 :label-map
-                                                 merge
-                                                 (:label-map context))
-                                         options)])
+                              [context (options/merge-label-maps options context)])
                             [context options])
         dataset (etl-proto/perform-etl-columns
                  op-impl dataset col-seq op-args context)]
@@ -137,27 +133,28 @@
    (build-etl-context-columns [op dataset column-name-seq op-args]
      ;;Label maps are special and used outside of this context do we have
      ;;treat them separately
-     {:label-map (categorical/build-categorical-map
-                  dataset column-name-seq (first op-args))})
+     (options/set-label-map {} (categorical/build-categorical-map
+                                dataset column-name-seq (first op-args))))
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
      (ds/update-columns dataset column-name-seq
                         (partial categorical/column-categorical-map
-                                 (:label-map context) (etl-datatype))))))
+                                 (options/->dataset-label-map context) (etl-datatype))))))
 
 
 (register-etl-operator!
  :one-hot
  (reify PETLMultipleColumnOperator
    (build-etl-context-columns [op dataset column-name-seq op-args]
-     {:label-map (categorical/build-one-hot-map
-                  dataset column-name-seq (first op-args))})
+     (options/set-label-map {}
+                            (categorical/build-one-hot-map
+                             dataset column-name-seq (first op-args))))
 
    (perform-etl-columns [op dataset column-name-seq op-args context]
-     (->> column-name-seq
-          (reduce (partial categorical/column-one-hot-map
-                           (:label-map context) (etl-datatype))
-                  dataset)))))
+     (let [lmap (options/->dataset-label-map context)]
+       (->> column-name-seq
+            (reduce (partial categorical/column-one-hot-map lmap (etl-datatype))
+                    dataset))))))
 
 
 (def-etl-operator

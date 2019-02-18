@@ -42,7 +42,9 @@
                                       existing
 
                                       (keyword? row-val)
-                                      (assoc existing :datatype (or datatype :keyword))
+                                      (if (#{:integer :float} datatype)
+                                        (assoc existing :datatype :string)
+                                        (assoc existing :datatype (or datatype :keyword)))
 
                                       (string? row-val)
                                       (assoc existing :datatype :string)

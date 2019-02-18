@@ -8,7 +8,8 @@
             [clojure.core.matrix :as m]
             [clojure.core.matrix.macros :refer [c-for]]
             [clojure.set :as c-set]
-            [tech.ml.dataset.categorical :as categorical])
+            [tech.ml.dataset.categorical :as categorical]
+            [tech.ml.dataset.options :as options])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -213,12 +214,7 @@ the correct type."
 
 (defn column-name->label-map
   [column-name options]
-  (if-let [col-label-map (get-in options [:label-map column-name])]
-    col-label-map
-    (throw (ex-info (format "Failed to find label map for column %s"
-                            column-name)
-                    {:label-column column-name
-                     :label-map-keys (keys (:label-map options))}))))
+  (options/->column-label-map options column-name))
 
 
 (defn options->label-map
@@ -249,7 +245,7 @@ the correct type."
   "When columns aren't scalars then this will change.
   For now, just the number of feature columns."
   ^long [options]
-  (count (:feature-columns options)))
+  (count (options/feature-column-names options)))
 
 
 (defn options->model-type
@@ -257,11 +253,8 @@ the correct type."
   Return either
   :regression
   :classification"
-  [{:keys [label-columns] :as options}]
-  (if (or (not= 1 (count label-columns))
-          (nil? (get-in options [:label-map (first label-columns)])))
-    :regression
-    :classification))
+  [options]
+  (options/model-type-map options))
 
 
 (defn column-values->categorical
@@ -269,7 +262,7 @@ the correct type."
   map to the a sequence of the original string column values."
   [dataset src-column options]
   (categorical/column-values->categorical dataset src-column
-                                          (:label-map options)))
+                                          (options/->dataset-label-map options)))
 
 
 (defn ->flyweight
@@ -279,47 +272,36 @@ the correct type."
   that the flyweight maps contain the labels and not their encoded values."
   [dataset & {:keys [column-name-seq
                      error-on-missing-values?
-                     label-map]
-              :or {column-name-seq :all
-                   error-on-missing-values? true}}]
-  (let [dataset (select dataset column-name-seq :all)
-        column-name-seq (map ds-col/column-name (columns dataset))
-        inverse-label-map (->> label-map
-                               (map (juxt first (comp c-set/map-invert second)))
-                               (into {}))
-        retval
-        (if error-on-missing-values?
-          (ds-map dataset (fn [& args]
-                            (zipmap column-name-seq args)))
-          ;;Much slower algorithm
-          (if-let [ds-columns (seq (columns dataset))]
-            (let [ecount (long (apply min (map dtype/ecount ds-columns)))
-                  columns (columns dataset)]
-              (for [idx (range ecount)]
-                (->> (for [col columns]
-                       [(ds-col/column-name col)
-                        (when-not (ds-col/is-missing? col idx)
-                          (ds-col/get-column-value col idx))])
-                     (remove nil?)
-                     (into {}))))))]
-    (if (seq inverse-label-map)
-      (->>
-       retval
-       (map
-        #(->> inverse-label-map
-              (reduce
-               (fn [row-map [colname value-map]]
-                 (if (contains? row-map colname)
-                   (if-let [mapped-val
-                            (get value-map (long (get row-map colname)))]
-                     (assoc row-map colname mapped-val)
-                     (throw
-                      (ex-info
-                       (format "Failed to find column %s value %s in label map %s"
-                               colname (get row-map colname) value-map) {})))
-                   row-map))
-               %))))
-      retval)))
+                     options]
+              :or {error-on-missing-values? true}}]
+  (let [target-columns-and-vals
+        (->> (or column-name-seq
+                 (->> (columns dataset)
+                      (map ds-col/column-name)
+                      (options/reduce-column-names options)))
+             (map (fn [colname]
+                    {:column-name colname
+                     :column-values
+                     (if (options/has-column-label-map? options colname)
+                       (categorical/column-values->categorical
+                        dataset colname (options/->dataset-label-map options))
+                       (let [current-column (column dataset colname)]
+                         (if (or error-on-missing-values?
+                                 (= 0 (count (ds-col/missing current-column))))
+                           (ds-col/column-values current-column)
+                           (->> (range (dtype/ecount current-column))
+                                (map (fn [col-idx]
+                                       (if (ds-col/is-missing? current-column col-idx)
+                                         nil
+                                         (ds-col/get-column-value current-column col-idx))))))))})))]
+    ;;Transpose the sequence of columns into a sequence of rows
+    (->> target-columns-and-vals
+         (map :column-values)
+         (apply interleave)
+         (partition (count target-columns-and-vals))
+         ;;Move to flyweight
+         (map zipmap
+              (repeat (map :column-name target-columns-and-vals))))))
 
 
 (declare ->dataset)
@@ -401,20 +383,22 @@ the correct type."
 
 
 (defn labels
-  "Given a dataset and an options map, generate a sequence of labels.
+  "Given a dataset and an options map, generate a sequence of label-values.
   If label count is 1, then if there is a label-map associated with column
-  generate sequence of labels."
-  [dataset {:keys [label-columns label-map] :as options}]
-  (when-not label-columns
+  generate sequence of labels by reverse mapping the column(s) back to the original
+  dataset values.  If there are multiple label columns results are presented in
+  flyweight (sequence of maps) format."
+  [dataset options]
+  (when-not (seq (options/label-column-names options))
     (throw (ex-info "No label columns indicated" {})))
-  (if-let [label-column (when (= (count label-columns) 1)
-                          (first label-columns))]
-    (if (contains? label-map label-column)
-      (column-values->categorical dataset label-column options)
-      (-> (column dataset label-column)
-          ds-col/column-values))
-    (->> (->row-major dataset {:labels label-columns} options)
-         (map :labels))))
+  (let [original-label-column-names (->> (options/label-column-names options)
+                                         (options/reduce-column-names options))
+        flyweight-labels (->flyweight dataset
+                                      :column-name-seq original-label-column-names
+                                      :options options)]
+    (if (= 1 (count original-label-column-names))
+      (map #(get % (first original-label-column-names)) flyweight-labels)
+      flyweight-labels)))
 
 
 (defn map-seq->dataset

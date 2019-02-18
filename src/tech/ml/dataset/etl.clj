@@ -5,7 +5,8 @@
             [tech.ml.dataset.etl.pipeline-operators :as pipeline-operators]
             [tech.ml.dataset.etl.column-filters :as column-filters]
             [tech.ml.dataset.etl.defaults :as defaults]
-            [clojure.set :as c-set])
+            [clojure.set :as c-set]
+            [tech.ml.dataset.options :as options])
   (:import [tech.ml.protocols.etl PETLSingleColumnOperator]))
 
 
@@ -59,7 +60,7 @@
                (-> options
                    ;;The column sequence cannot be a set as when you train
                    ;;the model is tightly bound to the sequence of columns
-                   (assoc :feature-columns (vec (sort feature-columns))
-                          :label-columns (vec (sort target-columns)))
+                   (options/set-feature-column-names (vec (sort feature-columns)))
+                   (options/set-label-column-names (vec (sort target-columns)))
                    (assoc-in [:dataset-column-metadata :post-pipeline]
                              (mapv ds-col/metadata (ds/columns dataset)))))))))
