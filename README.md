@@ -178,7 +178,8 @@ several levels:
 
 The current system is built on top of support for the [tech.datatype](https://github.com/techascent/tech.datatype) subsystem
 which is described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see the datatype-level bindings
-to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj) and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).
+to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj) and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).  These bindings enable generic and highly optimized copying simple transformations as well as enabling the tensor subsystem to operate
+on the base data in-place efficiently.
 
 
 Thanks to the integration of datatype, tech.compute, and jna, most operations are
