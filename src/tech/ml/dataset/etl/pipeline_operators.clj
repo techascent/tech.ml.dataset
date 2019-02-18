@@ -156,7 +156,7 @@
    (perform-etl-columns [op dataset column-name-seq op-args context]
      (->> column-name-seq
           (reduce (partial categorical/column-one-hot-map
-                           dataset (:label-map context) (etl-datatype))
+                           (:label-map context) (etl-datatype))
                   dataset)))))
 
 
@@ -390,5 +390,5 @@
                                              (ds/select dataset column-name-seq :all)
                                              (:row-major-centroids context)
                                              context))]
-           (ds/update-columns dataset columns-with-missing
-                              #(ds/column imputed-dataset %))))))))
+           (ds/update-columns dataset (map :column-name columns-with-missing)
+                              #(ds/column imputed-dataset (ds-col/column-name %)))))))))

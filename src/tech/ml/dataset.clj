@@ -269,7 +269,7 @@ the correct type."
   map to the a sequence of the original string column values."
   [dataset src-column options]
   (categorical/column-values->categorical dataset src-column
-                                          (options->label-map options)))
+                                          (:label-map options)))
 
 
 (defn ->flyweight

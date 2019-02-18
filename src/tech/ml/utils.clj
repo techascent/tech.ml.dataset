@@ -65,9 +65,10 @@
   ^String [item-name]
   (cond
     (and (or (keyword? item-name)
-             (symbol? item-name))
-         (namespace item-name))
-    (str (namespace item-name) "/" (name item-name))
+             (symbol? item-name)))
+    (if (namespace item-name)
+      (str (namespace item-name) "/" (name item-name))
+      (str (name item-name)))
     (boolean? item-name)
     (if item-name "true" "false")
     :else

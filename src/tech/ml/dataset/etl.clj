@@ -40,10 +40,14 @@
                                (let [local-seq (->> pipeline
                                                     (take (+ idx 2))
                                                     (drop (max 0 (- idx 2))))]
-                                 (throw (ex-info (format "Operator[%s]:\n%s\n Failed at %s:\n%s"
+                                 (throw (ex-info (format "Operator[%s]:\n%s\n Failed at %s:\n%s\n%s"
                                                          idx (with-out-str
                                                                (clojure.pprint/pprint (vec local-seq)))
-                                                         (str op) (.getMessage e))
+                                                         (str op) (.getMessage e)
+                                                         (if (ex-data e)
+                                                           (with-out-str
+                                                             (clojure.pprint/pprint (ex-data e)))
+                                                           ""))
                                                  {:operator op
                                                   :error e}))))))
                          {:pipeline [] :options options :dataset dataset}))

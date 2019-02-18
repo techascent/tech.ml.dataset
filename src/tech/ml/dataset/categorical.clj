@@ -60,8 +60,8 @@
   "Given a dataset and these columns, produce a label-map of
   column-name to specific categorical label-map."
   [dataset column-name-seq & [table-value-list]]
-  (let [provided-table (when-let [table-vals (seq (first table-value-list))]
-                         (make-string-table-from-table-args table-vals))]
+  (let [provided-table (when (seq table-value-list)
+                         (make-string-table-from-table-args table-value-list))]
     (->> column-name-seq
          (map (fn [column-name]
                 [column-name (if provided-table
@@ -186,7 +186,7 @@
 
 (defn column-one-hot-map
   "Using one hot map, produce Y new columns while removing existing column."
-  [dataset one-hot-map new-dtype column-name]
+  [one-hot-map new-dtype dataset column-name]
   (let [column (ds/column dataset column-name)
         dataset (ds/remove-column dataset column-name)
         context (get one-hot-map column-name)
@@ -230,7 +230,7 @@
                          keys
                          (map first)
                          distinct)]
-    (fn [col-idx col-values]
+    (fn [& col-values]
       (let [nonzero-entries
             (->> (map (fn [col-name col-val]
                         (when-not (= 0 (long col-val))
@@ -240,7 +240,7 @@
         (when-not (= 1 (count nonzero-entries))
           (throw (ex-info
                   (format "Multiple (or zero) nonzero entries detected:[%s]%s"
-                          col-idx nonzero-entries)
+                          src-column nonzero-entries)
                   {:column-name src-column
                    :label-map column-label-map})))
         (if-let [colval (get inverse-map (first nonzero-entries))]
@@ -260,7 +260,8 @@
                          distinct)]
     (->> (ds/select dataset colname-seq :all)
          ds/index-value-seq
-         (map (inverse-map-one-hot-column-values-fn column-label-map)))))
+         (map #(apply (inverse-map-one-hot-column-values-fn src-column column-label-map)
+                      (second %))))))
 
 
 (defn column-values->categorical
