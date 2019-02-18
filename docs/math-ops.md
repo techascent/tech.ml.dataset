@@ -81,3 +81,7 @@ The api of the math op is `(defn new-op [op-env & op-args] ...)`.
 
 This takes an environment which is a map of at least `:dataset` and `:column-name` which represent the source
 dataset and the result column that are being operated on.  Note that the column may not exist.
+
+There are wrapper functions for adding unary or binary operations that do the necessary dispatch to operate
+either in scalar space or in tensor space.  You have to provide a scalar version of your operation in case
+the arguments end up being constants.
