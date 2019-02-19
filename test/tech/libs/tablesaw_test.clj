@@ -365,6 +365,49 @@
            (->> (ds/->flyweight dataset :options options)
                 (mapv :fruit-name))))
 
+
+    (is (= (->> (ds/select dataset :all (range 10))
+                ds/->flyweight
+                (group-by :fruit-name))
+           (->> (ds/select dataset :all (range 10))
+                (ds/ds-group-by :fruit-name)
+                (map (fn [[k group-ds]]
+                       [k (vec (ds/->flyweight group-ds))]))
+                (into {}))))
+
+    ;;forward map from input value to encoded value.
+    ;;After ETL, column values are all doubles
+    (let [apple-value (double (get-in options [:label-map :fruit-name "apple"]))]
+      (is (= #{"apple"}
+             (->> dataset
+                  (ds/ds-filter #(= apple-value (:fruit-name %)))
+                  ;;Use full version of ->flyweight to do reverse mapping of numeric
+                  ;;fruit name back to input label.
+                  (#(ds/->flyweight % :options options))
+                  (map :fruit-name)
+                  set))))
+
+    ;;dataset starts with apple apple apple mandarin mandarin
+    (let [apple-v (double (get-in options [:label-map :fruit-name "apple"]))
+          mand-v (double (get-in options [:label-map :fruit-name "mandarin"]))]
+      (is (= [apple-v apple-v apple-v mand-v mand-v]
+             ;;Order columns
+             (->> (ds/select dataset [:mass :fruit-name :width] :all)
+                  (ds/ds-column-map #(ds-col/set-metadata
+                                      %
+                                      {:name (name (ds-col/column-name %))}))
+                  (take 2)
+                  (drop 1)
+                  (ds/from-prototype dataset "new-table")
+                  (#(ds/select % :all (range 5)))
+                  ;;Note the backward conversion failed in this case because we
+                  ;;change the column names.
+                  (#(ds/->flyweight % :options options))
+                  (map #(get % "fruit-name"))
+                  vec))))
+
+
+
     ;; Ensure range map works
     (is (= (vec (repeat (count non-categorical) [-1 1]))
            (->> non-categorical

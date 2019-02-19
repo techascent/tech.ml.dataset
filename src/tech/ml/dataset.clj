@@ -127,22 +127,35 @@ the correct type."
 
 
 (defn ds-filter
-  [dataset predicate & [column-name-seq]]
+  "dataset->dataset transformation"
+  [predicate dataset & [column-name-seq]]
   ;;interleave, partition count would also work.
-  (->> (index-value-seq (select dataset (or column-name-seq :all) :all))
-       (filter (fn [[idx col-values]]
-                 (apply predicate col-values)))
-       (map first)
-       (select dataset :all)))
+  (let [column-name-seq (or column-name-seq
+                            (->> (columns dataset)
+                                 (mapv ds-col/column-name)))]
+    (->> (index-value-seq (select dataset column-name-seq :all))
+         (filter (fn [[idx col-values]]
+                   (predicate (zipmap column-name-seq
+                                      col-values))))
+         (map first)
+         (select dataset :all))))
 
 
 (defn ds-group-by
-  [dataset key-fn & [column-name-seq]]
-  (->> (index-value-seq (select dataset (or column-name-seq :all) :all))
-       (group-by (fn [[idx col-values]]
-                   (apply key-fn col-values)))
-       (map first)
-       (select dataset :all)))
+  "Produce a map of key-fn-value->dataset.  key-fn is a function taking
+  Y values where Y is the count of column-name-seq or :all."
+  [key-fn dataset & [column-name-seq]]
+  (let [column-name-seq (or column-name-seq
+                            (->> (columns dataset)
+                                 (mapv ds-col/column-name)))]
+    (->> (index-value-seq (select dataset column-name-seq :all))
+         (group-by (fn [[idx col-values]]
+                     (->> (zipmap column-name-seq
+                                  col-values)
+                          key-fn)))
+         (map (fn [[k v]]
+                [k (select dataset :all (map first v))]))
+         (into {}))))
 
 
 (defn ds-concat
@@ -177,12 +190,24 @@ the correct type."
          (ds-proto/from-prototype dataset (dataset-name dataset)))))
 
 
-(defn ds-map
+(defn ds-map-values
   "Note this returns a sequence, not a dataset."
   [dataset map-fn & [column-name-seq]]
   (->> (index-value-seq (select dataset (or column-name-seq :all) :all))
        (map (fn [[idx col-values]]
               (apply map-fn col-values)))))
+
+
+(defn ds-column-map
+  "Map a function columnwise across datasets and produce a new dataset.
+  column sequence.  Note this does not produce a new dataset as that would
+  preclude remove,filter on nil values."
+  [map-fn first-ds & ds-seq]
+  (let [all-datasets (concat [first-ds] ds-seq)]
+       ;;first order the columns
+       (->> all-datasets
+            (map columns)
+            (apply map map-fn))))
 
 
 (defn correlation-table
@@ -358,23 +383,24 @@ the correct type."
                                           [item-k (count item-col-seq)])))
                                  (remove nil?)
                                  vec)]
-     (ds-map dataset
-             (fn [& column-values]
-               (->> item-col-count-map
-                    (reduce (fn [[flyweight column-values] [item-key item-count]]
-                              (let [contiguous-array (dtype/make-array-of-type
-                                                      datatype (take item-count
-                                                                     column-values))]
-                                (when-not (= (dtype/ecount contiguous-array)
-                                             (long item-count))
-                                  (throw
-                                   (ex-info "Failed to get correct number of items"
-                                            {:item-key item-key})))
-                                [(assoc flyweight item-key contiguous-array)
-                                 (drop item-count column-values)]))
-                            [{} column-values])
-                    first))
-             all-col-names)))
+     (ds-map-values
+      dataset
+      (fn [& column-values]
+        (->> item-col-count-map
+             (reduce (fn [[flyweight column-values] [item-key item-count]]
+                       (let [contiguous-array (dtype/make-array-of-type
+                                               datatype (take item-count
+                                                              column-values))]
+                         (when-not (= (dtype/ecount contiguous-array)
+                                      (long item-count))
+                           (throw
+                            (ex-info "Failed to get correct number of items"
+                                     {:item-key item-key})))
+                         [(assoc flyweight item-key contiguous-array)
+                          (drop item-count column-values)]))
+                     [{} column-values])
+             first))
+      all-col-names)))
   ([dataset options]
    (->row-major dataset (merge {:features (get options :feature-columns)}
                                (when (seq (get options :label-columns))
