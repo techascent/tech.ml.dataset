@@ -169,7 +169,7 @@ the correct type."
                                            :column
                                            col
                                            :table-name (dataset-name dataset)))))))
-                         (group-by :name))]
+             (group-by :name))]
     (when-not (= 1 (count (->> (vals column-list)
                                (map count)
                                distinct)))
@@ -180,9 +180,9 @@ the correct type."
                        newcol-ecount (apply + 0 (map m/ecount columns))
                        first-col (first columns)
                        new-col (ds-col/new-column first-col
-                                                     (dtype/get-datatype first-col)
-                                                     newcol-ecount
-                                                     (ds-col/metadata first-col))]
+                                                  (dtype/get-datatype first-col)
+                                                  newcol-ecount
+                                                  (ds-col/metadata first-col))]
                    (dtype/copy-raw->item! (map ds-col/column-values columns)
                                           new-col 0
                                           {:unchecked? true})
