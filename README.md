@@ -155,7 +155,7 @@ nil
 ## ETL Language Design
 
 
-The ETL language is current an implicit piping of a list of dataset->dataset transformations.
+The ETL language is currently an implicit piping of a list of dataset->dataset transformations.
 
 Each operator involves a column selection and then an operation, thus there are three sub-languages defined:
 
@@ -173,20 +173,23 @@ several levels:
 
 * [dataset](src/tech/ml/protocols/dataset.clj).
 * [column](src/tech/ml/protocols/column.clj) and then use the generic table
-  [implementation](src/ml/tech/dataset/generic_columnar_dataset.clj).
+* [implementation](src/ml/tech/dataset/generic_columnar_dataset.clj).
 
 
-The current system is built on top of support for the [tech.datatype](https://github.com/techascent/tech.datatype) subsystem
-which is described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see the datatype-level bindings
-to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj) and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).  These bindings enable generic and highly optimized copying simple transformations as well as enabling the tensor subsystem to operate
-on the base data in-place efficiently.
+The current system is built on top of support for the
+[tech.datatype](https://github.com/techascent/tech.datatype) subsystem which is
+described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see
+the datatype-level bindings to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj)
+and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).  These bindings enable
+generic and highly optimized simple transformations as well as enabling the
+tensor subsystem to operate on the base data in-place efficiently.
 
 
 Thanks to the integration of datatype, tech.compute, and jna, most operations are
 optimized.  Especially [math and transformations](https://github.com/techascent/tech.ml.dataset/blob/9739d72a81350ae5b8688ee9109290a04586b772/src/tech/ml/dataset/etl/pipeline_operators.clj#L228).
 
-The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the generic table support and as
-such they do not use the actual tablesaw 'table' datatype.
+The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the
+generic table support and as such they do not use the actual tablesaw 'table' datatype.
 
 
 ## License
