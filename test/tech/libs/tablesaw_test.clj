@@ -67,7 +67,7 @@
 
 
 (deftest base-etl-test
-  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/ames-house-prices/train.csv")
         ;;For inference, we won't have the target but we will have everything else.
         inference-columns (c-set/difference
                            (set (map ds-col/column-name
@@ -138,7 +138,7 @@
                       (dtype/->vector (ds/column inference-ds "OverallQual"))))))))
 
 
-(def full-aimes-pt-1
+(def full-ames-pt-1
   '[[remove "Id"]
     ;;Replace missing values or just empty csv values with NA
     [replace-missing string? "NA"]
@@ -214,7 +214,7 @@
                         (col "3SsnPorch") (col "ScreenPorch"))]])
 
 
-(def aimes-top-columns ["SalePrice"
+(def ames-top-columns ["SalePrice"
                         "OverallQual"
                         "AllSF"
                         "AllFlrsSF"
@@ -227,19 +227,19 @@
                         "GarageArea"])
 
 
-(def full-aimes-pt-2
+(def full-ames-pt-2
   ;;Drop SalePrice column of course.
-  (->> (rest aimes-top-columns)
+  (->> (rest ames-top-columns)
        (mapcat (fn [colname]
                  [['m= (str colname "-s2") ['** ['col colname] 2]]
                   ['m= (str colname "-s3") ['** ['col colname] 3]]
                   ['m= (str colname "-sqrt") ['sqrt ['col colname]]]]))
-       (concat full-aimes-pt-1)
+       (concat full-ames-pt-1)
        vec))
 
 
-(def full-aimes-pt-3
-  (->> (concat full-aimes-pt-2
+(def full-ames-pt-3
+  (->> (concat full-ames-pt-2
                '[[m= [and
                       [not categorical?]
                       [not target?]
@@ -252,19 +252,19 @@
        (vec)))
 
 
-(deftest full-aimes-pipeline-test
+(deftest full-ames-pipeline-test
   (let [src-dataset (tablesaw/path->tablesaw-dataset
-                     "data/aimes-house-prices/train.csv")]
-    (testing "Pathway through aimes pt one is sane.  Checking skew."
+                     "data/ames-house-prices/train.csv")]
+    (testing "Pathway through ames pt one is sane.  Checking skew."
       (let [{:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-dataset full-aimes-pt-1 {:target "SalePrice"})]
-       (is (= aimes-top-columns
+            (etl/apply-pipeline src-dataset full-ames-pt-1 {:target "SalePrice"})]
+       (is (= ames-top-columns
                (->> (get (ds/correlation-table dataset) "SalePrice")
                     (take 11)
                     (mapv first))))))
-    (testing "Pathway through aimes pt 2 is sane.  Checking skew."
+    (testing "Pathway through ames pt 2 is sane.  Checking skew."
       (let [{:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-dataset full-aimes-pt-2 {:target "SalePrice"})
+            (etl/apply-pipeline src-dataset full-ames-pt-2 {:target "SalePrice"})
             skewed-set (set (col-filters/execute-column-filter
                              dataset '[and
                                        [not categorical?]
@@ -275,9 +275,9 @@
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
-    (testing "Full aimes pathway is sane"
+    (testing "Full ames pathway is sane"
       (let [{:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-dataset full-aimes-pt-3 {:target "SalePrice"})
+            (etl/apply-pipeline src-dataset full-ames-pt-3 {:target "SalePrice"})
             std-set (set (col-filters/execute-column-filter
                           dataset '[and
                                     [not categorical?]
@@ -580,7 +580,7 @@
 
 
 (deftest impute-missing-k-means
-  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/ames-house-prices/train.csv")
         largest-missing-column (->> (ds/columns src-dataset)
                                     (sort-by (comp count ds-col/missing) >)
                                     ;;Numeric
@@ -624,7 +624,7 @@
 (defn cause-g-means-error
   "The root of this is that g/x means are not setup to work with nan values."
   []
-  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/aimes-house-prices/train.csv")
+  (let [src-dataset (tablesaw/path->tablesaw-dataset "data/ames-house-prices/train.csv")
         src-pipeline '[[remove "Id"]
                        ;;Replace missing values or just empty csv values with NA
                        [replace-missing string? "NA"]
