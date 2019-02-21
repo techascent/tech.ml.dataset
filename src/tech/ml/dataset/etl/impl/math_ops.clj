@@ -182,5 +182,7 @@
           (throw (ex-info (format "Operator %s failed:\n%s" math-expr (.getMessage e))
                           {:math-expression math-expr
                            :error e})))))
+    (map? math-expr)
+    math-expr
     :else
     (throw (ex-info (format "Malformed expression %s" math-expr) {}))))

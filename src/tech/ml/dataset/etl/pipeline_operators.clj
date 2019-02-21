@@ -18,7 +18,7 @@
             [clojure.core.matrix :as m]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.options :as options])
-  (:refer-clojure :exclude [remove]))
+  (:refer-clojure :exclude [remove filter]))
 
 
 (def-single-column-etl-operator set-attribute
@@ -287,7 +287,6 @@ contain missing values."
     dataset))
 
 
-
 (def-multiple-column-etl-operator impute-missing
   "NAN-aware k-means missing value imputation.
 1.  Perform k-means.
@@ -323,3 +322,25 @@ Algorithm fails if the entire column is missing (entire column gets NAN)."
                                           context))]
         (ds/update-columns dataset (map :column-name columns-with-missing)
                            #(ds/column imputed-dataset (ds-col/column-name %)))))))
+
+
+(def-single-column-etl-operator filter
+  "Filter the dataset based on a math expression.  The expression must return a tensor
+and it must be table-rows in length.  Indexes where the return value is 0 are stripped
+while indexes where the return value is nonzero are kept.  The math expression is
+implicitly applied to the result of the column selection if the (col) operator is used."
+  nil
+  (let [result (math-ops/eval-expr {:dataset dataset
+                                    :column-name column-name}
+                                   (first op-args))]
+    (when-not (and (math-ops/is-tensor? result)
+                   (= (m/ecount result)
+                      (second (m/shape dataset))))
+      (throw (ex-info "Either scalar returned or result's is wrong length" {})))
+    (let [^ints int-data (dtype/copy! result (int-array (m/ecount result)))
+          num-ints (alength int-data)]
+      (ds/select dataset :all (->> (range (alength int-data))
+                                   (map (fn [idx]
+                                          (when-not (= 0 (aget int-data (int idx)))
+                                            idx)))
+                                   (clojure.core/remove nil?))))))

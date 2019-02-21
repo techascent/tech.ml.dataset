@@ -3,20 +3,50 @@
             [tech.ml.dataset.etl.impl.math-ops
              :refer [def-math-op def-unary
                      def-col-stat-unary def-binary
-                     def-col-stat-unary-binary]]
+                     def-col-stat-unary-binary]
+             :as math-ops-impl]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset :as ds])
+            [tech.ml.dataset :as ds]
+            [tech.datatype :as dtype])
   (:refer-clojure :exclude [+ - / * max min
                             bit-and bit-xor
-                            > >= < <=]))
+                            > >= < <=
+                            replace]))
 
 
 (def-math-op col :varargs
+  "Lookup a column in the dataset.  With no args, returns the active column.  Else
+finds indicated column."
   (case (count args)
     0
     (ds/column dataset column-name)
     1
     (ds/column dataset (first args))))
+
+(def-math-op replace :varargs
+  "Replace column values using fixed lookup map."
+  (when-not (= (count args) 2)
+    (throw (ex-info "Replace takes exactly 2 arguments." {})))
+  (when-not (math-ops-impl/is-tensor? (first args))
+    (throw (ex-info "First argument to replace must be a tensor" {})))
+  (when-not (map? (second args))
+    (throw (ex-info "Second argument to replace must be lookup map." {})))
+  (let [tens (first args)
+        tens-dtype (dtype/get-datatype tens)
+        lookup-map (->> (second args)
+                        (map (fn [[k v]]
+                               [(dtype/cast k tens-dtype)
+                                (dtype/cast v tens-dtype)]))
+                        (into {}))]
+    (->> (ds-col/column-values tens)
+         (map (fn [col-val]
+                (if-let [retval (get lookup-map col-val)]
+                  retval
+                  (throw (ex-info (format "Failed to find column value %s"
+                                          col-val)
+                                  {:lookup-map lookup-map
+                                   :column-value col-val})))))
+         (ds-col/new-column tens tens-dtype))))
 
 
 (def-unary log1p #(Math/log1p (double %)))

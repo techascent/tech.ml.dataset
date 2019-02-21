@@ -7,6 +7,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.svm :as ds-svm]
             [tech.ml.dataset.options :as ds-opts]
+            [tech.ml.dataset.etl.pipeline-operators :as std-operators]
             [tech.datatype :as dtype]
             [tech.datatype.java-unsigned :as unsigned]
             [clojure.core.matrix :as m]
@@ -266,7 +267,30 @@
        (is (= ames-top-columns
                (->> (get (ds/correlation-table dataset) "SalePrice")
                     (take 11)
-                    (mapv first))))))
+                    (mapv first))))
+       (let [[n-cols n-rows] (m/shape src-dataset)
+             [n-new-cols n-new-rows] (-> (std-operators/filter src-dataset
+                                                               "GrLivArea"
+                                                               '(< (col) 4000))
+                                         m/shape)
+             num-over-the-line (->> (ds/column src-dataset "GrLivArea")
+                                    (ds-col/column-values)
+                                    (filter #(>= (int %) 4000))
+                                    count)]
+         ;;Ensure our test isn't pointless.
+         (is (not= 0 num-over-the-line))
+         (is (= n-new-rows
+                (- n-rows num-over-the-line))))
+       (let [new-ds (std-operators/m= src-dataset "SimplOverallQual"
+                                      '(replace (col "OverallQual")
+                                                {1 1 2 1 3 1
+                                                 4 2 5 2 6 2
+                                                 7 3 8 3 9 3 10 3}))]
+         (is (= #{1 2 3}
+                (-> new-ds
+                    (ds/column "SimplOverallQual")
+                    (ds-col/unique)
+                    set))))))
     (testing "Pathway through ames pt 2 is sane.  Checking skew."
       (let [{:keys [dataset pipeline options]}
             (etl/apply-pipeline src-dataset full-ames-pt-2 {:target "SalePrice"})

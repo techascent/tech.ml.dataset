@@ -64,14 +64,14 @@
             ~op-code)))
        (defn ~op-symbol
          ~docstring
-         [dataset# col-selector# & op-args#]
+         [~'dataset ~'col-filter & ~'args]
          (-> (apply-pipeline-operator
               {:pipeline []
                :options {}
-               :dataset dataset#}
+               :dataset ~'dataset}
               (-> (concat '[~op-symbol]
-                          [col-selector#]
-                          op-args#)
+                          [~'col-filter]
+                          ~'args)
                   vec))
              :dataset))))
 
@@ -87,13 +87,13 @@
             ~op-code)))
        (defn ~op-symbol
          ~docstring
-         [dataset# col-selector# & op-args#]
+         [~'dataset ~'col-filter & ~'args]
          (-> (apply-pipeline-operator
               {:pipeline []
                :options {}
-               :dataset dataset#}
+               :dataset ~'dataset}
               (-> (concat '[~op-symbol]
-                          [col-selector#]
-                          op-args#)
+                          [~'col-filter]
+                          ~'args)
                   vec))
              :dataset))))
