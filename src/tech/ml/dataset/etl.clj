@@ -2,11 +2,15 @@
   (:require [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.etl :as etl-proto]
-            [tech.ml.dataset.etl.pipeline-operators :as pipeline-operators]
+            [tech.ml.dataset.etl.impl.pipeline-operators :as pipeline-operators]
             [tech.ml.dataset.etl.column-filters :as column-filters]
             [tech.ml.dataset.etl.defaults :as defaults]
             [clojure.set :as c-set]
-            [tech.ml.dataset.options :as options])
+            [tech.ml.dataset.options :as options]
+            ;;Load all standard filters, math-ops, and operators
+            [tech.ml.dataset.etl.pipeline-operators :as std-operators]
+            [tech.ml.dataset.etl.column-filters :as std-filters]
+            [tech.ml.dataset.etl.math-ops :as std-math])
   (:import [tech.ml.protocols.etl PETLSingleColumnOperator]))
 
 
@@ -22,9 +26,11 @@
       (let [recorded? (or recorded? inference?)
             [dataset options] (if-not inference?
                                 [(if-let [target-name (:target options)]
-                                   (pipeline-operators/set-attribute dataset target-name :target? true)
+                                   (std-operators/set-attribute dataset target-name
+                                                                :target? true)
                                    dataset)
-                                 ;;Get datatype of all columns initially and full set of columns.
+                                 ;;Get datatype of all columns initially and full set of
+                                 ;;columns.
                                  (assoc options
                                         :dataset-column-metadata
                                         {:pre-pipeline
@@ -34,28 +40,31 @@
             {:keys [options dataset] :as retval}
             (->> pipeline
                  (map-indexed vector)
-                 (reduce (fn [retval [idx op]]
-                           (try
-                             (pipeline-operators/apply-pipeline-operator retval op)
-                             (catch Throwable e
-                               (let [local-seq (->> pipeline
-                                                    (take (+ idx 2))
-                                                    (drop (max 0 (- idx 2))))]
-                                 (throw (ex-info (format "Operator[%s]:\n%s\n Failed at %s:\n%s\n%s"
-                                                         idx (with-out-str
-                                                               (clojure.pprint/pprint (vec local-seq)))
-                                                         (str op) (.getMessage e)
-                                                         (if (ex-data e)
-                                                           (with-out-str
-                                                             (clojure.pprint/pprint (ex-data e)))
-                                                           ""))
-                                                 {:operator op
-                                                  :error e}))))))
-                         {:pipeline [] :options options :dataset dataset}))
-            target-columns (set (column-filters/execute-column-filter dataset :target?))
-            feature-columns (c-set/difference (set (map ds-col/column-name (ds/columns dataset)))
+                 (reduce
+                  (fn [retval [idx op]]
+                    (try
+                      (pipeline-operators/apply-pipeline-operator retval op)
+                      (catch Throwable e
+                        (let [local-seq (->> pipeline
+                                             (take (+ idx 2))
+                                             (drop (max 0 (- idx 2))))]
+                          (throw (ex-info
+                                  (format "Operator[%s]:\n%s\n Failed at %s:\n%s\n%s"
+                                          idx (with-out-str
+                                                (clojure.pprint/pprint (vec local-seq)))
+                                          (str op) (.getMessage e)
+                                          (if (ex-data e)
+                                            (with-out-str
+                                              (clojure.pprint/pprint (ex-data e)))
+                                            ""))
+                                          {:operator op
+                                           :local-stack local-seq
+                                           :error e}))))))
+                  {:pipeline [] :options options :dataset dataset}))
+            target-columns (set (std-filters/target? dataset))
+            feature-columns (c-set/difference (set (map ds-col/column-name
+                                                        (ds/columns dataset)))
                                               (set target-columns))]
-
         (assoc retval :options
                (-> options
                    ;;The column sequence cannot be a set as when you train

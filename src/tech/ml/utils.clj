@@ -1,5 +1,6 @@
 (ns tech.ml.utils
-  (:require [tech.parallel :as parallel])
+  (:require [tech.parallel :as parallel]
+            [tech.datatype.java-unsigned :as unsigned])
   (:import [java.util Iterator NoSuchElementException]))
 
 
@@ -86,3 +87,8 @@
       (keyword? src-name) (keyword new-name)
       (symbol? src-name) (symbol new-name)
       :else src-name)))
+
+
+(defn numeric-datatype?
+  [dtype-enum]
+  (boolean ((set unsigned/datatypes) dtype-enum)))

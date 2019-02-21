@@ -90,16 +90,16 @@
     (is (= [81 1460] (m/shape dataset)))
 
     (is (= 45
-           (count (col-filters/execute-column-filter dataset :categorical?))))
+           (count (col-filters/categorical? dataset))))
     (is (= #{"MSSubClass" "OverallQual" "OverallCond"}
            (c-set/intersection #{"MSSubClass" "OverallQual" "OverallCond"}
-                               (set (col-filters/execute-column-filter dataset :categorical?)))))
+                               (set (col-filters/categorical? dataset)))))
     (is (= []
-           (vec (col-filters/execute-column-filter dataset :string?))))
+           (vec (col-filters/string? dataset))))
     (is (= ["SalePrice"]
-           (vec (col-filters/execute-column-filter dataset :target?))))
+           (vec (col-filters/target? dataset))))
     (is (= []
-           (vec (col-filters/execute-column-filter dataset [:not [:numeric?]]))))
+           (vec (col-filters/execute-column-filter dataset '[not numeric?]))))
     (let [sale-price (ds/column dataset "SalePriceDup")
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
@@ -116,12 +116,14 @@
 
     (let [exact-columns (tablesaw/map-seq->tablesaw-dataset
                          inference-dataset
-                         {:column-definitions (get-in options [:dataset-column-metadata :pre-pipeline])})
+                         {:column-definitions (get-in options [:dataset-column-metadata
+                                                               :pre-pipeline])})
           ;;Just checking that this works at all..
           autoscan-columns (tablesaw/map-seq->tablesaw-dataset inference-dataset {})]
 
       ;;And the definition of exact is...
-      (is (= (mapv :datatype (->> (get-in options [:dataset-column-metadata :pre-pipeline])
+      (is (= (mapv :datatype (->> (get-in options [:dataset-column-metadata
+                                                   :pre-pipeline])
                                   (sort-by :name)))
              (->> (ds/columns exact-columns)
                   (map ds-col/metadata)
@@ -131,10 +133,12 @@
                                                  (assoc options :inference? true))
                              :dataset)]
         ;;spot check a few of the items
-        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight "MSSubClass"))
+        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
+                                                 "MSSubClass"))
                       (dtype/->vector (ds/column inference-ds "MSSubClass"))))
         ;;did categorical values get encoded identically?
-        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight "OverallQual"))
+        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
+                                                 "OverallQual"))
                       (dtype/->vector (ds/column inference-ds "OverallQual"))))))))
 
 
@@ -204,7 +208,7 @@
     [m= "TotalBath" (+ (col "BsmtFullBath")
                        (* 0.5 (col "BsmtHalfBath"))
                        (col "FullBath")
-                       (* 0.5 "HalfBath"))]
+                       (* 0.5 (col "HalfBath")))]
     ;; Total SF for house (incl. basement)
     [m= "AllSF" (+ (col "GrLivArea") (col "TotalBsmtSF"))]
     ;; Total SF for 1st + 2nd floors
@@ -214,17 +218,18 @@
                         (col "3SsnPorch") (col "ScreenPorch"))]])
 
 
-(def ames-top-columns ["SalePrice"
-                        "OverallQual"
-                        "AllSF"
-                        "AllFlrsSF"
-                        "GrLivArea"
-                        "GarageCars"
-                        "ExterQual"
-                        "KitchenQual"
-                        "GarageScore"
-                        "SimplGarageScore"
-                        "GarageArea"])
+(def ames-top-columns
+  ["SalePrice"
+   "OverallQual"
+   "AllSF"
+   "AllFlrsSF"
+   "GrLivArea"
+   "GarageCars"
+   "ExterQual"
+   "TotalBath"
+   "KitchenQual"
+   "GarageScore"
+   "SimplGarageScore"])
 
 
 (def full-ames-pt-2
@@ -271,7 +276,7 @@
                                        [not target?]
                                        [> [abs [skew [col]]] 0.5]]))]
         ;;This count seems rather high...a diff against the python stuff would be wise.
-        (is (= 67 (count skewed-set)))
+        (is (= 66 (count skewed-set)))
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
@@ -595,8 +600,10 @@
                        [replace-string string? "" "NA"]
                        [replace-missing boolean? false]
                        [impute-missing [not target?] {:method :k-means}]]
-        {:keys [pipeline dataset options]} (etl/apply-pipeline src-dataset src-pipeline {:target "SalePrice"})
-        infer-dataset (:dataset (etl/apply-pipeline src-dataset pipeline {:inference? true}))
+        {:keys [pipeline dataset options]} (etl/apply-pipeline src-dataset src-pipeline
+                                                               {:target "SalePrice"})
+        infer-dataset (:dataset (etl/apply-pipeline src-dataset pipeline
+                                                    {:inference? true}))
         stats-vec [:mean :min :max]]
     ;;The source stats
     (is (m/equals [70.049 21.0 313.0]

@@ -69,9 +69,13 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
 
 
 (defprotocol PColumnMathContext
-  (unary-op [ctx op-env op-arg op-kwd]
-    "Perform a unary operation (operation of one argument)")
-  (binary-op [ctx op-env op-args op-scalar-fn op-kwd]
+  (is-tensor? [ctx op-arg]
+    "Return true if this is a tensor and should use tensor ops.")
+  (unary-op [ctx op-arg op-kwd]
+    "Perform a unary operation (operation of one argument).")
+  (unary-reduce [ctx op-arg op-kwd]
+    "Perform a reduction across the argument returning a new tensor.")
+  (binary-op [ctx op-args op-scalar-fn op-kwd]
     "Perform a binary operation (operation logically of two arguments).
   op-args is at least 2 in length -
   (+ 1 2 3 4 5) is allowed."))

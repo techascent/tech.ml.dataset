@@ -16,21 +16,16 @@
                                (Math/pow lhs rhs))))
 
 
-(defn clone-arg
-  [op-env op-arg]
-  (let [retval
-        (-> (ds-col/clone op-arg)
-            (ds-col/set-metadata {})
-            (ds-col/set-name (:column-name op-env)))]
-    retval))
-
 
 (defrecord ComputeTensorMathContext []
   col-proto/PColumnMathContext
-  (unary-op [ctx op-env op-arg op-kwd]
-    (ct/unary-op! (clone-arg op-env op-arg) 1.0 op-arg op-kwd))
-
-  (binary-op [ctx op-env op-args op-scalar-fn op-kwd]
+  (is-tensor? [ctx op-arg]
+    (ct/acceptable-tensor-buffer? op-arg))
+  (unary-op [ctx op-arg op-kwd]
+    (ct/unary-op! (ct/clone op-arg) 1.0 op-arg op-kwd))
+  (unary-reduce [ctx op-arg op-kwd]
+    (throw (ex-info "Unavailable at moment" {})))
+  (binary-op [ctx op-args op-scalar-fn op-kwd]
     (let [first-tensor (->> op-args
                             (filter ct/acceptable-tensor-buffer?)
                             first)
@@ -39,7 +34,7 @@
           first-pair (take 2 op-args)
           op-args (drop 2 op-args)
           [first-arg second-arg] first-pair
-          accumulator (clone-arg op-env first-tensor)]
+          accumulator (ct/clone first-tensor)]
         (if (or (ct/acceptable-tensor-buffer? first-arg)
                 (ct/acceptable-tensor-buffer? second-arg))
           (ct/binary-op! accumulator 1.0 first-arg 1.0 second-arg op-kwd)

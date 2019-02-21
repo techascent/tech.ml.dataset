@@ -2,97 +2,27 @@
   (:require [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.etl :as etl-proto]
+            [tech.ml.dataset.etl.impl.pipeline-operators
+             :refer [def-single-column-etl-operator
+                     def-multiple-column-etl-operator]
+             :as pipe-ops]
             [tech.datatype :as dtype]
             [tech.datatype.java-primitive :as primitive]
             [tech.ml.dataset.etl.column-filters :as column-filters]
             [tech.ml.dataset.etl.defaults :refer [etl-datatype]]
-            [tech.ml.dataset.etl.math-ops :as math-ops]
+            [tech.ml.dataset.etl.impl.math-ops :as math-ops]
             [tech.ml.utils :as utils]
             [tech.compute.tensor :as ct]
             [tech.compute.tensor.operations :as ct-ops]
             [clojure.set :as c-set]
-            [clojure.core.matrix.protocols :as mp]
-            [clojure.core.matrix.macros :refer [c-for]]
-            [tech.parallel :as parallel]
             [clojure.core.matrix :as m]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.options :as options])
-  (:refer-clojure :exclude [remove])
-  (:import [tech.ml.protocols.etl
-            PETLSingleColumnOperator
-            PETLMultipleColumnOperator]))
+  (:refer-clojure :exclude [remove]))
 
 
-(defonce ^:dynamic *etl-operator-registry* (atom {}))
-
-
-(defn register-etl-operator!
-  [op-kwd op]
-  (-> (swap! *etl-operator-registry* assoc op-kwd op)
-      keys))
-
-
-(defn get-etl-operator
-  [op-kwd]
-  (if-let [retval (get @*etl-operator-registry* op-kwd)]
-    retval
-    (throw (ex-info (format "Failed to find etl operator %s" op-kwd)
-                    {:op-keyword op-kwd}))))
-
-
-(defn apply-pipeline-operator
-  [{:keys [pipeline dataset options]} op]
-  (let [inference? (:inference? options)
-        recorded? (or (:recorded? options) inference?)
-        [op context] (if-not recorded?
-                       [op {}]
-                       [(:operation op) (:context op)])
-        op-type (keyword (name (first op)))
-        col-selector (second op)
-        op-args (drop 2 op)
-        col-seq (column-filters/select-columns dataset col-selector)
-        op-impl (get-etl-operator op-type)
-        [context options] (if-not recorded?
-                            (let [context
-                                  (etl-proto/build-etl-context-columns
-                                   op-impl dataset col-seq op-args)]
-                              [context (options/merge-label-maps options context)])
-                            [context options])
-        dataset (etl-proto/perform-etl-columns
-                 op-impl dataset col-seq op-args context)]
-    {:dataset dataset
-     :options options
-     :pipeline (conj pipeline {:operation (->> (concat [(first op) col-seq]
-                                                       (drop 2 op))
-                                               vec)
-                               :context context})}))
-
-
-
-(defmacro def-etl-operator
-  [op-symbol op-context-code op-code]
-  `(do (register-etl-operator!
-        ~(keyword (name op-symbol))
-        (reify PETLSingleColumnOperator
-          (build-etl-context [~'op ~'dataset ~'column-name ~'op-args]
-            ~op-context-code)
-          (perform-etl [~'op ~'dataset ~'column-name ~'op-args ~'context]
-            ~op-code)))
-       (defn ~op-symbol
-         [dataset# col-selector# & op-args#]
-         (-> (apply-pipeline-operator
-              {:pipeline []
-               :options {}
-               :dataset dataset#}
-              (-> (concat '[~op-symbol]
-                          [col-selector#]
-                          op-args#)
-                  vec))
-             :dataset))))
-
-
-(def-etl-operator
-  set-attribute
+(def-single-column-etl-operator set-attribute
+  "Set a metadata attribute on a column.  Return a new dataset."
   nil
   (let [retval (ds/update-column
                 dataset column-name
@@ -103,19 +33,20 @@
     retval))
 
 
-(def-etl-operator
-  remove
+(def-single-column-etl-operator remove
+  "Remove a column from the dataset."
   nil
   (ds/remove-column dataset column-name))
 
 
-(def-etl-operator
-  replace-missing
-
+(def-single-column-etl-operator replace-missing
+  "Replace missing values with a constant.  The constant may be the result
+of running a math expression.  e.g.:
+(mean (col))
+"
   {:missing-value (math-ops/eval-expr {:dataset dataset
                                        :column-name column-name}
                                       (first op-args))}
-
   (ds/update-column
    dataset column-name
    (fn [col]
@@ -127,38 +58,42 @@
          col)))))
 
 
-(register-etl-operator!
- :string->number
- (reify PETLMultipleColumnOperator
-   (build-etl-context-columns [op dataset column-name-seq op-args]
-     ;;Label maps are special and used outside of this context do we have
-     ;;treat them separately
-     (options/set-label-map {} (categorical/build-categorical-map
-                                dataset column-name-seq (first op-args))))
+(def-multiple-column-etl-operator string->number
+  "Replace any string values with numeric values.  Updates the label map
+of the options.  Arguments may be notion or a vector of either expected
+strings or tuples of expected strings to their hardcoded values."
+ ;;Label maps are special and used outside of this context do we have
+  ;;treat them separately
+  (options/set-label-map {} (categorical/build-categorical-map
+                             dataset column-name-seq (first op-args)))
 
-   (perform-etl-columns [op dataset column-name-seq op-args context]
-     (ds/update-columns dataset column-name-seq
-                        (partial categorical/column-categorical-map
-                                 (options/->dataset-label-map context) (etl-datatype))))))
+  (ds/update-columns dataset column-name-seq
+                     (partial categorical/column-categorical-map
+                              (options/->dataset-label-map context)
+                              (etl-datatype))))
+
+(def-multiple-column-etl-operator one-hot
+  "Replace string columns with one-hot encoded columns.  Argument can be nothign
+or a map containing keys representing the new derived column names and values
+representing which original values to encode to that particular column.  The special
+keyword :rest indicates any remaining unencoded columns:
+example argument:
+{:main [\"apple\" \"mandarin\"]
+ :other :rest}
+"
+  (options/set-label-map {}
+                         (categorical/build-one-hot-map
+                          dataset column-name-seq (first op-args)))
+
+  (let [lmap (options/->dataset-label-map context)]
+    (->> column-name-seq
+         (reduce (partial categorical/column-one-hot-map lmap (etl-datatype))
+                 dataset))))
 
 
-(register-etl-operator!
- :one-hot
- (reify PETLMultipleColumnOperator
-   (build-etl-context-columns [op dataset column-name-seq op-args]
-     (options/set-label-map {}
-                            (categorical/build-one-hot-map
-                             dataset column-name-seq (first op-args))))
-
-   (perform-etl-columns [op dataset column-name-seq op-args context]
-     (let [lmap (options/->dataset-label-map context)]
-       (->> column-name-seq
-            (reduce (partial categorical/column-one-hot-map lmap (etl-datatype))
-                    dataset))))))
-
-
-(def-etl-operator
-  replace-string
+(def-single-column-etl-operator replace-string
+  "Replace a given string value with another value.  Useful for blanket replacing empty
+strings with a known value."
   nil
   (ds/update-column
    dataset column-name
@@ -173,8 +108,9 @@
        (ds-col/new-column col :string data-values)))))
 
 
-(def-etl-operator
-  ->etl-datatype
+(def-single-column-etl-operator ->etl-datatype
+  "Marshall columns to be the etl datatype.  This changes numeric columns to be
+a unified backing store datatype.  Necessary before full-table datatype declarations."
   nil
   (ds/update-column
    dataset column-name
@@ -191,7 +127,7 @@
        col))))
 
 
-(defn finalize-math-result
+(defn- finalize-math-result
   [result dataset column-name]
   (-> (if-let [src-col (ds/maybe-column dataset column-name)]
         (ds-col/set-metadata result (dissoc (ds-col/metadata src-col)
@@ -202,7 +138,7 @@
       (ds-col/set-name column-name)))
 
 
-(defn operator-eval-expr
+(defn- operator-eval-expr
   [dataset column-name math-expr]
   (ds/add-or-update-column
    dataset
@@ -212,8 +148,8 @@
        (finalize-math-result dataset column-name))))
 
 
-(def-etl-operator
-  m=
+(def-single-column-etl-operator m=
+  "Perform the math operation assigning result to selected columns."
   nil
   (operator-eval-expr dataset column-name (first op-args)))
 
@@ -272,41 +208,39 @@
                  dataset))))
 
 
-(register-etl-operator!
- :range-scaler
-  (reify PETLMultipleColumnOperator
-    (build-etl-context-columns [op dataset column-name-seq op-args]
-      (->> column-name-seq
-           (map (fn [column-name]
-                  [column-name
-                   (-> (ds/column dataset column-name)
-                       (ds-col/stats [:min :max]))]))
-           (into {})))
+(def-multiple-column-etl-operator range-scaler
+  "Range-scale a set of columns to be within either [-1 1] or the range provided
+by the first argument.  Will fail if columns have missing values."
+  (->> column-name-seq
+       (map (fn [column-name]
+              [column-name
+               (-> (ds/column dataset column-name)
+                   (ds-col/stats [:min :max]))]))
+       (into {}))
 
-    (perform-etl-columns [op dataset column-name-seq op-args context]
-      (if-let [column-name-seq (->> column-name-seq
-                                    (clojure.core/remove #(= (get-in context [% :min])
-                                                             (get-in context [% :max])))
-                                    seq)]
-        (let [colseq (map (partial dataset ds/column) column-name-seq)
-              etl-dtype (etl-datatype)
-              context-map-seq (map #(get context %) column-name-seq)
-              min-values (ct/->tensor (mapv :min context-map-seq) :datatype etl-dtype)
-              max-values (ct/->tensor (mapv :max context-map-seq) :datatype etl-dtype)
-              col-ranges (ct/binary-op! (ct/clone min-values) 1.0 max-values
-                                        1.0 min-values :-)
-              [range-min range-max] (if (seq op-args)
-                                      (first op-args)
-                                      [-1 1])
-              range-min (double range-min)
-              range-max (double range-max)
-              target-range (- range-max
-                              range-min)
-              divisor (ct/binary-op! (ct/clone col-ranges) 1.0 col-ranges
-                                     1.0 target-range :/)]
-          (sub-divide-bias dataset column-name-seq min-values divisor range-min))
-        ;;No columns, noop.
-        dataset))))
+  (if-let [column-name-seq (->> column-name-seq
+                                (clojure.core/remove #(= (get-in context [% :min])
+                                                         (get-in context [% :max])))
+                                seq)]
+    (let [colseq (map (partial dataset ds/column) column-name-seq)
+          etl-dtype (etl-datatype)
+          context-map-seq (map #(get context %) column-name-seq)
+          min-values (ct/->tensor (mapv :min context-map-seq) :datatype etl-dtype)
+          max-values (ct/->tensor (mapv :max context-map-seq) :datatype etl-dtype)
+          col-ranges (ct/binary-op! (ct/clone min-values) 1.0 max-values
+                                    1.0 min-values :-)
+          [range-min range-max] (if (seq op-args)
+                                  (first op-args)
+                                  [-1 1])
+          range-min (double range-min)
+          range-max (double range-max)
+          target-range (- range-max
+                          range-min)
+          divisor (ct/binary-op! (ct/clone col-ranges) 1.0 col-ranges
+                                 1.0 target-range :/)]
+      (sub-divide-bias dataset column-name-seq min-values divisor range-min))
+    ;;No columns, noop.
+    dataset))
 
 
 (defn- bool-arg
@@ -316,76 +250,76 @@
     (boolean default-value)))
 
 
-(register-etl-operator!
- :std-scaler
- (reify PETLMultipleColumnOperator
-   (build-etl-context-columns [op dataset column-name-seq op-args]
-     (let [argmap (apply hash-map op-args)
-           with-mean? (bool-arg argmap :with-mean? true)
-           with-std? (bool-arg argmap :with-std? true)
-           stats-seq (-> (concat (when with-mean? [:mean])
-                                 (when with-std? [:standard-deviation])))]
-       (->> column-name-seq
-            (map (fn [column-name]
-                   [column-name
-                    (-> (ds/column dataset column-name)
-                        (ds-col/stats stats-seq))]))
-            (into {}))))
+(def-multiple-column-etl-operator std-scaler
+  "Scale columns to have 0 mean and 1 std deviation.  Will fail if columns
+contain missing values."
+ (let [argmap (apply hash-map op-args)
+       with-mean? (bool-arg argmap :with-mean? true)
+       with-std? (bool-arg argmap :with-std? true)
+       stats-seq (-> (concat (when with-mean? [:mean])
+                             (when with-std? [:standard-deviation])))]
+   (->> column-name-seq
+        (map (fn [column-name]
+               [column-name
+                (-> (ds/column dataset column-name)
+                    (ds-col/stats stats-seq))]))
+        (into {})))
 
-   (perform-etl-columns [op dataset column-name-seq op-args context]
-     ;;Avoid divide by zero.
-     (if-let [column-name-seq (->> column-name-seq
-                                   (clojure.core/remove
-                                    #(= 0 (get-in context [% :standard-deviation]))))]
-       (let [first-ctx (get context (first column-name-seq))
-             colseq (map (partial ds/column dataset) column-name-seq)
-             use-mean? (contains? first-ctx :mean)
-             use-std? (contains? first-ctx :standard-deviation)
-             etl-dtype (etl-datatype)
-             context-map-seq (map #(get context (ds-col/column-name %)) colseq)
-             mean-values (if use-mean?
-                           (ct/->tensor (mapv :mean context-map-seq) :datatype etl-dtype)
-                           0)
-             std-values (if use-std?
-                          (ct/->tensor (mapv :standard-deviation context-map-seq)
-                                       :datatype etl-dtype)
-                          1.0)]
-         (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
-       ;;no columns, noop
-       dataset))))
+  ;;Avoid divide by zero.
+  (if-let [column-name-seq (->> column-name-seq
+                                (clojure.core/remove
+                                 #(= 0 (get-in context [% :standard-deviation]))))]
+    (let [first-ctx (get context (first column-name-seq))
+          colseq (map (partial ds/column dataset) column-name-seq)
+          use-mean? (contains? first-ctx :mean)
+          use-std? (contains? first-ctx :standard-deviation)
+          etl-dtype (etl-datatype)
+          context-map-seq (map #(get context (ds-col/column-name %)) colseq)
+          mean-values (if use-mean?
+                        (ct/->tensor (mapv :mean context-map-seq) :datatype etl-dtype)
+                        0)
+          std-values (if use-std?
+                       (ct/->tensor (mapv :standard-deviation context-map-seq)
+                                    :datatype etl-dtype)
+                       1.0)]
+      (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
+    ;;no columns, noop
+    dataset))
 
 
 
-(register-etl-operator!
- :impute-missing
- (reify PETLMultipleColumnOperator
-   (build-etl-context-columns [op dataset column-name-seq op-args]
-     (let [dataset (ds/select dataset column-name-seq :all)
-           argmap (or (first op-args) {:method :k-means
-                                       :k 5
-                                       :max-iterations 100
-                                       :runs 5})
-           ;; compute centroids.
-           row-major-centroids (case (:method argmap)
-                                 :k-means (ds/k-means dataset
-                                                      (:k argmap)
-                                                      (:max-iterations argmap)
-                                                      (:runs argmap)
-                                                      false))]
-       (merge {:row-major-centroids row-major-centroids
-               :method :centroids}
-              (ds/compute-centroid-and-global-means dataset row-major-centroids))))
+(def-multiple-column-etl-operator impute-missing
+  "NAN-aware k-means missing value imputation.
+1.  Perform k-means.
+2.  Cluster rows according to centroids.  Use centroid means (if not NAN)
+to replace missing values or global means if the centroid mean was NAN.
 
-   (perform-etl-columns [op dataset column-name-seq op-args context]
-     (let [dataset (ds/select dataset column-name-seq :all)
-           columns-with-missing (ds/columns-with-missing-seq dataset)]
-       ;;Attempt a fast-out.
-       (if-not columns-with-missing
-         dataset
-         (let [imputed-dataset (case (:method context)
-                                 :centroids (ds/impute-missing-by-centroid-averages
-                                             (ds/select dataset column-name-seq :all)
-                                             (:row-major-centroids context)
-                                             context))]
-           (ds/update-columns dataset (map :column-name columns-with-missing)
-                              #(ds/column imputed-dataset (ds-col/column-name %)))))))))
+Algorithm fails if the entire column is missing (entire column gets NAN)."
+ (let [dataset (ds/select dataset column-name-seq :all)
+       argmap (or (first op-args) {:method :k-means
+                                   :k 5
+                                   :max-iterations 100
+                                   :runs 5})
+       ;; compute centroids.
+       row-major-centroids (case (:method argmap)
+                             :k-means (ds/k-means dataset
+                                                  (:k argmap)
+                                                  (:max-iterations argmap)
+                                                  (:runs argmap)
+                                                  false))]
+   (merge {:row-major-centroids row-major-centroids
+           :method :centroids}
+          (ds/compute-centroid-and-global-means dataset row-major-centroids)))
+
+  (let [dataset (ds/select dataset column-name-seq :all)
+        columns-with-missing (ds/columns-with-missing-seq dataset)]
+    ;;Attempt a fast-out.
+    (if-not columns-with-missing
+      dataset
+      (let [imputed-dataset (case (:method context)
+                              :centroids (ds/impute-missing-by-centroid-averages
+                                          (ds/select dataset column-name-seq :all)
+                                          (:row-major-centroids context)
+                                          context))]
+        (ds/update-columns dataset (map :column-name columns-with-missing)
+                           #(ds/column imputed-dataset (ds-col/column-name %)))))))
