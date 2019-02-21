@@ -42,10 +42,7 @@ finds indicated column."
          (map (fn [col-val]
                 (if-let [retval (get lookup-map col-val)]
                   retval
-                  (throw (ex-info (format "Failed to find column value %s"
-                                          col-val)
-                                  {:lookup-map lookup-map
-                                   :column-value col-val})))))
+                  col-val)))
          (ds-col/new-column tens tens-dtype))))
 
 
