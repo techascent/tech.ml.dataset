@@ -11,7 +11,6 @@
             [tech.compute.tensor :as ct]
             [tech.compute.cpu.tensor-math :as cpu-tm]
             [tech.compute.cpu.typed-buffer :as cpu-typed-buffer]
-            [tech.ml.dataset.compute-math-context :as compute-math-context]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.generic-columnar-dataset :as columnar-dataset]
             [tech.jna :as jna])
@@ -222,9 +221,6 @@
                               (col-proto/column-name this)
                               (.countMissing col)))))
     (mp/to-double-array col))
-
-  (math-context [this]
-    (compute-math-context/->ComputeTensorMathContext))
 
   dtype-base/PDatatype
   (get-datatype [this] (dtype-base/get-datatype col))

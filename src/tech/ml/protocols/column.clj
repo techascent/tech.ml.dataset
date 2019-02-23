@@ -64,18 +64,4 @@ which cannot be simply coerced to the datatype are an error.")
   (to-double-array [col error-on-missing?]
     "Convert to a java primitive array of a given datatype.  For strings,
 an implicit string->double mapping is expected.  For booleans, true=1 false=0.
-Finally, any missing values should be indicated by a NaN of the expected type.")
-  (math-context [col]))
-
-
-(defprotocol PColumnMathContext
-  (is-tensor? [ctx op-arg]
-    "Return true if this is a tensor and should use tensor ops.")
-  (unary-op [ctx op-arg op-kwd]
-    "Perform a unary operation (operation of one argument).")
-  (unary-reduce [ctx op-arg op-kwd]
-    "Perform a reduction across the argument returning a new tensor.")
-  (binary-op [ctx op-args op-scalar-fn op-kwd]
-    "Perform a binary operation (operation logically of two arguments).
-  op-args is at least 2 in length -
-  (+ 1 2 3 4 5) is allowed."))
+Finally, any missing values should be indicated by a NaN of the expected type."))

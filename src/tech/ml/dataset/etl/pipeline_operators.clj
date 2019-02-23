@@ -6,6 +6,7 @@
              :refer [def-single-column-etl-operator
                      def-multiple-column-etl-operator]
              :as pipe-ops]
+            [tech.compute.tensor.functional.impl :as func-impl]
             [tech.datatype :as dtype]
             [tech.datatype.java-primitive :as primitive]
             [tech.ml.dataset.etl.column-filters :as column-filters]
@@ -333,7 +334,7 @@ implicitly applied to the result of the column selection if the (col) operator i
   (let [result (math-ops/eval-expr {:dataset dataset
                                     :column-name column-name}
                                    (first op-args))]
-    (when-not (and (math-ops/is-tensor? result)
+    (when-not (and (func-impl/tensor? result)
                    (= (m/ecount result)
                       (second (m/shape dataset))))
       (throw (ex-info "Either scalar returned or result's is wrong length" {})))

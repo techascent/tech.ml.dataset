@@ -164,39 +164,3 @@ which cannot be simply coerced to the datatype are an error."
   Finally, any missing values should be indicated by a NaN of the expected type."
   ^doubles [col & [error-on-missing?]]
   (col-proto/to-double-array col error-on-missing?))
-
-
-(defn math-context
-  "Return an implementation of PColumnMathContext for operating items of this
-  column type."
-  [col]
-  (col-proto/math-context col))
-
-
-(defn is-tensor?
-  "Return true if this is a tensor argument.  Else assumed to be a scalar type."
-  [math-context op-arg]
-  (col-proto/is-tensor? math-context op-arg))
-
-
-(defn unary-op
-  "Perform a unary operation (operation of one argument)"
-  [math-context op-arg op-kwd]
-  (col-proto/unary-op math-context op-arg op-kwd))
-
-
-(defn binary-op
-  "Perform a binary operation (operation logically of two arguments).
-  op-args is at least 2 in length -
-  (+ 1 2 3 4 5) is allowed.
-  op-scalar is a function taking 2 scalar values and returning a scalar value."
-  [math-context op-args op-scalar op-kwd]
-  (col-proto/binary-op math-context op-args op-scalar op-kwd))
-
-
-(defn unary-reduce
-  "Perform a reduction across the argument returning a vector of reduced
-  dimensions of 1.  So a reduction of shape [2 3 4] should return a vector
-  of shape [2 3]."
-  [ctx op-arg op-kwd]
-  (col-proto/unary-reduce ctx op-arg op-kwd))
