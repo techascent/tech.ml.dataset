@@ -111,7 +111,9 @@
 
   (stats [this stats-set]
     (when-not (instance? NumericColumn col)
-      (throw (ex-info "Stats aren't available on non-numeric columns" {})))
+      (throw (ex-info "Stats aren't available on non-numeric columns"
+                      {:column-type (dtype/get-datatype col)
+                       :column-name (col-proto/column-name this)})))
     (let [stats-set (set (if-not (seq stats-set)
                            available-stats
                            stats-set))

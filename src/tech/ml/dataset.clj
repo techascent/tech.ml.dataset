@@ -4,6 +4,7 @@
   (:require [tech.datatype :as dtype]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.ml.utils :as ml-utils]
             [tech.parallel :as parallel]
             [clojure.core.matrix :as m]
             [clojure.core.matrix.macros :refer [c-for]]
@@ -227,12 +228,21 @@ the correct type."
   [dataset & [correlation-type]]
   (let [missing-columns (columns-with-missing-seq dataset)
         _ (when missing-columns
-            (println "WARNING - excluding columns with missing values:"
+            (println "WARNING - excluding columns with missing values:\n"
                      (vec missing-columns)))
+        non-numeric (->> (columns dataset)
+                         (map ds-col/metadata)
+                         (remove #(ml-utils/numeric-datatype? (:datatype %)))
+                         (map :name)
+                         seq)
+        _ (when non-numeric
+            (println "WARNING - excluding non-numeric columns:\n"
+                     (vec non-numeric)))
         dataset (select dataset
                         (->> (columns dataset)
                              (map ds-col/column-name)
-                             (remove (set (map :column-name missing-columns))))
+                             (remove (set (concat (map :column-name missing-columns)
+                                                  non-numeric))))
                         :all)
         colseq (columns dataset)
         correlation-type (or :pearson correlation-type)]

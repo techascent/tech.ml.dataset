@@ -60,7 +60,9 @@
         (reduce (fn [live-set arg]
                   (when-not (= 0 (count live-set))
                     (c-set/intersection live-set (set (execute-column-filter
-                                                       dataset arg)))))
+                                                       (ds/select
+                                                        dataset live-set :all)
+                                                       arg)))))
                 live-set))))
 
 

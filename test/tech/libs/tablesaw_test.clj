@@ -353,7 +353,6 @@
         {:keys [dataset pipeline options]}
         (etl/apply-pipeline src-ds pipeline
                             {:target :fruit-name})
-
         origin-ds (mapseq-fruit-dataset)
         src-keys (set (keys (first (mapseq-fruit-dataset))))
         result-keys (set (->> (ds/columns dataset)

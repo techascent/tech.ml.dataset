@@ -15,11 +15,21 @@
 
 
 (defn apply-pipeline
-  "Returns a map of:
+  "Apply a pipeline to a dataset.  If inference? or recorded? is true,
+  then the context is expected to be saved with the pipeline.
+  If not running a recorded pipeline, the system inserts a pipelien command at the
+  beginning to auto-convert all numeric or boolean columns to be the ETL datatype.  This
+  generally fixes more problems than it creates.  If this behavior isn't desired,
+  however, :do-not-auto-convert? allows you to avoid this behavior.
+
+  Returns a map of:
   :pipeline - sequence of {:operation :context}
+  :options - options map to use with dataset.
   :dataset - new dataset."
   [dataset pipeline {:keys [inference?
-                            recorded?] :as options}]
+                            recorded?
+                            do-not-auto-convert?]
+                     :as options}]
   (let [dataset (ds/->dataset dataset options)]
     (with-bindings {#'defaults/*etl-datatype* (or :float64
                                                   (:datatype options))}
@@ -37,6 +47,11 @@
                                          (mapv ds-col/metadata (ds/columns dataset))})]
                                 ;;No change for inference case
                                 [dataset options])
+            ;;Check for autoconversion
+            pipeline (if (or do-not-auto-convert? recorded?)
+                       pipeline
+                       (concat ['[->etl-datatype [or numeric? boolean?]]]
+                               pipeline))
             {:keys [options dataset] :as retval}
             (->> pipeline
                  (map-indexed vector)

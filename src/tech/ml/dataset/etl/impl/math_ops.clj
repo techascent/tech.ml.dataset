@@ -14,7 +14,7 @@
   (when-not (= 1 (count args))
     (throw (ex-info "Unary function applied to multiple or zero arguments"
                     {:op-args args})))
-  (when-not (func-impl/tensor? (first args))
+  (when-not (ds-col/is-column? (first args))
     (throw (ex-info "Column stat function applied to something that is not a column."
                     {:argtype (type (first args))})))
   (-> (ds-col/stats (first args) [op-kwd])
