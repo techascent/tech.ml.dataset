@@ -225,7 +225,16 @@ the correct type."
 
   :pearson is the default."
   [dataset & [correlation-type]]
-  (let [colseq (columns dataset)
+  (let [missing-columns (columns-with-missing-seq dataset)
+        _ (when missing-columns
+            (println "WARNING - excluding columns with missing values:"
+                     (vec missing-columns)))
+        dataset (select dataset
+                        (->> (columns dataset)
+                             (map ds-col/column-name)
+                             (remove (set (map :column-name missing-columns))))
+                        :all)
+        colseq (columns dataset)
         correlation-type (or :pearson correlation-type)]
     (->> (for [lhs colseq]
            [(ds-col/column-name lhs)

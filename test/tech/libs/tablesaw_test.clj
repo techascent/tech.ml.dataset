@@ -90,8 +90,7 @@
     (is (= [81 1460] (m/shape src-dataset)))
     (is (= [81 1460] (m/shape dataset)))
 
-    (is (= 45
-           (count (col-filters/categorical? dataset))))
+    (is (= 45 (count (col-filters/categorical? dataset))))
     (is (= #{"MSSubClass" "OverallQual" "OverallCond"}
            (c-set/intersection #{"MSSubClass" "OverallQual" "OverallCond"}
                                (set (col-filters/categorical? dataset)))))

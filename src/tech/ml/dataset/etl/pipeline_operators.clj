@@ -118,12 +118,12 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
    (fn [col]
      (if-not (= (dtype/get-datatype col) (etl-datatype))
        (let [new-col-dtype (etl-datatype)
-             col-values (ds-col/column-values col)
+             col-values (if (= 0 (count (ds-col/missing col)))
+                          (ds-col/column-values col)
+                          (tech.ml.protocols.column/to-double-array col false))
              data-values (dtype/make-array-of-type
                           new-col-dtype
-                          (if (= :boolean (dtype/get-datatype col))
-                            (map #(if % 1 0) col-values)
-                            col-values))]
+                          col-values)]
          (ds-col/new-column col new-col-dtype data-values))
        col))))
 
