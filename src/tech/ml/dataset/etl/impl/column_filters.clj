@@ -48,7 +48,7 @@ The filter-function has an api of `(dataset & arguments)` where the arguments ar
                     {:filter-fn filter-fn}))))
 
 
-(defn execute-column-filter
+(defn- execute-column-filter
   [dataset col-filter]
   (cond
     (sequential? col-filter)
@@ -61,7 +61,9 @@ The filter-function has an api of `(dataset & arguments)` where the arguments ar
     (set? col-filter)
     col-filter
     (or (symbol? col-filter) (keyword? col-filter))
-    (execute-col-filter-fn dataset (keyword (name col-filter)) [])))
+    (execute-col-filter-fn dataset (keyword (name col-filter)) [])
+    :else
+    (throw (ex-info "Unrecognized column filter symbol" {:filter col-filter}))))
 
 
 (defn select-columns

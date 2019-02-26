@@ -99,7 +99,7 @@
     (is (= ["SalePrice"]
            (vec (col-filters/target? dataset))))
     (is (= []
-           (vec (col-filters/execute-column-filter dataset '[not numeric?]))))
+           (vec (col-filters/select-columns dataset '[not numeric?]))))
     (let [sale-price (ds/column dataset "SalePriceDup")
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
@@ -293,7 +293,7 @@
     (testing "Pathway through ames pt 2 is sane.  Checking skew."
       (let [{:keys [dataset pipeline options]}
             (etl/apply-pipeline src-dataset full-ames-pt-2 {:target "SalePrice"})
-            skewed-set (set (col-filters/execute-column-filter
+            skewed-set (set (col-filters/select-columns
                              dataset '[and
                                        [not categorical?]
                                        [not target?]
@@ -306,7 +306,7 @@
     (testing "Full ames pathway is sane"
       (let [{:keys [dataset pipeline options]}
             (etl/apply-pipeline src-dataset full-ames-pt-3 {:target "SalePrice"})
-            std-set (set (col-filters/execute-column-filter
+            std-set (set (col-filters/select-columns
                           dataset '[and
                                     [not categorical?]
                                     [not target?]]))
@@ -357,7 +357,7 @@
         src-keys (set (keys (first (mapseq-fruit-dataset))))
         result-keys (set (->> (ds/columns dataset)
                               (map ds-col/column-name)))
-        non-categorical (col-filters/execute-column-filter dataset [:not :categorical?])]
+        non-categorical (col-filters/select-columns dataset ['not 'categorical?])]
 
     (is (= #{59}
            (->> (ds/columns dataset)

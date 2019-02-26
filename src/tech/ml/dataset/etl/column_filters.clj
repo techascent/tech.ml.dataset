@@ -16,9 +16,9 @@
                             * > < >= <= ==]))
 
 
-(defn execute-column-filter
+(defn select-columns
   [dataset colfilter]
-  (filter-impl/execute-column-filter dataset colfilter))
+  (filter-impl/select-columns dataset colfilter))
 
 
 (defmacro ^:private register-all-dtype-filters
@@ -42,24 +42,24 @@
   "(set/difference world arg-result)"
   (let [all-names (set (map ds-col/column-name (ds/columns dataset)))]
     (c-set/difference all-names
-                      (-> (execute-column-filter
+                      (-> (select-columns
                            dataset
                            (first args))
                           set))))
 
 (def-column-filter or
   "(apply set/union arg-results)"
-  (apply c-set/union #{} (map (comp set (partial execute-column-filter dataset))
+  (apply c-set/union #{} (map (comp set (partial select-columns dataset))
                               args)))
 
 
 (def-column-filter and
   "(set/intersection arg-results)"
- (let [live-set (set (execute-column-filter dataset (first args)))]
+ (let [live-set (set (select-columns dataset (first args)))]
    (->> (rest args)
         (reduce (fn [live-set arg]
                   (when-not (= 0 (count live-set))
-                    (c-set/intersection live-set (set (execute-column-filter
+                    (c-set/intersection live-set (set (select-columns
                                                        (ds/select
                                                         dataset live-set :all)
                                                        arg)))))
