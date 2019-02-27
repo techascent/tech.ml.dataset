@@ -1,7 +1,8 @@
 (ns tech.ml.dataset.etl.impl.pipeline-operators
   (:require [tech.ml.dataset.etl.impl.column-filters :as column-filters]
             [tech.ml.protocols.etl :as etl-proto]
-            [tech.ml.dataset.options :as options])
+            [tech.ml.dataset.options :as options]
+            [tech.ml.dataset :as ds])
 
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
@@ -35,7 +36,11 @@
         op-type (keyword (name (first op)))
         col-selector (second op)
         op-args (drop 2 op)
-        col-seq (column-filters/select-columns dataset col-selector)
+        ;;The order of columns is extremely important at times.  It is unwise
+        ;;to carelessly reorder column names unless the user explicitly asks
+        col-seq (->> (column-filters/select-columns dataset col-selector)
+                     (ds/order-column-names dataset)
+                     vec)
         op-impl (get-etl-operator op-type)
         [context options] (if-not recorded?
                             (let [context

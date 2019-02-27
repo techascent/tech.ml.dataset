@@ -74,6 +74,18 @@
   (ds-proto/update-column dataset col-name update-fn))
 
 
+(defn order-column-names
+  "Order a sequence of columns names so they match the order in the
+  original dataset.  Missing columns are placed last."
+  [dataset colname-seq]
+  (let [colname-set (set colname-seq)
+        ordered-columns (->> (columns dataset)
+                             (map ds-col/column-name)
+                             (filter colname-set))]
+    (concat ordered-columns
+            (remove (set ordered-columns) colname-seq))))
+
+
 (defn update-columns
   "Update a sequence of columns."
   [dataset column-name-seq update-fn]
@@ -95,6 +107,16 @@ colname-seq - either keyword :all or list of column names with no duplicates.
 index-seq - either keyword :all or list of indexes.  May contain duplicates."
   [dataset colname-seq index-seq]
   (ds-proto/select dataset colname-seq index-seq))
+
+
+(defn unordered-select
+  "Perform a selection but use the order of the columns in the existing table; do
+  *not* reorder the columns based on colname-seq.  Useful when doing selection based
+  on sets."
+  [dataset colname-seq index-seq]
+  (select dataset
+          (order-column-names dataset colname-seq)
+          index-seq))
 
 
 (defn select-columns
