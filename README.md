@@ -10,6 +10,9 @@ columnwise databases.  The backing store behind tech.ml.dataset is
 near future for [Apache Arrow](https://github.com/apache/arrow).
 
 
+An example of using the dataset for [advanced regression techniques](https://github.com/cnuernber/ames-house-prices/blob/master/ames-housing-prices-clojure.md).
+
+
 ## Dataset Pipeline Processing
 
 Dataset ETL is a repeatable processing that stores data so that doing inference later is automatic.
