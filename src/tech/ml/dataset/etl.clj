@@ -84,7 +84,11 @@
                (-> options
                    ;;The column sequence cannot be a set as when you train
                    ;;the model is tightly bound to the sequence of columns
-                   (options/set-feature-column-names (vec (sort feature-columns)))
-                   (options/set-label-column-names (vec (sort target-columns)))
+                   (options/set-feature-column-names (vec (ds/order-column-names
+                                                           dataset
+                                                           feature-columns)))
+                   (options/set-label-column-names (vec (ds/order-column-names
+                                                         dataset
+                                                         target-columns)))
                    (assoc-in [:dataset-column-metadata :post-pipeline]
                              (mapv ds-col/metadata (ds/columns dataset)))))))))

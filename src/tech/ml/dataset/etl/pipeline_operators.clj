@@ -12,6 +12,7 @@
             [tech.ml.dataset.etl.column-filters :as column-filters]
             [tech.ml.dataset.etl.defaults :refer [etl-datatype]]
             [tech.ml.dataset.etl.impl.math-ops :as math-ops]
+            [tech.ml.dataset.pca :as ds-pca]
             [tech.ml.utils :as utils]
             [tech.compute.tensor :as ct]
             [tech.compute.tensor.operations :as ct-ops]
@@ -74,7 +75,7 @@ strings or tuples of expected strings to their hardcoded values."
                               (etl-datatype))))
 
 (def-multiple-column-etl-operator one-hot
-  "Replace string columns with one-hot encoded columns.  Argument can be nothign
+  "Replace string columns with one-hot encoded columns.  Argument can be nothing
 or a map containing keys representing the new derived column names and values
 representing which original values to encode to that particular column.  The special
 keyword :rest indicates any remaining unencoded columns:
@@ -345,3 +346,44 @@ implicitly applied to the result of the column selection if the (col) operator i
                                           (when-not (= 0 (aget int-data (int idx)))
                                             idx)))
                                    (clojure.core/remove nil?))))))
+
+
+(def-multiple-column-etl-operator pca
+  "Perform PCA storing context during training."
+  (let [dataset (ds/select dataset column-name-seq :all)
+        argmap (or (first op-args) {:method :svd
+                                    :variance 0.95})
+        pca-info (ds-pca/pca-dataset dataset
+                                     :method (:method argmap)
+                                     :datatype (etl-datatype))
+        n-components (long (or (:n-components argmap)
+                               (let [target-var-percent (double
+                                                         (or (:variance argmap)
+                                                             0.95))
+                                     eigenvalues (:eigenvalues pca-info)
+                                     var-total (apply + 0 eigenvalues)
+                                     n-cols (long (first (ct/shape dataset)))]
+                                 (loop [idx 0
+                                        var-sum 0.0]
+                                   (if (and (< idx n-cols)
+                                            (< (/ var-sum
+                                                  var-total)
+                                               target-var-percent))
+                                     (recur (inc idx)
+                                            (+ var-sum (dtype/get-value eigenvalues idx)))
+                                     idx)))))]
+    (assoc pca-info :n-components n-components))
+
+  (let [pca-info context
+        target-dataset (ds/select dataset column-name-seq :all)
+        leftover-column-names (->> (c-set/difference (set (->> (ds/columns dataset)
+                                                               (map ds-col/column-name)))
+                                                     (set column-name-seq))
+                                   (ds/order-column-names dataset))
+        transform-ds (ds-pca/pca-transform-dataset target-dataset pca-info
+                                                   (:n-components pca-info)
+                                                   (etl-datatype))]
+    (ds/from-prototype transform-ds (ds/dataset-name target-dataset)
+                       (concat (ds/columns transform-ds)
+                               (->> (ds/select dataset leftover-column-names :all)
+                                    ds/columns)))))
