@@ -541,11 +541,12 @@ the correct type."
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
   (let [num-runs (int (or num-runs 1))]
-    (if (= num-runs 1)
+    (if true ;;(= num-runs 1)
       (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
                         (int (or k 5))
                         (int (or max-iterations 100)))
           (.centroids))
+      ;;This fails as the initial distortion calculation returns nan
       (-> (KMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
                    (int (or k 5))
                    (int (or max-iterations 100))

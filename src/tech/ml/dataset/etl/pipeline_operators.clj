@@ -297,10 +297,11 @@ to replace missing values or global means if the centroid mean was NAN.
 
 Algorithm fails if the entire column is missing (entire column gets NAN)."
  (let [dataset (ds/select dataset column-name-seq :all)
-       argmap (or (first op-args) {:method :k-means
-                                   :k 5
-                                   :max-iterations 100
-                                   :runs 5})
+       argmap (merge {:method :k-means
+                      :k 5
+                      :max-iterations 100
+                      :runs 5}
+                     (first op-args))
        ;; compute centroids.
        row-major-centroids (case (:method argmap)
                              :k-means (ds/k-means dataset
@@ -351,8 +352,9 @@ implicitly applied to the result of the column selection if the (col) operator i
 (def-multiple-column-etl-operator pca
   "Perform PCA storing context during training."
   (let [dataset (ds/select dataset column-name-seq :all)
-        argmap (or (first op-args) {:method :svd
-                                    :variance 0.95})
+        argmap (merge {:method :svd
+                       :variance 0.95}
+                      (first op-args))
         pca-info (ds-pca/pca-dataset dataset
                                      :method (:method argmap)
                                      :datatype (etl-datatype))
