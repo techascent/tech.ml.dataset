@@ -149,7 +149,8 @@
 
      base/PCopyRawData
      {:copy-raw->item! (fn [raw-data# ary-target# target-offset# options#]
-                         (base/copy-raw->item! raw-data# (primitive/->buffer-backing-store ary-target#)
+                         (base/copy-raw->item! (primitive/->buffer-backing-store raw-data#)
+                                               ary-target#
                                                target-offset# options#))}
      base/PPrototype
      {:from-prototype (fn [src-ary# datatype# shape#]

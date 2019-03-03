@@ -238,7 +238,7 @@
 
   dtype-base/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
-    (dtype-base/copy-raw->item! raw-data col target-offset options))
+    (dtype-base/copy-raw->item! col ary-target target-offset options))
 
   dtype-base/PPrototype
   (from-prototype [src datatype shape]

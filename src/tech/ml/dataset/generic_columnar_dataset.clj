@@ -2,6 +2,7 @@
   (:require [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.datatype.base :as dtype-base]
             [clojure.core.matrix.protocols :as mp]
             [clojure.set :as c-set]))
 
@@ -110,7 +111,11 @@
         (get shape dimension-number)
         (throw (ex-info "Array does not have specific dimension"
                         {:dimension-number dimension-number
-                         :shape shape}))))))
+                         :shape shape})))))
+
+  dtype-base/PCopyRawData
+  (copy-raw->item! [raw-data ary-target target-offset options]
+    (dtype-base/copy-raw->item! (ds/columns raw-data) ary-target target-offset options)))
 
 
 (defn make-dataset
