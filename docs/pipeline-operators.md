@@ -73,7 +73,9 @@ from clusters and then use the centroids during later operations to find the clu
 column's missing value pertains to and use those means to fill in missing values.
 * `pca` - Standard, vanilla PCA.  Eigenvectors, means, and eigenvalues are stored as context along with
 the number of result columns.  Users can pass in a map with following keys:
-{:method - :svd or :correlation - defaults to svd.
+```clojure
+"{:method - :svd or :correlation - defaults to svd.
  :n-components - Number of components.  Defaults to not-provided.
  :variance - Fraction of variance to retain.  Only used if n-components is not in the
- map.  Defaults to 0.95.
+             map.  Defaults to 0.95."
+ ```
