@@ -13,6 +13,7 @@ of pandas.
 * 'data-frame' - column store db with heterogeneous column types including string and
   object column types.
 * Designed to make the majority of data munging fast and easy.
+* Missing values are first class things that you can do something about.
 
 
 ## High Level Differences
