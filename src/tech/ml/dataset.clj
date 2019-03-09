@@ -38,6 +38,13 @@
   (ds-proto/columns dataset))
 
 
+(defn column-names
+  "In-order sequence of column names"
+  [dataset]
+  (->> (ds-proto/columns dataset)
+       (map ds-col/column-name)))
+
+
 (defn columns-with-missing-seq
   "Return a sequence of:
   {:column-name column-name
@@ -758,3 +765,9 @@ the correct type."
                                  (aset col-doubles row-idx (aget src-doubles row-idx))))
                               new-col)))))
                      dataset))))))
+
+
+(defn dataset->string
+  ^String [ds]
+  (with-out-str
+    ((parallel/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))

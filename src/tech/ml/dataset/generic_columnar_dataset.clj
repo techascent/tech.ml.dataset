@@ -3,8 +3,10 @@
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.datatype.base :as dtype-base]
+            [tech.datatype :as dtype]
             [clojure.core.matrix.protocols :as mp]
-            [clojure.set :as c-set]))
+            [clojure.set :as c-set])
+  (:import [java.io Writer]))
 
 
 (declare make-dataset)
@@ -125,3 +127,12 @@
                             (->> column-seq
                                  (map (juxt ds-col/column-name identity))
                                  (into {}))))
+
+
+(defmethod print-method GenericColumnarDataset
+  [ds w]
+  (.write ^Writer w (format "%s %s:\n%s"
+                            (ds/dataset-name ds)
+                            ;;make row major shape to avoid confusion
+                            (vec (reverse (dtype/shape ds)))
+                            (ds/dataset->string ds))))
