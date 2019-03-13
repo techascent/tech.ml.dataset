@@ -113,3 +113,9 @@
 
 (def-col-stat-unary-binary min)
 (def-col-stat-unary-binary max)
+
+
+(defn window
+  [{:keys [dataset column-name]} index-weight-seq-seq arglist]
+
+  )
