@@ -146,6 +146,27 @@ These are the operators available in addition that are defined for columns:
             quartile-3]`
 
 
+#### rolling
+
+ A partial implementation of the pandas rolling operator.  Most likely you
+will need sort-by first to get your dataset ordered the way you expect it.
+This is a math operation that operates in tensor space and as such the input
+column cannot have NaN's present.
+
+
+Input-fn-keywords can be any of the base binary or reduction operators in
+the tech.compute tensor library.
+
+Usage:
+
+```clojure
+[m= :speed-avg (rolling 20 :mean (col :speed))]
+```
+
+
+
+
+
 ## Extensions
 
 The math subsystem is based on the [tech.compute](https://github.com/techascent/tech.compute) [tensor](https://github.com/techascent/tech.compute/blob/master/docs/tensor.md) library.

@@ -188,6 +188,27 @@ the correct type."
          (into {}))))
 
 
+(defn ds-sort-by
+  ([key-fn compare-fn dataset column-name-seq]
+   (let [column-name-seq (when-not (= :all column-name-seq)
+                           column-name-seq)
+         column-name-seq (or column-name-seq
+                             (->> (columns dataset)
+                                  (mapv ds-col/column-name)))]
+     (->> (index-value-seq (select dataset column-name-seq :all))
+          (sort-by (fn [[idx col-values]]
+                     (->> (zipmap column-name-seq
+                                  col-values)
+                          key-fn))
+                   compare-fn)
+          (map first)
+          (select dataset :all))))
+  ([key-fn compare-fn dataset]
+   (ds-sort-by key-fn compare-fn dataset :all))
+  ([key-fn dataset]
+   (ds-sort-by key-fn < dataset :all)))
+
+
 (defn ds-concat
   [dataset & other-datasets]
   (let [column-list
@@ -218,6 +239,12 @@ the correct type."
                                           {:unchecked? true})
                    new-col)))
          (ds-proto/from-prototype dataset (dataset-name dataset)))))
+
+
+(defn ds-take-nth
+  [n-val dataset]
+  (select dataset :all (->> (range (second (m/shape dataset)))
+                            (take-nth n-val))))
 
 
 (defn ds-map-values

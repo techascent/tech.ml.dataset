@@ -4,6 +4,7 @@
             [tech.compute.tensor.functional.impl :as func-impl]
             [tech.compute.cpu.math-operands :as math-ops]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.window :as window]
             [tech.ml.dataset :as ds]
             [tech.datatype :as dtype]
             [tech.compute.tensor.functional])
@@ -113,3 +114,24 @@
 
 (def-col-stat-unary-binary min)
 (def-col-stat-unary-binary max)
+
+
+(defn rolling
+  "Perform a rolling window operation.  Possibilities are :mean, :max, :min, etc.
+  Operation must be performed only when there are no NANs."
+  [{:keys [dataset column-name]} window-size window-fn input-col]
+  (let [window-fn (cond
+                    (keyword? window-fn)
+                    window-fn
+                    (symbol? window-fn)
+                    (keyword (name window-fn))
+                    (string? window-fn)
+                    (keyword window-fn)
+                    :else
+                    (throw (ex-info (format "Unrecognized window fn: %s" window-fn)
+                                    {:window-fn window-fn})))]
+    (window/specific-rolling-window
+     input-col (long window-size) window-fn)))
+
+
+(ds-math-ops/register-symbol! (symbol "rolling") rolling)
