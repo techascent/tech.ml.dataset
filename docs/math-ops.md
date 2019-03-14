@@ -161,6 +161,13 @@ Usage:
 
 ```clojure
 [m= :speed-avg (rolling 20 :mean (col :speed))]
+
+(etl/apply-pipeline dataset '[[m= :speed-avg (rolling 20 :mean (col :speed-mph))]
+                              [m= :power-avg (rolling 20 :mean (col :power))]
+                              [m= :cadence-avg (rolling 20 :mean (col :cadence))]
+                              [m= :minutes-from-start (/ (- (col :timestamp (min (col :timestamp)))
+                                                       60)]]
+                    {})
 ```
 
 
