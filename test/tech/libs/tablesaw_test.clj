@@ -471,8 +471,52 @@
                          (mapseq-fruit-dataset)))
            (->> (-> (ds/ds-concat dataset dataset)
                     (ds/->flyweight :options options))
-                (mapv :fruit-name))))))
+                (mapv :fruit-name))))
 
+    (let [new-ds (-> (etl/apply-pipeline (ds/->dataset (map hash-map (repeat :mass) (range 20)))
+                                         '[[m= :mass-avg (rolling 5 :mean (col :mass))]]
+                                         {})
+                     :dataset)]
+      (is (= [{:mass 0.0, :mass-avg 0.6}
+              {:mass 1.0, :mass-avg 1.2}
+              {:mass 2.0, :mass-avg 2.0}
+              {:mass 3.0, :mass-avg 3.0}
+              {:mass 4.0, :mass-avg 4.0}
+              {:mass 5.0, :mass-avg 5.0}
+              {:mass 6.0, :mass-avg 6.0}
+              {:mass 7.0, :mass-avg 7.0}
+              {:mass 8.0, :mass-avg 8.0}
+              {:mass 9.0, :mass-avg 9.0}]
+             (-> (ds/select new-ds [:mass :mass-avg] (range 10))
+                 ds/->flyweight)))
+      (let [sorted-ds (ds/ds-sort-by :mass-avg > new-ds)]
+        (is (= [{:mass 19.0, :mass-avg 18.4}
+                {:mass 18.0, :mass-avg 17.8}
+                {:mass 17.0, :mass-avg 17.0}
+                {:mass 16.0, :mass-avg 16.0}
+                {:mass 15.0, :mass-avg 15.0}
+                {:mass 14.0, :mass-avg 14.0}
+                {:mass 13.0, :mass-avg 13.0}
+                {:mass 12.0, :mass-avg 12.0}
+                {:mass 11.0, :mass-avg 11.0}
+                {:mass 10.0, :mass-avg 10.0}]
+               (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
+                   ds/->flyweight))))
+      (let [nth-db (ds/ds-take-nth 5 src-ds)]
+        (is (= [7 12] (m/shape nth-db)))
+        (is (= [{:mass 192.0, :width 8}
+                {:mass 80.0, :width 5}
+                {:mass 166.0, :width 6}
+                {:mass 156.0, :width 7}
+                {:mass 160.0, :width 7}
+                {:mass 356.0, :width 9}
+                {:mass 158.0, :width 7}
+                {:mass 150.0, :width 7}
+                {:mass 154.0, :width 7}
+                {:mass 186.0, :width 7}]
+               (->> (-> (ds/select nth-db [:mass :width] (range 10))
+                        ds/->flyweight)
+                    (map #(update % :width int)))))))))
 
 (deftest one-hot
   (testing "Testing one-hot into multiple column groups"

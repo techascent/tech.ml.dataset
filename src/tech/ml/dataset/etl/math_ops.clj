@@ -126,7 +126,10 @@
                     (symbol? window-fn)
                     (keyword (name window-fn))
                     (string? window-fn)
-                    (keyword window-fn))]
+                    (keyword window-fn)
+                    :else
+                    (throw (ex-info (format "Unrecognized window fn: %s" window-fn)
+                                    {:window-fn window-fn})))]
     (window/specific-rolling-window
      input-col (long window-size) window-fn)))
 

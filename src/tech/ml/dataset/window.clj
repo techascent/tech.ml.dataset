@@ -7,7 +7,8 @@
   (:require [tech.compute.tensor.functional :as ct-fun]
             [clojure.core.matrix.macros :refer [c-for]]
             [tech.datatype :as dtype]
-            [tech.compute.tensor :as ct])
+            [tech.compute.tensor :as ct]
+            [tech.parallel :as parallel])
   (:import [org.apache.commons.math3.distribution NormalDistribution]))
 
 
@@ -98,6 +99,9 @@
         n-elems (dtype/ecount src-tensor)
         window-size (long window-size)
         last-idx (- n-elems 1)]
+    ;;This type of reduction really should be supported deep in the cpu driver layer for
+    ;;tensors--it should be a new tensor-level operation which would increase performance
+    ;;to about maximum but for now this will get you maybe 10% of the way there.
     (parallel/parallel-for
      idx n-elems
      (let [indexes (create-index-array idx window-size last-idx)]
