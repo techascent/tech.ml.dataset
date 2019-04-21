@@ -1,7 +1,7 @@
 (ns tech.ml.dataset
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
-  (:require [tech.datatype :as dtype]
+  (:require [tech.v2.datatype :as dtype]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]

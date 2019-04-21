@@ -1,20 +1,18 @@
 (ns tech.ml.dataset.window
   "Windowing functions to create new columns from windowed views into other tables.
-  A window into a table is a sequence of sequences index,weight pairs.  Please
-  ensure new window functions match exactly the scipy versions.
   [[[0 1.0][1 1.0][2 0.5]]
    [[3 1.0][4 1.0][5 0.5]]]"
-  (:require [tech.compute.tensor.functional :as ct-fun]
+  (:require [tech.v2.datatype.functional :as dtype-fn]
             [clojure.core.matrix.macros :refer [c-for]]
-            [tech.datatype :as dtype]
-            [tech.compute.tensor :as ct]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.reader :as reader]
             [tech.parallel :as parallel])
   (:import [org.apache.commons.math3.distribution NormalDistribution]))
 
 
 (defn normalize
   [double-data]
-  (let [mag (ct-fun/magnitude-reduce double-data)]
+  (let [mag (dtype-fn/magnitude double-data)]
     (ct-fun// double-data mag)))
 
 
@@ -61,17 +59,11 @@
                  window-data])))))
 
 
-(defn outer-select
-  [tens-value indexes]
-  (let [n-dims (count (ct/shape tens-value))]
-    (apply ct/select tens-value (repeat (- n-dims 1) :all))))
-
-
 (defn inner-select
   [tens-value indexes]
-  (let [n-dims (count (ct/shape tens-value))]
-    (apply ct/select tens-value (concat (repeat (- n-dims 1) :all)
-                                        [indexes]))))
+  (let [n-dims (count (dtype/shape tens-value))]
+    (apply tens/select tens-value (concat (repeat (- n-dims 1) :all)
+                                          [indexes]))))
 
 
 (defn generalized-rolling-window
@@ -79,7 +71,7 @@
   [window-index-seq window-fn src-tensor-seq]
   (let [first-tens (first src-tensor-seq)
         result-dtype (dtype/get-datatype first-tens)
-        src-tensor-seq (map ct/ensure-tensor src-tensor-seq)]
+        src-tensor-seq (map tens/ensure-tensor src-tensor-seq)]
     (->> window-index-seq
          (map (fn [[idx-ary window-ary]]
                 (if-not (= 0 (count idx-ary))
@@ -92,10 +84,8 @@
 
 
 (defn specific-rolling-window
-  [src-tensor window-size window-fn-keywd]
-  (let [dest (ct/clone src-tensor)
-        dest-tensor (ct/ensure-tensor dest)
-        src-tensor (ct/ensure-tensor src-tensor)
+  [src-tensor window-size binary-op]
+  (let [
         n-elems (dtype/ecount src-tensor)
         window-size (long window-size)
         last-idx (- n-elems 1)]
@@ -105,7 +95,6 @@
     (parallel/parallel-for
      idx n-elems
      (let [indexes (create-index-array idx window-size last-idx)]
-       (ct/unary-reduce! (ct/select dest-tensor [idx]) 1.0
-                         (ct/select src-tensor indexes)
+       (dtype-fn/iterable-reduce                          (ct/select src-tensor indexes)
                          window-fn-keywd)))
     dest))

@@ -2,8 +2,9 @@
   (:require [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.dataset :as ds-proto]
-            [tech.datatype.base :as dtype-base]
-            [tech.datatype :as dtype]
+            [tech.v2.datatype.base :as dtype-base]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.protocols :as dtype-proto]
             [clojure.core.matrix.protocols :as mp]
             [clojure.set :as c-set])
   (:import [java.io Writer]))
@@ -68,7 +69,8 @@
                                :selection column-name-seq})))
           _ (when-not (= (count name-set)
                          (count column-name-seq))
-              (throw (ex-info "Duplicate column names detected" {:selection column-name-seq})))
+              (throw (ex-info "Duplicate column names detected"
+                              {:selection column-name-seq})))
           indexes (if (= :all index-seq)
                     nil
                     (int-array index-seq))]
@@ -115,9 +117,10 @@
                         {:dimension-number dimension-number
                          :shape shape})))))
 
-  dtype-base/PCopyRawData
+  dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
-    (dtype-base/copy-raw->item! (ds/columns raw-data) ary-target target-offset options)))
+    (dtype-proto/copy-raw->item! (ds/columns raw-data) ary-target
+                                 target-offset options)))
 
 
 (defn make-dataset

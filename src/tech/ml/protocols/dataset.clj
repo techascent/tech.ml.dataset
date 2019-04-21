@@ -1,7 +1,7 @@
 (ns tech.ml.protocols.dataset
   (:require [clojure.set :as c-set]
             [tech.ml.protocols.column :as col-proto]
-            [tech.datatype :as dtype]
+            [tech.v2.datatype :as dtype]
             [clojure.core.matrix.protocols :as mp]))
 
 

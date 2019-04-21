@@ -1,8 +1,6 @@
 (ns tech.ml.dataset.etl.math-ops
   (:require [tech.ml.dataset.etl.defaults :refer [etl-datatype]]
             [tech.ml.dataset.etl.impl.math-ops :as ds-math-ops]
-            [tech.compute.tensor.functional.impl :as func-impl]
-            [tech.compute.cpu.math-operands :as math-ops]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.window :as window]
             [tech.ml.dataset :as ds]

@@ -6,7 +6,7 @@
   column."
   (:require [tech.ml.protocols.dataset :as ds]
             [tech.ml.protocols.column :as ds-col]
-            [tech.datatype :as dtype]
+            [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
             [tech.ml.utils :as utils]))
 
