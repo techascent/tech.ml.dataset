@@ -34,7 +34,7 @@
 
 
 (defn pca-dataset
-  "Run PCA on the dataset.  Dataset must not of missing values
+  "Run PCA on the dataset.  Dataset must not have missing values
   or non-numeric string columns. Returns pca-info:
   {:means - vec of means
    :eigenvalues - vec of eigenvalues
@@ -50,6 +50,8 @@
         ^PCA pca-data (case method
                         :svd (PCA. array-of-arrays)
                         :correlation (PCA. array-of-arrays true))
+        ;;We transform out of the tensor system so that we can be sure the output of
+        ;;pca-dataset can be saved with a simple system.  Tensors aren't serializeable.
         data-transform (fn [item]
                          (tens/->jvm
                           (tens/ensure-tensor item)
@@ -78,7 +80,10 @@
                             {:n-components n-components
                              :n-cols n-cols})))
         project-matrix (tens/select eigenvectors (range n-components) :all)
-        subtract-result (dtype-fn/- dataset-tens (tens/reshape (:means pca-info) [n-cols 1]))]
+        ;;The old system would auto-broadcast.  Given the confusion that broadcasting causes,
+        ;;the simpler manual way may be better.
+        subtract-result (dtype-fn/- dataset-tens (-> (tens/reshape (:means pca-info) [n-cols 1])
+                                                     (tens/broadcast (dtype/shape dataset-tens))))]
 
     (-> (tens/matrix-multiply project-matrix subtract-result)
         (ds-tens/column-major-tensor->dataset dataset "pca-result"))))
