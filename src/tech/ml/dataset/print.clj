@@ -1,7 +1,7 @@
 (ns tech.ml.dataset.print
   (:require [clojure.pprint :as pp]
             [tech.ml.dataset :as dataset]
-            [tech.datatype :as dtype]))
+            [tech.v2.datatype :as dtype]))
 
 
 (def ^:dynamic *default-float-format* "%.3f")

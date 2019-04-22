@@ -1,16 +1,16 @@
 (ns tech.ml.dataset.tensor
   "Conversion mechanisms from dataset to tensor and back"
-  (:require [tech.compute.tensor :as ct]
+  (:require [tech.v2.tensor :as tens]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.datatype :as dtype]))
+            [tech.v2.datatype :as dtype]))
 
 
 (defn column-major-tensor->dataset
   [tens & [proto-dataset table-name]]
-  (when-not (= 2 (count (ct/shape tens)))
+  (when-not (= 2 (count (dtype/shape tens)))
     (throw (ex-info "Tensors must be 2 dimensional to transform to datasets" {})))
-  (let [[n-cols n-rows] (ct/shape tens)
+  (let [[n-cols n-rows] (dtype/shape tens)
         proto-dataset (or proto-dataset (ds/->dataset [{:a 1 :b 2} {:a 2 :b 3}]))
         table-name (or table-name "_unnamed")
         first-col (first (ds/columns proto-dataset))
@@ -21,25 +21,25 @@
                              #(ds-col/new-column
                                first-col
                                datatype
-                               (ct/select tens % :all)
+                               (tens/select tens % :all)
                                {:name %}))))))
 
 
 (defn row-major-tensor->dataset
   [tens & [proto-dataset table-name]]
-  (when-not (= 2 (count (ct/shape tens)))
+  (when-not (= 2 (count (dtype/shape tens)))
     (throw (ex-info "Tensors must be 2 dimensional to transform to datasets" {})))
-  (column-major-tensor->dataset (-> (ct/transpose tens [1 0])
-                                    (ct/clone))
+  (column-major-tensor->dataset (-> (tens/transpose tens [1 0])
+                                    (tens/clone))
                                 proto-dataset table-name))
 
 
 (defn dataset->column-major-tensor
   [dataset datatype]
   (-> (dtype/copy-raw->item! dataset
-                             (ct/new-tensor (ct/shape dataset)
-                                            :datatype datatype
-                                            :init-value nil)
+                             (tens/new-tensor (dtype/shape dataset)
+                                              :datatype datatype
+                                              :init-value nil)
                              0
                              {:unchecked? true})
       first))
@@ -48,9 +48,9 @@
 
 (defn dataset->row-major-tensor
   [dataset datatype]
-  (let [[n-cols n-rows] (ct/shape dataset)]
+  (let [[n-cols n-rows] (dtype/shape dataset)]
     (-> (dataset->column-major-tensor dataset datatype)
         ;;transpose is in-place
-        (ct/transpose [1 0])
+        (tens/transpose [1 0])
         ;;clone makes it real.
-        (ct/clone))))
+        (tens/clone))))

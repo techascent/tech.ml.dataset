@@ -1,5 +1,5 @@
 (ns tech.libs.tablesaw
-  (:require [tech.libs.tablesaw.datatype.tablesaw :as dtype-tbl]
+  (:require [tech.libs.tablesaw.tablesaw-column :as dtype-tbl]
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.column :as col-proto]
             [clojure.core.matrix.protocols :as mp]
@@ -74,7 +74,7 @@
                       {:column-type (dtype/get-datatype col)
                        :column-name (col-proto/column-name this)})))
     (let [stats-set (set (if-not (seq stats-set)
-                           available-stats
+                           dtype-tbl/available-stats
                            stats-set))
           existing (->> stats-set
                         (map (fn [skey]
@@ -196,6 +196,17 @@
       ->tablesaw-dataset))
 
 
+(defn col-dtype-cast
+  [data-val dtype]
+  (if (= dtype
+         :string)
+    (if (or (keyword? data-val)
+            (symbol? data-val))
+      (name data-val)
+      (str data-val))
+    (dtype/cast data-val dtype)))
+
+
 (defn map-seq->tablesaw-dataset
   [map-seq-dataset {:keys [scan-depth
                            column-definitions
@@ -228,7 +239,7 @@
                               (dotimes [idx missing]
                                 (.appendMissing col))
                               (if-not (nil? item-val)
-                                (.append col (col-datatype-cast
+                                (.append col (col-dtype-cast
                                               item-val (dtype/get-datatype col)))
                                 (.appendMissing col))))
                           idx)

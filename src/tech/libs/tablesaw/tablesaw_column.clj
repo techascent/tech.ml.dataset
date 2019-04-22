@@ -1,4 +1,4 @@
-(ns tech.libs.tablesaw.datatype.tablesaw
+(ns tech.libs.tablesaw.tablesaw-column
   "Bindings so that you can do math on tablesaw columns."
   (:require [tech.v2.datatype.base :as base]
             [tech.v2.datatype.protocols :as dtype-proto]
@@ -13,6 +13,7 @@
   (:import [tech.tablesaw.api ShortColumn IntColumn LongColumn
             FloatColumn DoubleColumn StringColumn BooleanColumn
             NumericColumn]
+           [tech.v2.datatype ObjectReader ObjectWriter ObjectMutable]
            [tech.tablesaw.columns Column]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList]
@@ -272,7 +273,62 @@
       (throw (ex-info (format "Missing values detected: %s - %s"
                               (col-proto/column-name col)
                               (.countMissing col)))))
-    (base/copy! col (double-array (base/ecount col)))))
+    (base/copy! col (double-array (base/ecount col))))
+
+  dtype-proto/PCopyRawData
+  (copy-raw->item! [raw-data ary-target target-offset options]
+    (base/raw-dtype-copy! (dtype-proto/->reader-of-type raw-data :object false)
+                          ary-target
+                          target-offset options))
+
+
+  dtype-proto/PToReader
+  (->reader-of-type [col datatype unchecked?]
+    (-> (reify ObjectReader
+          (getDatatype [reader] (dtype-proto/get-datatype col))
+          (lsize [reader] (base/ecount col))
+          (read [reader idx] (.get col idx)))
+        (dtype-proto/->reader-of-type datatype unchecked?)))
+
+
+  dtype-proto/PToWriter
+  (->writer-of-type [col datatype unchecked?]
+    (-> (reify ObjectWriter
+          (getDatatype [writer] (dtype-proto/get-datatype col))
+          (lsize [writer] (base/ecount col))
+          (write [writer idx value] (.set col idx value)))
+        (dtype-proto/->writer-of-type datatype unchecked?)))
+
+
+  dtype-proto/PToMutable
+  (->mutable-of-type [col datatype unchecked?]
+    (-> (reify ObjectMutable
+          (getDatatype [mut] (dtype-proto/get-datatype col))
+          (lsize [mut] (base/ecount col))
+          (insert [mut idx value]
+            (when-not (= idx (.lsize mut))
+              (throw (ex-info "Only insertion at the end of a column is supported." {})))
+            (.append col value)))
+        (dtype-proto/->mutable-of-type datatype unchecked?)))
+
+
+  dtype-proto/PPrototype
+  (from-prototype [col datatype shape]
+    (when-not (= 1 (count shape))
+      (throw (ex-info "Base containers cannot have complex shapes"
+                      {:shape shape})))
+    (dtype-proto/make-container :tablesaw-column
+                                datatype
+                                (base/shape->ecount shape)
+                                {:column-name (.name col)}))
+
+  dtype-proto/PToArray
+  (->sub-array [col] nil)
+  (->array-copy [col] (.asObjectArray col))
+
+  mp/PElementCount
+  (element-count [col]
+    (.size col)))
 
 
 (defmacro extend-tablesaw-type
@@ -287,17 +343,6 @@
                          (base/raw-dtype-copy! (dtype-proto/as-list raw-data#)
                                                ary-target#
                                                target-offset# options#))}
-     dtype-proto/PPrototype
-     {:from-prototype
-      (fn [src-ary# datatype# shape#]
-        (when-not (= 1 (count shape#))
-          (throw (ex-info "Base containers cannot have complex shapes"
-                          {:shape shape#})))
-        (dtype-proto/make-container :tablesaw-column
-                                    datatype#
-                                    (base/shape->ecount shape#)
-                                    {:column-name (.name (datatype->column-cast-fn
-                                                          ~datatype src-ary#))}))}
 
      dtype-proto/PToNioBuffer
      {:convertible-to-nio-buffer? (fn [item#] (casting/numeric-type?
@@ -343,12 +388,7 @@
      dtype-proto/PSetConstant
      {:set-constant! (fn [item# offset# value# elem-count#]
                        (dtype-proto/set-constant! (dtype-proto/as-list item#) offset#
-                                                  value# elem-count#))}
-
-
-     mp/PElementCount
-     {:element-count (fn [item#]
-                       (.size (datatype->column-cast-fn ~datatype item#)))}))
+                                                  value# elem-count#))}))
 
 
 (extend-tablesaw-type ShortColumn :int16)
@@ -356,8 +396,32 @@
 (extend-tablesaw-type LongColumn :int64)
 (extend-tablesaw-type FloatColumn :float32)
 (extend-tablesaw-type DoubleColumn :float64)
-(extend-tablesaw-type StringColumn :string)
 (extend-tablesaw-type BooleanColumn :boolean)
+
+(extend-type StringColumn
+  dtype-proto/PDatatype
+  (get-datatype [col] :string))
+
+
+(defmacro extend-generic-tablesaw-type
+  [typename datatype]
+  `(clojure.core/extend
+       ~typename
+     dtype-proto/PDatatype
+     {:get-datatype (fn [arg#] ~datatype)}
+
+
+
+     dtype-proto/PSetConstant
+     {:set-constant! (fn [item# offset# value# elem-count#]
+                       (dtype-proto/set-constant! (dtype-proto/as-list item#) offset#
+                                                  value# elem-count#))}
+
+
+     mp/PElementCount
+     {:element-count (fn [item#]
+                       (.size (datatype->column-cast-fn ~datatype item#)))}))
+
 
 
 (defn make-column
