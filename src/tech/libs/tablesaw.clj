@@ -135,16 +135,19 @@
 
 
   dtype-proto/PToReader
-  (->reader-of-type [item datatype unchecked?]
-    (dtype-proto/->reader-of-type col datatype unchecked?))
+  (convertible-to-reader? [item] true)
+  (->reader [item options]
+    (dtype-proto/->reader col options))
 
   dtype-proto/PToWriter
-  (->writer-of-type [item datatype unchecked?]
-    (dtype-proto/->writer-of-type col datatype unchecked?))
+  (convertible-to-writer? [item] true)
+  (->writer [item options]
+    (dtype-proto/->writer col options))
 
   dtype-proto/PToMutable
-  (->mutable-of-type [item datatype unchecked?]
-    (dtype-proto/->mutable-of-type col datatype unchecked?))
+  (convertible-to-mutable? [item] true)
+  (->mutable [item options]
+    (dtype-proto/->mutable col options))
 
 
   dtype-proto/PToArray

@@ -1,6 +1,7 @@
 (ns tech.libs.tablesaw.tablesaw-column
   "Bindings so that you can do math on tablesaw columns."
   (:require [tech.v2.datatype.base :as base]
+            [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.typecast :as typecast]
@@ -277,31 +278,34 @@
 
   dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
-    (base/raw-dtype-copy! (dtype-proto/->reader-of-type raw-data :object false)
+    (base/raw-dtype-copy! (dtype/->reader raw-data)
                           ary-target
                           target-offset options))
 
 
   dtype-proto/PToReader
-  (->reader-of-type [col datatype unchecked?]
+  (convertible-to-reader? [item] true)
+  (->reader [col options]
     (-> (reify ObjectReader
           (getDatatype [reader] (dtype-proto/get-datatype col))
           (lsize [reader] (base/ecount col))
           (read [reader idx] (.get col idx)))
-        (dtype-proto/->reader-of-type datatype unchecked?)))
+        (dtype-proto/->reader options)))
 
 
   dtype-proto/PToWriter
-  (->writer-of-type [col datatype unchecked?]
+  (convertible-to-writer? [item] true)
+  (->writer [col options]
     (-> (reify ObjectWriter
           (getDatatype [writer] (dtype-proto/get-datatype col))
           (lsize [writer] (base/ecount col))
           (write [writer idx value] (.set col idx value)))
-        (dtype-proto/->writer-of-type datatype unchecked?)))
+        (dtype-proto/->writer options)))
 
 
   dtype-proto/PToMutable
-  (->mutable-of-type [col datatype unchecked?]
+  (convertible-to-mutable? [item] true)
+  (->mutable [col options]
     (-> (reify ObjectMutable
           (getDatatype [mut] (dtype-proto/get-datatype col))
           (lsize [mut] (base/ecount col))
@@ -309,7 +313,7 @@
             (when-not (= idx (.lsize mut))
               (throw (ex-info "Only insertion at the end of a column is supported." {})))
             (.append col value)))
-        (dtype-proto/->mutable-of-type datatype unchecked?)))
+        (dtype-proto/->mutable options)))
 
 
   dtype-proto/PPrototype
@@ -365,19 +369,22 @@
 
 
      dtype-proto/PToReader
-     {:->reader-of-type (fn [item# datatype# unchecked?#]
-                          (dtype-proto/->reader-of-type (dtype-proto/as-list item#)
-                                                        datatype# unchecked?#))}
+     {:convertible-to-reader? (constantly true)
+      :->reader (fn [item# options#]
+                  (dtype-proto/->reader (dtype-proto/as-list item#)
+                                        options#))}
 
      dtype-proto/PToWriter
-     {:->writer-of-type (fn [item# datatype# unchecked?#]
-                          (dtype-proto/->writer-of-type (dtype-proto/as-list item#)
-                                                        datatype# unchecked?#))}
+     {:convertible-to-reader? (constantly true)
+      :->writer (fn [item# options#]
+                  (dtype-proto/->writer (dtype-proto/as-list item#)
+                                        options#))}
 
      dtype-proto/PToMutable
-     {:->mutable-of-type (fn [item# datatype# unchecked?#]
-                           (dtype-proto/->mutable-of-type (dtype-proto/as-list item#)
-                                                          datatype# unchecked?#))}
+     {:convertible-to-reader? (constantly true)
+      :->mutable (fn [item# options#]
+                   (dtype-proto/->mutable (dtype-proto/as-list item#)
+                                          options#))}
 
      dtype-proto/PBuffer
      {:sub-buffer
@@ -401,26 +408,6 @@
 (extend-type StringColumn
   dtype-proto/PDatatype
   (get-datatype [col] :string))
-
-
-(defmacro extend-generic-tablesaw-type
-  [typename datatype]
-  `(clojure.core/extend
-       ~typename
-     dtype-proto/PDatatype
-     {:get-datatype (fn [arg#] ~datatype)}
-
-
-
-     dtype-proto/PSetConstant
-     {:set-constant! (fn [item# offset# value# elem-count#]
-                       (dtype-proto/set-constant! (dtype-proto/as-list item#) offset#
-                                                  value# elem-count#))}
-
-
-     mp/PElementCount
-     {:element-count (fn [item#]
-                       (.size (datatype->column-cast-fn ~datatype item#)))}))
 
 
 

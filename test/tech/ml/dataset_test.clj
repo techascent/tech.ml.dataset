@@ -63,8 +63,8 @@
         ;; _ (clojure.pprint/print-table (dataset/->flyweight ds))
 
         result-tens (ds-tens/dataset->row-major-tensor ds :float64)]
-    (is (m/equals (tens/->core-matrix test-tensor)
-                  (tens/->core-matrix result-tens)))))
+    (is (= (tens/->jvm test-tensor :datatype :int32)
+           (tens/->jvm result-tens :datatype :int32)))))
 
 
 (deftest pca
