@@ -94,7 +94,8 @@
                                         :column-name column-name}))))))
                      {:unchecked? true})]
     (ds-col/new-column old-column new-dtype data-values
-                       (ds-col/metadata old-column))))
+                       (assoc (ds-col/metadata old-column)
+                              :label-map categorical-map))))
 
 
 (defn inverse-map-categorical-col-fn

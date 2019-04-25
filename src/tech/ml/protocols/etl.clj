@@ -18,7 +18,8 @@
   [op dataset column-name-seq op-args]
   (->> column-name-seq
        (map (fn [col-name]
-              (when-let [etl-ctx (build-etl-context op dataset col-name op-args)]
+              (when-let [etl-ctx (build-etl-context op dataset
+                                                    col-name op-args)]
                 [col-name etl-ctx])))
        (remove nil?)
        (into {})))
@@ -38,5 +39,5 @@
   (build-etl-context-columns [op dataset column-name-seq op-args]
     (default-etl-context-columns op dataset column-name-seq op-args))
 
-  (perform-etl-columns [op dataset column-name-seq op-args context]
-    (default-perform-etl-columns op dataset column-name-seq op-args context)))
+  (perform-etl-columns [op dataset column-name-seq op-args]
+    (default-perform-etl-columns op dataset column-name-seq op-args)))

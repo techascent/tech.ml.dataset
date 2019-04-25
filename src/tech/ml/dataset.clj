@@ -38,6 +38,14 @@
   (ds-proto/columns dataset))
 
 
+(defn column-map
+  "clojure map of column-name->column"
+  [datatypes]
+  (->> (ds-proto/columns datatypes)
+       (map (juxt ds-col/column-name identity))
+       (into {})))
+
+
 (defn column-names
   "In-order sequence of column names"
   [dataset]
@@ -72,6 +80,11 @@
   "Fails quietly"
   [dataset col-name]
   (ds-proto/remove-column dataset col-name))
+
+
+(defn remove-columns
+  [dataset colname-seq]
+  (reduce ds-proto/remove-column dataset colname-seq))
 
 
 (defn update-column
