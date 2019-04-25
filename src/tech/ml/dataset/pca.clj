@@ -80,10 +80,9 @@
                             {:n-components n-components
                              :n-cols n-cols})))
         project-matrix (tens/select eigenvectors (range n-components) :all)
-        ;;The old system would auto-broadcast.  Given the confusion that broadcasting causes,
-        ;;the simpler manual way may be better.
-        subtract-result (dtype-fn/- dataset-tens (-> (tens/reshape (:means pca-info) [n-cols 1])
-                                                     (tens/broadcast (dtype/shape dataset-tens))))]
+        subtract-result (dtype-fn/- dataset-tens
+                                    (-> (tens/reshape (:means pca-info) [n-cols 1])
+                                        (tens/broadcast (dtype/shape dataset-tens))))]
 
     (-> (tens/matrix-multiply project-matrix subtract-result)
         (ds-tens/column-major-tensor->dataset dataset "pca-result"))))

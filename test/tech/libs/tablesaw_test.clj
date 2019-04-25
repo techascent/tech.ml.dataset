@@ -318,21 +318,23 @@
                       (vec (repeat (count mean-var-seq) 0))
                       0.001))
         (let [{pca-ds :dataset
-               pca-pipeline :pipeline} (etl/apply-pipeline dataset '[[pca [and numeric?
-                                                                           [not categorical?]
-                                                                           [not target?]]]]
-                                                           {:do-not-auto-convert? true})
+               pca-pipeline :pipeline} (etl/apply-pipeline
+                                        dataset '[[pca [and numeric?
+                                                        [not categorical?]
+                                                        [not target?]]]]
+                                        {:do-not-auto-convert? true})
               saved-pca-context (:context (last pca-pipeline))]
           (is (= 28 (:n-components saved-pca-context)))
           (is (= 127 (count (ds/columns dataset))))
           (is (= 74 (count (ds/columns pca-ds))))
           (is (= 1 (count (col-filters/target? pca-ds)))))
         (let [{pca-ds :dataset
-               pca-pipeline :pipeline} (etl/apply-pipeline dataset '[[pca [and numeric?
-                                                                           [not categorical?]
-                                                                           [not target?]]
-                                                                      {:n-components 10}]]
-                                                           {:do-not-auto-convert? true})
+               pca-pipeline :pipeline} (etl/apply-pipeline
+                                        dataset '[[pca [and numeric?
+                                                        [not categorical?]
+                                                        [not target?]]
+                                                   {:n-components 10}]]
+                                        {:do-not-auto-convert? true})
               saved-pca-context (:context (last pca-pipeline))]
           (is (= 10 (:n-components saved-pca-context)))
           (is (= 127 (count (ds/columns dataset))))
