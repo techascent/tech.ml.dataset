@@ -1,4 +1,5 @@
 (ns tech.ml.dataset.pipeline
+  "A set of common 'pipeline' operations you probably will want to run on a dataset."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.ml.protocols.etl :as etl-proto]
@@ -68,7 +69,28 @@
 (defn ->datatype
   "Marshall columns to be the etl datatype.  This changes numeric columns to be a
   unified backing store datatype."
-  [dataset datatype & {:keys [column-name-seq]}]
+  [dataset & {:keys [column-name-seq datatype]
+              :or {datatype :float64}}]
   (pipe-ops/inline-perform-operator
    pipe-ops/->datatype dataset (or column-name-seq (ds/columns dataset))
    datatype))
+
+
+(defn range-scale
+  "Range-scale a set of columns to be within either [-1 1] or the range provided
+  by the first argument.  Will fail if columns have missing values."
+  [dataset & {:keys [column-name-seq value-range]
+              :or {value-range [-1 1]} :as op-args}]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/range-scaler dataset (or column-name-seq (ds/columns dataset))
+   op-args))
+
+
+(defn std-scale
+  "Scale columns to have 0 mean and 1 std deviation.  Will fail if columns
+  contain missing values."
+  [dataset & {:keys [column-name-seq use-mean? use-std?]
+              :or {use-mean? true use-std? true} :as op-args}]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/range-scaler dataset (or column-name-seq (ds/columns dataset))
+   op-args))

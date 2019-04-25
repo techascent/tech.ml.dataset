@@ -4,7 +4,10 @@
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
-            [tech.v2.datatype :as dtype])
+            [tech.ml.dataset.tensor :as ds-tens]
+            [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.tensor :as tens])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
             PETLMultipleColumnOperator]))
@@ -136,10 +139,11 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
 
 
 (defn- ->row-broadcast
-  [item-tensor]
+  [item-tensor target-shape]
   (if (number? item-tensor)
     item-tensor
-    (tens/in-place-reshape item-tensor [(tens/ecount item-tensor) 1])))
+    (-> (tens/reshape item-tensor [(dtype/ecount item-tensor) 1])
+        (tens/broadcast target-shape))))
 
 
 (defn- sub-divide-bias
@@ -152,28 +156,17 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
   return a new dataset."
   [dataset datatype column-name-seq sub-val divide-val bias-val]
   (let [src-data (ds/select dataset column-name-seq :all)
-        [src-cols src-rows] (tens/shape src-data)
         colseq (ds/columns src-data)
-        etl-dtype (or datatype *datatype-)
+        etl-dtype (or datatype *pipeline-datatype*)
         ;;Storing data column-major so the row is incremention fast.
-        backing-store (tens/new-tensor [src-cols src-rows]
-                                     :datatype etl-dtype
-                                     :init-value nil)
-        _ (dtype/copy-raw->item!
-           (->> colseq
-                (map
-                 (fn [col]
-                   (when-not (= (int src-rows) (tens/ecount col))
-                     (throw (ex-info "Column is wrong size; ragged table not supported."
-                                     {})))
-                   (ds-col/column-values col))))
-           (tens/tensor->buffer backing-store)
-           0 {:unchecked? true})
+        backing-store (ds-tens/dataset->column-major-tensor
+                       dataset :datatype etl-dtype)
+        ds-shape (dtype/shape backing-store)
 
         backing-store (-> backing-store
-                          (ct-ops/- (->row-broadcast sub-val))
-                          (ct-ops// (->row-broadcast divide-val))
-                          (ct-ops/+ (->row-broadcast bias-val)))]
+                          (dtype-fn/- (->row-broadcast sub-val ds-shape))
+                          (dtype-fn// (->row-broadcast divide-val ds-shape))
+                          (dtype-fn/+ (->row-broadcast bias-val ds-shape)))]
 
     ;;apply result back to main table
     (->> colseq
@@ -187,3 +180,79 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
                                          (dissoc (ds-col/metadata incoming-col)
                                                  :categorical?)))))
                  dataset))))
+
+
+(def-multiple-column-etl-operator range-scaler
+  "Range-scale a set of columns to be within either [-1 1] or the range provided
+by the first argument.  Will fail if columns have missing values."
+  (->> column-name-seq
+       (map (fn [column-name]
+              [column-name
+               (-> (ds/column dataset column-name)
+                   (ds-col/stats [:min :max]))]))
+       (into {}))
+
+  (if-let [column-name-seq (->> column-name-seq
+                                (clojure.core/remove #(= (get-in context [% :min])
+                                                         (get-in context [% :max])))
+                                seq)]
+    (let [colseq (map (partial dataset ds/column) column-name-seq)
+          etl-dtype (context-datatype op-args)
+          context-map-seq (map #(get context %) column-name-seq)
+          min-values (tens/->tensor (mapv :min context-map-seq) :datatype etl-dtype)
+          max-values (tens/->tensor (mapv :max context-map-seq) :datatype etl-dtype)
+          col-ranges (dtype-fn/- max-values min-values)
+          [range-min range-max] (or (:value-range op-args)
+                                    [-1 1])
+          range-min (double range-min)
+          range-max (double range-max)
+          target-range (- range-max
+                          range-min)
+          divisor (dtype-fn// col-ranges target-range)]
+      (sub-divide-bias dataset column-name-seq min-values divisor range-min))
+    ;;No columns, noop.
+    dataset))
+
+
+(defn- bool-arg
+  [argmap argname default-value]
+  (if (contains? argmap argname)
+    (boolean (get argmap argname))
+    (boolean default-value)))
+
+
+(def-multiple-column-etl-operator std-scaler
+  "Scale columns to have 0 mean and 1 std deviation.  Will fail if columns
+contain missing values."
+ (let [argmap op-args
+       with-mean? (bool-arg argmap :with-mean? true)
+       with-std? (bool-arg argmap :with-std? true)
+       stats-seq (-> (concat (when with-mean? [:mean])
+                             (when with-std? [:standard-deviation])))]
+   (->> column-name-seq
+        (map (fn [column-name]
+               [column-name
+                (-> (ds/column dataset column-name)
+                    (ds-col/stats stats-seq))]))
+        (into {})))
+
+  ;;Avoid divide by zero.
+  (if-let [column-name-seq (->> column-name-seq
+                                (clojure.core/remove
+                                 #(= 0 (get-in context [% :standard-deviation]))))]
+    (let [first-ctx (get context (first column-name-seq))
+          colseq (map (partial ds/column dataset) column-name-seq)
+          use-mean? (contains? first-ctx :mean)
+          use-std? (contains? first-ctx :standard-deviation)
+          etl-dtype (context-datatype op-args)
+          context-map-seq (map #(get context (ds-col/column-name %)) colseq)
+          mean-values (if use-mean?
+                        (tens/->tensor (mapv :mean context-map-seq) :datatype etl-dtype)
+                        0)
+          std-values (if use-std?
+                       (tens/->tensor (mapv :standard-deviation context-map-seq)
+                                      :datatype etl-dtype)
+                       1.0)]
+      (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
+    ;;no columns, noop
+    dataset))

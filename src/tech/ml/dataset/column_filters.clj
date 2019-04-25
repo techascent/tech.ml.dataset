@@ -2,7 +2,8 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col]))
+            [tech.ml.dataset.column :as ds-col])
+  (:refer-clojure :exclude [string?]))
 
 
 (defn of-datatype?
