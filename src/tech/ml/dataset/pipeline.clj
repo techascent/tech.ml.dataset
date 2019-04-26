@@ -22,7 +22,7 @@
   strings or tuples of expected strings to their hardcoded values."
   [dataset & {:keys [datatype column-name-seq table-value-list] :as op-args}]
   (pipe-ops/inline-perform-operator
-   string->number dataset (or column-name-seq (col-filters/string? dataset)) op-args))
+   pipe-ops/string->number dataset (or column-name-seq (col-filters/string? dataset)) op-args))
 
 
 (defn one-hot
@@ -35,7 +35,7 @@
  :other :rest}"
   [dataset & {:keys [datatype column-name-seq table-value-list] :as op-args}]
   (pipe-ops/inline-perform-operator
-   one-hot dataset (or column-name-seq (col-filters/string? dataset)) op-args))
+   pipe-ops/one-hot dataset (or column-name-seq (col-filters/string? dataset)) op-args))
 
 
 (defn replace-missing
@@ -43,7 +43,7 @@
   or a fn.  If a fn, it gets passed the dataset and the column-name."
   [dataset replace-value-or-fn & {:keys [column-name-seq]}]
   (pipe-ops/inline-perform-operator
-   replace-missing dataset (or column-name-seq (ds/column-names dataset))
+   pipe-ops/replace-missing dataset (or column-name-seq (ds/column-names dataset))
    replace-value-or-fn))
 
 
@@ -62,7 +62,7 @@
 (defn replace-string
   [dataset src-str replace-str & {:keys [column-name-seq]}]
   (pipe-ops/inline-perform-operator
-   replace-string dataset (or column-name-seq (col-filters/string? dataset))
+   pipe-ops/replace-string dataset (or column-name-seq (col-filters/string? dataset))
    [src-str replace-str]))
 
 

@@ -51,6 +51,7 @@
 (defn dataset-label-map
   [dataset]
   (->> (columns dataset)
+       (filter (comp :label-map ds-col/metadata))
        (map (juxt ds-col/column-name
                   (comp :label-map ds-col/metadata)))
        (into {})))
@@ -84,8 +85,8 @@
   Return either
   :regression
   :classification"
-  [dataset]
-  (let [inference-colnames (col-filters/inference? dataset)
+  [dataset & [column-name-seq]]
+  (let [inference-colnames (or column-name-seq (col-filters/inference? dataset))
         categorical-colnames (col-filters/categorical? dataset inference-colnames)
         num-inf (count inference-colnames)
         num-cat (count categorical-colnames)]

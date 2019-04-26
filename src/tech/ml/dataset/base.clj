@@ -68,6 +68,21 @@
   (ds-proto/add-column dataset column))
 
 
+(defn new-column
+  "Create a new column from some values."
+  ([dataset column-name values {:keys [datatype
+                                       container-type]
+                                :or {container-type :tablesaw-column}
+                                :as options}]
+   (let [datatype (or datatype (dtype/get-datatype values))]
+     (->> (if-let [col (first (columns dataset))]
+            (ds-col/new-column col datatype values {:column-name column-name})
+            (dtype/make-container container-type datatype values
+                                  (assoc options
+                                         :column-name column-name)))
+          (add-column dataset)))))
+
+
 (defn remove-column
   "Fails quietly"
   [dataset col-name]

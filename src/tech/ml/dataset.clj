@@ -12,7 +12,9 @@
             [clojure.set :as c-set]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column-filters :as col-filters]
-            [tech.ml.dataset.options :as options])
+            [tech.ml.dataset.options :as options]
+            [tech.ml.dataset.base]
+            [tech.ml.dataset.modelling])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -27,15 +29,18 @@
                         column-names
                         columns-with-missing-seq
                         add-column
+                        new-column
                         remove-column
                         remove-columns
                         update-column
                         order-column-names
                         update-columns
                         select
+                        select-columns
                         add-or-update-column
                         ds-group-by
                         ds-sort-by
+                        ds-filter
                         ds-concat
                         ds-take-nth
                         ds-map-values
@@ -48,7 +53,7 @@
                         column-label-map
                         inference-target-label-map
                         dataset-label-map
-                        label-inverse-map
+                        inference-target-label-inverse-map
                         num-inference-classes
                         feature-ecount
                         model-type
@@ -80,11 +85,14 @@
                     {:column-name colname
                      :column-values
                      (if (has-column-label-map? dataset colname)
-                       (categorical/column-values->categorical
-                        dataset colname label-map)
+                       (let [retval
+                             (categorical/column-values->categorical
+                              dataset colname label-map)]
+                         (println colname retval)
+                         retval)
                        (let [current-column (column dataset colname)]
                          (when (and error-on-missing-values?
-                                    (not= 0 (ds-col/missing current-column)))
+                                    (not= 0 (count (ds-col/missing current-column))))
                            (throw (ex-info (format "Column %s has missing values"
                                                    (ds-col/column-name current-column))
                                            {})))

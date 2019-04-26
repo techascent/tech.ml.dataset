@@ -56,7 +56,7 @@ strings or tuples of expected strings to their hardcoded values."
   ;;treat them separately
   (options/set-label-map {} (categorical/build-categorical-map
                              dataset column-name-seq
-                             {:table-value-list op-args}))
+                             op-args))
 
   (ds/update-columns dataset column-name-seq
                      (partial categorical/column-categorical-map

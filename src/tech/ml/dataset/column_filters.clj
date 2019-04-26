@@ -9,7 +9,8 @@
 
 (defn select-columns
   [dataset column-name-seq]
-  (ds/select-columns (clojure.core/or (seq column-name-seq) :all)))
+  (-> (ds/select-columns dataset (clojure.core/or (seq column-name-seq) :all))
+      ds/columns))
 
 
 (defn column-filter
@@ -59,7 +60,7 @@
   (if (seq column-name-seq)
     (->> (c-set/difference
           (set column-name-seq)
-          (ds/column-names dataset))
+          (set (ds/column-names dataset)))
          (ds/order-column-names dataset))))
 
 
