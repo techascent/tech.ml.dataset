@@ -195,9 +195,9 @@ the correct type."
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
   Y values where Y is the count of column-name-seq or :all."
   [key-fn dataset & [column-name-seq]]
-  (let [column-name-seq (or column-name-seq
-                            (->> (columns dataset)
-                                 (mapv ds-col/column-name)))]
+  (let [column-name-seq (vec (or column-name-seq
+                                 (->> (columns dataset)
+                                      (map ds-col/column-name))))]
     (->> (index-value-seq (select dataset column-name-seq :all))
          (group-by (fn [[idx col-values]]
                      (->> (zipmap column-name-seq

@@ -37,8 +37,8 @@
         src-keys (set (keys (first (mapseq-fruit-dataset))))
         result-keys (set (->> (ds/columns dataset)
                               (map ds-col/column-name)))
-        non-categorical (->> (ds/columns dataset)
-                             (remove #(:categorical? (ds-col/metadata %))))]
+        non-categorical (->> (col-filters/categorical? dataset)
+                             (col-filters/not dataset))]
 
     (is (= #{59}
            (->> (ds/columns dataset)
@@ -59,75 +59,74 @@
     (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
            (ds/labels dataset)))
 
-    ;; (is (= {:fruit-name :classification}
-    ;;        (ds/model-type dataset)))
+    (is (= {:fruit-name :classification}
+           (ds/model-type dataset)))
 
-    ;; (is (= {:fruit-name :classification,
-    ;;         :mass :regression,
-    ;;         :width :regression,
-    ;;         :height :regression,
-    ;;         :color-score :regression}
-    ;;        (->> (ds/column-names dataset)
-    ;;             (map (juxt identity #(ds/model-type dataset (vec %1))))
-    ;;             (into {}))))
+    (is (= {:fruit-name :classification,
+            :mass :regression,
+            :width :regression,
+            :height :regression,
+            :color-score :regression}
+           (ds/model-type dataset (ds/column-names dataset))))
 
-    ;; ;;Does the post-transformation value of fruit-name map to the
-    ;; ;;pre-transformation value of fruit-name?
-    ;; (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
-    ;;        (->> (ds/->flyweight dataset)
-    ;;             (mapv :fruit-name))))
+    ;;Does the post-transformation value of fruit-name map to the
+    ;;pre-transformation value of fruit-name?
+    (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
+           (->> (ds/->flyweight dataset :translate-strings? true)
+                (mapv :fruit-name))))
 
 
-    ;; (is (= (->> (ds/select dataset :all (range 10))
-    ;;             ds/->flyweight
-    ;;             (group-by :fruit-name))
-    ;;        (->> (ds/select dataset :all (range 10))
-    ;;             (ds/ds-group-by :fruit-name)
-    ;;             (map (fn [[k group-ds]]
-    ;;                    [k (vec (ds/->flyweight group-ds))]))
-    ;;             (into {}))))
+    (is (= (as-> (ds/select dataset :all (range 10)) dataset
+             (ds/->flyweight dataset)
+             (group-by :fruit-name dataset))
+           (->> (ds/select dataset :all (range 10))
+                (ds/ds-group-by :fruit-name)
+                (map (fn [[k group-ds]]
+                       [k (vec (ds/->flyweight group-ds))]))
+                (into {}))))
 
-    ;; ;;forward map from input value to encoded value.
-    ;; ;;After ETL, column values are all doubles
-    ;; (let [apple-value (get (ds/inference-target-label-map dataset) "apple")]
-    ;;   (is (= #{"apple"}
-    ;;          (->> dataset
-    ;;               (ds/ds-filter #(= apple-value (:fruit-name %)))
-    ;;               ;;Use full version of ->flyweight to do reverse mapping of numeric
-    ;;               ;;fruit name back to input label.
-    ;;               (#(ds/->flyweight %))
-    ;;               (map :fruit-name)
-    ;;               set))))
+    ;;forward map from input value to encoded value.
+    ;;After ETL, column values are all doubles
+    (let [apple-value (-> (get (ds/inference-target-label-map dataset) "apple")
+                          double)]
+      (is (= #{"apple"}
+             (->> dataset
+                  (ds/ds-filter #(= apple-value (:fruit-name %)))
+                  ;;Use full version of ->flyweight to do reverse mapping of numeric
+                  ;;fruit name back to input label.
+                  (#(ds/->flyweight % :translate-strings? true))
+                  (map :fruit-name)
+                  set))))
 
-    ;; ;;dataset starts with apple apple apple mandarin mandarin
-    ;; (let [apple-v (double (get (ds/inference-target-label-map dataset) "apple"))
-    ;;       mand-v (double (get (ds/inference-target-label-map dataset) "mandarin"))]
-    ;;   (is (= [apple-v apple-v apple-v mand-v mand-v]
-    ;;          ;;Order columns
-    ;;          (->> (ds/select dataset [:mass :fruit-name :width] :all)
-    ;;               (ds/ds-column-map #(ds-col/set-metadata
-    ;;                                   %
-    ;;                                   {:name (name (ds-col/column-name %))}))
-    ;;               (take 2)
-    ;;               (drop 1)
-    ;;               (ds/from-prototype dataset "new-table")
-    ;;               (#(ds/select % :all (range 5)))
-    ;;               ;;Note the backward conversion failed in this case because we
-    ;;               ;;change the column names.
-    ;;               (#(ds/->flyweight %))
-    ;;               (map #(get % "fruit-name"))
-    ;;               vec))))
+    ;;dataset starts with apple apple apple mandarin mandarin
+    (let [apple-v (double (get (ds/inference-target-label-map dataset) "apple"))
+          mand-v (double (get (ds/inference-target-label-map dataset) "mandarin"))]
+      (is (= [apple-v apple-v apple-v mand-v mand-v]
+             ;;Order columns
+             (->> (ds/select dataset [:mass :fruit-name :width] :all)
+                  (ds/ds-column-map #(ds-col/set-metadata
+                                      %
+                                      {:name (name (ds-col/column-name %))}))
+                  (take 2)
+                  (drop 1)
+                  (ds/from-prototype dataset "new-table")
+                  (#(ds/select % :all (range 5)))
+                  ;;Note the backward conversion failed in this case because we
+                  ;;change the column names.
+                  (#(ds/->flyweight % :translate-strings? true))
+                  (map #(get % "fruit-name"))
+                  vec))))
 
 
 
-    ;; ;; Ensure range map works
-    ;; (is (= (vec (repeat (count non-categorical) [-1 1]))
-    ;;        (->> non-categorical
-    ;;             (mapv (fn [colname]
-    ;;                     (let [{col-min :min
-    ;;                            col-max :max} (-> (ds/column dataset colname)
-    ;;                                              (ds-col/stats [:min :max]))]
-    ;;                       [(long col-min) (long col-max)]))))))
+    ;; Ensure range map works
+    (is (= (vec (repeat (count non-categorical) [-1 1]))
+           (->> non-categorical
+                (mapv (fn [colname]
+                        (let [{col-min :min
+                               col-max :max} (-> (ds/column dataset colname)
+                                                 (ds-col/stats [:min :max]))]
+                          [(long col-min) (long col-max)]))))))
 
     ;; ;;Concatenation should work
     ;; (is (= (mapv (comp name :fruit-name)

@@ -73,9 +73,11 @@
   then for the columns that are present in the label map a reverse mapping is done such
   that the flyweight maps contain the labels and not their encoded values."
   [dataset & {:keys [column-name-seq
-                     error-on-missing-values?]
+                     error-on-missing-values?
+                     translate-strings?]
               :or {error-on-missing-values? true}}]
-  (let [label-map (dataset-label-map dataset)
+  (let [label-map (when translate-strings?
+                    (dataset-label-map dataset))
         target-columns-and-vals
         (->> (or column-name-seq
                  (->> (columns dataset)
@@ -84,11 +86,10 @@
              (map (fn [colname]
                     {:column-name colname
                      :column-values
-                     (if (has-column-label-map? dataset colname)
+                     (if (contains? label-map colname)
                        (let [retval
                              (categorical/column-values->categorical
                               dataset colname label-map)]
-                         (println colname retval)
                          retval)
                        (let [current-column (column dataset colname)]
                          (when (and error-on-missing-values?
@@ -119,7 +120,8 @@
   (let [original-label-column-names (->> (col-filters/inference? dataset)
                                          (reduce-column-names dataset))
         flyweight-labels (->flyweight dataset
-                                      :column-name-seq original-label-column-names)]
+                                      :column-name-seq original-label-column-names
+                                      :translate-strings? true)]
     (if (= 1 (count original-label-column-names))
       (map #(get % (first original-label-column-names)) flyweight-labels)
       flyweight-labels)))

@@ -36,7 +36,7 @@
 
 (defn has-column-label-map?
   [dataset column-name]
-  (nil? (column-label-map dataset column-name)))
+  (boolean (column-label-map dataset column-name)))
 
 
 (defn inference-target-label-map
@@ -86,17 +86,16 @@
   :regression
   :classification"
   [dataset & [column-name-seq]]
-  (let [inference-colnames (or column-name-seq (col-filters/inference? dataset))
-        categorical-colnames (col-filters/categorical? dataset inference-colnames)
-        num-inf (count inference-colnames)
-        num-cat (count categorical-colnames)]
-    (cond
-      (= num-inf num-cat)
-      :classification
-      (= 0 num-cat)
-      :regression
-      :else
-      :mixed)))
+  (->> (or column-name-seq (col-filters/inference? dataset))
+       (map (juxt identity
+                  (fn [colname]
+                    (let [col-metadata (-> (column dataset colname)
+                                           ds-col/metadata)]
+                      (cond
+                        (:categorical? col-metadata) :classification
+                        :else
+                        :regression)))))
+       (into {})))
 
 
 (defn column-values->categorical
