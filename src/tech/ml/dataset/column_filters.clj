@@ -1,27 +1,93 @@
 (ns tech.ml.dataset.column-filters
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col])
-  (:refer-clojure :exclude [string?]))
+            [tech.ml.dataset.base :as ds]
+            [tech.ml.dataset.column :as ds-col]
+            [clojure.set :as c-set])
+  (:refer-clojure :exclude [string? not and or boolean?]))
+
+
+(defn select-columns
+  [dataset column-name-seq]
+  (ds/select-columns (clojure.core/or (seq column-name-seq) :all)))
+
+
+(defn column-filter
+  [dataset col-filter-fn & [column-name-seq]]
+  (->> (select-columns dataset column-name-seq)
+       (filter col-filter-fn)
+       (map ds-col/column-name)))
 
 
 (defn of-datatype?
   "Return column-names  of a given datatype."
-  [dataset datatype]
-  (->> (ds/columns dataset)
-       (filter #(= datatype
-                   (dtype/get-datatype %)))
-       (map ds-col/column-name)))
+  [dataset datatype & [column-name-seq]]
+  (column-filter dataset #(= datatype (dtype/get-datatype %))
+                 column-name-seq))
 
 
 (defn string?
-  [dataset]
-  (of-datatype? dataset :string))
+  [dataset & [column-name-seq]]
+  (of-datatype? dataset :string column-name-seq))
+
+
+(defn boolean?
+  [dataset & [column-name-seq]]
+  (of-datatype? dataset :string column-name-seq))
 
 
 (defn numeric?
-  [dataset]
-  (->> (ds/columns dataset)
-       (filter #(casting/numeric-type?
-                 (dtype/get-datatype %)))))
+  [dataset & [column-name-seq]]
+  (column-filter dataset #(casting/numeric-type? (dtype/get-datatype %))
+                 column-name-seq))
+
+
+(defn categorical?
+  [dataset & [column-name-seq]]
+  (column-filter dataset (comp :categorical? ds-col/metadata)
+                 column-name-seq))
+
+
+(defn missing?
+  [dataset & [column-name-seq]]
+  (column-filter dataset #(not= 0 (ds-col/missing %))
+                 column-name-seq))
+
+
+(defn not
+  [dataset & [column-name-seq]]
+  (if (seq column-name-seq)
+    (->> (c-set/difference
+          (set column-name-seq)
+          (ds/column-names dataset))
+         (ds/order-column-names dataset))))
+
+
+(defn and
+  [dataset lhs-name-seq rhs-name-seq]
+  (->> (c-set/intersection (set lhs-name-seq)
+                           (set rhs-name-seq))
+       (ds/order-column-names dataset)))
+
+
+(defn or
+  [dataset lhs-name-seq rhs-name-seq]
+  (->> (c-set/union (set lhs-name-seq)
+                    (set rhs-name-seq))
+       (ds/order-column-names dataset)))
+
+
+(defn inference?
+  [dataset & [column-name-seq]]
+  (column-filter
+   dataset
+   (comp #(= % :inference) :column-type ds-col/metadata)
+   column-name-seq))
+
+
+(defn feature?
+  [dataset & [column-name-seq]]
+  (column-filter
+   dataset
+   (comp #(= % :feature) :column-type ds-col/metadata)
+   column-name-seq))

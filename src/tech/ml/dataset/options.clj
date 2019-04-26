@@ -1,7 +1,8 @@
 (ns tech.ml.dataset.options
   "The etl pipeline and dataset operators are built to produce a metadata options map.
   Their API access to the options is centralized in this file."
-  (:require [tech.ml.dataset.categorical :as categorical]))
+  (:require [tech.ml.dataset.categorical :as categorical]
+            [clojure.set :as c-set]))
 
 
 (defn ->dataset-label-map

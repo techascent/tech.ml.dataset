@@ -3,6 +3,7 @@
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.options :as ds-opts]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
@@ -22,13 +23,14 @@
                    [range-scaler (not categorical?)]]
         src-ds (ds/->dataset (mapseq-fruit-dataset) {})
 
-        dataset (-> src-ds
-                    (ds/remove-columns [:fruit-subtype :fruit-label])
-                    (ds-pipe/string->number)
-                    (ds-pipe/range-scale
-                     :column-name-seq (->> (ds/columns src-ds)
-                                           (remove #(:categorical? (ds-col/metadata %)))
-                                           (ds-col/column-name))))
+        dataset (as-> src-ds dataset
+                  (ds/remove-columns dataset [:fruit-subtype :fruit-label])
+                  (ds-pipe/string->number dataset)
+                  (ds-pipe/range-scale
+                   dataset
+                   :column-name-seq (-> (col-filters/categorical? dataset)
+                                        (col-filters/not dataset)))
+                  (ds/set-inference-target dataset :fruit-name))
 
         origin-ds (mapseq-fruit-dataset)
         src-keys (set (keys (first (mapseq-fruit-dataset))))
