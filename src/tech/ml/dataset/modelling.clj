@@ -56,12 +56,12 @@
        (into {})))
 
 
-(defn label-inverse-map
+(defn inference-target-label-inverse-map
   "Given options generated during ETL operations and annotated with :label-columns
   sequence container 1 label column, generate a reverse map that maps from a dataset
   value back to the label that generated that value."
   [dataset]
-  (c-set/map-invert (label-map dataset)))
+  (c-set/map-invert (inference-target-label-map dataset)))
 
 
 (defn num-inference-classes
@@ -69,7 +69,7 @@
   return the number of classes used for the label.  Error if not classification
   dataset."
   ^long [dataset]
-  (count (label-map dataset)))
+  (count (inference-target-label-map dataset)))
 
 
 (defn feature-ecount

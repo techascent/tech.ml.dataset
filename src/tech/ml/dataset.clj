@@ -39,7 +39,9 @@
                         ds-concat
                         ds-take-nth
                         ds-map-values
-                        ds-column-map)
+                        ds-column-map
+                        ->dataset
+                        from-prototype)
 
 (fn-impl/export-symbols tech.ml.dataset.modelling
                         set-inference-target
