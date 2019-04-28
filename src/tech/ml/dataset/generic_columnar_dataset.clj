@@ -55,11 +55,17 @@
       (throw (ex-info (format "Failed to find column %s" col-name)
                       {:col-name col-name
                        :col-names (keys colmap)})))
-    (->GenericColumnarDataset
-     table-name
-     column-names
-     (update colmap col-name col-fn)
-     metadata))
+    (let [col (get colmap col-name)
+          new-col-data (col-fn col)]
+      (->GenericColumnarDataset
+       table-name
+       column-names
+       (assoc colmap col-name
+              (if (ds-col/is-column? new-col-data)
+                (ds-col/set-name new-col-data col-name)
+                (ds-col/new-column col (dtype/get-datatype new-col-data)
+                                   new-col-data {:name (ds-col/column-name col)})))
+       metadata)))
 
   (add-or-update-column [dataset column]
     (let [col-name (ds-col/column-name column)]

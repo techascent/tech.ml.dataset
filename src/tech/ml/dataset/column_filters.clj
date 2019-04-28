@@ -9,8 +9,28 @@
 
 (defn select-columns
   [dataset column-name-seq]
-  (-> (ds/select-columns dataset (clojure.core/or (seq column-name-seq) :all))
-      ds/columns))
+  (cond
+    (fn? column-name-seq)
+    (->> (column-name-seq dataset)
+         (ds/select-columns dataset)
+         ds/columns)
+    (clojure.core/or (= :all column-name-seq)
+                     (sequential? column-name-seq)
+                     (nil? column-name-seq))
+    (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
+         ds/columns)
+    (clojure.core/or (clojure.core/string? column-name-seq)
+                     (keyword? column-name-seq))
+    [(ds/column dataset column-name-seq)]
+    :else
+    (throw (ex-info (format "Unrecognized argument to select columns: %s" column-name-seq)
+                    {}))))
+
+
+(defn select-column-names
+  [dataset column-name-seq]
+  (->> (select-columns dataset column-name-seq)
+       (map ds-col/column-name)))
 
 
 (defn column-filter
@@ -23,7 +43,8 @@
 (defn of-datatype?
   "Return column-names  of a given datatype."
   [dataset datatype & [column-name-seq]]
-  (column-filter dataset #(= datatype (dtype/get-datatype %))
+  (column-filter dataset #(do
+                            (= datatype (dtype/get-datatype %)))
                  column-name-seq))
 
 
@@ -57,24 +78,25 @@
 
 (defn not
   [dataset & [column-name-seq]]
-  (if (seq column-name-seq)
+  (if-not (nil? column-name-seq)
     (->> (c-set/difference
-          (set column-name-seq)
-          (set (ds/column-names dataset)))
-         (ds/order-column-names dataset))))
+          (set (ds/column-names dataset))
+          (set (select-column-names dataset column-name-seq)))
+         (ds/order-column-names dataset))
+    (ds/column-names dataset)))
 
 
 (defn and
   [dataset lhs-name-seq rhs-name-seq]
-  (->> (c-set/intersection (set lhs-name-seq)
-                           (set rhs-name-seq))
+  (->> (c-set/intersection (set (select-column-names dataset lhs-name-seq))
+                           (set (select-column-names dataset rhs-name-seq)))
        (ds/order-column-names dataset)))
 
 
 (defn or
   [dataset lhs-name-seq rhs-name-seq]
-  (->> (c-set/union (set lhs-name-seq)
-                    (set rhs-name-seq))
+  (->> (c-set/union (set (select-column-names dataset lhs-name-seq))
+                    (set (select-column-names dataset rhs-name-seq)))
        (ds/order-column-names dataset)))
 
 

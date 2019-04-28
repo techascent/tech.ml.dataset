@@ -10,22 +10,37 @@
             [tech.ml.dataset.pipeline.pipeline-operators
              :refer [def-multiple-column-etl-operator]
              :as pipe-ops]
-            [tech.ml.dataset.column-filters :as col-filters]))
+            [tech.ml.dataset.column-filters :as col-filters])
+  (:refer-clojure :exclude [replace]))
 
 
-(defn string->number
+(defmacro def-pipeline-fn
+  [op-name documentation-string op-varname destructure-map]
+  `(defn ~op-name
+     ~documentation-string
+     [~'dataset & ~destructure-map]
+     (pipe-ops/inline-perform-operator ~op-varname ~'dataset ~'column-filter ~'op-args)))
+
+
+(defn remove-columns
+  "Remove columns selected by column-filter"
+  [dataset column-filter]
+  (pipe-ops/inline-perform-operator pipe-ops/remove-columns dataset column-filter nil))
+
+
+(def-pipeline-fn string->number
   "Convert all string columns to numeric recording the lookup table
   in the column metadata.
 
   Replace any string values with numeric values.  Updates the label map
   of the options.  Arguments may be notion or a vector of either expected
   strings or tuples of expected strings to their hardcoded values."
-  [dataset & {:keys [datatype column-name-seq table-value-list] :as op-args}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/string->number dataset (or column-name-seq (col-filters/string? dataset)) op-args))
+  pipe-ops/string->number {:keys [datatype column-filter table-value-list]
+                           :or {column-filter col-filters/string?}
+                           :as op-args})
 
 
-(defn one-hot
+(def-pipeline-fn one-hot
   "Replace string columns with one-hot encoded columns.  table value list Argument can
   be nothing or a map containing keys representing the new derived column names and
   values representing which original values to encode to that particular column.  The
@@ -33,18 +48,15 @@
   example argument:
   {:main [\"apple\" \"mandarin\"]
  :other :rest}"
-  [dataset & {:keys [datatype column-name-seq table-value-list] :as op-args}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/one-hot dataset (or column-name-seq (col-filters/string? dataset)) op-args))
+  pipe-ops/one-hot {:keys [datatype column-filter table-value-list]
+                    :or {column-filter col-filters/string?}
+                    :as op-args})
 
 
-(defn replace-missing
-  "Replace all the missing values in the dataset.  Input can be a value
-  or a fn.  If a fn, it gets passed the dataset and the column-name."
-  [dataset replace-value-or-fn & {:keys [column-name-seq]}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/replace-missing dataset (or column-name-seq (ds/column-names dataset))
-   replace-value-or-fn))
+(def-pipeline-fn replace-missing
+  "Replace all the missing values in the dataset.  Can take a sclar missing value
+or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
+  pipe-ops/replace-missing {:keys [column-filter missing-value-or-fn] :as op-args})
 
 
 (defn remove-missing
@@ -59,38 +71,52 @@
                                  (remove missing-indexes)))))
 
 
-(defn replace-string
-  [dataset src-str replace-str & {:keys [column-name-seq]}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/replace-string dataset (or column-name-seq (col-filters/string? dataset))
-   [src-str replace-str]))
+(def-pipeline-fn replace
+  "Map a function across a column or set of columns.  Map-fn may be a map?.
+  Result column names are identical to src column names but metadata like a label
+  map is removed.
+  If map-setup-fn is provided, map-fn must be nil and map-setup-fn will be called
+  with the dataset and column name to produce map-fn."
+  pipe-ops/replace {:keys [column-filter result-datatype map-setup-fn map-fn] :as op-args})
 
 
-(defn ->datatype
+(defn update-dataset-column
+  "Update a column via a function.  Function takes a dataset and a column and returns
+  either a column, an iterable, or a reader."
+  [dataset dataset-column-fn & {:keys [column-filter]}]
+  (pipe-ops/inline-perform-operator pipe-ops/update-column dataset
+                                    column-filter dataset-column-fn))
+
+
+(defn update-column
+  "Update a column via a function.  Function takes a column and returns a either a
+  column, an iterable, or a reader."
+  [dataset column-fn & {:keys [column-filter]}]
+  (update-dataset-column dataset #(column-fn %2) {:column-filter column-filter}))
+
+
+(defn new-column
+  "Create a new column.  fn takes dataset and returns a reader, an iterable, or
+  a new column."
+  [dataset result-colname dataset-column-fn]
+  (ds/new-column dataset result-colname (dataset-column-fn dataset)))
+
+
+(def-pipeline-fn ->datatype
   "Marshall columns to be the etl datatype.  This changes numeric columns to be a
   unified backing store datatype."
-  [dataset & {:keys [column-name-seq datatype]
-              :or {datatype :float64}}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/->datatype dataset (or column-name-seq (ds/column-names dataset))
-   datatype))
+  pipe-ops/->datatype {:keys [column-filter datatype] :as op-args})
 
 
-(defn range-scale
+(def-pipeline-fn range-scale
   "Range-scale a set of columns to be within either [-1 1] or the range provided
   by the first argument.  Will fail if columns have missing values."
-  [dataset & {:keys [column-name-seq value-range]
-              :or {value-range [-1 1]} :as op-args}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/range-scaler dataset (or column-name-seq (ds/column-names dataset))
-   op-args))
+  pipe-ops/range-scaler {:keys [column-filter value-range]
+                         :or {value-range [-1 1]} :as op-args})
 
 
-(defn std-scale
+(def-pipeline-fn std-scale
   "Scale columns to have 0 mean and 1 std deviation.  Will fail if columns
   contain missing values."
-  [dataset & {:keys [column-name-seq use-mean? use-std?]
-              :or {use-mean? true use-std? true} :as op-args}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/range-scaler dataset (or column-name-seq (ds/column-names dataset))
-   op-args))
+  pipe-ops/range-scaler  {:keys [column-filter use-mean? use-std?]
+                          :or {use-mean? true use-std? true} :as op-args})

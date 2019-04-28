@@ -20,12 +20,13 @@
   (let [src-ds (ds/->dataset (mapseq-fruit-dataset) {})
 
         dataset (as-> src-ds dataset
-                  (ds/remove-columns dataset [:fruit-subtype :fruit-label])
+                  (ds-pipe/remove-columns dataset [:fruit-subtype :fruit-label])
+                  (do (println (ds/column-names dataset))
+                      dataset)
                   (ds-pipe/string->number dataset)
-                  (ds-pipe/range-scale
-                   dataset
-                   :column-name-seq (->> (col-filters/categorical? dataset)
-                                         (col-filters/not dataset)))
+                  (ds-pipe/range-scale dataset
+                                       :column-filter #(->> (col-filters/categorical? %)
+                                                            (col-filters/not %)))
                   (ds/set-inference-target dataset :fruit-name))
 
         origin-ds (mapseq-fruit-dataset)
@@ -34,6 +35,7 @@
                               (map ds-col/column-name)))
         non-categorical (->> (col-filters/categorical? dataset)
                              (col-filters/not dataset))]
+
 
     (is (= #{59}
            (->> (ds/columns dataset)
@@ -184,13 +186,12 @@
           dataset (as-> src-ds dataset
                       (ds/remove-columns dataset [:fruit-subtype :fruit-label])
                       (ds-pipe/one-hot dataset
-                                       :column-name-seq [:fruit-name]
+                                       :column-filter [:fruit-name]
                                        :table-value-list
                                        {:main ["apple" "mandarin"]
                                         :other :rest})
                       (ds-pipe/string->number dataset
-                                              :column-name-seq
-                                              (col-filters/string? dataset))
+                                              :column-filter col-filters/string?)
                       (ds/set-inference-target dataset :fruit-name))]
 
       (is (= {:fruit-name

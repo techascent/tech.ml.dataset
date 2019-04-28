@@ -3,10 +3,12 @@
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.column-filters :as col-filters]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype :as dtype]
             [tech.v2.tensor :as tens])
+  (:refer-clojure :exclude [replace])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
             PETLMultipleColumnOperator]))
@@ -40,11 +42,18 @@
 
 
 (defn inline-perform-operator
-  [etl-op dataset colname-seq op-args]
-  (let [context (etl-proto/build-etl-context-columns
+  [etl-op dataset column-filter op-args]
+  (let [colname-seq (col-filters/select-column-names dataset column-filter)
+        context (etl-proto/build-etl-context-columns
                  etl-op dataset colname-seq op-args)]
     (etl-proto/perform-etl-columns
      etl-op dataset colname-seq op-args context)))
+
+
+(def-multiple-column-etl-operator remove-columns
+  "Remove columns selected via the column filter"
+  nil
+  (ds/remove-columns dataset column-name-seq))
 
 
 (def-multiple-column-etl-operator string->number
@@ -53,18 +62,18 @@ of the options.  Arguments may be notion or a vector of either expected
 strings or tuples of expected strings to their hardcoded values."
  ;;Label maps are special and used outside of this context do we have
   ;;treat them separately
-  (categorical/build-categorical-map
-   dataset column-name-seq
-   op-args)
-
-  (-> (ds/update-columns dataset column-name-seq
-                         (partial categorical/column-categorical-map
-                                  context
-                                  (context-datatype op-args)))
-      (ds/set-metadata (update (ds/metadata dataset)
-                               :label-map
-                               merge
-                               context))))
+  (do (categorical/build-categorical-map
+       dataset column-name-seq
+       (:table-value-list op-args)))
+  (do
+    (-> (ds/update-columns dataset column-name-seq
+                           (partial categorical/column-categorical-map
+                                    context
+                                    (context-datatype op-args)))
+        (ds/set-metadata (update (ds/metadata dataset)
+                                 :label-map
+                                 merge
+                                 context)))))
 
 
 (def-single-column-etl-operator replace-missing
@@ -109,39 +118,41 @@ example argument:
                              context))))
 
 
-(def-single-column-etl-operator replace-string
+(def-single-column-etl-operator replace
   "Replace a given string value with another value.  Useful for blanket replacing empty
 strings with a known value."
-  nil
+  {:map-fn (or (:map-fn op-args)
+               ((:map-setup-fn op-args)))}
   (ds/update-column
    dataset column-name
    (fn [col]
-     (let [existing-values (ds-col/column-values col)
-           [src-str replace-str] op-args
-           data-values (into-array String (->> existing-values
-                                            (map (fn [str-value]
-                                                   (if (= str-value src-str)
-                                                     replace-str
-                                                     str-value)))))]
-       (ds-col/new-column col :string data-values)))))
+     (let [result-dtype (or (:result-datatype op-args)
+                            (dtype/get-datatype col))
+           map-fn (:map-fn context)]
+       (as-> (mapv map-fn (dtype/->reader col)) col-values
+         (ds-col/new-column col col-values {:name (or (:result-name op-args)
+                                                      (ds-col/column-name col))}))))))
+
+
+(def-single-column-etl-operator update-column
+  "Update a column via a function.  Function takes a dataset and column and returns either a
+column, and iterable, or a reader."
+  nil
+  (ds/update-column dataset column-name (partial op-args dataset)))
 
 
 (def-single-column-etl-operator ->datatype
   "Marshall columns to be the etl datatype.  This changes numeric columns to be
 a unified backing store datatype.  Necessary before full-table datatype declarations."
   nil
-  (let [etl-dtype (context-datatype {:datatype op-args})]
+  (let [etl-dtype (context-datatype op-args)]
     (ds/update-column
      dataset column-name
      (fn [col]
        (if-not (= (dtype/get-datatype col) etl-dtype)
          (let [new-col-dtype etl-dtype
-               col-values (if (= 0 (count (ds-col/missing col)))
-                            (ds-col/column-values col)
-                            (tech.ml.protocols.column/to-double-array col false))
-               data-values (dtype/make-array-of-type
-                            new-col-dtype
-                            col-values)]
+               col-values (ds-col/column-values col)
+               data-values (dtype/make-array-of-type new-col-dtype col-values)]
            (ds-col/new-column col new-col-dtype data-values))
          col)))))
 
@@ -167,8 +178,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
         colseq (ds/columns src-data)
         etl-dtype (or datatype *pipeline-datatype*)
         ;;Storing data column-major so the row is incremention fast.
-        backing-store (ds-tens/dataset->column-major-tensor
-                       dataset :datatype etl-dtype)
+        backing-store (ds-tens/dataset->column-major-tensor src-data etl-dtype)
         ds-shape (dtype/shape backing-store)
 
         backing-store (-> backing-store
@@ -217,7 +227,7 @@ by the first argument.  Will fail if columns have missing values."
           target-range (- range-max
                           range-min)
           divisor (dtype-fn// col-ranges target-range)]
-      (sub-divide-bias dataset column-name-seq min-values divisor range-min))
+      (sub-divide-bias dataset etl-dtype column-name-seq min-values divisor range-min))
     ;;No columns, noop.
     dataset))
 
@@ -261,6 +271,6 @@ contain missing values."
                        (tens/->tensor (mapv :standard-deviation context-map-seq)
                                       :datatype etl-dtype)
                        1.0)]
-      (sub-divide-bias dataset column-name-seq mean-values std-values 0.0))
+      (sub-divide-bias dataset etl-dtype column-name-seq mean-values std-values 0.0))
     ;;no columns, noop
     dataset))

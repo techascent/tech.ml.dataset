@@ -83,11 +83,13 @@
                                 :or {container-type :tablesaw-column}
                                 :as options}]
    (let [datatype (or datatype (dtype/get-datatype values))]
-     (->> (if-let [col (first (columns dataset))]
-            (ds-col/new-column col datatype values {:name column-name})
-            (dtype/make-container container-type datatype values
-                                  (assoc options
-                                         :column-name column-name)))
+     (->> (if (ds-col/is-column? values)
+            (ds-col/set-name values column-name)
+            (if-let [col (first (columns dataset))]
+              (ds-col/new-column col datatype values {:name column-name})
+              (dtype/make-container container-type datatype values
+                                    (assoc options
+                                           :column-name column-name))))
           (add-column dataset))))
   ([dataset column-name values]
    (new-column dataset column-name values {})))
