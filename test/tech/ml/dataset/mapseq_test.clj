@@ -19,15 +19,12 @@
 (deftest mapseq-classification-test
   (let [src-ds (ds/->dataset (mapseq-fruit-dataset) {})
 
-        dataset (as-> src-ds dataset
-                  (ds-pipe/remove-columns dataset [:fruit-subtype :fruit-label])
-                  (do (println (ds/column-names dataset))
-                      dataset)
-                  (ds-pipe/string->number dataset)
-                  (ds-pipe/range-scale dataset
-                                       :column-filter #(->> (col-filters/categorical? %)
+        dataset (-> src-ds
+                  (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
+                  (ds-pipe/string->number)
+                  (ds-pipe/range-scale :column-filter #(->> (col-filters/categorical? %)
                                                             (col-filters/not %)))
-                  (ds/set-inference-target dataset :fruit-name))
+                  (ds/set-inference-target :fruit-name))
 
         origin-ds (mapseq-fruit-dataset)
         src-keys (set (keys (first (mapseq-fruit-dataset))))
@@ -183,16 +180,14 @@
 (deftest one-hot
   (testing "Testing one-hot into multiple column groups"
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
-          dataset (as-> src-ds dataset
-                      (ds/remove-columns dataset [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot dataset
-                                       :column-filter [:fruit-name]
+          dataset (-> src-ds
+                      (ds/remove-columns [:fruit-subtype :fruit-label])
+                      (ds-pipe/one-hot :column-filter [:fruit-name]
                                        :table-value-list
                                        {:main ["apple" "mandarin"]
                                         :other :rest})
-                      (ds-pipe/string->number dataset
-                                              :column-filter col-filters/string?)
-                      (ds/set-inference-target dataset :fruit-name))]
+                      (ds-pipe/string->number)
+                      (ds/set-inference-target :fruit-name))]
 
       (is (= {:fruit-name
               {"apple" [:fruit-name-main 1],
@@ -225,85 +220,85 @@
               :color-score :regression}
              (ds/model-type dataset (ds/column-names dataset))))))
 
-  (comment
-    (testing "one hot-figure it out"
-      (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
-                       [one-hot :fruit-name]
-                       [string->number string?]]
-            src-ds (mapseq-fruit-dataset)
-            {:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-ds pipeline
-                                {:target :fruit-name})]
-        (is (= {:fruit-name
-                {"apple" [:fruit-name-apple 1],
-                 "orange" [:fruit-name-orange 1],
-                 "lemon" [:fruit-name-lemon 1],
-                 "mandarin" [:fruit-name-mandarin 1]}}
-               (:label-map options)))
-        (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
-                 :fruit-name-lemon :fruit-name-apple :height}
-               (->> (ds/columns dataset)
-                    (map ds-col/column-name)
-                    set)))
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/column-values->categorical dataset :fruit-name options)
-                    (take 20)
-                    vec)))
+  (testing "one hot-figure it out"
+    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
+          dataset (-> src-ds
+                      (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
+                      (ds-pipe/one-hot :column-filter :fruit-name)
+                      (ds-pipe/string->number))]
+      (is (= {:fruit-name
+              {"apple" [:fruit-name-apple 1],
+               "orange" [:fruit-name-orange 1],
+               "lemon" [:fruit-name-lemon 1],
+               "mandarin" [:fruit-name-mandarin 1]}}
+             (ds/dataset-label-map dataset)))
+      (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
+               :fruit-name-lemon :fruit-name-apple :height}
+             (->> (ds/columns dataset)
+                  (map ds-col/column-name)
+                  set)))
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/column-values->categorical dataset :fruit-name)
+                  (take 20)
+                  vec)))
 
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/->flyweight dataset :options options)
-                    (map :fruit-name)
-                    (take 20)
-                    vec)))
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :number->string? true)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
 
-        (is (= {:fruit-name :classification
-                :mass :regression
-                :width :regression
-                :height :regression
-                :color-score :regression}
-               (ds-opts/model-type-map options (->> (ds/columns dataset)
-                                                    (map ds-col/column-name))))))))
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+             (ds/model-type dataset (ds/column-names dataset))))))
 
-  (comment
-    (testing "one hot - defined values"
-      (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
-                       [one-hot :fruit-name ["apple" "mandarin" "orange" "lemon"]]
-                       [string->number string?]]
-            src-ds (mapseq-fruit-dataset)]
-        (is (= {:fruit-name
-                {"apple" [:fruit-name-apple 1],
-                 "orange" [:fruit-name-orange 1],
-                 "lemon" [:fruit-name-lemon 1],
-                 "mandarin" [:fruit-name-mandarin 1]}}
-               (:label-map options)))
-        (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
-                 :fruit-name-lemon :fruit-name-apple :height}
-               (->> (ds/columns dataset)
-                    (map ds-col/column-name)
-                    set)))
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/column-values->categorical dataset :fruit-name options)
-                    (take 20)
-                    vec)))
+  (testing "one hot - defined values"
+    (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
+                     [one-hot :fruit-name ["apple" "mandarin" "orange" "lemon"]]
+                     [string->number string?]]
+          src-ds (ds/->dataset (mapseq-fruit-dataset))
+          dataset (-> src-ds
+                      (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
+                      (ds-pipe/one-hot :column-filter :fruit-name
+                                       :table-value-list ["apple" "mandarin"
+                                                          "orange" "lemon"])
+                      (ds-pipe/string->number))]
+      (is (= {:fruit-name
+              {"apple" [:fruit-name-apple 1],
+               "orange" [:fruit-name-orange 1],
+               "lemon" [:fruit-name-lemon 1],
+               "mandarin" [:fruit-name-mandarin 1]}}
+             (ds/dataset-label-map dataset)))
+      (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
+               :fruit-name-lemon :fruit-name-apple :height}
+             (->> (ds/columns dataset)
+                  (map ds-col/column-name)
+                  set)))
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/column-values->categorical dataset :fruit-name)
+                  (take 20)
+                  vec)))
 
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/->flyweight dataset :options options)
-                    (map :fruit-name)
-                    (take 20)
-                    vec)))
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :number->string? true)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
 
-        (is (= {:fruit-name :classification
-                :mass :regression
-                :width :regression
-                :height :regression
-                :color-score :regression}
-               (ds-opts/model-type-map options (->> (ds/columns dataset)
-                                                    (map ds-col/column-name)))))))))
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+             (ds/model-type dataset (ds/column-names dataset)))))))
