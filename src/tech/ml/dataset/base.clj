@@ -13,6 +13,14 @@
   [dataset]
   (ds-proto/dataset-name dataset))
 
+(defn metadata
+  [dataset]
+  (ds-proto/metadata dataset))
+
+(defn set-metadata
+  [dataset meta-map]
+  (ds-proto/set-metadata dataset meta-map))
+
 (defn maybe-column
   "Return either column if exists or nil."
   [dataset column-name]
@@ -76,11 +84,13 @@
                                 :as options}]
    (let [datatype (or datatype (dtype/get-datatype values))]
      (->> (if-let [col (first (columns dataset))]
-            (ds-col/new-column col datatype values {:column-name column-name})
+            (ds-col/new-column col datatype values {:name column-name})
             (dtype/make-container container-type datatype values
                                   (assoc options
                                          :column-name column-name)))
-          (add-column dataset)))))
+          (add-column dataset))))
+  ([dataset column-name values]
+   (new-column dataset column-name values {})))
 
 
 (defn remove-column
@@ -231,8 +241,9 @@ the correct type."
 
 (defn ds-concat
   [dataset & other-datasets]
-  (let [column-list
-        (->> (concat [dataset] (remove nil? other-datasets))
+  (let [datasets  (concat [dataset] (remove nil? other-datasets))
+        column-list
+        (->> datasets
              (mapcat (fn [dataset]
                        (->> (columns dataset)
                             (mapv (fn [col]
@@ -240,7 +251,10 @@ the correct type."
                                            :column
                                            col
                                            :table-name (dataset-name dataset)))))))
-             (group-by :name))]
+             (group-by :name))
+        label-map (->> datasets
+                       (map (comp :label-map metadata))
+                       (apply merge))]
     (when-not (= 1 (count (->> (vals column-list)
                                (map count)
                                distinct)))
@@ -258,7 +272,8 @@ the correct type."
                                           new-col 0
                                           {:unchecked? true})
                    new-col)))
-         (ds-proto/from-prototype dataset (dataset-name dataset)))))
+         (ds-proto/from-prototype dataset (dataset-name dataset))
+         (#(set-metadata % {:label-map label-map})))))
 
 
 (defn ds-take-nth

@@ -1,6 +1,5 @@
 (ns tech.ml.dataset.pipeline.pipeline-operators
   (:require [tech.ml.protocols.etl :as etl-proto]
-            [tech.ml.dataset.options :as options]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
@@ -54,14 +53,18 @@ of the options.  Arguments may be notion or a vector of either expected
 strings or tuples of expected strings to their hardcoded values."
  ;;Label maps are special and used outside of this context do we have
   ;;treat them separately
-  (options/set-label-map {} (categorical/build-categorical-map
-                             dataset column-name-seq
-                             op-args))
+  (categorical/build-categorical-map
+   dataset column-name-seq
+   op-args)
 
-  (ds/update-columns dataset column-name-seq
-                     (partial categorical/column-categorical-map
-                              (options/->dataset-label-map context)
-                              (context-datatype op-args))))
+  (-> (ds/update-columns dataset column-name-seq
+                         (partial categorical/column-categorical-map
+                                  context
+                                  (context-datatype op-args)))
+      (ds/set-metadata (update (ds/metadata dataset)
+                               :label-map
+                               merge
+                               context))))
 
 
 (def-single-column-etl-operator replace-missing
@@ -90,15 +93,20 @@ keyword :rest indicates any remaining unencoded columns:
 example argument:
 {:main [\"apple\" \"mandarin\"]
  :other :rest}"
-  (options/set-label-map {}
-                         (categorical/build-one-hot-map
-                          dataset column-name-seq (:table-value-list op-args)))
+  (categorical/build-one-hot-map
+   dataset column-name-seq (:table-value-list op-args))
 
-  (let [lmap (options/->dataset-label-map context)]
-    (->> column-name-seq
-         (reduce (partial categorical/column-one-hot-map lmap
-                          (context-datatype op-args))
-                 dataset))))
+  (let [lmap context
+        retval
+        (->> column-name-seq
+             (reduce (partial categorical/column-one-hot-map lmap
+                              (context-datatype op-args))
+                     dataset))]
+    (ds/set-metadata retval
+                     (update (ds/metadata dataset)
+                             :label-map
+                             merge
+                             context))))
 
 
 (def-single-column-etl-operator replace-string

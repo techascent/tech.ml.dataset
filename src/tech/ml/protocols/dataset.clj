@@ -7,6 +7,8 @@
 
 (defprotocol PColumnarDataset
   (dataset-name [dataset])
+  (metadata [dataset])
+  (set-metadata [dataset meta-map])
   (maybe-column [dataset column-name]
     "Return either column if exists or nil.")
   (columns [dataset])

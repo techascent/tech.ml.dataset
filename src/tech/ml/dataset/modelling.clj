@@ -2,7 +2,8 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.ml.dataset.base
              :refer [column-names update-columns column columns
-                     ->dataset select ds-map-values]
+                     ->dataset select ds-map-values
+                     metadata maybe-column]
              :as ds-base]
             [tech.ml.dataset.column-filters :as col-filters]
             [tech.ml.dataset.column :as ds-col]
@@ -12,9 +13,19 @@
 
 (defn set-inference-target
   [dataset target-name-or-target-name-seq]
-  (let [target (->> (if (sequential? target-name-or-target-name-seq)
+  (let [label-map (dataset-label-map dataset)
+        target (->> (if (sequential? target-name-or-target-name-seq)
                       target-name-or-target-name-seq
                       [target-name-or-target-name-seq])
+                    ;;expand column names after 1-hot mapping
+                    (mapcat (fn [colname]
+                              (let [col-label-map (get label-map colname)]
+                                (if (and col-label-map
+                                         (categorical/is-one-hot-label-map?
+                                          col-label-map))
+                                  (->> (vals col-label-map)
+                                       (map first))
+                                  [colname]))))
                     set)]
     (update-columns dataset (column-names dataset)
                     (fn [col]
@@ -29,9 +40,7 @@
 
 (defn column-label-map
   [dataset column-name]
-  (-> (column dataset column-name)
-      (ds-col/metadata)
-      :label-map))
+  (get-in (metadata dataset) [:label-map column-name]))
 
 
 (defn has-column-label-map?
@@ -50,11 +59,7 @@
 
 (defn dataset-label-map
   [dataset]
-  (->> (columns dataset)
-       (filter (comp :label-map ds-col/metadata))
-       (map (juxt ds-col/column-name
-                  (comp :label-map ds-col/metadata)))
-       (into {})))
+  (get (metadata dataset) :label-map))
 
 
 (defn inference-target-label-inverse-map
@@ -86,16 +91,21 @@
   :regression
   :classification"
   [dataset & [column-name-seq]]
-  (->> (or column-name-seq (col-filters/inference? dataset))
-       (map (juxt identity
-                  (fn [colname]
-                    (let [col-metadata (-> (column dataset colname)
-                                           ds-col/metadata)]
-                      (cond
-                        (:categorical? col-metadata) :classification
-                        :else
-                        :regression)))))
-       (into {})))
+  (let [col-label-map (dataset-label-map dataset)]
+    (->> (or column-name-seq (col-filters/inference? dataset))
+         (reduce-column-names dataset)
+         (map (juxt identity
+                    (fn [colname]
+                      (if-let [column-data (maybe-column dataset colname)]
+                        (let [col-metadata (ds-col/metadata column-data)]
+                          (cond
+                            (:categorical? col-metadata) :classification
+                            :else
+                            :regression))
+                        (if (contains? col-label-map colname)
+                          :classification
+                          :regression)))))
+         (into {}))))
 
 
 (defn column-values->categorical

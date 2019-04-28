@@ -13,11 +13,19 @@
 (declare make-dataset)
 
 
-(defrecord GenericColumnarDataset [table-name column-names colmap]
+(defrecord GenericColumnarDataset [table-name
+                                   column-names
+                                   colmap
+                                   metadata]
   ds-proto/PColumnarDataset
   (dataset-name [dataset] table-name)
   (maybe-column [dataset column-name]
     (get colmap column-name))
+
+  (metadata [dataset] metadata)
+  (set-metadata [dataset meta-map]
+    (->GenericColumnarDataset table-name column-names colmap
+                              meta-map))
 
   (columns [dataset] (mapv (partial get colmap) column-names))
 
@@ -32,13 +40,15 @@
 
       (make-dataset
        table-name
-       (concat (ds-proto/columns dataset) [col]))))
+       (concat (ds-proto/columns dataset) [col])
+       metadata)))
 
   (remove-column [dataset col-name]
     (make-dataset table-name
                   (->> (ds-proto/columns dataset)
                        (remove #(= (ds-col/column-name %)
-                                   col-name)))))
+                                   col-name)))
+                  metadata))
 
   (update-column [dataset col-name col-fn]
     (when-not (contains? colmap col-name)
@@ -48,7 +58,8 @@
     (->GenericColumnarDataset
      table-name
      column-names
-     (update colmap col-name col-fn)))
+     (update colmap col-name col-fn)
+     metadata))
 
   (add-or-update-column [dataset column]
     (let [col-name (ds-col/column-name column)]
@@ -82,7 +93,8 @@
                      (if indexes
                        (ds-col/select col indexes)
                        col))))
-            vec))))
+            vec)
+       metadata)))
 
   (index-value-seq [dataset]
     (let [col-value-seq (->> (ds-proto/columns dataset)
@@ -94,8 +106,9 @@
   (supported-column-stats [dataset]
     (ds-col/supported-stats (first (vals colmap))))
 
+
   (from-prototype [dataset table-name column-seq]
-    (make-dataset table-name column-seq))
+    (make-dataset table-name column-seq {}))
 
 
   mp/PDimensionInfo
@@ -124,12 +137,13 @@
 
 
 (defn make-dataset
-  [table-name column-seq]
+  [table-name column-seq ds-metadata]
   (->GenericColumnarDataset table-name
                             (map ds-col/column-name column-seq)
                             (->> column-seq
                                  (map (juxt ds-col/column-name identity))
-                                 (into {}))))
+                                 (into {}))
+                            ds-metadata))
 
 
 (defmethod print-method GenericColumnarDataset

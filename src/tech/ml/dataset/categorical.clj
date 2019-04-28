@@ -206,7 +206,8 @@
               (let [[new-column-name new-colval] table-entry]
                 (if-let [new-col (get new-column-map new-column-name)]
                   (dtype/set-value! new-col idx new-colval)
-                  (throw (ex-info (format "Failed to find new column: %s" new-column-name)
+                  (throw (ex-info (format "Failed to find new column: %s"
+                                          new-column-name)
                                   {:new-columns (keys new-column-map)}))))
               (throw (ex-info (format "Failed to find string table value: %s"
                                       col-val)
@@ -220,7 +221,8 @@
                     (ds-col/new-column column new-dtype column-data
                                        (assoc
                                         (ds-col/metadata column)
-                                        :name column-name))))
+                                        :name column-name
+                                        :label-map context))))
                  dataset))))
 
 

@@ -299,7 +299,9 @@
     (-> (reify ObjectWriter
           (getDatatype [writer] (dtype-proto/get-datatype col))
           (lsize [writer] (base/ecount col))
-          (write [writer idx value] (.set col idx value)))
+          (write [writer idx value]
+            (locking writer
+              (.set col idx value))))
         (dtype-proto/->writer options)))
 
 
@@ -375,13 +377,13 @@
                                         options#))}
 
      dtype-proto/PToWriter
-     {:convertible-to-reader? (constantly true)
+     {:convertible-to-writer? (constantly true)
       :->writer (fn [item# options#]
                   (dtype-proto/->writer (dtype-proto/as-list item#)
                                         options#))}
 
      dtype-proto/PToMutable
-     {:convertible-to-reader? (constantly true)
+     {:convertible-to-mutable? (constantly true)
       :->mutable (fn [item# options#]
                    (dtype-proto/->mutable (dtype-proto/as-list item#)
                                           options#))}

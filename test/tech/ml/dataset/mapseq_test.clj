@@ -3,7 +3,6 @@
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.column-filters :as col-filters]
-            [tech.ml.dataset.options :as ds-opts]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
@@ -18,11 +17,7 @@
 ;;the necessity of mapping back from the label column to a sequence of
 ;;keyword labels.
 (deftest mapseq-classification-test
-  (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
-                   [string->number string?]
-                   ;;Range numeric data to -1 1
-                   [range-scaler (not categorical?)]]
-        src-ds (ds/->dataset (mapseq-fruit-dataset) {})
+  (let [src-ds (ds/->dataset (mapseq-fruit-dataset) {})
 
         dataset (as-> src-ds dataset
                   (ds/remove-columns dataset [:fruit-subtype :fruit-label])
@@ -72,7 +67,7 @@
     ;;Does the post-transformation value of fruit-name map to the
     ;;pre-transformation value of fruit-name?
     (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
-           (->> (ds/->flyweight dataset :translate-strings? true)
+           (->> (ds/->flyweight dataset :number->string? true)
                 (mapv :fruit-name))))
 
 
@@ -94,7 +89,7 @@
                   (ds/ds-filter #(= apple-value (:fruit-name %)))
                   ;;Use full version of ->flyweight to do reverse mapping of numeric
                   ;;fruit name back to input label.
-                  (#(ds/->flyweight % :translate-strings? true))
+                  (#(ds/->flyweight % :number->string? true))
                   (map :fruit-name)
                   set))))
 
@@ -113,7 +108,7 @@
                   (#(ds/select % :all (range 5)))
                   ;;Note the backward conversion failed in this case because we
                   ;;change the column names.
-                  (#(ds/->flyweight % :translate-strings? true))
+                  (#(ds/->flyweight % :number->string? true))
                   (map #(get % "fruit-name"))
                   vec))))
 
@@ -128,102 +123,108 @@
                                                  (ds-col/stats [:min :max]))]
                           [(long col-min) (long col-max)]))))))
 
-    ;; ;;Concatenation should work
-    ;; (is (= (mapv (comp name :fruit-name)
-    ;;              (concat (mapseq-fruit-dataset)
-    ;;                      (mapseq-fruit-dataset)))
-    ;;        (->> (-> (ds/ds-concat dataset dataset)
-    ;;                 (ds/->flyweight))
-    ;;             (mapv :fruit-name))))
+    ;;Concatenation should work
+    (is (= (mapv (comp name :fruit-name)
+                 (concat (mapseq-fruit-dataset)
+                         (mapseq-fruit-dataset)))
+           (->> (-> (ds/ds-concat dataset dataset)
+                    (ds/->flyweight :number->string? true))
+                (mapv :fruit-name))))
 
-    ;; (let [new-ds (-> (ds/->dataset (map hash-map (repeat :mass) (range 20)))
-    ;;                  (ds/new-column :mass-avg (->> (ds/column :mass)
-    ;;                                                (dtype-fn/fixed-rolling-window 5 dtype-fn/mean))))]
-    ;;   (is (= [{:mass 0.0, :mass-avg 0.6}
-    ;;           {:mass 1.0, :mass-avg 1.2}
-    ;;           {:mass 2.0, :mass-avg 2.0}
-    ;;           {:mass 3.0, :mass-avg 3.0}
-    ;;           {:mass 4.0, :mass-avg 4.0}
-    ;;           {:mass 5.0, :mass-avg 5.0}
-    ;;           {:mass 6.0, :mass-avg 6.0}
-    ;;           {:mass 7.0, :mass-avg 7.0}
-    ;;           {:mass 8.0, :mass-avg 8.0}
-    ;;           {:mass 9.0, :mass-avg 9.0}]
-    ;;          (-> (ds/select new-ds [:mass :mass-avg] (range 10))
-    ;;              ds/->flyweight)))
-    ;;   (let [sorted-ds (ds/ds-sort-by :mass-avg > new-ds)]
-    ;;     (is (= [{:mass 19.0, :mass-avg 18.4}
-    ;;             {:mass 18.0, :mass-avg 17.8}
-    ;;             {:mass 17.0, :mass-avg 17.0}
-    ;;             {:mass 16.0, :mass-avg 16.0}
-    ;;             {:mass 15.0, :mass-avg 15.0}
-    ;;             {:mass 14.0, :mass-avg 14.0}
-    ;;             {:mass 13.0, :mass-avg 13.0}
-    ;;             {:mass 12.0, :mass-avg 12.0}
-    ;;             {:mass 11.0, :mass-avg 11.0}
-    ;;             {:mass 10.0, :mass-avg 10.0}]
-    ;;            (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
-    ;;                ds/->flyweight))))
-    ;;   (let [nth-db (ds/ds-take-nth 5 src-ds)]
-    ;;     (is (= [7 12] (dtype/shape nth-db)))
-    ;;     (is (= [{:mass 192.0, :width 8}
-    ;;             {:mass 80.0, :width 5}
-    ;;             {:mass 166.0, :width 6}
-    ;;             {:mass 156.0, :width 7}
-    ;;             {:mass 160.0, :width 7}
-    ;;             {:mass 356.0, :width 9}
-    ;;             {:mass 158.0, :width 7}
-    ;;             {:mass 150.0, :width 7}
-    ;;             {:mass 154.0, :width 7}
-    ;;             {:mass 186.0, :width 7}]
-    ;;            (->> (-> (ds/select nth-db [:mass :width] (range 10))
-    ;;                     ds/->flyweight)
-    ;;                 (map #(update % :width int)))))))
-    ))
+    (let [new-ds (as-> (ds/->dataset (map hash-map (repeat :mass) (range 20))) dataset
+                   (ds-pipe/->datatype dataset :datatype :float64)
+                   (ds/new-column dataset :mass-avg
+                                  (->> (ds/column dataset :mass)
+                                       (dtype-fn/fixed-rolling-window
+                                        5 dtype-fn/mean))))]
+      (is (= [{:mass 0.0, :mass-avg 0.6}
+              {:mass 1.0, :mass-avg 1.2}
+              {:mass 2.0, :mass-avg 2.0}
+              {:mass 3.0, :mass-avg 3.0}
+              {:mass 4.0, :mass-avg 4.0}
+              {:mass 5.0, :mass-avg 5.0}
+              {:mass 6.0, :mass-avg 6.0}
+              {:mass 7.0, :mass-avg 7.0}
+              {:mass 8.0, :mass-avg 8.0}
+              {:mass 9.0, :mass-avg 9.0}]
+             (-> (ds/select new-ds [:mass :mass-avg] (range 10))
+                 ds/->flyweight)))
+      (let [sorted-ds (ds/ds-sort-by :mass-avg > new-ds)]
+        (is (= [{:mass 19.0, :mass-avg 18.4}
+                {:mass 18.0, :mass-avg 17.8}
+                {:mass 17.0, :mass-avg 17.0}
+                {:mass 16.0, :mass-avg 16.0}
+                {:mass 15.0, :mass-avg 15.0}
+                {:mass 14.0, :mass-avg 14.0}
+                {:mass 13.0, :mass-avg 13.0}
+                {:mass 12.0, :mass-avg 12.0}
+                {:mass 11.0, :mass-avg 11.0}
+                {:mass 10.0, :mass-avg 10.0}]
+               (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
+                   ds/->flyweight)))))
+    (let [nth-db (ds/ds-take-nth 5 src-ds)]
+      (is (= [7 12] (dtype/shape nth-db)))
+      (is (= [{:mass 192.0, :width 8}
+              {:mass 80.0, :width 5}
+              {:mass 166.0, :width 6}
+              {:mass 156.0, :width 7}
+              {:mass 160.0, :width 7}
+              {:mass 356.0, :width 9}
+              {:mass 158.0, :width 7}
+              {:mass 150.0, :width 7}
+              {:mass 154.0, :width 7}
+              {:mass 186.0, :width 7}]
+             (->> (-> (ds/select nth-db [:mass :width] (range 10))
+                      ds/->flyweight)
+                  (map #(update % :width int))))))))
 
-(comment
-  (deftest one-hot
-    (testing "Testing one-hot into multiple column groups"
-      (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
-                       [one-hot :fruit-name {:main ["apple" "mandarin"]
-                                             :other :rest}]
-                       [string->number string?]]
-            src-ds (mapseq-fruit-dataset)
-            {:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-ds pipeline
-                                {:target :fruit-name})]
-        (is (= {:fruit-name
-                {"apple" [:fruit-name-main 1],
-                 "mandarin" [:fruit-name-main 2],
-                 "orange" [:fruit-name-other 1],
-                 "lemon" [:fruit-name-other 2]}}
-               (:label-map options)))
-        (is (= #{:mass :fruit-name-main :fruit-name-other :width :color-score :height}
-               (->> (ds/columns dataset)
-                    (map ds-col/column-name)
-                    set)))
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/column-values->categorical dataset :fruit-name options)
-                    (take 20)
-                    vec)))
-        ;;Check that flyweight conversion is correct.
-        (is (= (->> (mapseq-fruit-dataset)
-                    (take 20)
-                    (mapv (comp name :fruit-name)))
-               (->> (ds/->flyweight dataset :options options)
-                    (map :fruit-name)
-                    (take 20)
-                    vec)))
-        (is (= {:fruit-name :classification
-                :mass :regression
-                :width :regression
-                :height :regression
-                :color-score :regression}
-               (ds-opts/model-type-map options (->> (ds/columns dataset)
-                                                    (map ds-col/column-name)))))))
+(deftest one-hot
+  (testing "Testing one-hot into multiple column groups"
+    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
+          dataset (as-> src-ds dataset
+                      (ds/remove-columns dataset [:fruit-subtype :fruit-label])
+                      (ds-pipe/one-hot dataset
+                                       :column-name-seq [:fruit-name]
+                                       :table-value-list
+                                       {:main ["apple" "mandarin"]
+                                        :other :rest})
+                      (ds-pipe/string->number dataset
+                                              :column-name-seq
+                                              (col-filters/string? dataset))
+                      (ds/set-inference-target dataset :fruit-name))]
 
+      (is (= {:fruit-name
+              {"apple" [:fruit-name-main 1],
+               "mandarin" [:fruit-name-main 2],
+               "orange" [:fruit-name-other 1],
+               "lemon" [:fruit-name-other 2]}}
+             (ds/dataset-label-map dataset)))
+      (is (= #{:mass :fruit-name-main :fruit-name-other :width :color-score :height}
+             (->> (ds/columns dataset)
+                  (map ds-col/column-name)
+                  set)))
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/labels dataset)
+                  (take 20)
+                  vec)))
+      ;;Check that flyweight conversion is correct.
+      (is (= (->> (mapseq-fruit-dataset)
+                  (take 20)
+                  (mapv (comp name :fruit-name)))
+             (->> (ds/->flyweight dataset :number->string? true)
+                  (map :fruit-name)
+                  (take 20)
+                  vec)))
+      (is (= {:fruit-name :classification
+              :mass :regression
+              :width :regression
+              :height :regression
+              :color-score :regression}
+             (ds/model-type dataset (ds/column-names dataset))))))
+
+  (comment
     (testing "one hot-figure it out"
       (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
                        [one-hot :fruit-name]
@@ -264,16 +265,14 @@
                 :height :regression
                 :color-score :regression}
                (ds-opts/model-type-map options (->> (ds/columns dataset)
-                                                    (map ds-col/column-name)))))))
+                                                    (map ds-col/column-name))))))))
 
+  (comment
     (testing "one hot - defined values"
       (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
                        [one-hot :fruit-name ["apple" "mandarin" "orange" "lemon"]]
                        [string->number string?]]
-            src-ds (mapseq-fruit-dataset)
-            {:keys [dataset pipeline options]}
-            (etl/apply-pipeline src-ds pipeline
-                                {:target :fruit-name})]
+            src-ds (mapseq-fruit-dataset)]
         (is (= {:fruit-name
                 {"apple" [:fruit-name-apple 1],
                  "orange" [:fruit-name-orange 1],

@@ -22,6 +22,8 @@
 
 (fn-impl/export-symbols tech.ml.dataset.base
                         dataset-name
+                        metadata
+                        set-metadata
                         maybe-column
                         column
                         columns
@@ -74,15 +76,18 @@
   that the flyweight maps contain the labels and not their encoded values."
   [dataset & {:keys [column-name-seq
                      error-on-missing-values?
-                     translate-strings?]
+                     number->string?]
               :or {error-on-missing-values? true}}]
-  (let [label-map (when translate-strings?
+  (let [label-map (when number->string?
                     (dataset-label-map dataset))
         target-columns-and-vals
         (->> (or column-name-seq
                  (->> (columns dataset)
                       (map ds-col/column-name)
-                      (reduce-column-names dataset)))
+                      ((fn [colname-seq]
+                         (if number->string?
+                           (reduce-column-names dataset colname-seq)
+                           colname-seq)))))
              (map (fn [colname]
                     {:column-name colname
                      :column-values
@@ -121,7 +126,7 @@
                                          (reduce-column-names dataset))
         flyweight-labels (->flyweight dataset
                                       :column-name-seq original-label-column-names
-                                      :translate-strings? true)]
+                                      :number->string? true)]
     (if (= 1 (count original-label-column-names))
       (map #(get % (first original-label-column-names)) flyweight-labels)
       flyweight-labels)))

@@ -72,7 +72,7 @@
   [dataset & {:keys [column-name-seq datatype]
               :or {datatype :float64}}]
   (pipe-ops/inline-perform-operator
-   pipe-ops/->datatype dataset (or column-name-seq (ds/columns dataset))
+   pipe-ops/->datatype dataset (or column-name-seq (ds/column-names dataset))
    datatype))
 
 
@@ -82,7 +82,7 @@
   [dataset & {:keys [column-name-seq value-range]
               :or {value-range [-1 1]} :as op-args}]
   (pipe-ops/inline-perform-operator
-   pipe-ops/range-scaler dataset (or column-name-seq (ds/columns dataset))
+   pipe-ops/range-scaler dataset (or column-name-seq (ds/column-names dataset))
    op-args))
 
 
@@ -92,5 +92,5 @@
   [dataset & {:keys [column-name-seq use-mean? use-std?]
               :or {use-mean? true use-std? true} :as op-args}]
   (pipe-ops/inline-perform-operator
-   pipe-ops/range-scaler dataset (or column-name-seq (ds/columns dataset))
+   pipe-ops/range-scaler dataset (or column-name-seq (ds/column-names dataset))
    op-args))

@@ -149,6 +149,11 @@
   (->mutable [item options]
     (dtype-proto/->mutable col options))
 
+  dtype-proto/PBuffer
+  (sub-buffer [item offset length]
+    (->TablesawColumn
+     (dtype-proto/sub-buffer col offset length)
+     metadata {}))
 
   dtype-proto/PToArray
   (->sub-array [src] (dtype-proto/->sub-array col))
@@ -184,7 +189,8 @@
      (->> columns
           (mapv (fn [[col-name col]]
                   (make-column col (assoc (column->metadata col)
-                                          :name col-name))))))))
+                                          :name col-name))))))
+   {}))
 
 
 (defn ->tablesaw-dataset
