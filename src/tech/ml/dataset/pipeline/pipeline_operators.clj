@@ -80,7 +80,7 @@ strings or tuples of expected strings to their hardcoded values."
   "Replace missing values with a constant.  The constant may be the result
 of running a math expression.  e.g.:
 (mean (col))"
-  {:missing-value (let [op-arg op-args]
+  {:missing-value (let [op-arg (:missing-value op-args)]
                     (if (fn? op-arg)
                       (op-arg dataset column-name)
                       op-arg))}
@@ -89,9 +89,10 @@ of running a math expression.  e.g.:
    (fn [col]
      (let [missing-indexes (ds-col/missing col)]
        (if (> (count missing-indexes) 0)
-         (ds-col/set-values col (map vector
-                                     (seq missing-indexes)
-                                     (repeat (:missing-value context))))
+         (dtype/write-indexes! (ds-col/clone col)
+                               (vec missing-indexes)
+                               (repeat (count missing-indexes)
+                                       (:missing-value context)))
          col)))))
 
 (def-multiple-column-etl-operator one-hot
@@ -121,17 +122,20 @@ example argument:
 (def-single-column-etl-operator replace
   "Replace a given string value with another value.  Useful for blanket replacing empty
 strings with a known value."
-  {:map-fn (or (:map-fn op-args)
-               ((:map-setup-fn op-args)))}
+  {:value-map (let [val-map (:value-map op-args)]
+                (if (fn? val-map)
+                  (val-map dataset column-name)
+                  val-map))}
   (ds/update-column
    dataset column-name
    (fn [col]
      (let [result-dtype (or (:result-datatype op-args)
                             (dtype/get-datatype col))
            map-fn (:map-fn context)]
-       (as-> (mapv map-fn (dtype/->reader col)) col-values
-         (ds-col/new-column col col-values {:name (or (:result-name op-args)
-                                                      (ds-col/column-name col))}))))))
+       (as-> (mapv #(get map-fn % %) (dtype/->reader col)) col-values
+         (ds-col/new-column col result-dtype col-values
+                            {:name (or (:result-name op-args)
+                                       (ds-col/column-name col))}))))))
 
 
 (def-single-column-etl-operator update-column

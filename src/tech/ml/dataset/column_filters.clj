@@ -55,7 +55,7 @@
 
 (defn boolean?
   [dataset & [column-name-seq]]
-  (of-datatype? dataset :string column-name-seq))
+  (of-datatype? dataset :boolean column-name-seq))
 
 
 (defn numeric?

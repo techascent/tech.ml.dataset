@@ -53,10 +53,13 @@
                     :as op-args})
 
 
-(def-pipeline-fn replace-missing
+(defn replace-missing
   "Replace all the missing values in the dataset.  Can take a sclar missing value
 or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
-  pipe-ops/replace-missing {:keys [column-filter missing-value-or-fn] :as op-args})
+  [dataset column-filter missing-value]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/replace-missing dataset column-filter
+   {:missing-value missing-value}))
 
 
 (defn remove-missing
@@ -71,13 +74,16 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
                                  (remove missing-indexes)))))
 
 
-(def-pipeline-fn replace
+(defn replace
   "Map a function across a column or set of columns.  Map-fn may be a map?.
   Result column names are identical to src column names but metadata like a label
   map is removed.
   If map-setup-fn is provided, map-fn must be nil and map-setup-fn will be called
   with the dataset and column name to produce map-fn."
-  pipe-ops/replace {:keys [column-filter result-datatype map-setup-fn map-fn] :as op-args})
+  [dataset col-filter replace-value-or-fn & {:keys [result-datatype]}]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/replace dataset col-filter {:missing-value replace-value-or-fn
+                                        :result-datatype result-datatype}))
 
 
 (defn update-dataset-column
