@@ -11,6 +11,9 @@
             [tech.ml.dataset.categorical :as categorical]))
 
 
+(declare dataset-label-map reduce-column-names)
+
+
 (defn set-inference-target
   [dataset target-name-or-target-name-seq]
   (let [label-map (dataset-label-map dataset)
