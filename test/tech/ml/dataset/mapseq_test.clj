@@ -2,7 +2,7 @@
   (:require [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]

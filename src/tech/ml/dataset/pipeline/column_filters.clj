@@ -1,10 +1,9 @@
-(ns tech.ml.dataset.column-filters
+(ns tech.ml.dataset.pipeline.column-filters
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.base :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.pipeline-operators
-             :as pipe-ops]
+            [tech.ml.dataset.pipeline.base :as pipe-base]
             [clojure.set :as c-set])
   (:refer-clojure :exclude [string? not and or boolean?
                             > >= < <=]))
@@ -32,8 +31,20 @@
 
 (defn select-column-names
   [dataset column-name-seq]
-  (->> (select-columns dataset column-name-seq)
-       (map ds-col/column-name)))
+  (cond
+    (fn? column-name-seq)
+    (column-name-seq dataset)
+    (clojure.core/or (= :all column-name-seq)
+                     (sequential? column-name-seq)
+                     (nil? column-name-seq))
+    (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
+         ds/column-names)
+    (clojure.core/or (clojure.core/string? column-name-seq)
+                     (keyword? column-name-seq))
+    [column-name-seq]
+    :else
+    (throw (ex-info (format "Unrecognized argument to select columns: %s" column-name-seq)
+                    {}))))
 
 
 (defn column-filter
@@ -94,7 +105,7 @@
   (->> (apply c-set/intersection
               (set (select-column-names dataset lhs-name-seq))
               (set (select-column-names dataset rhs-name-seq))
-              (map (comp set select-column-names) more-column-filters))
+              (map (comp set (partial select-column-names dataset)) more-column-filters))
        (ds/order-column-names dataset)))
 
 
@@ -108,6 +119,7 @@
 
 
 (defn inference?
+  "Is this column used as an inference target"
   [dataset & [column-name-seq]]
   (column-filter
    dataset
@@ -116,11 +128,13 @@
 
 
 (defn target?
+  "Is this column used as an inference target"
   [dataset & [column-name-seq]]
   (inference? dataset column-name-seq))
 
 
 (defn feature?
+  "Is this column used as a feature column"
   [dataset & [column-name-seq]]
   (column-filter
    dataset
@@ -135,36 +149,36 @@
    #(apply bool-fn
            (->> (concat [lhs rhs]
                         args)
-                (map (partial pipe-ops/eval-math-fn
+                (map (partial pipe-base/eval-math-fn
                               dataset
                               (ds-col/column-name %)))))))
 
 
 (defn >
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset > lhs rhs args))
+  (boolean-math-filter dataset clojure.core/> lhs rhs args))
 
 
 (defn >=
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset >= lhs rhs args))
+  (boolean-math-filter dataset clojure.core/>= lhs rhs args))
 
 
 (defn <
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset < lhs rhs args))
+  (boolean-math-filter dataset clojure.core/< lhs rhs args))
 
 
 (defn <=
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset <= lhs rhs args))
+  (boolean-math-filter dataset clojure.core/<= lhs rhs args))
 
 
 (defn eq
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset = lhs rhs args))
+  (boolean-math-filter dataset clojure.core/= lhs rhs args))
 
 
 (defn not-eq
   [dataset lhs rhs & args]
-  (boolean-math-filter dataset not= lhs rhs args))
+  (boolean-math-filter dataset clojure.core/not= lhs rhs args))

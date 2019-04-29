@@ -11,7 +11,7 @@
             [clojure.core.matrix.macros :refer [c-for]]
             [clojure.set :as c-set]
             [tech.ml.dataset.categorical :as categorical]
-            [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.options :as options]
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
@@ -129,7 +129,7 @@
   dataset values.  If there are multiple label columns results are presented in
   flyweight (sequence of maps) format."
   [dataset]
-  (when-not (seq (col-filters/inference? dataset))
+  (when-not (seq (col-filters/target? dataset))
     (throw (ex-info "No label columns indicated" {})))
   (let [original-label-column-names (->> (col-filters/inference? dataset)
                                          (reduce-column-names dataset))

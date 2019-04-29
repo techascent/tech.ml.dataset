@@ -194,7 +194,8 @@
     (when-not (instance? NumericColumn col)
       (throw (ex-info "Stats aren't available on non-numeric columns"
                       {:column-type (base/get-datatype col)
-                       :column-name (col-proto/column-name col)})))
+                       :column-name (col-proto/column-name col)
+                       :column-java-type (type col)})))
     (let [stats-set (set (if-not (seq stats-set)
                            available-stats
                            stats-set))
@@ -227,8 +228,7 @@
   (correlation
     [col other-column correlation-type]
     (let [^NumericColumn column (jna/ensure-type NumericColumn col)
-          ^NumericColumn other-column (jna/ensure-type NumericColumn
-                                                       (:col other-column))]
+          ^NumericColumn other-column (jna/ensure-type NumericColumn other-column)]
       (case correlation-type
         :pearson (.pearsons column other-column)
         :spearman (.spearmans column other-column)
@@ -265,7 +265,7 @@
   (clone [this]
     (dtype-proto/make-container :tablesaw-column
                                 (base/get-datatype this) (col-proto/column-values this)
-                                {:column-name (col-proto/column-name this)}))
+                                {:name (col-proto/column-name this)}))
 
 
   (to-double-array [col error-missing?]
@@ -326,7 +326,7 @@
     (dtype-proto/make-container :tablesaw-column
                                 datatype
                                 (base/shape->ecount shape)
-                                {:column-name (.name col)}))
+                                {:name (.name col)}))
 
   dtype-proto/PToArray
   (->sub-array [col] nil)
@@ -416,10 +416,10 @@
 (defn make-column
   "Make a new tablesaw column.  Note that this does not make
   columns with missing values.  For that, use make-empty-column."
-  ([datatype elem-count-or-seq {:keys [column-name]
-                                :or {column-name "_unnamed"}
+  ([datatype elem-count-or-seq {:keys [name]
+                                :or {name "_unnamed"}
                                 :as options}]
-   (let [^String column-name (column-safe-name column-name)]
+   (let [^String column-name (column-safe-name name)]
      ;;If numeric column, then use this pathway.
      (let [src-data (dtype-proto/make-container
                      :java-array datatype
@@ -437,9 +437,9 @@
 
 
 (defn make-empty-column
-  ([datatype elem-count {:keys [column-name]
-                         :or {column-name "_unnamed"}}]
-   (let [^String column-name (column-safe-name column-name)
+  ([datatype elem-count {:keys [name]
+                         :or {name "_unnamed"}}]
+   (let [^String column-name (column-safe-name name)
          elem-count (int elem-count)]
      (case datatype
        :int16 (ShortColumn/create column-name elem-count)

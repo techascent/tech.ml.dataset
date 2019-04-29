@@ -72,7 +72,8 @@
     (when-not (instance? NumericColumn col)
       (throw (ex-info "Stats aren't available on non-numeric columns"
                       {:column-type (dtype/get-datatype col)
-                       :column-name (col-proto/column-name this)})))
+                       :column-name (col-proto/column-name this)
+                       :column-java-type (type col)})))
     (let [stats-set (set (if-not (seq stats-set)
                            dtype-tbl/available-stats
                            stats-set))
@@ -96,14 +97,19 @@
   (select [this idx-seq] (make-column (col-proto/select col idx-seq) metadata {}))
 
   (empty-column [this datatype elem-count metadata]
-    (make-column (col-proto/empty-column col datatype elem-count metadata)
-                 metadata {}))
+    (dtype-proto/make-container :tablesaw-column datatype elem-count
+                                (assoc (select-keys metadata [:name])
+                                       :empty? true)))
 
   (new-column [this datatype elem-count-or-values metadata]
-    (make-column (col-proto/new-column col datatype elem-count-or-values metadata)
-                 metadata {}))
+    (dtype-proto/make-container :tablesaw-column datatype
+                                elem-count-or-values metadata))
 
-  (clone [this] (make-column (col-proto/clone col) metadata cache))
+  (clone [this]
+    (dtype-proto/make-container :tablesaw-column
+                                (dtype/get-datatype this)
+                                (col-proto/column-values this)
+                                metadata))
 
   (to-double-array [this error-missing?] (col-proto/to-double-array col error-missing?))
 
@@ -139,10 +145,18 @@
   (->reader [item options]
     (dtype-proto/->reader col options))
 
+
   dtype-proto/PToWriter
   (convertible-to-writer? [item] true)
   (->writer [item options]
     (dtype-proto/->writer col options))
+
+
+  dtype-proto/PToIterable
+  (convertible-to-iterable? [item] true)
+  (->iterable [item options]
+    (dtype-proto/->reader col options))
+
 
   dtype-proto/PToMutable
   (convertible-to-mutable? [item] true)
@@ -165,6 +179,8 @@
 
 (defn make-column
   [datatype-col metadata & [cache]]
+  (if (instance? TablesawColumn datatype-col)
+    (throw (ex-info "Nested" {})))
   (->TablesawColumn datatype-col metadata cache))
 
 
@@ -178,7 +194,7 @@
    (if empty?
      (dtype-tbl/make-empty-column datatype elem-count-or-seq options)
      (dtype-tbl/make-column datatype elem-count-or-seq options))
-   (make-column {:name (:column-name options)} {})))
+   (make-column options {})))
 
 
 (defn ^tech.tablesaw.io.csv.CsvReadOptions$Builder
@@ -251,7 +267,7 @@
                                                 datatype)]
                                  [colname
                                   (dtype-tbl/make-empty-column
-                                   datatype 0 {:column-name colname})])))
+                                   datatype 0 {:name colname})])))
                         (into {}))
         all-column-names (set (keys column-map))
         max-idx (reduce (fn [max-idx [idx item-row]]

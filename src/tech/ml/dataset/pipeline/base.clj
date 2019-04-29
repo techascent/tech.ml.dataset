@@ -1,0 +1,81 @@
+(ns tech.ml.dataset.pipeline.base
+  (:require [tech.ml.protocols.dataset :as ds-proto]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.functional :as dtype-fn]))
+
+
+
+(def ^:dynamic *pipeline-datatype* :float64)
+
+(defn context-datatype
+  [context]
+  (or (:datatype context) *pipeline-datatype*))
+
+
+
+(def ^:dynamic *pipeline-dataset*)
+(def ^:dynamic *pipeline-column-name*)
+(def ^:dynamic *pipeline-column-name-seq*)
+
+
+(defmacro with-pipeline-vars
+  "Run a body of code with pipeline global variables set."
+  [dataset
+   column-name
+   datatype
+   column-name-seq & body]
+  (when datatype
+    (throw (ex-info "mistake" {})))
+  `(with-bindings {#'*pipeline-datatype* (or ~datatype *pipeline-datatype*)
+                   #'*pipeline-dataset* (or ~dataset *pipeline-dataset*)
+                   #'*pipeline-column-name* (or ~column-name *pipeline-column-name*)
+                   #'*pipeline-column-name-seq*
+                   (or ~column-name-seq *pipeline-column-name-seq*)}
+     (when-not (= *pipeline-datatype* :float64)
+       (throw (ex-info "Failed" {})))
+     ~@body))
+
+
+(defn dtype
+  []
+  *pipeline-datatype*)
+
+
+(defn colname
+  []
+  *pipeline-datatype*)
+
+(defn ds
+  []
+  *pipeline-dataset*)
+
+
+(defn eval-math-fn
+  [dataset column-name math-fn-or-val]
+  (with-bindings {#'*pipeline-dataset* dataset
+                  #'*pipeline-column-name* column-name}
+    (if (fn? math-fn-or-val)
+      (math-fn-or-val)
+      math-fn-or-val)))
+
+
+(defn int-map
+  "Perform an integer->integer conversion of a column using a static map.
+  The map must be complete; missing entries are errors."
+  [table col-data]
+  (-> (dtype-fn/unary-reader
+       :int32
+       (int (if-let [item (table x)]
+              item
+              (throw (ex-info "Failed to lookup value int table"))))
+       col-data)
+      (dtype/->reader *pipeline-datatype*)))
+
+
+(defn col
+  "Return a column.  Only works during 'm=' and the default column
+  is the current operating column."
+  [& [column-name]]
+  (ds-proto/column *pipeline-dataset*
+                   (or column-name
+                       *pipeline-column-name*)))

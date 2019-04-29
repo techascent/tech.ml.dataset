@@ -2,16 +2,18 @@
   "A set of common 'pipeline' operations you probably will want to run on a dataset."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.datatype.functional.impl :as fn-impl]
             [tech.v2.datatype.reader :as reader]
             [tech.ml.protocols.etl :as etl-proto]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.options :as options]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.pipeline.pipeline-operators
              :refer [def-multiple-column-etl-operator]
              :as pipe-ops]
-            [tech.ml.dataset.column-filters :as col-filters])
+            [tech.ml.dataset.pipeline.base :as pipe-base])
   (:refer-clojure :exclude [replace filter]))
 
 
@@ -129,7 +131,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
    (pipe-ops/inline-perform-operator
     pipe-ops/->datatype dataset column-filter {:datatype datatype}))
   ([dataset column-filter]
-   (->datatype dataset column-filter pipe-ops/*pipeline-datatype*))
+   (->datatype dataset column-filter pipe-base/*pipeline-datatype*))
   ([dataset]
    (->datatype dataset nil)))
 
@@ -179,22 +181,9 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
     :value att-value}))
 
 
-(defn col
-  "Return a column.  Only works during 'm=' and the default column
-  is the current operating column."
-  [& args]
-  (apply pipe-ops/col args))
-
-
-(defn int-lookup
-  [table col-data]
-  (-> (dtype-fn/unary-reader
-       :int32
-       (int (if-let [item (get table x)]
-              item
-              (throw (ex-info "Failed to lookup value int table"))))
-       col-data)
-      (dtype/->reader pipe-ops/*pipeline-datatype*)))
+(fn-impl/export-symbols tech.ml.dataset.pipeline.base
+                        col
+                        int-map)
 
 
 (defn m=

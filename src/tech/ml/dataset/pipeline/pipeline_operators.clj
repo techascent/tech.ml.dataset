@@ -4,8 +4,10 @@
             [tech.ml.dataset.pca :as ds-pca]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.tensor :as ds-tens]
+            [tech.ml.dataset.pipeline.base :as pipe-base
+             :refer [context-datatype]]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype :as dtype]
             [tech.v2.tensor :as tens]
@@ -37,20 +39,50 @@
          ~op-code))))
 
 
-(def ^:dynamic *pipeline-datatype* :float64)
+(defn default-etl-context-columns
+  "Default implementation of build-etl-context-columns"
+  [op dataset column-name-seq op-args]
+  (->> column-name-seq
+       (map (fn [col-name]
+              (when-let [etl-ctx (pipe-base/with-pipeline-vars nil col-name nil nil
+                                   (etl-proto/build-etl-context op dataset
+                                                                col-name op-args))]
+                [col-name etl-ctx])))
+       (remove nil?)
+       (into {})))
 
-(defn context-datatype
-  [context]
-  (or (:datatype context) *pipeline-datatype*))
+
+(defn default-perform-etl-columns
+  [op dataset column-name-seq op-args context]
+  (->> column-name-seq
+       (reduce (fn [dataset col-name]
+                 (pipe-base/with-pipeline-vars dataset col-name nil nil
+                   (etl-proto/perform-etl op dataset col-name op-args
+                                          (get context col-name))))
+               dataset)))
+
+
+(extend-protocol etl-proto/PETLMultipleColumnOperator
+  Object
+  (build-etl-context-columns [op dataset column-name-seq op-args]
+    (default-etl-context-columns op dataset column-name-seq op-args))
+
+  (perform-etl-columns [op dataset column-name-seq op-args context]
+    (default-perform-etl-columns op dataset column-name-seq op-args context)))
 
 
 (defn inline-perform-operator
   [etl-op dataset column-filter op-args]
-  (let [colname-seq (col-filters/select-column-names dataset column-filter)
-        context (etl-proto/build-etl-context-columns
-                 etl-op dataset colname-seq op-args)]
-    (etl-proto/perform-etl-columns
-     etl-op dataset colname-seq op-args context)))
+  (pipe-base/with-pipeline-vars dataset nil nil nil
+    (if-let [colname-seq (seq (col-filters/select-column-names
+                               dataset column-filter))]
+      (pipe-base/with-pipeline-vars nil nil nil colname-seq
+        (let [context (etl-proto/build-etl-context-columns
+                       etl-op dataset colname-seq op-args)]
+          (etl-proto/perform-etl-columns
+           etl-op dataset colname-seq op-args context)))
+      dataset)))
+
 
 (def-single-column-etl-operator assoc-metadata
   "Assoc a new value into the metadata."
@@ -195,7 +227,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
   [dataset datatype column-name-seq sub-val divide-val bias-val]
   (let [src-data (ds/select dataset column-name-seq :all)
         colseq (ds/columns src-data)
-        etl-dtype (or datatype *pipeline-datatype*)
+        etl-dtype (or datatype pipe-base/*pipeline-datatype*)
         ;;Storing data column-major so the row is incremention fast.
         backing-store (ds-tens/dataset->column-major-tensor src-data etl-dtype)
         ds-shape (dtype/shape backing-store)
@@ -295,35 +327,15 @@ contain missing values."
     dataset))
 
 
-(def ^:dynamic *pipeline-dataset*)
-(def ^:dynamic *pipeline-column-name*)
-
-
-(defn col
-  [& [column-name]]
-  (ds/column *pipeline-dataset*
-             (or column-name
-                 *pipeline-column-name*)))
-
-
-(defn eval-math-fn
-  [dataset column-name math-fn]
-  (with-bindings {#'*pipeline-dataset* dataset
-                  #'*pipeline-column-name* column-name}
-    (if (fn? math-fn)
-      (math-fn)
-      math-fn)))
-
-
 (def-single-column-etl-operator m=
   "Perform some math.  This operator sets up context so the 'col' operator works."
   nil
-  (let [result (eval-math-fn dataset column-name op-args)]
+  (let [result (pipe-base/eval-math-fn dataset column-name op-args)]
     (ds/add-or-update-column
      dataset (dtype/make-container :tablesaw-column
-                                   *pipeline-datatype*
+                                   pipe-base/*pipeline-datatype*
                                    result
-                                   {:column-name column-name}))))
+                                   {:name column-name}))))
 
 
 (def-multiple-column-etl-operator impute-missing
@@ -371,7 +383,7 @@ will be exluded.  Indexes where the return value is 0 are stripped while indexes
 the return value is nonzero are kept.  The math expression is implicitly applied to the
 result of the column selection if the (col) operator is used."
   nil
-  (let [result (eval-math-fn dataset column-name op-args)
+  (let [result (pipe-base/eval-math-fn dataset column-name op-args)
         bool-reader (typecast/datatype->reader :boolean result)]
     (when-not (= (dtype/ecount result)
                  (second (dtype/shape dataset)))
@@ -388,7 +400,7 @@ result of the column selection if the (col) operator is used."
                       (first op-args))
         pca-info (ds-pca/pca-dataset dataset
                                      :method (:method argmap)
-                                     :datatype *pipeline-datatype*)
+                                     :datatype pipe-base/*pipeline-datatype*)
         n-components (long (or (:n-components argmap)
                                (let [target-var-percent (double
                                                          (or (:variance argmap)
@@ -415,7 +427,7 @@ result of the column selection if the (col) operator is used."
                                    (ds/order-column-names dataset))
         transform-ds (ds-pca/pca-transform-dataset target-dataset pca-info
                                                    (:n-components pca-info)
-                                                   *pipeline-datatype*)]
+                                                   pipe-base/*pipeline-datatype*)]
     (ds/from-prototype transform-ds (ds/dataset-name target-dataset)
                        (concat (ds/columns transform-ds)
                                (->> (ds/select dataset leftover-column-names :all)

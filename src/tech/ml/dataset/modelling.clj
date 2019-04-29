@@ -5,7 +5,7 @@
                      ->dataset select ds-map-values
                      metadata maybe-column]
              :as ds-base]
-            [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.column :as ds-col]
             [clojure.set :as c-set]
             [tech.ml.dataset.categorical :as categorical]))

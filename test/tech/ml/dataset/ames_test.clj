@@ -1,10 +1,10 @@
 (ns tech.ml.dataset.ames-test
   (:require [tech.ml.dataset.pipeline
-             :refer [m= col int-lookup]
+             :refer [m= col int-map]
              :as ds-pipe]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
@@ -121,7 +121,7 @@
     (is (= []
            (vec (col-filters/string? dataset))))
     (is (= ["SalePrice"]
-           (vec (col-filters/inference? dataset))))
+           (vec (col-filters/target? dataset))))
     (is (= []
            (vec (->> (col-filters/numeric? dataset)
                      (col-filters/not dataset)))))
@@ -249,8 +249,8 @@
    "ExterQual"
    "TotalBath"
    "KitchenQual"
-   "GarageScore"
-   "SimplGarageScore"])
+   "GarageArea"
+   "ExterGrade"])
 
 
 (defn full-ames-pt-2
@@ -268,11 +268,19 @@
 (defn full-ames-pt-3
   [dataset]
   (-> dataset
-      (m= #(col-filters/and dataset
-                            (col-filters/not (col-filters/categorical? %))
-                            (col-filters/not (col-filters/inference? %))
-                            (col-filters/> (dtype-fn/abs
-                                            (dtype-fn/skewness (col))) 0.5)))))
+      (m= #(col-filters/and %
+                            (col-filters/not % (col-filters/categorical? %))
+                            (col-filters/not % (col-filters/target? %))
+                            (col-filters/> %
+                                           (fn []
+                                             (dtype-fn/abs
+                                              (dtype-fn/skewness (col))))
+                                           0.5))
+          #(dtype-fn/log1p (col)))
+      (ds-pipe/std-scale #(col-filters/and
+                           %
+                           (col-filters/not % (col-filters/categorical? %))
+                           (col-filters/not % (col-filters/target? %))))))
 
 
 (deftest full-ames-pipeline-test
@@ -297,15 +305,15 @@
          (is (= n-new-rows
                 (- n-rows num-over-the-line))))
        (let [new-ds (m= src-dataset "SimplOverallQual"
-                        #(int-lookup {1 1 2 1 3 1
-                                      4 2 5 2 6 2
-                                      7 3 8 3 9 3 10 3}
-                                     (col "OverallQual")))]
+                        #(int-map {1 1 2 1 3 1
+                                   4 2 5 2 6 2
+                                   7 3 8 3 9 3 10 3}
+                                  (col "OverallQual")))]
          (is (= #{1 2 3}
-                (-> new-ds
-                    (ds/column "SimplOverallQual")
-                    (ds-col/unique)
-                    set))))))
+                (->> (ds/column new-ds "SimplOverallQual")
+                     (ds-col/unique)
+                     (map int)
+                     set))))))
     (testing "Pathway through ames pt 2 is sane.  Checking skew."
       (let [dataset (-> src-ds
                         full-ames-pt-1
@@ -313,14 +321,14 @@
             skewed-set (set (col-filters/and dataset
                                              (->> (col-filters/categorical? dataset)
                                                   (col-filters/not dataset))
-                                             (->> (col-filters/inference? dataset)
+                                             (->> (col-filters/target? dataset)
                                                   (col-filters/not dataset))
                                              (col-filters/> dataset
                                                             #(dtype-fn/abs
                                                               (dtype-fn/skewness (col)))
                                                             0.5)))]
         ;;This count seems rather high...a diff against the python stuff would be wise.
-        (is (= 66 (count skewed-set)))
+        (is (= 64 (count skewed-set)))
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
@@ -332,8 +340,8 @@
             std-set (set (col-filters/and dataset
                                           (->> (col-filters/categorical? dataset)
                                                (col-filters/not dataset))
-                                          (->> (col-filters/inference? dataset)
-                                               (col-filters/not))))
+                                          (->> (col-filters/target? dataset)
+                                               (col-filters/not dataset))))
             mean-var-seq (->> std-set
                               (map (comp #(ds-col/stats % [:mean :variance])
                                          (partial ds/column dataset))))]
@@ -345,16 +353,16 @@
                                             % col-filters/numeric?
                                             (->> (col-filters/categorical? %)
                                                  (col-filters/not %))
-                                            (->> (col-filters/inference? %)
+                                            (->> (col-filters/target? %)
                                                  (col-filters/not %))))]
           (is (= 127 (count (ds/columns dataset))))
-          (is (= 74 (count (ds/columns pca-ds))))
-          (is (= 1 (count (col-filters/inference? pca-ds)))))
+          (is (= 75 (count (ds/columns pca-ds))))
+          (is (= 1 (count (col-filters/target? pca-ds)))))
         (let [pca-ds (ds-pipe/pca dataset #(col-filters/and
                                             % col-filters/numeric?
                                             (->> (col-filters/categorical? %)
                                                  (col-filters/not %))
-                                            (->> (col-filters/inference? %)
+                                            (->> (col-filters/target? %)
                                                  (col-filters/not %)))
                                   :n-components 10)]
           (is (= 127 (count (ds/columns dataset))))
