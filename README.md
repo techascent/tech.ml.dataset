@@ -28,7 +28,7 @@ generic table support and as such they do not use the actual tablesaw 'table' da
 
 ## Examples
 
-* [sequences of maps](test/tech/ml/dataset/mapseq.clj)
+* [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
 * [regression pipelines](test/tech/ml/dataset/ames_test.clj)
 
 ## License
