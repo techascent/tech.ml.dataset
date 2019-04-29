@@ -21,7 +21,7 @@ operating on that data in a mainly columnwise fashion.
 
 [tech.v2.datatype](https://github.com/techascent/tech.datatype) subsystem which is
 described on our [blog](http://techascent.com/blog/datatype-library.html).
-[Here is a cheatsheet](https://github.com/techascent/tech.datatype/docs/cheatsheet.md).
+[Here is a cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md).
 
 The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the
 generic table support and as such they do not use the actual tablesaw 'table' datatype.
