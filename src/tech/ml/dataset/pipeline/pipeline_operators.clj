@@ -49,6 +49,17 @@
     (etl-proto/perform-etl-columns
      etl-op dataset colname-seq op-args context)))
 
+(def-single-column-etl-operator assoc-metadata
+  "Assoc a new value into the metadata."
+  nil
+  (ds/update-column
+   dataset column-name
+   (fn [col]
+     (ds-col/set-metadata col
+                          (assoc (ds-col/metadata col)
+                                 (:key op-args)
+                                 (:value op-args))))))
+
 
 (def-multiple-column-etl-operator remove-columns
   "Remove columns selected via the column filter"
@@ -131,11 +142,12 @@ strings with a known value."
    (fn [col]
      (let [result-dtype (or (:result-datatype op-args)
                             (dtype/get-datatype col))
-           map-fn (:map-fn context)]
+           map-fn (:value-map context)]
        (as-> (mapv #(get map-fn % %) (dtype/->reader col)) col-values
          (ds-col/new-column col result-dtype col-values
-                            {:name (or (:result-name op-args)
-                                       (ds-col/column-name col))}))))))
+                            (assoc (ds-col/metadata col)
+                                   :name (or (:result-name op-args)
+                                             (ds-col/column-name col)))))))))
 
 
 (def-single-column-etl-operator update-column

@@ -22,8 +22,7 @@
         dataset (-> src-ds
                   (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
                   (ds-pipe/string->number)
-                  (ds-pipe/range-scale :column-filter #(->> (col-filters/categorical? %)
-                                                            (col-filters/not %)))
+                  (ds-pipe/range-scale)
                   (ds/set-inference-target :fruit-name))
 
         origin-ds (mapseq-fruit-dataset)
@@ -182,8 +181,7 @@
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
           dataset (-> src-ds
                       (ds/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :column-filter [:fruit-name]
-                                       :table-value-list
+                      (ds-pipe/one-hot :fruit-name
                                        {:main ["apple" "mandarin"]
                                         :other :rest})
                       (ds-pipe/string->number)
@@ -224,7 +222,7 @@
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
           dataset (-> src-ds
                       (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :column-filter :fruit-name)
+                      (ds-pipe/one-hot :fruit-name)
                       (ds-pipe/string->number))]
       (is (= {:fruit-name
               {"apple" [:fruit-name-apple 1],
@@ -260,15 +258,11 @@
              (ds/model-type dataset (ds/column-names dataset))))))
 
   (testing "one hot - defined values"
-    (let [pipeline '[[remove [:fruit-subtype :fruit-label]]
-                     [one-hot :fruit-name ["apple" "mandarin" "orange" "lemon"]]
-                     [string->number string?]]
-          src-ds (ds/->dataset (mapseq-fruit-dataset))
+    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
           dataset (-> src-ds
                       (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :column-filter :fruit-name
-                                       :table-value-list ["apple" "mandarin"
-                                                          "orange" "lemon"])
+                      (ds-pipe/one-hot :fruit-name ["apple" "mandarin"
+                                                    "orange" "lemon"])
                       (ds-pipe/string->number))]
       (is (= {:fruit-name
               {"apple" [:fruit-name-apple 1],
