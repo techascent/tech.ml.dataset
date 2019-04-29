@@ -130,7 +130,8 @@
                 (mapv :fruit-name))))
 
     (let [new-ds (as-> (ds/->dataset (map hash-map (repeat :mass) (range 20))) dataset
-                   (ds-pipe/->datatype dataset :datatype :float64)
+                   ;;The mean should happen in double or floating point space.
+                   (ds-pipe/->datatype dataset)
                    (ds/new-column dataset :mass-avg
                                   (->> (ds/column dataset :mass)
                                        (dtype-fn/fixed-rolling-window

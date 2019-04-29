@@ -168,6 +168,19 @@
   (->TablesawColumn datatype-col metadata cache))
 
 
+(defmethod dtype-proto/make-container :tablesaw-column
+  [container-type datatype elem-count-or-seq
+   {:keys [empty?] :as options}]
+  (when (and empty?
+             (not (number? elem-count-or-seq)))
+    (throw (ex-info "Empty columns must have colsize argument." {})))
+  (->
+   (if empty?
+     (dtype-tbl/make-empty-column datatype elem-count-or-seq options)
+     (dtype-tbl/make-column datatype elem-count-or-seq options))
+   (make-column {:name (:column-name options)} {})))
+
+
 (defn ^tech.tablesaw.io.csv.CsvReadOptions$Builder
   ->csv-builder [^String path & {:keys [separator header? date-format]}]
   (if separator

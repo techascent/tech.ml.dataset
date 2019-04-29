@@ -453,14 +453,3 @@
    (make-empty-column datatype elem-count {}))
   ([datatype]
    (make-empty-column datatype 0 {})))
-
-
-(defmethod dtype-proto/make-container :tablesaw-column
-  [container-type datatype elem-count-or-seq
-   {:keys [empty?] :as options}]
-  (when (and empty?
-             (not (number? elem-count-or-seq)))
-    (throw (ex-info "Empty columns must have colsize argument." {})))
-  (if empty?
-    (make-empty-column datatype elem-count-or-seq options)
-    (make-column datatype elem-count-or-seq options)))

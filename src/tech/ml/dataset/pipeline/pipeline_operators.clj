@@ -1,14 +1,17 @@
 (ns tech.ml.dataset.pipeline.pipeline-operators
   (:require [tech.ml.protocols.etl :as etl-proto]
             [tech.ml.dataset :as ds]
+            [tech.ml.dataset.pca :as ds-pca]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.column-filters :as col-filters]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype :as dtype]
-            [tech.v2.tensor :as tens])
-  (:refer-clojure :exclude [replace])
+            [tech.v2.tensor :as tens]
+            [tech.v2.datatype.typecast :as typecast]
+            [clojure.set :as c-set])
+  (:refer-clojure :exclude [replace filter])
   (:import [tech.ml.protocols.etl
             PETLSingleColumnOperator
             PETLMultipleColumnOperator]))
@@ -290,3 +293,130 @@ contain missing values."
       (sub-divide-bias dataset etl-dtype column-name-seq mean-values std-values 0.0))
     ;;no columns, noop
     dataset))
+
+
+(def ^:dynamic *pipeline-dataset*)
+(def ^:dynamic *pipeline-column-name*)
+
+
+(defn col
+  [& [column-name]]
+  (ds/column *pipeline-dataset*
+             (or column-name
+                 *pipeline-column-name*)))
+
+
+(defn eval-math-fn
+  [dataset column-name math-fn]
+  (with-bindings {#'*pipeline-dataset* dataset
+                  #'*pipeline-column-name* column-name}
+    (if (fn? math-fn)
+      (math-fn)
+      math-fn)))
+
+
+(def-single-column-etl-operator m=
+  "Perform some math.  This operator sets up context so the 'col' operator works."
+  nil
+  (let [result (eval-math-fn dataset column-name op-args)]
+    (ds/add-or-update-column
+     dataset (dtype/make-container :tablesaw-column
+                                   *pipeline-datatype*
+                                   result
+                                   {:column-name column-name}))))
+
+
+(def-multiple-column-etl-operator impute-missing
+  "NAN-aware k-means missing value imputation.
+1.  Perform k-means.
+2.  Cluster rows according to centroids.  Use centroid means (if not NAN)
+to replace missing values or global means if the centroid mean was NAN.
+
+Algorithm fails if the entire column is missing (entire column gets NAN)."
+ (let [dataset (ds/select dataset column-name-seq :all)
+       argmap (merge {:method :k-means
+                      :k 5
+                      :max-iterations 100
+                      :runs 5}
+                     (first op-args))
+       ;; compute centroids.
+       row-major-centroids (case (:method argmap)
+                             :k-means (ds/k-means dataset
+                                                  (:k argmap)
+                                                  (:max-iterations argmap)
+                                                  (:runs argmap)
+                                                  false))]
+   (merge {:row-major-centroids row-major-centroids
+           :method :centroids}
+          (ds/compute-centroid-and-global-means dataset row-major-centroids)))
+
+  (let [dataset (ds/select dataset column-name-seq :all)
+        columns-with-missing (ds/columns-with-missing-seq dataset)]
+    ;;Attempt a fast-out.
+    (if-not columns-with-missing
+      dataset
+      (let [imputed-dataset (case (:method context)
+                              :centroids (ds/impute-missing-by-centroid-averages
+                                          (ds/select dataset column-name-seq :all)
+                                          (:row-major-centroids context)
+                                          context))]
+        (ds/update-columns dataset (map :column-name columns-with-missing)
+                           #(ds/column imputed-dataset (ds-col/column-name %)))))))
+
+
+(def-single-column-etl-operator filter
+  "Filter the dataset based on a math expression.  The expression must return a reader
+and it must be table-rows in length.  It will be casted to doubles so only values == 0
+will be exluded.  Indexes where the return value is 0 are stripped while indexes where
+the return value is nonzero are kept.  The math expression is implicitly applied to the
+result of the column selection if the (col) operator is used."
+  nil
+  (let [result (eval-math-fn dataset column-name op-args)
+        bool-reader (typecast/datatype->reader :boolean result)]
+    (when-not (= (dtype/ecount result)
+                 (second (dtype/shape dataset)))
+      (throw (ex-info "Either scalar returned or result's is wrong length" {})))
+    (ds/select dataset :all (->> (range (dtype/ecount result))
+                                 (clojure.core/filter #(.read bool-reader %))))))
+
+
+(def-multiple-column-etl-operator pca
+  "Perform PCA storing context during training."
+  (let [dataset (ds/select dataset column-name-seq :all)
+        argmap (merge {:method :svd
+                       :variance 0.95}
+                      (first op-args))
+        pca-info (ds-pca/pca-dataset dataset
+                                     :method (:method argmap)
+                                     :datatype *pipeline-datatype*)
+        n-components (long (or (:n-components argmap)
+                               (let [target-var-percent (double
+                                                         (or (:variance argmap)
+                                                             0.95))
+                                     eigenvalues (:eigenvalues pca-info)
+                                     var-total (apply + 0 eigenvalues)
+                                     n-cols (long (first (dtype/shape dataset)))]
+                                 (loop [idx 0
+                                        var-sum 0.0]
+                                   (if (and (< idx n-cols)
+                                            (< (/ var-sum
+                                                  var-total)
+                                               target-var-percent))
+                                     (recur (inc idx)
+                                            (+ var-sum (dtype/get-value eigenvalues
+                                                                        idx)))
+                                     idx)))))]
+    (assoc pca-info :n-components n-components))
+  (let [pca-info context
+        target-dataset (ds/select dataset column-name-seq :all)
+        leftover-column-names (->> (c-set/difference (set (->> (ds/columns dataset)
+                                                               (map ds-col/column-name)))
+                                                     (set column-name-seq))
+                                   (ds/order-column-names dataset))
+        transform-ds (ds-pca/pca-transform-dataset target-dataset pca-info
+                                                   (:n-components pca-info)
+                                                   *pipeline-datatype*)]
+    (ds/from-prototype transform-ds (ds/dataset-name target-dataset)
+                       (concat (ds/columns transform-ds)
+                               (->> (ds/select dataset leftover-column-names :all)
+                                    ds/columns)))))

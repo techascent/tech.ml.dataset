@@ -2,6 +2,7 @@
   "A set of common 'pipeline' operations you probably will want to run on a dataset."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.datatype.reader :as reader]
             [tech.ml.protocols.etl :as etl-proto]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.options :as options]
@@ -11,7 +12,7 @@
              :refer [def-multiple-column-etl-operator]
              :as pipe-ops]
             [tech.ml.dataset.column-filters :as col-filters])
-  (:refer-clojure :exclude [replace]))
+  (:refer-clojure :exclude [replace filter]))
 
 
 (defmacro def-pipeline-fn
@@ -121,10 +122,16 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
   (ds/new-column dataset result-colname (dataset-column-fn dataset)))
 
 
-(def-pipeline-fn ->datatype
+(defn ->datatype
   "Marshall columns to be the etl datatype.  This changes numeric columns to be a
   unified backing store datatype."
-  pipe-ops/->datatype {:keys [column-filter datatype] :as op-args})
+  ([dataset column-filter datatype]
+   (pipe-ops/inline-perform-operator
+    pipe-ops/->datatype dataset column-filter {:datatype datatype}))
+  ([dataset column-filter]
+   (->datatype dataset column-filter pipe-ops/*pipeline-datatype*))
+  ([dataset]
+   (->datatype dataset nil)))
 
 
 (defn range-scale
@@ -170,3 +177,56 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
    pipe-ops/assoc-metadata dataset column-filter
    {:key att-name
     :value att-value}))
+
+
+(defn col
+  "Return a column.  Only works during 'm=' and the default column
+  is the current operating column."
+  [& args]
+  (apply pipe-ops/col args))
+
+
+(defn int-lookup
+  [table col-data]
+  (-> (dtype-fn/unary-reader
+       :int32
+       (int (if-let [item (get table x)]
+              item
+              (throw (ex-info "Failed to lookup value int table"))))
+       col-data)
+      (dtype/->reader pipe-ops/*pipeline-datatype*)))
+
+
+(defn m=
+  "Perform some math.  Sets up variables such that the 'col' operator
+  works."
+  [dataset column-filter operation]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/m= dataset column-filter operation))
+
+
+(defn impute-missing
+  "Group columns into K groups and impute missing values from the means calculated from
+  those groups."
+  ([dataset column-filter k]
+   (pipe-ops/inline-perform-operator
+    pipe-ops/impute-missing dataset column-filter {:k k}))
+  ([dataset column-filter]
+   (impute-missing dataset column-filter 5))
+  ([dataset]
+   (impute-missing dataset nil 5)))
+
+
+(defn filter
+  "Filter out indexes for which filter-fn produces a 0 or false value."
+  ([dataset column-filter filter-fn]
+   (pipe-ops/inline-perform-operator
+    pipe-ops/filter dataset column-filter filter-fn)))
+
+
+(defn pca
+  [dataset column-filter & {:keys [method variance n-components]
+                            :or {method :svd
+                                 variance 0.95} :as op-args}]
+  (pipe-ops/inline-perform-operator
+   pipe-ops/pca dataset column-filter op-args))

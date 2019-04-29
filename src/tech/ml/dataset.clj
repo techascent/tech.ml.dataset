@@ -14,7 +14,8 @@
             [tech.ml.dataset.column-filters :as col-filters]
             [tech.ml.dataset.options :as options]
             [tech.ml.dataset.base]
-            [tech.ml.dataset.modelling])
+            [tech.ml.dataset.modelling]
+            [tech.ml.dataset.math])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -66,6 +67,14 @@
                         ->train-test-split
                         ->row-major)
 
+
+(fn-impl/export-symbols tech.ml.dataset.math
+                        correlation-table
+                        k-means
+                        g-means
+                        x-means
+                        compute-centroid-and-global-means
+                        impute-missing-by-centroid-averages)
 
 
 

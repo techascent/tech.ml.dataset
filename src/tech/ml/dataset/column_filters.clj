@@ -3,8 +3,11 @@
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.base :as ds]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.pipeline.pipeline-operators
+             :as pipe-ops]
             [clojure.set :as c-set])
-  (:refer-clojure :exclude [string? not and or boolean?]))
+  (:refer-clojure :exclude [string? not and or boolean?
+                            > >= < <=]))
 
 
 (defn select-columns
@@ -87,16 +90,20 @@
 
 
 (defn and
-  [dataset lhs-name-seq rhs-name-seq]
-  (->> (c-set/intersection (set (select-column-names dataset lhs-name-seq))
-                           (set (select-column-names dataset rhs-name-seq)))
+  [dataset lhs-name-seq rhs-name-seq & more-column-filters]
+  (->> (apply c-set/intersection
+              (set (select-column-names dataset lhs-name-seq))
+              (set (select-column-names dataset rhs-name-seq))
+              (map (comp set select-column-names) more-column-filters))
        (ds/order-column-names dataset)))
 
 
 (defn or
-  [dataset lhs-name-seq rhs-name-seq]
-  (->> (c-set/union (set (select-column-names dataset lhs-name-seq))
-                    (set (select-column-names dataset rhs-name-seq)))
+  [dataset lhs-name-seq rhs-name-seq & more-column-filters]
+  (->> (apply c-set/union
+              (set (select-column-names dataset lhs-name-seq))
+              (set (select-column-names dataset rhs-name-seq))
+              (map (comp set select-column-names) more-column-filters))
        (ds/order-column-names dataset)))
 
 
@@ -108,9 +115,56 @@
    column-name-seq))
 
 
+(defn target?
+  [dataset & [column-name-seq]]
+  (inference? dataset column-name-seq))
+
+
 (defn feature?
   [dataset & [column-name-seq]]
   (column-filter
    dataset
    (comp #(= % :feature) :column-type ds-col/metadata)
    column-name-seq))
+
+
+(defn boolean-math-filter
+  [dataset bool-fn lhs rhs args]
+  (column-filter
+   dataset
+   #(apply bool-fn
+           (->> (concat [lhs rhs]
+                        args)
+                (map (partial pipe-ops/eval-math-fn
+                              dataset
+                              (ds-col/column-name %)))))))
+
+
+(defn >
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset > lhs rhs args))
+
+
+(defn >=
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset >= lhs rhs args))
+
+
+(defn <
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset < lhs rhs args))
+
+
+(defn <=
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset <= lhs rhs args))
+
+
+(defn eq
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset = lhs rhs args))
+
+
+(defn not-eq
+  [dataset lhs rhs & args]
+  (boolean-math-filter dataset not= lhs rhs args))
