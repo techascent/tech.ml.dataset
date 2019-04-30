@@ -52,8 +52,8 @@
 
 
 (defn inference-target-label-map
-  [dataset]
-  (let [label-columns (col-filters/inference? dataset)]
+  [dataset & [label-columns]]
+  (let [label-columns (or label-columns (col-filters/inference? dataset))]
     (when-not (= 1 (count label-columns))
       (throw (ex-info (format "Multiple label columns found: %s" label-columns)
                       {:label-columns label-columns})))
@@ -69,8 +69,8 @@
   "Given options generated during ETL operations and annotated with :label-columns
   sequence container 1 label column, generate a reverse map that maps from a dataset
   value back to the label that generated that value."
-  [dataset]
-  (c-set/map-invert (inference-target-label-map dataset)))
+  [dataset & [label-columns]]
+  (c-set/map-invert (inference-target-label-map dataset label-columns)))
 
 
 (defn num-inference-classes

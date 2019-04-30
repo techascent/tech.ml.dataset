@@ -5,12 +5,12 @@
             [clojure.set :as c-set]))
 
 
-(defn ->dataset-label-map
+(defn dataset-label-map
   [options]
   (:label-map options))
 
 
-(defn ->column-label-map
+(defn column-label-map
   [options column-name]
   (if-let [retval (get-in options [:label-map column-name])]
     retval
@@ -24,17 +24,27 @@
   (boolean (get-in options [:label-map column-name])))
 
 
-(defn merge-label-maps
-  [lhs-options rhs-options]
-  (update lhs-options
-          :label-map
-          merge
-          (:label-map rhs-options)))
-
-
-(defn set-label-map
+(defn set-dataset-label-map
   [options lmap]
   (assoc options :label-map lmap))
+
+
+
+(defn inference-target-label-map
+  [options]
+    (let [label-columns (:label-columns options)]
+      (when-not (= 1 (count label-columns))
+        (throw (ex-info (format "Multiple label columns found: %s" label-columns)
+                        {:label-columns label-columns})))
+      (column-label-map options (first label-columns))))
+
+
+(defn inference-target-label-inverse-map
+  "Given options generated during ETL operations and annotated with :label-columns
+  sequence container 1 label column, generate a reverse map that maps from a dataset
+  value back to the label that generated that value."
+  [options]
+  (c-set/map-invert (inference-target-label-map options)))
 
 
 (defn feature-column-names
