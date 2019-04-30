@@ -52,6 +52,16 @@
   (:feature-columns options))
 
 
+(defn feature-ecount
+  [options]
+  (count (:feature-columns options)))
+
+
+(defn num-classes
+  [options]
+  (count (inference-target-label-map options)))
+
+
 (defn set-feature-column-names
   [options colname-seq]
   (assoc options :feature-columns colname-seq))
@@ -75,8 +85,8 @@
        (mapcat (fn [colname]
                  (if (and (has-column-label-map? options colname)
                           (categorical/is-one-hot-label-map?
-                           (->column-label-map options colname)))
-                   (->> (->column-label-map options colname)
+                           (column-label-map options colname)))
+                   (->> (column-label-map options colname)
                         vals
                         (map first))
                    [colname])))))
@@ -87,7 +97,7 @@
   to the original source column."
   [options colname-seq]
   (let [colname-set (set colname-seq)
-        reverse-map (->> (->dataset-label-map options)
+        reverse-map (->> (dataset-label-map options)
                          (mapcat (fn [[colname colmap]]
                                    ;;If this is one hot *and* every one hot is represented in the
                                    ;;column name sequence, then we can recover the original column.
