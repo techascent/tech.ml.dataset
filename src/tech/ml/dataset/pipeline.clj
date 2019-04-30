@@ -17,12 +17,14 @@
   (:refer-clojure :exclude [replace filter]))
 
 
-(defmacro def-pipeline-fn
-  [op-name documentation-string op-varname destructure-map]
-  `(defn ~op-name
-     ~documentation-string
-     [~'dataset & ~destructure-map]
-     (pipe-ops/inline-perform-operator ~op-varname ~'dataset ~'column-filter ~'op-args)))
+(fn-impl/export-symbols tech.ml.dataset.pipeline.pipeline-operators
+                        pipeline-train-context
+                        pipeline-inference-context
+                        store-variables
+                        read-var
+                        training?
+                        pif
+                        pwhen)
 
 
 (defn remove-columns

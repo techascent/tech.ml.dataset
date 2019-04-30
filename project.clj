@@ -3,7 +3,7 @@
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.9.0"]
+  :dependencies [[org.clojure/clojure "1.10.1-beta2"]
                  [camel-snake-kebab "0.4.0"]
                  [techascent/tech.datatype "4.0-alpha16"]
                  [tech.tablesaw/tablesaw-core "0.30.2"]

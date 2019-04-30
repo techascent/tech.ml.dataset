@@ -12,6 +12,7 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.tensor :as tens]
             [tech.v2.datatype.typecast :as typecast]
+            [tech.parallel :as parallel]
             [clojure.set :as c-set])
   (:refer-clojure :exclude [replace filter])
   (:import [tech.ml.protocols.etl
@@ -71,17 +72,83 @@
     (default-perform-etl-columns op dataset column-name-seq op-args context)))
 
 
+(def ^:dynamic *pipeline-context* nil)
+(def ^:dynamic *pipeline-training?* true)
+(def ^:dynamic *pipeline-env* (atom {}))
+
+
+(defmacro pipeline-train-context
+  [& body]
+  `(with-bindings {#'*pipeline-context* (atom [])
+                   #'*pipeline-training?* true
+                   #'*pipeline-env* (atom {})}
+     (let [dataset# ~@body]
+       {:dataset dataset#
+        :context {:operator-context @*pipeline-context*
+                  :pipeline-environment @*pipeline-env*}})))
+
+
+(defmacro pipeline-inference-context
+  [train-context & body]
+  `(with-bindings {#'*pipeline-context* (parallel/create-next-item-fn
+                                         (:operator-context ~train-context))
+                   #'*pipeline-training?* false
+                   #'*pipeline-env* (atom {})}
+     {:dataset ~@body}))
+
+
+(defn store-variables
+  [dataset varmap-fn]
+  (let [varmap-data (if *pipeline-training?*
+                      (if (fn? varmap-fn)
+                        (varmap-fn dataset)
+                        varmap-fn)
+                      (*pipeline-context*))]
+    (when (and *pipeline-training?* *pipeline-context*)
+      (swap! *pipeline-context* conj varmap-data))
+    (swap! *pipeline-env* merge varmap-data)
+    dataset))
+
+
+(defn read-var
+  [varname]
+  (get @*pipeline-env* varname))
+
+
+(defn pif
+  [dataset bool-expr pipe-when-true pipe-when-false]
+  (if (if (fn? bool-expr)
+        (bool-expr dataset)
+        bool-expr)
+    (pipe-when-true dataset)
+    (pipe-when-false dataset)))
+
+
+(defn pwhen
+  [dataset bool-expr pipe-when-true]
+  (pif dataset bool-expr pipe-when-true identity))
+
+
 (defn inline-perform-operator
   [etl-op dataset column-filter op-args]
   (pipe-base/with-pipeline-vars dataset nil nil nil
     (if-let [colname-seq (seq (col-filters/select-column-names
                                dataset column-filter))]
       (pipe-base/with-pipeline-vars nil nil nil colname-seq
-        (let [context (etl-proto/build-etl-context-columns
-                       etl-op dataset colname-seq op-args)]
+        (let [context (if *pipeline-training?*
+                        (etl-proto/build-etl-context-columns
+                         etl-op dataset colname-seq op-args)
+                        (*pipeline-context*))]
+          (when (and *pipeline-training?* *pipeline-context*)
+            (swap! *pipeline-context* conj context))
           (etl-proto/perform-etl-columns
            etl-op dataset colname-seq op-args context)))
       dataset)))
+
+
+(defn training?
+  []
+  *pipeline-training?*)
 
 
 (def-single-column-etl-operator assoc-metadata
@@ -103,10 +170,10 @@
 
 
 (def-multiple-column-etl-operator string->number
-  "Replace any string values with numeric values.  Updates the label map
-of the options.  Arguments may be notion or a vector of either expected
-strings or tuples of expected strings to their hardcoded values."
- ;;Label maps are special and used outside of this context do we have
+  "Replace any string values with numeric values.  Updates the label map of the options.
+Arguments may be notion or a vector of either expected strings or tuples of expected
+strings to their hardcoded values."
+  ;;Label maps are special and used outside of this context do we have
   ;;treat them separately
   (do (categorical/build-categorical-map
        dataset column-name-seq
@@ -137,8 +204,8 @@ of running a math expression.  e.g.:
        (if (> (count missing-indexes) 0)
          (dtype/write-indexes! (ds-col/clone col)
                                (vec missing-indexes)
-                               (repeat (count missing-indexes)
-                                       (:missing-value context)))
+                               (vec (repeat (count missing-indexes)
+                                            (:missing-value context))))
          col)))))
 
 (def-multiple-column-etl-operator one-hot
