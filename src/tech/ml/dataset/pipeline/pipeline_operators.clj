@@ -221,7 +221,7 @@ of running a math expression.  e.g.:
 (mean (col))"
   {:missing-value (let [op-arg (:missing-value op-args)]
                     (if (fn? op-arg)
-                      (op-arg dataset column-name)
+                      (pipe-base/eval-math-fn dataset column-name op-arg)
                       op-arg))}
   (ds/update-column
    dataset column-name
