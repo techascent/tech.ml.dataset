@@ -13,9 +13,9 @@
 
 
 
-(def ^:dynamic *pipeline-dataset*)
-(def ^:dynamic *pipeline-column-name*)
-(def ^:dynamic *pipeline-column-name-seq*)
+(def ^:dynamic *pipeline-dataset* nil)
+(def ^:dynamic *pipeline-column-name* nil)
+(def ^:dynamic *pipeline-column-name-seq* nil)
 
 
 (defmacro with-pipeline-vars
@@ -62,13 +62,19 @@
 (defn int-map
   "Perform an integer->integer conversion of a column using a static map.
   The map must be complete; missing entries are errors."
-  [table col-data]
-  (-> (dtype-fn/unary-reader
-       :int32
-       (int (if-let [item (table x)]
-              item
-              (throw (ex-info "Failed to lookup value int table"))))
-       col-data)
+  [table col-data & {:keys [not-strict?]}]
+  (-> (if not-strict?
+        (dtype-fn/unary-reader
+         :int32
+         (int (table x x))
+         col-data)
+        (dtype-fn/unary-reader
+         :int32
+         (int (if-let [retval (table x)]
+                retval
+                (throw (ex-info (format "Int-map failed on value: %s" x)
+                                {}))))
+         col-data))
       (dtype/->reader *pipeline-datatype*)))
 
 

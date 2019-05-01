@@ -40,14 +40,27 @@
          ~op-code))))
 
 
+(defmacro ^:private context-wrap-fn
+  [& body]
+  `(try
+     ~@body
+     (catch Throwable e#
+       (throw (ex-info (format "Dataset %s execution failed at %s"
+                               (ds/dataset-name pipe-base/*pipeline-dataset*)
+                               (or pipe-base/*pipeline-column-name*
+                                   pipe-base/*pipeline-column-name-seq*))
+                       {:error e#})))))
+
+
 (defn default-etl-context-columns
   "Default implementation of build-etl-context-columns"
   [op dataset column-name-seq op-args]
   (->> column-name-seq
        (map (fn [col-name]
               (when-let [etl-ctx (pipe-base/with-pipeline-vars nil col-name nil nil
-                                   (etl-proto/build-etl-context op dataset
-                                                                col-name op-args))]
+                                   (context-wrap-fn
+                                    (etl-proto/build-etl-context op dataset
+                                                                 col-name op-args)))]
                 [col-name etl-ctx])))
        (remove nil?)
        (into {})))
@@ -58,8 +71,9 @@
   (->> column-name-seq
        (reduce (fn [dataset col-name]
                  (pipe-base/with-pipeline-vars dataset col-name nil nil
-                   (etl-proto/perform-etl op dataset col-name op-args
-                                          (get context col-name))))
+                   (context-wrap-fn
+                    (etl-proto/perform-etl op dataset col-name op-args
+                                           (get context col-name)))))
                dataset)))
 
 
@@ -135,14 +149,15 @@
     (if-let [colname-seq (seq (col-filters/select-column-names
                                dataset column-filter))]
       (pipe-base/with-pipeline-vars nil nil nil colname-seq
-        (let [context (if *pipeline-training?*
-                        (etl-proto/build-etl-context-columns
-                         etl-op dataset colname-seq op-args)
-                        (*pipeline-context*))]
-          (when (and *pipeline-training?* *pipeline-context*)
-            (swap! *pipeline-context* conj context))
-          (etl-proto/perform-etl-columns
-           etl-op dataset colname-seq op-args context)))
+        (context-wrap-fn
+         (let [context (if *pipeline-training?*
+                         (etl-proto/build-etl-context-columns
+                          etl-op dataset colname-seq op-args)
+                         (*pipeline-context*))]
+           (when (and *pipeline-training?* *pipeline-context*)
+             (swap! *pipeline-context* conj context))
+           (etl-proto/perform-etl-columns
+            etl-op dataset colname-seq op-args context))))
       dataset)))
 
 
