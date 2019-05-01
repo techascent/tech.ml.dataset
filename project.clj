@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.1-beta2"]
                  [camel-snake-kebab "0.4.0"]
-                 [techascent/tech.datatype "4.0-alpha16"]
+                 [techascent/tech.datatype "4.0-alpha17"]
                  [tech.tablesaw/tablesaw-core "0.30.2"]
                  [com.github.haifengl/smile-core "1.5.2"]
                  [com.github.haifengl/smile-netlib "1.5.2"]]

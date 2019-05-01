@@ -52,6 +52,15 @@
                 (map dtype/get-datatype)
                 set)))))
 
+
+(deftest log1p-fails-on-wrong-datatype
+  ;;This causes actual data corruption--if the column datatype gets clipped
+  ;;back to an integer type you get values like 12 instead of 12.5.  For this
+  ;;dataset that destroys the accuracy.
+  (is (thrown? Throwable
+               (dsp/m= src-ds "SalePrice" #(dfn/log1p (col))))))
+
+
 (defn skew-column-filter
   [dataset]
   (dsp/with-ds dataset
