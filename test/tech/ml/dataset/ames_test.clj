@@ -4,12 +4,12 @@
              :as ds-pipe]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as cf]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.datatype.functional :as dfn]
             [clojure.set :as c-set]
             [tech.libs.tablesaw :as tablesaw]
             [clojure.test :refer :all]
@@ -33,24 +33,40 @@
   [dataset]
   (-> (ds/->dataset dataset)
       (ds/remove-column "Id")
-      (ds-pipe/replace-missing col-filters/string? "NA")
-      (ds-pipe/replace col-filters/string? {"" "NA"})
-      (ds-pipe/replace-missing col-filters/numeric? 0)
-      (ds-pipe/replace-missing col-filters/boolean? false)
-      (ds-pipe/->datatype #(col-filters/or %
-                                           col-filters/numeric?
-                                           col-filters/boolean?))))
+      (ds-pipe/replace-missing cf/string? "NA")
+      (ds-pipe/replace cf/string? {"" "NA"})
+      (ds-pipe/replace-missing cf/numeric? 0)
+      (ds-pipe/replace-missing cf/boolean? false)
+      (ds-pipe/->datatype #(cf/or %
+                                           cf/numeric?
+                                           cf/boolean?))))
+
 
 
 (deftest basic-pipeline-test
   (let [dataset (missing-pipeline src-ds)]
     (is (= 19 (count (ds/columns-with-missing-seq src-ds))))
     (is (= 0 (count (ds/columns-with-missing-seq dataset))))
-    (is (= 42 (count (col-filters/categorical? dataset))))
+    (is (= 42 (count (cf/categorical? dataset))))
     (is (= #{:string :float64}
            (->> (ds/columns dataset)
                 (map dtype/get-datatype)
                 set)))))
+
+(defn skew-column-filter
+  [dataset]
+  (cf/and dataset
+          cf/numeric?
+          #(cf/not % "SalePrice")
+          #(cf/> %
+                 (fn [] (dfn/abs (dfn/skewness (col))))
+                 0.5)))
+
+
+;;This test fails if col-filters/and (intersection) isn't
+;;implemented correctly
+(deftest and-is-lazy
+  (is (= 29 (count (skew-column-filter src-ds)))))
 
 
 (defn string-and-math
@@ -86,7 +102,7 @@
       ;; ;;Auto convert the rest that are still string columns
       (ds-pipe/string->number)
       (ds-pipe/new-column "SalePriceDup" #(ds/column % "SalePrice"))
-      (ds-pipe/update-column "SalePrice" dtype-fn/log1p)
+      (ds-pipe/update-column "SalePrice" dfn/log1p)
       (ds/set-inference-target "SalePrice")))
 
 
@@ -114,17 +130,17 @@
     (is (= [81 1460] (dtype/shape src-dataset)))
     (is (= [81 1460] (dtype/shape dataset)))
 
-    (is (= 45 (count (col-filters/categorical? dataset))))
+    (is (= 45 (count (cf/categorical? dataset))))
     (is (= #{"MSSubClass" "OverallQual" "OverallCond"}
            (c-set/intersection #{"MSSubClass" "OverallQual" "OverallCond"}
-                               (set (col-filters/categorical? dataset)))))
+                               (set (cf/categorical? dataset)))))
     (is (= []
-           (vec (col-filters/string? dataset))))
+           (vec (cf/string? dataset))))
     (is (= ["SalePrice"]
-           (vec (col-filters/target? dataset))))
+           (vec (cf/target? dataset))))
     (is (= []
-           (vec (->> (col-filters/numeric? dataset)
-                     (col-filters/not dataset)))))
+           (vec (->> (cf/numeric? dataset)
+                     (cf/not dataset)))))
     (let [sale-price (ds/column dataset "SalePriceDup")
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
@@ -198,44 +214,44 @@
                                                "NA" -1})
       ;; ;;Auto convert the rest that are still string columns
       (ds-pipe/string->number)
-      (ds-pipe/update-column "SalePrice" dtype-fn/log1p)
+      (ds-pipe/update-column "SalePrice" dfn/log1p)
       (ds/set-inference-target "SalePrice")
-      (m= "OverallGrade" #(dtype-fn/* (col "OverallQual") (col "OverallCond")))
+      (m= "OverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
       ;; Overall quality of the garage
-      (m= "GarageGrade"  #(dtype-fn/* (col "GarageQual") (col "GarageCond")))
+      (m= "GarageGrade"  #(dfn/* (col "GarageQual") (col "GarageCond")))
       ;; Overall quality of the exterior
-      (m= "ExterGrade" #(dtype-fn/* (col "ExterQual") (col "ExterCond")))
+      (m= "ExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
       ;; Overall kitchen score
-      (m=  "KitchenScore" #(dtype-fn/* (col "KitchenAbvGr") (col "KitchenQual")))
+      (m=  "KitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
       ;; Overall fireplace score
-      (m= "FireplaceScore" #(dtype-fn/* (col "Fireplaces") (col "FireplaceQu")))
+      (m= "FireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
       ;; Overall garage score
-      (m= "GarageScore" #(dtype-fn/* (col "GarageArea") (col "GarageQual")))
+      (m= "GarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
       ;; Overall pool score
-      (m= "PoolScore" #(dtype-fn/* (col "PoolArea") (col "PoolQC")))
+      (m= "PoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
       ;; Simplified overall quality of the house
-      (m= "SimplOverallGrade" #(dtype-fn/* (col "OverallQual") (col "OverallCond")))
+      (m= "SimplOverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
       ;; Simplified overall quality of the exterior
-      (m= "SimplExterGrade" #(dtype-fn/* (col "ExterQual") (col "ExterCond")))
+      (m= "SimplExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
       ;; Simplified overall pool score
-      (m= "SimplPoolScore" #(dtype-fn/* (col "PoolArea") (col "PoolQC")))
+      (m= "SimplPoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
       ;; Simplified overall garage score
-      (m= "SimplGarageScore" #(dtype-fn/* (col "GarageArea") (col "GarageQual")))
+      (m= "SimplGarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
       ;; Simplified overall fireplace score
-      (m= "SimplFireplaceScore" #(dtype-fn/* (col "Fireplaces") (col "FireplaceQu")))
+      (m= "SimplFireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
       ;; Simplified overall kitchen score
-      (m= "SimplKitchenScore" #(dtype-fn/* (col "KitchenAbvGr") (col "KitchenQual")))
+      (m= "SimplKitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
       ;; Total number of bathrooms
-      (m= "TotalBath" #(dtype-fn/+ (col "BsmtFullBath")
-                                   (dtype-fn/* 0.5 (col "BsmtHalfBath"))
+      (m= "TotalBath" #(dfn/+ (col "BsmtFullBath")
+                                   (dfn/* 0.5 (col "BsmtHalfBath"))
                                    (col "FullBath")
-                                   (dtype-fn/* 0.5 (col "HalfBath"))))
+                                   (dfn/* 0.5 (col "HalfBath"))))
       ;; Total SF for house (incl. basement)
-      (m= "AllSF" #(dtype-fn/+ (col "GrLivArea") (col "TotalBsmtSF")))
+      (m= "AllSF" #(dfn/+ (col "GrLivArea") (col "TotalBsmtSF")))
       ;; Total SF for 1st + 2nd floors
-      (m= "AllFlrsSF" #(dtype-fn/+ (col "1stFlrSF") (col "2ndFlrSF")))
+      (m= "AllFlrsSF" #(dfn/+ (col "1stFlrSF") (col "2ndFlrSF")))
       ;; Total SF for porch
-      (m= "AllPorchSF" #(dtype-fn/+ (col "OpenPorchSF") (col "EnclosedPorch")
+      (m= "AllPorchSF" #(dfn/+ (col "OpenPorchSF") (col "EnclosedPorch")
                                     (col "3SsnPorch") (col "ScreenPorch")))))
 
 
@@ -259,28 +275,21 @@
   (->> (rest ames-top-columns)
        (reduce (fn [dataset colname]
                  (-> dataset
-                     (m= (str colname "-s2") #(dtype-fn/pow (col colname) 2))
-                     (m= (str colname "-s3") #(dtype-fn/pow (col colname) 3))
-                     (m= (str colname "-sqrt") #(dtype-fn/sqrt (col colname)))))
+                     (m= (str colname "-s2") #(dfn/pow (col colname) 2))
+                     (m= (str colname "-s3") #(dfn/pow (col colname) 3))
+                     (m= (str colname "-sqrt") #(dfn/sqrt (col colname)))))
                dataset)))
 
 
 (defn full-ames-pt-3
   [dataset]
   (-> dataset
-      (m= #(col-filters/and %
-                            (col-filters/not % (col-filters/categorical? %))
-                            (col-filters/not % (col-filters/target? %))
-                            (col-filters/> %
-                                           (fn []
-                                             (dtype-fn/abs
-                                              (dtype-fn/skewness (col))))
-                                           0.5))
-          #(dtype-fn/log1p (col)))
-      (ds-pipe/std-scale #(col-filters/and
+      (m= (skew-column-filter dataset)
+          #(dfn/log1p (col)))
+      (ds-pipe/std-scale #(cf/and
                            %
-                           (col-filters/not % (col-filters/categorical? %))
-                           (col-filters/not % (col-filters/target? %))))))
+                           (cf/not % (cf/categorical? %))
+                           (cf/not % (cf/target? %))))))
 
 
 (deftest full-ames-pipeline-test
@@ -294,7 +303,7 @@
        (let [[n-cols n-rows] (dtype/shape src-dataset)
              [n-new-cols n-new-rows] (-> (ds-pipe/filter src-dataset
                                                          "GrLivArea"
-                                                         #(dtype-fn/< (col) 4000))
+                                                         #(dfn/< (col) 4000))
                                          dtype/shape)
              num-over-the-line (->> (ds/column src-dataset "GrLivArea")
                                     (ds-col/column-values)
@@ -318,17 +327,9 @@
       (let [dataset (-> src-ds
                         full-ames-pt-1
                         full-ames-pt-2)
-            skewed-set (set (col-filters/and dataset
-                                             (->> (col-filters/categorical? dataset)
-                                                  (col-filters/not dataset))
-                                             (->> (col-filters/target? dataset)
-                                                  (col-filters/not dataset))
-                                             (col-filters/> dataset
-                                                            #(dtype-fn/abs
-                                                              (dtype-fn/skewness (col)))
-                                                            0.5)))]
+            skewed-set (set (skew-column-filter dataset))]
         ;;This count seems rather high...a diff against the python stuff would be wise.
-        (is (= 64 (count skewed-set)))
+        (is (= 98 (count skewed-set)))
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
@@ -337,11 +338,11 @@
                         full-ames-pt-1
                         full-ames-pt-2
                         full-ames-pt-3)
-            std-set (set (col-filters/and dataset
-                                          (->> (col-filters/categorical? dataset)
-                                               (col-filters/not dataset))
-                                          (->> (col-filters/target? dataset)
-                                               (col-filters/not dataset))))
+            std-set (set (cf/and dataset
+                                          (->> (cf/categorical? dataset)
+                                               (cf/not dataset))
+                                          (->> (cf/target? dataset)
+                                               (cf/not dataset))))
             mean-var-seq (->> std-set
                               (map (comp #(ds-col/stats % [:mean :variance])
                                          (partial ds/column dataset))))]
@@ -349,22 +350,22 @@
         (is (m/equals (mapv :mean mean-var-seq)
                       (vec (repeat (count mean-var-seq) 0))
                       0.001))
-        (let [pca-ds (ds-pipe/pca dataset #(col-filters/and
-                                            % col-filters/numeric?
-                                            (->> (col-filters/categorical? %)
-                                                 (col-filters/not %))
-                                            (->> (col-filters/target? %)
-                                                 (col-filters/not %))))]
+        (let [pca-ds (ds-pipe/pca dataset #(cf/and
+                                            % cf/numeric?
+                                            (->> (cf/categorical? %)
+                                                 (cf/not %))
+                                            (->> (cf/target? %)
+                                                 (cf/not %))))]
           (is (= 127 (count (ds/columns dataset))))
           (is (= 75 (count (ds/columns pca-ds))))
-          (is (= 1 (count (col-filters/target? pca-ds)))))
-        (let [pca-ds (ds-pipe/pca dataset #(col-filters/and
-                                            % col-filters/numeric?
-                                            (->> (col-filters/categorical? %)
-                                                 (col-filters/not %))
-                                            (->> (col-filters/target? %)
-                                                 (col-filters/not %)))
+          (is (= 1 (count (cf/target? pca-ds)))))
+        (let [pca-ds (ds-pipe/pca dataset #(cf/and
+                                            % cf/numeric?
+                                            (->> (cf/categorical? %)
+                                                 (cf/not %))
+                                            (->> (cf/target? %)
+                                                 (cf/not %)))
                                   :n-components 10)]
           (is (= 127 (count (ds/columns dataset))))
           (is (= 56 (count (ds/columns pca-ds))))
-          (is (= 1 (count (col-filters/target? pca-ds)))))))))
+          (is (= 1 (count (cf/target? pca-ds)))))))))

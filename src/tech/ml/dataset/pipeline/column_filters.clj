@@ -9,26 +9,6 @@
                             > >= < <=]))
 
 
-(defn select-columns
-  [dataset column-name-seq]
-  (cond
-    (fn? column-name-seq)
-    (->> (column-name-seq dataset)
-         (ds/select-columns dataset)
-         ds/columns)
-    (clojure.core/or (= :all column-name-seq)
-                     (sequential? column-name-seq)
-                     (nil? column-name-seq))
-    (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
-         ds/columns)
-    (clojure.core/or (clojure.core/string? column-name-seq)
-                     (keyword? column-name-seq))
-    [(ds/column dataset column-name-seq)]
-    :else
-    (throw (ex-info (format "Unrecognized argument to select columns: %s" column-name-seq)
-                    {}))))
-
-
 (defn select-column-names
   [dataset column-name-seq]
   (cond
@@ -43,8 +23,17 @@
                      (keyword? column-name-seq))
     [column-name-seq]
     :else
-    (throw (ex-info (format "Unrecognized argument to select columns: %s" column-name-seq)
+    (throw (ex-info (format "Unrecognized argument to select columns: %s"
+                            column-name-seq)
                     {}))))
+
+
+(defn select-columns
+  [dataset column-name-seq]
+  (->> (select-column-names
+        dataset
+        column-name-seq)
+       (map (partial ds/column dataset))))
 
 
 (defn column-filter
@@ -102,10 +91,18 @@
 
 (defn and
   [dataset lhs-name-seq rhs-name-seq & more-column-filters]
-  (->> (apply c-set/intersection
-              (set (select-column-names dataset lhs-name-seq))
-              (set (select-column-names dataset rhs-name-seq))
-              (map (comp set (partial select-column-names dataset)) more-column-filters))
+  (->> (reduce (fn [all-column-names and-operator]
+                 (c-set/intersection all-column-names
+                                     (set (select-column-names
+                                           (ds/select dataset
+                                                      (c-set/intersection
+                                                       all-column-names
+                                                       (set (ds/column-names dataset)))
+                                                      :all)
+                                           and-operator))))
+               (set (ds/column-names dataset))
+               (concat [lhs-name-seq rhs-name-seq]
+                       more-column-filters))
        (ds/order-column-names dataset)))
 
 
