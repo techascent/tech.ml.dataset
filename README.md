@@ -150,6 +150,8 @@ user> (type *1)
 
 * [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
 * [regression pipelines](test/tech/ml/dataset/ames_test.clj)
+* [real world example](https://github.com/cnuernber/ames-house-prices/blob/d60b18cb13f7d125dba787f23f0a81cac90c8861/src/clj_ml_wkg/ames_house_prices.clj)
+
 
 ## License
 
