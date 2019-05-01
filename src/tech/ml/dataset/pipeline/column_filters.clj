@@ -10,7 +10,7 @@
 
 
 
-(defn- check-dataset
+(defn check-dataset
   [& [dataset]]
   (let [retval  (clojure.core/or dataset pipe-base/*pipeline-dataset*)]
     (when-not retval

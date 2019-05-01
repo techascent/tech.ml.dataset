@@ -119,7 +119,7 @@
                         varmap-fn)
                       (*pipeline-context*))]
     (when (and *pipeline-training?* *pipeline-context*)
-      (swap! *pipeline-context* conj varmap-data))
+      (swap! *pipeline-context* conj (or varmap-data {})))
     (swap! *pipeline-env* merge varmap-data)
     dataset))
 
@@ -143,21 +143,33 @@
   (pif dataset bool-expr pipe-when-true identity))
 
 
+(defmacro without-recording
+  [& body]
+  `(with-bindings {#'*pipeline-context* nil}
+     ~@body))
+
+
 (defn inline-perform-operator
   [etl-op dataset column-filter op-args]
   (pipe-base/with-pipeline-vars dataset nil nil nil
-    (if-let [colname-seq (seq (col-filters/select-column-names column-filter))]
-      (pipe-base/with-pipeline-vars nil nil nil colname-seq
-        (context-wrap-fn
-         (let [context (if *pipeline-training?*
-                         (etl-proto/build-etl-context-columns
-                          etl-op dataset colname-seq op-args)
+    (let [pipeline-ctx (when (and (not *pipeline-training?*)
+                                  (fn? *pipeline-context*))
                          (*pipeline-context*))]
-           (when (and *pipeline-training?* *pipeline-context*)
-             (swap! *pipeline-context* conj context))
-           (etl-proto/perform-etl-columns
-            etl-op dataset colname-seq op-args context))))
-      dataset)))
+      (if-let [colname-seq (if pipeline-ctx
+                             (:column-name-seq pipeline-ctx)
+                             (seq (col-filters/select-column-names column-filter)))]
+        (pipe-base/with-pipeline-vars nil nil nil colname-seq
+          (context-wrap-fn
+           (let [context (if pipeline-ctx
+                           (:context pipeline-ctx)
+                           (etl-proto/build-etl-context-columns
+                            etl-op dataset colname-seq op-args))]
+             (when (and *pipeline-training?* *pipeline-context*)
+               (swap! *pipeline-context* conj {:column-name-seq colname-seq
+                                               :context context}))
+             (etl-proto/perform-etl-columns
+              etl-op dataset colname-seq op-args context))))
+        dataset))))
 
 
 (defn training?
