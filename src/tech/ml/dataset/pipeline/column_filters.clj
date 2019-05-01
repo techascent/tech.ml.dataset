@@ -9,173 +9,189 @@
                             > >= < <=]))
 
 
+
+(defn- check-dataset
+  [& [dataset]]
+  (let [retval  (clojure.core/or dataset pipe-base/*pipeline-dataset*)]
+    (when-not retval
+      (throw (ex-info "Dataset is not bound; use with-ds" {})))
+    retval))
+
+
 (defn select-column-names
-  [dataset column-name-seq]
-  (cond
-    (fn? column-name-seq)
-    (column-name-seq dataset)
-    (clojure.core/or (= :all column-name-seq)
-                     (sequential? column-name-seq)
-                     (nil? column-name-seq))
-    (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
-         ds/column-names)
-    (clojure.core/or (clojure.core/string? column-name-seq)
-                     (keyword? column-name-seq))
-    [column-name-seq]
-    :else
-    (throw (ex-info (format "Unrecognized argument to select columns: %s"
-                            column-name-seq)
-                    {}))))
+  [column-name-seq & [dataset]]
+  (let [dataset (check-dataset dataset)]
+    (pipe-base/with-ds dataset
+      (cond
+        (fn? column-name-seq)
+        (column-name-seq)
+        (clojure.core/or (= :all column-name-seq)
+                         (sequential? column-name-seq)
+                         (nil? column-name-seq))
+        (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
+             ds/column-names)
+        (clojure.core/or (clojure.core/string? column-name-seq)
+                         (keyword? column-name-seq))
+        [column-name-seq]
+        :else
+        (throw (ex-info (format "Unrecognized argument to select columns: %s"
+                                column-name-seq)
+                        {}))))))
 
 
 (defn select-columns
-  [dataset column-name-seq]
-  (->> (select-column-names
-        dataset
-        column-name-seq)
-       (map (partial ds/column dataset))))
+  [column-name-seq & [dataset]]
+  (let [dataset (check-dataset dataset)]
+    (->> (select-column-names column-name-seq dataset)
+         (map (partial ds/column dataset)))))
 
 
 (defn column-filter
-  [dataset col-filter-fn & [column-name-seq]]
-  (->> (select-columns dataset column-name-seq)
+  [col-filter-fn & [dataset]]
+  (->> (select-columns nil dataset)
        (filter col-filter-fn)
        (map ds-col/column-name)))
 
 
 (defn of-datatype?
   "Return column-names  of a given datatype."
-  [dataset datatype & [column-name-seq]]
-  (column-filter dataset #(do
-                            (= datatype (dtype/get-datatype %)))
-                 column-name-seq))
+  [dataset datatype]
+  (column-filter #(= datatype (dtype/get-datatype %))
+                 dataset))
 
 
 (defn string?
-  [dataset & [column-name-seq]]
-  (of-datatype? dataset :string column-name-seq))
+  [& [dataset]]
+  (of-datatype? dataset :string))
 
 
 (defn boolean?
-  [dataset & [column-name-seq]]
-  (of-datatype? dataset :boolean column-name-seq))
+  [& [dataset]]
+  (of-datatype? dataset :boolean))
 
 
 (defn numeric?
-  [dataset & [column-name-seq]]
-  (column-filter dataset #(casting/numeric-type? (dtype/get-datatype %))
-                 column-name-seq))
+  [& [dataset]]
+  (column-filter #(casting/numeric-type? (dtype/get-datatype %))
+                 dataset))
 
 
 (defn categorical?
-  [dataset & [column-name-seq]]
-  (column-filter dataset (comp :categorical? ds-col/metadata)
-                 column-name-seq))
+  [& [dataset]]
+  (column-filter (comp :categorical? ds-col/metadata) dataset))
 
 
 (defn missing?
-  [dataset & [column-name-seq]]
-  (column-filter dataset #(not= 0 (ds-col/missing %))
-                 column-name-seq))
+  [& [dataset]]
+  (column-filter #(not= 0 (ds-col/missing %)) dataset))
 
-
-(defn not
-  [dataset & [column-name-seq]]
-  (if-not (nil? column-name-seq)
-    (->> (c-set/difference
-          (set (ds/column-names dataset))
-          (set (select-column-names dataset column-name-seq)))
-         (ds/order-column-names dataset))
-    (ds/column-names dataset)))
-
-
-(defn and
-  [dataset lhs-name-seq rhs-name-seq & more-column-filters]
-  (->> (reduce (fn [all-column-names and-operator]
-                 (c-set/intersection all-column-names
-                                     (set (select-column-names
-                                           (ds/select dataset
-                                                      (c-set/intersection
-                                                       all-column-names
-                                                       (set (ds/column-names dataset)))
-                                                      :all)
-                                           and-operator))))
-               (set (ds/column-names dataset))
-               (concat [lhs-name-seq rhs-name-seq]
-                       more-column-filters))
-       (ds/order-column-names dataset)))
-
-
-(defn or
-  [dataset lhs-name-seq rhs-name-seq & more-column-filters]
-  (->> (apply c-set/union
-              (set (select-column-names dataset lhs-name-seq))
-              (set (select-column-names dataset rhs-name-seq))
-              (map (comp set select-column-names) more-column-filters))
-       (ds/order-column-names dataset)))
 
 
 (defn inference?
   "Is this column used as an inference target"
-  [dataset & [column-name-seq]]
+  [& [dataset]]
   (column-filter
-   dataset
    (comp #(= % :inference) :column-type ds-col/metadata)
-   column-name-seq))
+   dataset))
 
 
 (defn target?
   "Is this column used as an inference target"
-  [dataset & [column-name-seq]]
-  (inference? dataset column-name-seq))
+  [& [dataset]]
+  (inference? dataset))
 
 
 (defn feature?
   "Is this column used as a feature column"
-  [dataset & [column-name-seq]]
+  [& [dataset]]
   (column-filter
-   dataset
    (comp #(= % :feature) :column-type ds-col/metadata)
-   column-name-seq))
+   dataset))
+
+
+(defn not
+  [column-name-seq & [dataset]]
+  (let [dataset (check-dataset dataset)]
+    (pipe-base/with-pipeline-vars dataset nil nil nil
+      (if-not (nil? column-name-seq)
+        (->> (c-set/difference
+              (set (ds/column-names dataset))
+              (set (select-column-names column-name-seq)))
+             (ds/order-column-names dataset))
+        (ds/column-names dataset)))))
+
+
+(defn and
+  [lhs-name-seq rhs-name-seq & more-column-filters]
+  (let [dataset (check-dataset)]
+    (->> (reduce (fn [all-column-names and-operator]
+                   (pipe-base/with-pipeline-vars
+                     (ds/select dataset all-column-names :all) nil nil nil
+                     (c-set/intersection all-column-names
+                                         (set (select-column-names and-operator)))))
+                 (set (ds/column-names dataset))
+                 (concat [lhs-name-seq rhs-name-seq]
+                         more-column-filters))
+         (ds/order-column-names dataset))))
+
+
+(defn or
+  [lhs-name-seq rhs-name-seq & more-column-filters]
+  (let [dataset (check-dataset)]
+    (pipe-base/with-ds dataset
+      (->> (apply c-set/union
+                  (set (select-column-names lhs-name-seq))
+                  (set (select-column-names rhs-name-seq))
+                  (map (comp set select-column-names) more-column-filters))
+           (ds/order-column-names dataset)))))
 
 
 (defn boolean-math-filter
-  [dataset bool-fn lhs rhs args]
-  (column-filter
-   dataset
-   #(apply bool-fn
-           (->> (concat [lhs rhs]
-                        args)
-                (map (partial pipe-base/eval-math-fn
-                              dataset
-                              (ds-col/column-name %)))))))
+  [bool-fn lhs rhs args]
+  (let [dataset (check-dataset)]
+    (column-filter
+     #(apply bool-fn
+             (->> (concat [lhs rhs]
+                          args)
+                  (map (partial pipe-base/eval-math-fn
+                                dataset
+                                (ds-col/column-name %))))))))
 
 
 (defn >
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/> lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/> lhs rhs args))
 
 
 (defn >=
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/>= lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/>= lhs rhs args))
 
 
 (defn <
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/< lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/< lhs rhs args))
 
 
 (defn <=
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/<= lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/<= lhs rhs args))
 
 
 (defn eq
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/= lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/= lhs rhs args))
 
 
 (defn not-eq
-  [dataset lhs rhs & args]
-  (boolean-math-filter dataset clojure.core/not= lhs rhs args))
+  [lhs rhs & args]
+  (boolean-math-filter clojure.core/not= lhs rhs args))
+
+
+(defn numeric-and-non-categorical-and-not-target
+  [& [dataset]]
+  (let [dataset (check-dataset dataset)]
+    (pipe-base/with-ds dataset
+      (and #(not categorical?)
+           #(not target?)
+           numeric?))))

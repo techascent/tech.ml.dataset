@@ -2,7 +2,7 @@
   (:require [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as cf]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
@@ -29,8 +29,7 @@
         src-keys (set (keys (first (mapseq-fruit-dataset))))
         result-keys (set (->> (ds/columns dataset)
                               (map ds-col/column-name)))
-        non-categorical (->> (col-filters/categorical? dataset)
-                             (col-filters/not dataset))]
+        non-categorical (cf/not cf/categorical? dataset)]
 
 
     (is (= #{59}

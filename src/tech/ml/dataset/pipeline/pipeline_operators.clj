@@ -146,8 +146,7 @@
 (defn inline-perform-operator
   [etl-op dataset column-filter op-args]
   (pipe-base/with-pipeline-vars dataset nil nil nil
-    (if-let [colname-seq (seq (col-filters/select-column-names
-                               dataset column-filter))]
+    (if-let [colname-seq (seq (col-filters/select-column-names column-filter))]
       (pipe-base/with-pipeline-vars nil nil nil colname-seq
         (context-wrap-fn
          (let [context (if *pipeline-training?*

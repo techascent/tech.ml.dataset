@@ -9,12 +9,21 @@
             [tech.ml.dataset.options :as options]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.pipeline.column-filters :as cf]
             [tech.ml.dataset.pipeline.pipeline-operators
              :refer [def-multiple-column-etl-operator]
              :as pipe-ops]
             [tech.ml.dataset.pipeline.base :as pipe-base])
   (:refer-clojure :exclude [replace filter]))
+
+
+(fn-impl/export-symbols tech.ml.dataset.pipeline.base
+                        with-ds
+                        with-datatype
+                        with-column-name
+                        with-column-name-seq
+                        col
+                        int-map)
 
 
 (fn-impl/export-symbols tech.ml.dataset.pipeline.pipeline-operators
@@ -48,7 +57,7 @@
   ([dataset column-filter]
    (string->number dataset column-filter nil))
   ([dataset]
-   (string->number dataset col-filters/string?)))
+   (string->number dataset cf/string?)))
 
 
 (defn one-hot
@@ -67,7 +76,7 @@
   ([dataset column-filter]
    (one-hot dataset column-filter nil))
   ([dataset]
-   (one-hot dataset col-filters/string?)))
+   (one-hot dataset cf/string?)))
 
 
 (defn replace-missing
@@ -135,7 +144,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
   ([dataset column-filter]
    (->datatype dataset column-filter pipe-base/*pipeline-datatype*))
   ([dataset]
-   (->datatype dataset nil)))
+   (->datatype dataset #(cf/or cf/numeric? cf/boolean?) nil)))
 
 
 (defn range-scale
@@ -150,10 +159,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
   ([dataset column-filter]
    (range-scale dataset column-filter [-1 1]))
   ([dataset]
-   (range-scale dataset #(col-filters/and %
-                                          (->> (col-filters/categorical? %)
-                                               (col-filters/not %))
-                                          col-filters/numeric?))))
+   (range-scale dataset cf/numeric-and-non-categorical-and-not-target)))
 
 
 (defn std-scale
@@ -168,10 +174,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
                                                      :use-mean? use-mean?
                                                      :use-std? use-std?)))
   ([dataset]
-   (std-scale dataset #(col-filters/and %
-                                        (->> (col-filters/categorical? %)
-                                             (col-filters/not %))
-                                        col-filters/numeric?))))
+   (std-scale dataset cf/numeric-and-non-categorical-and-not-target)))
 
 
 (defn assoc-metadata
@@ -181,11 +184,6 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
    pipe-ops/assoc-metadata dataset column-filter
    {:key att-name
     :value att-value}))
-
-
-(fn-impl/export-symbols tech.ml.dataset.pipeline.base
-                        col
-                        int-map)
 
 
 (defn m=
@@ -216,8 +214,10 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
 
 
 (defn pca
-  [dataset column-filter & {:keys [method variance n-components]
-                            :or {method :svd
-                                 variance 0.95} :as op-args}]
-  (pipe-ops/inline-perform-operator
-   pipe-ops/pca dataset column-filter op-args))
+  ([dataset column-filter & {:keys [method variance n-components]
+                             :or {method :svd
+                                  variance 0.95} :as op-args}]
+   (pipe-ops/inline-perform-operator
+    pipe-ops/pca dataset column-filter op-args))
+  ([dataset]
+   (pca dataset cf/numeric-and-non-categorical-and-not-target)))

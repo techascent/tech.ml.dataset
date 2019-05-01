@@ -1,7 +1,7 @@
 (ns tech.ml.dataset.ames-test
   (:require [tech.ml.dataset.pipeline
              :refer [m= col int-map]
-             :as ds-pipe]
+             :as dsp]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.pipeline.column-filters :as cf]
@@ -33,13 +33,12 @@
   [dataset]
   (-> (ds/->dataset dataset)
       (ds/remove-column "Id")
-      (ds-pipe/replace-missing cf/string? "NA")
-      (ds-pipe/replace cf/string? {"" "NA"})
-      (ds-pipe/replace-missing cf/numeric? 0)
-      (ds-pipe/replace-missing cf/boolean? false)
-      (ds-pipe/->datatype #(cf/or %
-                                           cf/numeric?
-                                           cf/boolean?))))
+      (dsp/replace-missing cf/string? "NA")
+      (dsp/replace cf/string? {"" "NA"})
+      (dsp/replace-missing cf/numeric? 0)
+      (dsp/replace-missing cf/boolean? false)
+      (dsp/->datatype #(cf/or cf/numeric?
+                              cf/boolean?))))
 
 
 
@@ -55,12 +54,11 @@
 
 (defn skew-column-filter
   [dataset]
-  (cf/and dataset
-          cf/numeric?
-          #(cf/not % "SalePrice")
-          #(cf/> %
-                 (fn [] (dfn/abs (dfn/skewness (col))))
-                 0.5)))
+  (dsp/with-ds dataset
+    (cf/and cf/numeric?
+            #(cf/not "SalePrice")
+            (fn [] (cf/> #(dfn/abs (dfn/skewness (col)))
+                         0.5)))))
 
 
 ;;This test fails if col-filters/and (intersection) isn't
@@ -72,9 +70,9 @@
 (defn string-and-math
   [dataset]
   (-> dataset
-      (ds-pipe/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-      (ds-pipe/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-      (ds-pipe/string->number ["ExterQual"
+      (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+      (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
+      (dsp/string->number ["ExterQual"
                                "ExterCond"
                                "BsmtQual"
                                "BsmtCond"
@@ -84,15 +82,15 @@
                                "GarageQual"
                                "GarageCond"
                                "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-      (ds-pipe/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+      (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
                               :categorical? true)
-      (ds-pipe/string->number "MasVnrType" {"BrkCmn" 1
+      (dsp/string->number "MasVnrType" {"BrkCmn" 1
                                             "BrkFace" 1
                                             "CBlock" 1
                                             "Stone" 1
                                             "None" 0
                                             "NA" -1})
-      (ds-pipe/string->number "SaleCondition" {"Abnorml" 0
+      (dsp/string->number "SaleCondition" {"Abnorml" 0
                                                "Alloca" 0
                                                "AdjLand" 0
                                                "Family" 0
@@ -100,9 +98,9 @@
                                                "Partial" 1
                                                "NA" -1})
       ;; ;;Auto convert the rest that are still string columns
-      (ds-pipe/string->number)
-      (ds-pipe/new-column "SalePriceDup" #(ds/column % "SalePrice"))
-      (ds-pipe/update-column "SalePrice" dfn/log1p)
+      (dsp/string->number)
+      (dsp/new-column "SalePriceDup" #(ds/column % "SalePrice"))
+      (dsp/update-column "SalePrice" dfn/log1p)
       (ds/set-inference-target "SalePrice")))
 
 
@@ -139,8 +137,7 @@
     (is (= ["SalePrice"]
            (vec (cf/target? dataset))))
     (is (= []
-           (vec (->> (cf/numeric? dataset)
-                     (cf/not dataset)))))
+           (vec (cf/not cf/numeric? dataset))))
     (let [sale-price (ds/column dataset "SalePriceDup")
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
@@ -185,9 +182,9 @@
 (defn full-ames-pt-1
   [dataset]
   (-> (missing-pipeline dataset)
-      (ds-pipe/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-      (ds-pipe/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-      (ds-pipe/string->number ["ExterQual"
+      (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+      (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
+      (dsp/string->number ["ExterQual"
                                "ExterCond"
                                "BsmtQual"
                                "BsmtCond"
@@ -197,15 +194,15 @@
                                "GarageQual"
                                "GarageCond"
                                "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-      (ds-pipe/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+      (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
                               :categorical? true)
-      (ds-pipe/string->number "MasVnrType" {"BrkCmn" 1
+      (dsp/string->number "MasVnrType" {"BrkCmn" 1
                                             "BrkFace" 1
                                             "CBlock" 1
                                             "Stone" 1
                                             "None" 0
                                             "NA" -1})
-      (ds-pipe/string->number "SaleCondition" {"Abnorml" 0
+      (dsp/string->number "SaleCondition" {"Abnorml" 0
                                                "Alloca" 0
                                                "AdjLand" 0
                                                "Family" 0
@@ -213,8 +210,8 @@
                                                "Partial" 1
                                                "NA" -1})
       ;; ;;Auto convert the rest that are still string columns
-      (ds-pipe/string->number)
-      (ds-pipe/update-column "SalePrice" dfn/log1p)
+      (dsp/string->number)
+      (dsp/update-column "SalePrice" dfn/log1p)
       (ds/set-inference-target "SalePrice")
       (m= "OverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
       ;; Overall quality of the garage
@@ -286,10 +283,7 @@
   (-> dataset
       (m= (skew-column-filter dataset)
           #(dfn/log1p (col)))
-      (ds-pipe/std-scale #(cf/and
-                           %
-                           (cf/not % (cf/categorical? %))
-                           (cf/not % (cf/target? %))))))
+      (dsp/std-scale)))
 
 
 (deftest full-ames-pipeline-test
@@ -301,7 +295,7 @@
                     (take 11)
                     (mapv first))))
        (let [[n-cols n-rows] (dtype/shape src-dataset)
-             [n-new-cols n-new-rows] (-> (ds-pipe/filter src-dataset
+             [n-new-cols n-new-rows] (-> (dsp/filter src-dataset
                                                          "GrLivArea"
                                                          #(dfn/< (col) 4000))
                                          dtype/shape)
@@ -338,11 +332,7 @@
                         full-ames-pt-1
                         full-ames-pt-2
                         full-ames-pt-3)
-            std-set (set (cf/and dataset
-                                          (->> (cf/categorical? dataset)
-                                               (cf/not dataset))
-                                          (->> (cf/target? dataset)
-                                               (cf/not dataset))))
+            std-set (set (cf/numeric-and-non-categorical-and-not-target dataset))
             mean-var-seq (->> std-set
                               (map (comp #(ds-col/stats % [:mean :variance])
                                          (partial ds/column dataset))))]
@@ -350,22 +340,16 @@
         (is (m/equals (mapv :mean mean-var-seq)
                       (vec (repeat (count mean-var-seq) 0))
                       0.001))
-        (let [pca-ds (ds-pipe/pca dataset #(cf/and
-                                            % cf/numeric?
-                                            (->> (cf/categorical? %)
-                                                 (cf/not %))
-                                            (->> (cf/target? %)
-                                                 (cf/not %))))]
+        (let [pca-ds (dsp/pca dataset)]
           (is (= 127 (count (ds/columns dataset))))
-          (is (= 75 (count (ds/columns pca-ds))))
+          (is (= 11 (count (cf/categorical? pca-ds))))
+          (is (= 63 (count (ds/columns pca-ds))))
           (is (= 1 (count (cf/target? pca-ds)))))
-        (let [pca-ds (ds-pipe/pca dataset #(cf/and
-                                            % cf/numeric?
-                                            (->> (cf/categorical? %)
-                                                 (cf/not %))
-                                            (->> (cf/target? %)
-                                                 (cf/not %)))
-                                  :n-components 10)]
+        (let [pca-ds (dsp/pca dataset
+                              cf/numeric-and-non-categorical-and-not-target
+                              :n-components 10)]
+          (is (= 11 (count (cf/categorical? dataset))))
+          (is (= 11 (count (cf/categorical? pca-ds))))
           (is (= 127 (count (ds/columns dataset))))
-          (is (= 56 (count (ds/columns pca-ds))))
+          (is (= 22 (count (ds/columns pca-ds))))
           (is (= 1 (count (cf/target? pca-ds)))))))))

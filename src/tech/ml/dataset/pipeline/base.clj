@@ -36,6 +36,30 @@
      ~@body))
 
 
+(defmacro with-ds
+  [dataset & body]
+  `(with-pipeline-vars ~dataset nil nil nil
+     ~@body))
+
+
+(defmacro with-column-name
+  [colname & body]
+  `(with-pipeline-vars nil ~colname nil nil
+     ~@body))
+
+
+(defmacro with-datatype
+  [datatype & body]
+  `(with-pipeline-vars nil nil ~datatype nil
+     ~@body))
+
+
+(defmacro with-column-name-seq
+  [colname-seq & body]
+  `(with-pipeline-vars nil nil nil ~colname-seq
+     ~@body))
+
+
 (defn dtype
   []
   *pipeline-datatype*)
