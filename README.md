@@ -15,184 +15,142 @@ An example of using the dataset for [advanced regression techniques](https://git
 
 ## Dataset Pipeline Processing
 
-Dataset ETL is a repeatable processing that stores data so that doing inference later is automatic.
-
-1.  Build your ETL pipeline.
-2.  Apply to training dataset.  Result is a new pipeline with things that min,max per column stored or even trained models.
-3.  Train, gridsearch, get a model.
-4.  Use ETL pipeline returned from (2) with no modification to apply to new inference samples.
-5.  Infer.
-
-## Example
-
-```clojure
-user> (require '[tech.ml.dataset.etl :as etl])
-nil
-user> (require '[tech.ml.dataset :as dataset])
-nil
-user> (require '[clojure.edn :as edn])
-nil
-user> (require '[clojure.java.io :as io])
-nil
-user> (require '[camel-snake-kebab.core :refer [->kebab-case]])
-nil
-user> (require '[clojure.string :as s])
-nil
-
-user> (def mapseq-fruit-dataset
-  (memoize
-   (fn []
-     (let [fruit-ds (slurp (io/resource "fruit_data_with_colors.txt"))
-           dataset (->> (s/split fruit-ds #"\n")
-                        (mapv #(s/split % #"\s+")))
-           ds-keys (->> (first dataset)
-                        (mapv (comp keyword ->kebab-case)))]
-       (->> (rest dataset)
-            (map (fn [ds-line]
-                   (->> ds-line
-                        (map (fn [ds-val]
-                               (try
-                                 (Double/parseDouble ^String ds-val)
-                                 (catch Throwable e
-                                   (-> (->kebab-case ds-val)
-                                       keyword)))))
-                        (zipmap ds-keys)))))))))
-#'user/mapseq-fruit-dataset
-user> (take 3 (mapseq-fruit-dataset))
-({:color-score 0.55,
-  :fruit-label 1.0,
-  :fruit-name :apple,
-  :fruit-subtype :granny-smith,
-  :height 7.3,
-  :mass 192.0,
-  :width 8.4}
- {:color-score 0.59,
-  :fruit-label 1.0,
-  :fruit-name :apple,
-  :fruit-subtype :granny-smith,
-  :height 6.8,
-  :mass 180.0,
-  :width 8.0}
- {:color-score 0.6,
-  :fruit-label 1.0,
-  :fruit-name :apple,
-  :fruit-subtype :granny-smith,
-  :height 7.2,
-  :mass 176.0,
-  :width 7.4})
-...
+Dataset ETL for this library consists of loading heterogeneous columns of data and then
+operating on that data in a mainly columnwise fashion.
 
 
-user> (def etl-source-pipeline '[[remove [:fruit-subtype :fruit-label]]
-                                 [string->number string?]
-                                 ;;Range numeric data to -1 1
-                                 [range-scaler (not categorical?)]])
-#'user/etl-source-pipeline
-user> (def pipeline-result (etl/apply-pipeline (mapseq-fruit-dataset)
-                                               etl-source-pipeline
-                                               {:target :fruit-name}))
-#'user/pipeline-result
-user> (:options pipeline-result)
-
-user> (:options pipeline-result)
-{:dataset-column-metadata {:post-pipeline [{:categorical? true,
-                                            :datatype :float64,
-                                            :name :fruit-name,
-                                            :size 59,
-                                            :target? true}
-                                           {:datatype :float64, :name :mass, :size 59}
-                                           {:datatype :float64, :name :width, :size 59}
-                                           {:datatype :float64, :name :height, :size 59}
-                                           {:datatype :float64,
-                                            :name :color-score,
-                                            :size 59}],
-                           :pre-pipeline [{:datatype :float32,
-                                           :name :fruit-label,
-                                           :size 59}
-                                          {:categorical? true,
-                                           :datatype :string,
-                                           :name :fruit-name,
-                                           :size 59}
-                                          {:categorical? true,
-                                           :datatype :string,
-                                           :name :fruit-subtype,
-                                           :size 59}
-                                          {:datatype :float32, :name :mass, :size 59}
-                                          {:datatype :float32, :name :width, :size 59}
-                                          {:datatype :float32, :name :height, :size 59}
-                                          {:datatype :float32,
-                                           :name :color-score,
-                                           :size 59}]},
- :feature-columns [:color-score :height :mass :width],
- :label-columns [:fruit-name],
- :label-map {:fruit-name {"apple" 0, "lemon" 2, "mandarin" 3, "orange" 1}},
- :target :fruit-name}
-user> (:pipeline pipeline-result)
-[{:context {}, :operation [remove [:fruit-subtype :fruit-label]]}
- {:context {:label-map {:fruit-name {"apple" 0, "lemon" 2, "mandarin" 3, "orange" 1}}},
-  :operation [string->number (:fruit-name)]}
- {:context {:color-score {:max 0.9300000071525574, :min 0.550000011920929},
-            :height {:max 10.5, :min 4.0},
-            :mass {:max 362.0, :min 76.0},
-            :width {:max 9.600000381469727, :min 5.800000190734863}},
-  :operation [range-scaler #{:color-score :height :mass :width}]}]
-user> (clojure.pprint/print-table (->> (dataset/->flyweight (:dataset pipeline-result))
-                                       (take 10)))
-
-| :fruit-name |                :mass |               :width |               :height |        :color-score |
-|-------------+----------------------+----------------------+-----------------------+---------------------|
-|         0.0 | -0.18881118881118886 |  0.36842068278560225 |  0.015384674072265625 |                -1.0 |
-|         0.0 |  -0.2727272727272727 |  0.15789457833668674 |  -0.13846147977388823 |  -0.789473882342312 |
-|         0.0 | -0.30069930069930073 | -0.15789482930359944 | -0.015384674072265625 | -0.7368420392192294 |
-|         3.0 |  -0.9300699300699301 |  -0.7894738955510845 |   -0.7846154433030348 | 0.31578949019519276 |
-|         3.0 |  -0.9440559440559441 |  -0.8947369477755422 |   -0.8153846447284405 |  0.2631579607807706 |
-|         3.0 |   -0.972027972027972 |                 -1.0 |   -0.9076922490046575 | 0.15789458824326608 |
-|         3.0 |   -0.972027972027972 |  -0.9473684738877711 |   -0.9076922490046575 |  0.3684210196096147 |
-|         3.0 |                 -1.0 |                 -1.0 |                  -1.0 |  0.3684210196096147 |
-|         0.0 | -0.28671328671328666 |  -0.3157896586071989 |   0.16923082791841937 |   0.947368470585578 |
-|         0.0 | -0.32867132867132864 | -0.15789482930359944 |  -0.07692307692307687 |  0.7894735686336514 |
-nil
-```
-
-
-## ETL Language Design
-
-
-The ETL language is currently an implicit piping of a list of dataset->dataset transformations.
-
-Each operator involves a column selection and then an operation, thus there are three sub-languages defined:
-
-
-* Column Selection - [column-filters.md](docs/column-filters.md).
-* Math Operations - [math-ops.md](docs/math-ops.md).
-* Pipeline Operators - [pipeline-operators.md](docs/pipeline-operators.md).
-
-
-## Extension
-
-
-There is an extensive protocol hierarchy for supporting different data stores.  You can buy into the hierarchy at
-several levels:
-
-* [dataset](src/tech/ml/protocols/dataset.clj).
-* [column](src/tech/ml/protocols/column.clj) and then use the generic table
-* [implementation](src/ml/tech/dataset/generic_columnar_dataset.clj).
-
-
-The current system is built on top of support for the
-[tech.datatype](https://github.com/techascent/tech.datatype) subsystem which is
-described on our [blog](http://techascent.com/blog/datatype-library.html).  You can see
-the datatype-level bindings to [fastutil](src/tech/libs/tablesaw/datatype/fastutil.clj)
-and [tablesaw](src/tech/libs/tablesaw/datatype/tablesaw.clj).  These bindings enable
-generic and highly optimized simple transformations as well as enabling the
-tensor subsystem to operate on the base data in-place efficiently.
-
-
-Thanks to the integration of datatype, tech.compute, and jna, most operations are
-optimized.  Especially [math and transformations](https://github.com/techascent/tech.ml.dataset/blob/9739d72a81350ae5b8688ee9109290a04586b772/src/tech/ml/dataset/etl/pipeline_operators.clj#L228).
+[tech.v2.datatype](https://github.com/techascent/tech.datatype) subsystem which is
+described on our [blog](http://techascent.com/blog/datatype-library.html).
+[Here is a cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md).
 
 The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the
 generic table support and as such they do not use the actual tablesaw 'table' datatype.
+
+## Walkthrough
+
+```clojure
+;; You have a seq of maps
+
+user> (take 5 (mapseq-fruit-dataset))
+({:fruit-label 1.0,
+  :fruit-name :apple,
+  :fruit-subtype :granny-smith,
+  :mass 192.0,
+  :width 8.4,
+  :height 7.3,
+  :color-score 0.55}
+ {:fruit-label 1.0,
+  :fruit-name :apple,
+  :fruit-subtype :granny-smith,
+  :mass 180.0,
+  :width 8.0,
+  :height 6.8,
+  :color-score 0.59}
+  ...
+
+;; Here are the namespaces
+user> (require '[tech.ml.dataset :as ds])
+:tech.resource.gc Reference thread starting
+nil
+user> (require '[tech.v2.datatype.functional :as dfn])
+nil
+user> (require '[tech.ml.dataset.pipeline :as dsp])
+nil
+user> (require '[tech.ml.dataset.pipeline.column-filters :as cf])
+
+;; Making a dataset is easy:
+user> (def fruits (ds/->dataset (mapseq-fruit-dataset)))
+#'user/fruits
+user> (ds/column-names fruits)
+(:fruit-label :fruit-name :fruit-subtype :mass :width :height :color-score)
+
+;;Select allows you to grab various rectangles, and println is your friend
+
+user> (println (ds/select fruits [:fruit-name :mass :width] (range 10)))
+_unnamed [10 3]:
+
+| :fruit-name |   :mass | :width |
+|-------------+---------+--------|
+|       apple | 192.000 |  8.400 |
+|       apple | 180.000 |  8.000 |
+|       apple | 176.000 |  7.400 |
+|    mandarin |  86.000 |  6.200 |
+|    mandarin |  84.000 |  6.000 |
+|    mandarin |  80.000 |  5.800 |
+|    mandarin |  80.000 |  5.900 |
+|    mandarin |  76.000 |  5.800 |
+|       apple | 178.000 |  7.100 |
+|       apple | 172.000 |  7.400 |
+
+
+;;Columns implement dataset reader/writer (see the cheatsheet), so anything goes
+;;with them
+
+user> (dfn/+ (dfn/* (ds/column fruits :mass) 0.5) (ds/column fruits :width))
+[104.39999961853027 98.0 95.40000009536743 49.19999980926514 48.0
+45.80000019073486 45.90000009536743 43.80000019073486 96.09999990463257
+93.40000009536743 89.90000009536743 93.09999990463257
+...
+user> (type *1)
+tech.v2.datatype.binary_op$fn$reify__45831
+
+
+user> (require '[tech.ml.dataset.column :as ds-col])
+nil
+user> (ds-col/stats (ds/column fruits :mass) [:min :max :mean])
+{:min 76.0, :mean 163.11864406779662, :max 362.0}
+
+;; Sometimes most of the time you will need to more advanced processing
+;; This is where the pipeline concept comes in.
+
+user> (def processed-ds (-> fruits
+                            (dsp/string->number)
+                            (dsp/->datatype)
+                            (dsp/range-scale)))
+#'user/processed-ds
+
+
+user> (println (ds/select processed-ds [:fruit-name :mass :width] (range 10)))
+_unnamed [10 3]:
+
+| :fruit-name |  :mass | :width |
+|-------------+--------+--------|
+|       0.000 | -0.189 |  0.368 |
+|       0.000 | -0.273 |  0.158 |
+|       0.000 | -0.301 | -0.158 |
+|       3.000 | -0.930 | -0.789 |
+|       3.000 | -0.944 | -0.895 |
+|       3.000 | -0.972 | -1.000 |
+|       3.000 | -0.972 | -0.947 |
+|       3.000 | -1.000 | -1.000 |
+|       0.000 | -0.287 | -0.316 |
+|       0.000 | -0.329 | -0.158 |
+
+nil
+user> (ds-col/stats (ds/column processed-ds :mass) [:min :max :mean])
+{:min -1.0, :mean -0.3907787128126111, :max 1.0}
+
+user> (cf/categorical? processed-ds)
+(:fruit-name :fruit-subtype)
+user> (cf/numeric? processed-ds)
+(:fruit-label :fruit-name :fruit-subtype :mass :width :height :color-score)
+
+;;You can always get any of the columns back as a java array
+
+user> (dtype/->array-copy (ds/column processed-ds :width))
+[0.36842068278560225, 0.15789457833668674, -0.15789482930359944, -0.7894738955510845,
+ -0.8947369477755422, -1.0, -0.9473684738877711, -1.0, -0.3157896586071989,
+ -0.15789482930359944, -0.42105271083165663, -0.3157896586071989, -0.36842118471942775,
+...
+user> (type *1)
+[D
+```
+
+## Examples
+
+* [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
+* [regression pipelines](test/tech/ml/dataset/ames_test.clj)
+* [real world example](https://github.com/cnuernber/ames-house-prices/blob/d60b18cb13f7d125dba787f23f0a81cac90c8861/src/clj_ml_wkg/ames_house_prices.clj)
 
 
 ## License

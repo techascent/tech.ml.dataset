@@ -1,6 +1,6 @@
 (ns tech.ml.utils
   (:require [tech.parallel :as parallel]
-            [tech.datatype.java-unsigned :as unsigned])
+            [tech.v2.datatype.casting :as casting])
   (:import [java.util Iterator NoSuchElementException]))
 
 
@@ -91,4 +91,4 @@
 
 (defn numeric-datatype?
   [dtype-enum]
-  (boolean ((set unsigned/datatypes) dtype-enum)))
+  (boolean (casting/numeric-type? dtype-enum)))

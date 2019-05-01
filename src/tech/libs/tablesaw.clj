@@ -1,16 +1,13 @@
 (ns tech.libs.tablesaw
-  (:require [tech.libs.tablesaw.datatype.tablesaw :as dtype-tbl]
+  (:require [tech.libs.tablesaw.tablesaw-column :as dtype-tbl]
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.column :as col-proto]
             [clojure.core.matrix.protocols :as mp]
-            [tech.datatype :as dtype]
-            [tech.datatype.base :as dtype-base]
-            [tech.datatype.java-primitive :as primitive]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.base :as dtype-base]
+            [tech.v2.datatype.protocols :as dtype-proto]
             [tech.parallel :as parallel]
             [clojure.set :as c-set]
-            [tech.compute.tensor :as ct]
-            [tech.compute.cpu.tensor-math :as cpu-tm]
-            [tech.compute.cpu.typed-buffer :as cpu-typed-buffer]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.generic-columnar-dataset :as columnar-dataset]
             [tech.jna :as jna])
@@ -20,8 +17,7 @@
            [tech.tablesaw.columns Column]
            [tech.tablesaw.io.csv CsvReadOptions]
            [java.util UUID]
-           [org.apache.commons.math3.stat.descriptive.moment Skewness])
-  (:import [tech.compute.cpu UnaryOp BinaryOp]))
+           [org.apache.commons.math3.stat.descriptive.moment Skewness]))
 
 
 
@@ -34,43 +30,11 @@
   (Table/create (.name table) (into-array Column col-seq)))
 
 
-(defn- col-datatype-cast
-  [data-val col-dtype]
-  (if-let [dtype ((set primitive/datatypes) col-dtype)]
-    (dtype/cast data-val dtype)
-    (case col-dtype
-      :string (if (or (keyword? data-val)
-                      (symbol? data-val))
-                (name data-val)
-                (str data-val))
-      :boolean (boolean data-val))))
-
-
 (defn- column->metadata
   [^Column col]
   (merge {:name (.name col)}
          (when (= :string (dtype/get-datatype col))
            {:categorical? true})))
-
-
-(def available-stats
-  (set [:mean
-        :variance
-        :median
-        :min
-        :max
-        :skew
-        :kurtosis
-        :geometric-mean
-        :sum-of-squares
-        :sum-of-logs
-        :quadratic-mean
-        :standard-deviation
-        :population-variance
-        :sum
-        :product
-        :quartile-1
-        :quartile-3]))
 
 
 (declare make-column)
@@ -85,12 +49,12 @@
   (set-name [this colname]
     (->TablesawColumn col (assoc metadata :name colname) {}))
 
-  (supported-stats [col] available-stats)
+  (supported-stats [this] (col-proto/supported-stats col))
 
-  (metadata [this] (assoc metadata
-                          :name (col-proto/column-name this)
-                          :size (mp/element-count col)
-                          :datatype (dtype/get-datatype col)))
+  (metadata [this] (merge metadata
+                          {:name (col-proto/column-name this)
+                           :size (mp/element-count col)
+                           :datatype (dtype/get-datatype col)}))
 
   (set-metadata [this data-map]
     (->TablesawColumn col data-map cache))
@@ -100,22 +64,18 @@
   (set-cache [this cache-map]
     (->TablesawColumn col metadata cache-map))
 
-  (missing [this]
-    (-> (.isMissing ^Column col)
-        (.toArray)))
+  (missing [this] (col-proto/missing col))
 
-  (unique [this]
-    (-> (.unique ^Column col)
-        (.asList)
-        set))
+  (unique [this] (col-proto/unique col))
 
   (stats [this stats-set]
     (when-not (instance? NumericColumn col)
       (throw (ex-info "Stats aren't available on non-numeric columns"
                       {:column-type (dtype/get-datatype col)
-                       :column-name (col-proto/column-name this)})))
+                       :column-name (col-proto/column-name this)
+                       :column-java-type (type col)})))
     (let [stats-set (set (if-not (seq stats-set)
-                           available-stats
+                           dtype-tbl/available-stats
                            stats-set))
           existing (->> stats-set
                         (map (fn [skey]
@@ -123,160 +83,118 @@
                                  [skey cached])))
                         (remove nil?)
                         (into {}))
-          missing-stats (c-set/difference stats-set (set (keys existing)))
-          ^NumericColumn col col]
+          missing-stats (c-set/difference stats-set (set (keys existing)))]
       (merge existing
-             (->> missing-stats
-                  (map (fn [skey]
-                         [skey
-                          (case skey
-                            :mean (.mean col)
-                            :variance (.variance col)
-                            :median (.median col)
-                            :min (.min col)
-                            :max (.max col)
-                            :skew (.skewness col)
-                            :kurtosis (.kurtosis col)
-                            :geometric-mean (.geometricMean col)
-                            :sum-of-squares (.sumOfSquares col)
-                            :sum-of-logs (.sumOfLogs col)
-                            :quadratic-mean (.quadraticMean col)
-                            :standard-deviation (.standardDeviation col)
-                            :population-variance (.populationVariance col)
-                            :sum (.sum col)
-                            :product (.product col)
-                            :quartile-1 (.quartile1 col)
-                            :quartile-3 (.quartile3 col)
-                            )]))
-                  (into {})))))
+             (col-proto/stats col missing-stats))))
 
-  (correlation
-    [this other-column correlation-type]
-    (let [^NumericColumn column (jna/ensure-type NumericColumn col)
-          ^NumericColumn other-column (jna/ensure-type NumericColumn (:col other-column))]
-      (case correlation-type
-        :pearson (.pearsons column other-column)
-        :spearman (.spearmans column other-column)
-        :kendall (.kendalls column other-column))))
+  (correlation [this other-column correlation-type]
+    (col-proto/correlation col (:col other-column) correlation-type))
 
-  (column-values [this]
-    (when-not (= 0 (dtype/ecount this))
-      (or (dtype/->array this)
-          (dtype/->array-copy this))))
+  (column-values [this] (col-proto/column-values col))
 
-  (is-missing? [this idx]
-    (-> (.isMissing col)
-        (.contains (int idx))))
+  (is-missing? [this idx] (col-proto/is-missing? col idx))
 
-  (get-column-value [this idx]
-    (let [idx (int idx)]
-      (when (< idx 0)
-        (throw (ex-info "Index out of range" {:index idx})))
-      (when (>= idx (.size col))
-        (throw (ex-info "Index out of range" {:index idx})))
-      (if-not (col-proto/is-missing? this idx)
-        (.get col (int idx))
-        (throw (ex-info (format "Column is missing index %s" idx) {})))))
-
-  (set-values [this idx-val-seq]
-    (let [new-col (.copy col)
-          col-dtype (dtype/get-datatype col)]
-      (doseq [[idx col-val] idx-val-seq]
-        (.set new-col (int idx) (col-datatype-cast col-val col-dtype)))
-
-      (make-column new-col metadata {})))
-
-  (select [this idx-seq]
-    (let [^ints int-data (if (instance? (Class/forName "[I") idx-seq)
-                           idx-seq
-                           (int-array idx-seq))]
-      ;;We can't cache much metadata now as we don't really know.
-      (make-column (.subset col int-data) metadata {})))
+  (select [this idx-seq] (make-column (col-proto/select col idx-seq) metadata {}))
 
   (empty-column [this datatype elem-count metadata]
-    (make-column
-     (dtype-tbl/make-empty-column datatype elem-count
-                                  {:column-name  (or (:name metadata)
-                                                     (col-proto/column-name this))})
-     metadata
-     {}))
+    (dtype-proto/make-container :tablesaw-column datatype elem-count
+                                (assoc (select-keys metadata [:name])
+                                       :empty? true)))
 
   (new-column [this datatype elem-count-or-values metadata]
-    (make-column
-     (dtype-tbl/make-column datatype elem-count-or-values
-                            {:column-name (or (:name metadata)
-                                              (col-proto/column-name this))})
-     metadata
-     {}))
+    (dtype-proto/make-container :tablesaw-column datatype
+                                elem-count-or-values metadata))
 
   (clone [this]
-    (make-column
-     (dtype-tbl/make-column (dtype/get-datatype this) (col-proto/column-values this)
-                            {:column-name (col-proto/column-name this)})
-     metadata
-     cache))
+    (dtype-proto/make-container :tablesaw-column
+                                (dtype/get-datatype this)
+                                (col-proto/column-values this)
+                                metadata))
 
-  (to-double-array [this error-missing?]
-    (when (and error-missing?
-               (> (.countMissing col) 0))
-      (throw (ex-info (format "Missing values detected: %s - %s"
-                              (col-proto/column-name this)
-                              (.countMissing col)))))
-    (mp/to-double-array col))
+  (to-double-array [this error-missing?] (col-proto/to-double-array col error-missing?))
 
-  dtype-base/PDatatype
+  dtype-proto/PDatatype
   (get-datatype [this] (dtype-base/get-datatype col))
 
-  dtype-base/PContainerType
-  (container-type [this] (dtype-base/container-type col))
 
-  dtype-base/PAccess
-  (get-value [this idx] (dtype-base/get-value col idx))
-  (set-value! [this offset val] (dtype-base/set-value! col offset val))
-  (set-constant! [this offset value elem-count]
-    (dtype-base/set-constant! col offset value elem-count))
-
-  dtype-base/PCopyRawData
+  dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
-    (dtype-base/copy-raw->item! col ary-target target-offset options))
+    (dtype-proto/copy-raw->item! col ary-target target-offset options))
 
-  dtype-base/PPrototype
+  dtype-proto/PPrototype
   (from-prototype [src datatype shape]
     (col-proto/new-column src datatype (first shape) (select-keys [:name] metadata)))
 
-  primitive/PToBuffer
+
+  dtype-proto/PToNioBuffer
+  (convertible-to-nio-buffer? [item]
+    (dtype-proto/convertible-to-nio-buffer? col))
   (->buffer-backing-store [item]
-    (primitive/->buffer-backing-store col))
+    (dtype-proto/as-nio-buffer col))
 
-  primitive/POffsetable
-  (offset-item [src offset]
-    (primitive/offset-item col offset))
 
-  primitive/PToArray
-  (->array [src] (primitive/->array col))
-  (->array-copy [src] (primitive/->array-copy col))
+  dtype-proto/PToList
+  (convertible-to-fastutil-list? [item]
+    (dtype-proto/convertible-to-fastutil-list? col))
+  (->list-backing-store [item]
+    (dtype-proto/as-list col))
+
+
+  dtype-proto/PToReader
+  (convertible-to-reader? [item] true)
+  (->reader [item options]
+    (dtype-proto/->reader col options))
+
+
+  dtype-proto/PToWriter
+  (convertible-to-writer? [item] true)
+  (->writer [item options]
+    (dtype-proto/->writer col options))
+
+
+  dtype-proto/PToIterable
+  (convertible-to-iterable? [item] true)
+  (->iterable [item options]
+    (dtype-proto/->reader col options))
+
+
+  dtype-proto/PToMutable
+  (convertible-to-mutable? [item] true)
+  (->mutable [item options]
+    (dtype-proto/->mutable col options))
+
+  dtype-proto/PBuffer
+  (sub-buffer [item offset length]
+    (->TablesawColumn
+     (dtype-proto/sub-buffer col offset length)
+     metadata {}))
+
+  dtype-proto/PToArray
+  (->sub-array [src] (dtype-proto/->sub-array col))
+  (->array-copy [src] (dtype-proto/->array-copy col))
 
   mp/PElementCount
-  (element-count [item] (mp/element-count col))
-
-  mp/PDoubleArrayOutput
-  (to-double-array [item] (mp/to-double-array col))
-  (as-double-array [item] (mp/as-double-array col))
-
-  mp/PObjectArrayOutput
-  (to-object-array [item] (mp/to-object-array col))
-  (as-object-array [item] (mp/as-object-array col)))
-
-
-;;Enable this to be used directly as a tensor.  This adds protocols telling the compute
-;;system what device and driver this buffer pertains to.
-(cpu-typed-buffer/generic-extend-java-type TablesawColumn)
+  (element-count [item] (mp/element-count col)))
 
 
 (defn make-column
   [datatype-col metadata & [cache]]
+  (if (instance? TablesawColumn datatype-col)
+    (throw (ex-info "Nested" {})))
   (->TablesawColumn datatype-col metadata cache))
 
+
+(defmethod dtype-proto/make-container :tablesaw-column
+  [container-type datatype elem-count-or-seq
+   {:keys [empty?] :as options}]
+  (when (and empty?
+             (not (number? elem-count-or-seq)))
+    (throw (ex-info "Empty columns must have colsize argument." {})))
+  (->
+   (if empty?
+     (dtype-tbl/make-empty-column datatype elem-count-or-seq options)
+     (dtype-tbl/make-column datatype elem-count-or-seq options))
+   (make-column options {})))
 
 
 (defn ^tech.tablesaw.io.csv.CsvReadOptions$Builder
@@ -300,7 +218,8 @@
      (->> columns
           (mapv (fn [[col-name col]]
                   (make-column col (assoc (column->metadata col)
-                                          :name col-name))))))))
+                                          :name col-name))))))
+   {}))
 
 
 (defn ->tablesaw-dataset
@@ -313,6 +232,17 @@
   (-> (Table/read)
       (.csv (->csv-builder path :separator separator :header? true))
       ->tablesaw-dataset))
+
+
+(defn col-dtype-cast
+  [data-val dtype]
+  (if (= dtype
+         :string)
+    (if (or (keyword? data-val)
+            (symbol? data-val))
+      (name data-val)
+      (str data-val))
+    (dtype/cast data-val dtype)))
 
 
 (defn map-seq->tablesaw-dataset
@@ -336,7 +266,8 @@
                                                 :string
                                                 datatype)]
                                  [colname
-                                  (dtype-tbl/make-empty-column datatype 0 {:column-name colname})])))
+                                  (dtype-tbl/make-empty-column
+                                   datatype 0 {:name colname})])))
                         (into {}))
         all-column-names (set (keys column-map))
         max-idx (reduce (fn [max-idx [idx item-row]]
@@ -346,7 +277,8 @@
                               (dotimes [idx missing]
                                 (.appendMissing col))
                               (if-not (nil? item-val)
-                                (.append col (col-datatype-cast item-val (dtype/get-datatype col)))
+                                (.append col (col-dtype-cast
+                                              item-val (dtype/get-datatype col)))
                                 (.appendMissing col))))
                           idx)
                         0

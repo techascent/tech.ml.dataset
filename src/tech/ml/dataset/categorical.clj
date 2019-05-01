@@ -6,7 +6,7 @@
   column."
   (:require [tech.ml.protocols.dataset :as ds]
             [tech.ml.protocols.column :as ds-col]
-            [tech.datatype :as dtype]
+            [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
             [tech.ml.utils :as utils]))
 
@@ -94,7 +94,8 @@
                                         :column-name column-name}))))))
                      {:unchecked? true})]
     (ds-col/new-column old-column new-dtype data-values
-                       (ds-col/metadata old-column))))
+                       (assoc (ds-col/metadata old-column)
+                              :label-map categorical-map))))
 
 
 (defn inverse-map-categorical-col-fn
@@ -205,7 +206,8 @@
               (let [[new-column-name new-colval] table-entry]
                 (if-let [new-col (get new-column-map new-column-name)]
                   (dtype/set-value! new-col idx new-colval)
-                  (throw (ex-info (format "Failed to find new column: %s" new-column-name)
+                  (throw (ex-info (format "Failed to find new column: %s"
+                                          new-column-name)
                                   {:new-columns (keys new-column-map)}))))
               (throw (ex-info (format "Failed to find string table value: %s"
                                       col-val)
@@ -219,7 +221,8 @@
                     (ds-col/new-column column new-dtype column-data
                                        (assoc
                                         (ds-col/metadata column)
-                                        :name column-name))))
+                                        :name column-name
+                                        :label-map context))))
                  dataset))))
 
 

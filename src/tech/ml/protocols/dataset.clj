@@ -1,12 +1,14 @@
 (ns tech.ml.protocols.dataset
   (:require [clojure.set :as c-set]
             [tech.ml.protocols.column :as col-proto]
-            [tech.datatype :as dtype]
+            [tech.v2.datatype :as dtype]
             [clojure.core.matrix.protocols :as mp]))
 
 
 (defprotocol PColumnarDataset
   (dataset-name [dataset])
+  (metadata [dataset])
+  (set-metadata [dataset meta-map])
   (maybe-column [dataset column-name]
     "Return either column if exists or nil.")
   (columns [dataset])
