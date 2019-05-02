@@ -287,7 +287,7 @@ the correct type."
 (defn ds-map-values
   "Note this returns a sequence, not a dataset."
   [dataset map-fn & [column-name-seq]]
-  (->> (index-value-seq (select dataset (or column-name-seq :all) :all))
+  (->> (index-value-seq (select dataset (or (seq column-name-seq) :all) :all))
        (map (fn [[idx col-values]]
               (apply map-fn col-values)))))
 
