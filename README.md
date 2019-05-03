@@ -100,7 +100,7 @@ nil
 user> (ds-col/stats (ds/column fruits :mass) [:min :max :mean])
 {:min 76.0, :mean 163.11864406779662, :max 362.0}
 
-;; Sometimes most of the time you will need to more advanced processing
+;; Sometimes you will need to more advanced processing
 ;; This is where the pipeline concept comes in.
 
 user> (def processed-ds (-> fruits
