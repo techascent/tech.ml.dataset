@@ -89,4 +89,4 @@
     ;;Make sure we get the same answer as smile.
     (is (dtype-fn/equals trans-tens
                          smile-transformed-ds
-                         0.001))))
+                         0.01))))
