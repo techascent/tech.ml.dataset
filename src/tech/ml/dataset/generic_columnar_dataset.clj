@@ -5,7 +5,6 @@
             [tech.v2.datatype.base :as dtype-base]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [clojure.core.matrix.protocols :as mp]
             [clojure.set :as c-set])
   (:import [java.io Writer]))
 
@@ -117,24 +116,12 @@
     (make-dataset table-name column-seq {}))
 
 
-  mp/PDimensionInfo
-  (dimensionality [m] (count (mp/get-shape m)))
-  ;;Shape reflects the fact that we are column major.  Hence n-columns
-  ;;comes before n-rows.
-  (get-shape [m]
+  dtype-proto/PShape
+  (shape [m]
     [(count column-names)
      (if-let [first-col (first (vals colmap))]
-       (mp/element-count first-col)
+       (dtype/ecount first-col)
        0)])
-  (is-scalar? [m] false)
-  (is-vector? [m] true)
-  (dimension-count [m dimension-number]
-    (let [shape (mp/get-shape m)]
-      (if (<= (count shape) (long dimension-number))
-        (get shape dimension-number)
-        (throw (ex-info "Array does not have specific dimension"
-                        {:dimension-number dimension-number
-                         :shape shape})))))
 
   dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]

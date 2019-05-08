@@ -1,8 +1,7 @@
 (ns tech.ml.protocols.dataset
   (:require [clojure.set :as c-set]
             [tech.ml.protocols.column :as col-proto]
-            [tech.v2.datatype :as dtype]
-            [clojure.core.matrix.protocols :as mp]))
+            [tech.v2.datatype :as dtype]))
 
 
 (defprotocol PColumnarDataset

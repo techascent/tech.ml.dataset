@@ -12,7 +12,7 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.tensor :as tens]
             [tech.v2.datatype.typecast :as typecast]
-            [tech.parallel :as parallel]
+            [tech.parallel.next-item-fn :as parallel-nfn]
             [clojure.set :as c-set])
   (:refer-clojure :exclude [replace filter])
   (:import [tech.ml.protocols.etl
@@ -104,7 +104,7 @@
 
 (defmacro pipeline-inference-context
   [train-context & body]
-  `(with-bindings {#'*pipeline-context* (parallel/create-next-item-fn
+  `(with-bindings {#'*pipeline-context* (parallel-nfn/create-next-item-fn
                                          (:operator-context ~train-context))
                    #'*pipeline-training?* false
                    #'*pipeline-env* (atom {})}

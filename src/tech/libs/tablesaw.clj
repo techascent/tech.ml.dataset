@@ -2,11 +2,9 @@
   (:require [tech.libs.tablesaw.tablesaw-column :as dtype-tbl]
             [tech.ml.dataset :as ds]
             [tech.ml.protocols.column :as col-proto]
-            [clojure.core.matrix.protocols :as mp]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.base :as dtype-base]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.parallel :as parallel]
             [clojure.set :as c-set]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.generic-columnar-dataset :as columnar-dataset]
@@ -53,7 +51,7 @@
 
   (metadata [this] (merge metadata
                           {:name (col-proto/column-name this)
-                           :size (mp/element-count col)
+                           :size (dtype/ecount col)
                            :datatype (dtype/get-datatype col)}))
 
   (set-metadata [this data-map]
@@ -173,8 +171,8 @@
   (->sub-array [src] (dtype-proto/->sub-array col))
   (->array-copy [src] (dtype-proto/->array-copy col))
 
-  mp/PElementCount
-  (element-count [item] (mp/element-count col)))
+  dtype-proto/PCountable
+  (ecount [item] (dtype-proto/ecount col)))
 
 
 (defn make-column

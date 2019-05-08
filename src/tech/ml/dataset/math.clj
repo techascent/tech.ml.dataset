@@ -5,8 +5,8 @@
             [tech.ml.dataset.base
              :refer [columns-with-missing-seq
                      columns select update-column]]
-            [tech.parallel :as parallel]
-            [clojure.core.matrix.macros :refer [c-for]])
+            [tech.parallel.for :as parallel-for]
+            [tech.parallel.require :as parallel-req])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -70,13 +70,14 @@
         ^"[[D" retval (into-array (repeatedly n-rows #(double-array n-cols)))
         n-cols (int n-cols)
         n-rows (int n-rows)]
-    (parallel/parallel-for
+    (parallel-for/parallel-for
      row-idx
      n-rows
      (let [^doubles target-row (aget retval row-idx)]
-       (c-for [col-idx (int 0) (< col-idx n-cols) (inc col-idx)]
-              (aset target-row col-idx (aget ^doubles (aget input-data col-idx)
-                                             row-idx)))))
+       (parallel-for/serial-for
+        col-idx n-cols
+        (aset target-row col-idx (aget ^doubles (aget input-data col-idx)
+                                       row-idx)))))
     retval))
 
 
@@ -143,7 +144,7 @@
 
 
 (def find-static
-  (parallel/memoize
+  (parallel-req/memoize
    (fn [^Class cls ^String fn-name & fn-arg-types]
      (let [method (doto (.getDeclaredMethod cls fn-name (into-array ^Class fn-arg-types))
                     (.setAccessible true))]
@@ -300,7 +301,7 @@
                                            (dtype/ecount old-column)
                                            (ds-col/metadata old-column))
                                   ^doubles col-doubles (dtype/->array new-col)]
-                              (parallel/parallel-for
+                              (parallel-for/parallel-for
                                row-idx
                                n-rows
                                (if (Double/isNaN (aget src-doubles row-idx))

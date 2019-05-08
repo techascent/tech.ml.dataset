@@ -12,8 +12,7 @@
             [tech.v2.datatype.functional :as dfn]
             [clojure.set :as c-set]
             [tech.libs.tablesaw :as tablesaw]
-            [clojure.test :refer :all]
-            [clojure.core.matrix :as m]))
+            [clojure.test :refer :all]))
 
 
 (deftest tablesaw-col-subset-test
@@ -151,12 +150,12 @@
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
           sp1p-stats (ds-col/stats sale-price-l1p [:mean :min :max])]
-      (is (m/equals (mapv sp-stats [:mean :min :max])
-                    [180921.195890 34900 755000]
-                    0.01))
-      (is (m/equals (mapv sp1p-stats [:mean :min :max])
-                    [12.024 10.460 13.534]
-                    0.01)))
+      (is (dfn/equals (mapv sp-stats [:mean :min :max])
+                      [180921.195890 34900 755000]
+                      0.01))
+      (is (dfn/equals (mapv sp1p-stats [:mean :min :max])
+                      [12.024 10.460 13.534]
+                      0.01)))
 
     (is (= 10 (count inference-dataset)))
     (is (= 10 (count final-flyweight)))
@@ -179,11 +178,11 @@
                              missing-pipeline
                              string-and-math)]
         ;;spot check a few of the items
-        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
+        (is (dfn/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
                                                  "MSSubClass"))
                       (dtype/->vector (ds/column inference-ds "MSSubClass"))))
         ;;did categorical values get encoded identically?
-        (is (m/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
+        (is (dfn/equals (dtype/->vector (ds/column sane-dataset-for-flyweight
                                                  "OverallQual"))
                       (dtype/->vector (ds/column inference-ds "OverallQual"))))))))
 
@@ -346,9 +345,9 @@
                               (map (comp #(ds-col/stats % [:mean :variance])
                                          (partial ds/column dataset))))]
         ;;Are means 0?
-        (is (m/equals (mapv :mean mean-var-seq)
-                      (vec (repeat (count mean-var-seq) 0))
-                      0.001))
+        (is (dfn/equals (mapv :mean mean-var-seq)
+                        (vec (repeat (count mean-var-seq) 0))
+                        0.001))
         (let [pca-ds (dsp/pca dataset)]
           (is (= 127 (count (ds/columns dataset))))
           (is (= 11 (count (cf/categorical? pca-ds))))

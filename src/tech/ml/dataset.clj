@@ -6,9 +6,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]
-            [tech.parallel :as parallel]
-            [clojure.core.matrix :as m]
-            [clojure.core.matrix.macros :refer [c-for]]
+            [tech.parallel.require :as parallel-req]
             [clojure.set :as c-set]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
@@ -144,4 +142,4 @@
 (defn dataset->string
   ^String [ds]
   (with-out-str
-    ((parallel/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
+    ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))

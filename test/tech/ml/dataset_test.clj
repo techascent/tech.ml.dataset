@@ -1,11 +1,11 @@
 (ns tech.ml.dataset-test
   (:require [tech.ml.dataset :as dataset]
             [tech.v2.tensor :as tens]
+            [tech.v2.datatype.functional :as dtype-fn]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
             [clojure.test :refer :all]
             [tech.v2.datatype :as dtype]
-            [clojure.core.matrix :as m]
             [clojure.java.io :as io]
             [clojure.string :as s]
             [camel-snake-kebab.core :refer [->kebab-case]])
@@ -38,18 +38,18 @@
     (is (= 5 (count dataset-seq)))
     (is (= [[7 47] [7 47] [7 47] [7 47] [7 48]]
            (->> dataset-seq
-                (mapv (comp m/shape :train-ds)))))
+                (mapv (comp dtype/shape :train-ds)))))
     (is (= [[7 12] [7 12] [7 12] [7 12] [7 11]]
            (->> dataset-seq
-                (mapv (comp m/shape :test-ds)))))))
+                (mapv (comp dtype/shape :test-ds)))))))
 
 
 (deftest train-test-split-sanity
   (let [dataset (dataset/->train-test-split (mapseq-fruit-dataset) {})]
     (is (= [7 41]
-           (m/shape (:train-ds dataset))))
+           (dtype/shape (:train-ds dataset))))
     (is (= [7 18]
-           (m/shape (:test-ds dataset))))))
+           (dtype/shape (:test-ds dataset))))))
 
 
 
@@ -87,6 +87,6 @@
                                                 (into-array (Class/forName "[D"))))
                                  (tens/->tensor))]
     ;;Make sure we get the same answer as smile.
-    (is (m/equals (tens/->core-matrix trans-tens)
-                  (tens/->core-matrix smile-transformed-ds)
-                  0.001))))
+    (is (dtype-fn/equals trans-tens
+                         smile-transformed-ds
+                         0.001))))

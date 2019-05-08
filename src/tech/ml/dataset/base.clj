@@ -3,7 +3,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]
-            [tech.parallel :as parallel]))
+            [tech.parallel.require :as parallel-req]))
 
 
 (set! *warn-on-reflection* true)
@@ -314,7 +314,7 @@ the correct type."
                  table-name "_unnamed"
                  dataset-constructor 'tech.libs.tablesaw/map-seq->tablesaw-dataset}
             :as options}]
-  ((parallel/require-resolve dataset-constructor)
+  ((parallel-req/require-resolve dataset-constructor)
    map-seq options))
 
 

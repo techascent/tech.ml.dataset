@@ -8,7 +8,6 @@
             [tech.v2.datatype.nio-buffer :as nio-buffer]
             [tech.v2.datatype.list :as dtype-list]
             [tech.ml.protocols.column :as col-proto]
-            [clojure.core.matrix.protocols :as mp]
             [tech.ml.utils :refer [column-safe-name]]
             [tech.jna :as jna])
   (:import [tech.tablesaw.api ShortColumn IntColumn LongColumn
@@ -178,7 +177,7 @@
   (column-name [col] (.name col))
   (supported-stats [col] available-stats)
   (metadata [col] {:name (col-proto/column-name col)
-                   :size (mp/element-count col)
+                   :size (dtype/ecount col)
                    :datatype (base/get-datatype col)})
 
   (cache [this] {})
@@ -332,8 +331,8 @@
   (->sub-array [col] nil)
   (->array-copy [col] (.asObjectArray col))
 
-  mp/PElementCount
-  (element-count [col]
+  dtype-proto/PCountable
+  (ecount [col]
     (.size col)))
 
 

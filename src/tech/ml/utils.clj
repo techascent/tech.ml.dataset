@@ -1,5 +1,6 @@
 (ns tech.ml.utils
-  (:require [tech.parallel :as parallel]
+  (:require [tech.parallel.require :as parallel-req]
+            [tech.parallel.next-item-fn :as parallel-nfn]
             [tech.v2.datatype.casting :as casting])
   (:import [java.util Iterator NoSuchElementException]))
 
@@ -38,7 +39,7 @@
   "Java ml interfaces sometimes use iterators where they really should
   use sequences (iterators have state).  In any case, we do what we can."
   ^Iterator [item-seq]
-  (let [next-item-fn (parallel/create-next-item-fn item-seq)
+  (let [next-item-fn (parallel-nfn/create-next-item-fn item-seq)
         next-item-atom (atom (next-item-fn))]
     (proxy [Iterator] []
       (hasNext []
@@ -57,7 +58,7 @@
   classpath."
   [level]
   (try
-    ((parallel/require-resolve 'tech.ml.utils.slf4j-log-level/set-log-level) level)
+    ((parallel-req/require-resolve 'tech.ml.utils.slf4j-log-level/set-log-level) level)
     (catch Throwable e
       :exception)))
 
