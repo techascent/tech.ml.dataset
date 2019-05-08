@@ -18,18 +18,11 @@
 
 
 (fn-impl/export-symbols tech.ml.dataset.pipeline.base
-                        with-ds
-                        with-datatype
-                        with-column-name
-                        with-column-name-seq
                         col
                         int-map)
 
 
 (fn-impl/export-symbols tech.ml.dataset.pipeline.pipeline-operators
-                        pipeline-train-context
-                        pipeline-inference-context
-                        without-recording
                         store-variables
                         read-var
                         training?

@@ -2,9 +2,15 @@
   (:require [tech.ml.dataset.pipeline
              :refer [m= col int-map]
              :as dsp]
+            [tech.ml.dataset.pipeline.pipeline-operators
+             :refer [pipeline-train-context
+                     pipeline-inference-context]]
+            [tech.ml.dataset.pipeline.base
+             :refer [with-ds]]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.column-filters :as cf]
+            [tech.ml.dataset.pipeline.column-filters
+             :as cf]
             [tech.ml.dataset-test
              :refer [mapseq-fruit-dataset]
              :as ds-test]
@@ -62,7 +68,7 @@
 
 (defn skew-column-filter
   [dataset]
-  (dsp/with-ds dataset
+  (with-ds dataset
     (cf/and cf/numeric?
             #(cf/not "SalePrice")
             (fn [] (cf/> #(dfn/abs (dfn/skewness (col)))
