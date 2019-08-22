@@ -6,6 +6,7 @@
 
 (defprotocol PColumnarDataset
   (dataset-name [dataset])
+  (set-dataset-name [dataset name])
   (metadata [dataset])
   (set-metadata [dataset meta-map])
   (maybe-column [dataset column-name]

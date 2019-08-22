@@ -21,6 +21,7 @@
 
 (fn-impl/export-symbols tech.ml.dataset.base
                         dataset-name
+                        set-dataset-name
                         metadata
                         set-metadata
                         maybe-column

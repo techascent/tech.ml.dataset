@@ -13,6 +13,10 @@
   [dataset]
   (ds-proto/dataset-name dataset))
 
+(defn set-dataset-name
+  [dataset ds-name]
+  (ds-proto/set-dataset-name dataset ds-name))
+
 (defn metadata
   [dataset]
   (ds-proto/metadata dataset))

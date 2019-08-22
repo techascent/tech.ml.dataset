@@ -18,6 +18,12 @@
                                  metadata]
   ds-proto/PColumnarDataset
   (dataset-name [dataset] table-name)
+  (set-dataset-name [dataset new-name]
+    (GenericColumnarDataset.
+     new-name
+     column-names
+     colmap
+     metadata))
   (maybe-column [dataset column-name]
     (get colmap column-name))
 
