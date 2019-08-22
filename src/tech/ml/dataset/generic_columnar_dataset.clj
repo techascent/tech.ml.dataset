@@ -145,3 +145,8 @@
                                 (map (juxt ds-col/column-name identity))
                                 (into {}))
                            ds-metadata))
+
+
+(defmethod print-method GenericColumnarDataset
+  [dataset w]
+  (.write ^Writer w (.toString dataset)))
