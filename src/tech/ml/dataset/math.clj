@@ -1,12 +1,15 @@
 (ns tech.ml.dataset.math
   (:require [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.functional :as dfn]
             [tech.ml.utils :as ml-utils]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.base
              :refer [columns-with-missing-seq
-                     columns select update-column]]
+                     columns select update-column]
+             :as base]
             [tech.parallel.for :as parallel-for]
-            [tech.parallel.require :as parallel-req])
+            [tech.parallel.require :as parallel-req]
+            [clojure.tools.logging :as log])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -24,7 +27,8 @@
   :kendall
 
   :pearson is the default."
-  [dataset & [correlation-type]]
+  [dataset & [correlation-type
+              colname-seq]]
   (let [missing-columns (columns-with-missing-seq dataset)
         _ (when missing-columns
             (println "WARNING - excluding columns with missing values:\n"
@@ -43,14 +47,24 @@
                              (remove (set (concat (map :column-name missing-columns)
                                                   non-numeric))))
                         :all)
-        colseq (columns dataset)
+        lhs-colseq (if (seq colname-seq)
+                     (map (partial base/column dataset) colname-seq)
+                     (columns dataset))
+        rhs-colseq (columns dataset)
         correlation-type (or :pearson correlation-type)]
-    (->> (for [lhs colseq]
+    (->> (for [lhs lhs-colseq]
            [(ds-col/column-name lhs)
-            (->> colseq
+            (->> rhs-colseq
                  (map (fn [rhs]
-                        [(ds-col/column-name rhs)
-                         (ds-col/correlation lhs rhs correlation-type)]))
+                        (let [corr (ds-col/correlation lhs rhs correlation-type)]
+                          (if (dfn/valid? corr)
+                            [(ds-col/column-name rhs)
+                             (ds-col/correlation lhs rhs correlation-type)]
+                            (do
+                              (log/warnf "Correlation failed: %s-%s"
+                                         (ds-col/column-name lhs)
+                                         (ds-col/column-name rhs)))))))
+                 (remove nil?)
                  (sort-by (comp #(Math/abs (double %)) second) >))])
          (into {}))))
 
