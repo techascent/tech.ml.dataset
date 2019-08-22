@@ -12,10 +12,10 @@
 (declare make-dataset)
 
 
-(defrecord GenericColumnarDataset [table-name
-                                   column-names
-                                   colmap
-                                   metadata]
+(deftype GenericColumnarDataset [table-name
+                                 column-names
+                                 colmap
+                                 metadata]
   ds-proto/PColumnarDataset
   (dataset-name [dataset] table-name)
   (maybe-column [dataset column-name]
@@ -23,8 +23,8 @@
 
   (metadata [dataset] metadata)
   (set-metadata [dataset meta-map]
-    (->GenericColumnarDataset table-name column-names colmap
-                              meta-map))
+    (GenericColumnarDataset. table-name column-names colmap
+                             meta-map))
 
   (columns [dataset] (mapv (partial get colmap) column-names))
 
@@ -56,7 +56,7 @@
                        :col-names (keys colmap)})))
     (let [col (get colmap col-name)
           new-col-data (col-fn col)]
-      (->GenericColumnarDataset
+      (GenericColumnarDataset.
        table-name
        column-names
        (assoc colmap col-name
@@ -126,23 +126,22 @@
   dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
     (dtype-proto/copy-raw->item! (ds/columns raw-data) ary-target
-                                 target-offset options)))
+                                 target-offset options))
+
+  Object
+  (toString [item]
+    (format "%s %s:\n%s"
+            (ds-proto/dataset-name item)
+            ;;make row major shape to avoid confusion
+            (vec (reverse (dtype/shape item)))
+            (ds/dataset->string item))))
 
 
 (defn make-dataset
   [table-name column-seq ds-metadata]
-  (->GenericColumnarDataset table-name
-                            (map ds-col/column-name column-seq)
-                            (->> column-seq
-                                 (map (juxt ds-col/column-name identity))
-                                 (into {}))
-                            ds-metadata))
-
-
-(defmethod print-method GenericColumnarDataset
-  [ds w]
-  (.write ^Writer w (format "%s %s:\n%s"
-                            (ds/dataset-name ds)
-                            ;;make row major shape to avoid confusion
-                            (vec (reverse (dtype/shape ds)))
-                            (ds/dataset->string ds))))
+  (GenericColumnarDataset. table-name
+                           (map ds-col/column-name column-seq)
+                           (->> column-seq
+                                (map (juxt ds-col/column-name identity))
+                                (into {}))
+                           ds-metadata))

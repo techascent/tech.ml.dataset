@@ -13,8 +13,10 @@
             NumericColumn DoubleColumn
             StringColumn BooleanColumn]
            [tech.tablesaw.columns Column]
-           [tech.tablesaw.io.csv CsvReadOptions]
+           [tech.tablesaw.io.csv CsvReadOptions
+            CsvReadOptions$Builder]
            [java.util UUID]
+           [java.io InputStream]
            [org.apache.commons.math3.stat.descriptive.moment Skewness]))
 
 
@@ -196,13 +198,21 @@
 
 
 (defn ^tech.tablesaw.io.csv.CsvReadOptions$Builder
-  ->csv-builder [^String path & {:keys [separator header? date-format]}]
-  (if separator
-    (doto (CsvReadOptions/builder path)
-      (.separator separator)
-      (.header (boolean header?)))
-    (doto (CsvReadOptions/builder path)
-      (.header (boolean header?)))))
+  ->csv-builder [path & {:keys [separator header? date-format]}]
+  (let [^CsvReadOptions$Builder builder
+        (cond
+          (instance? InputStream path)
+          (CsvReadOptions/builder ^InputStream path)
+          (string? path)
+          (CsvReadOptions/builder ^String path)
+          :else
+          (throw (ex-info "Failed to make builder" {})))]
+    (if separator
+      (doto builder
+        (.separator separator)
+        (.header (boolean header?)))
+      (doto builder
+        (.header (boolean header?))))))
 
 
 (defn tablesaw-columns->tablesaw-dataset
