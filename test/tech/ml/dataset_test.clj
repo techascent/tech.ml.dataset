@@ -1,5 +1,6 @@
 (ns tech.ml.dataset-test
   (:require [tech.ml.dataset :as dataset]
+            [tech.ml.dataset.column :as ds-col]
             [tech.v2.tensor :as tens]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.ml.dataset.tensor :as ds-tens]
@@ -90,3 +91,22 @@
     (is (dtype-fn/equals trans-tens
                          smile-transformed-ds
                          0.01))))
+
+
+(deftest n-permutations
+  (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
+               (dataset/set-inference-target :fruit-name))]
+    (is (= 35
+           (count (dataset/n-permutations ds 3))))
+    (is (= 20
+           (count (dataset/n-feature-permutations ds 3))))
+    ;;The label column shows up in every permutation.
+    (is (every? :fruit-name
+                (->> (dataset/n-feature-permutations ds 3)
+                     (map (comp set dataset/column-names)))))))
+
+
+(deftest iterable
+  (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
+    (is (= (dataset/column-names ds)
+           (map ds-col/column-name ds)))))

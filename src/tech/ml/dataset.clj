@@ -13,7 +13,8 @@
             [tech.ml.dataset.options :as options]
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
-            [tech.ml.dataset.math])
+            [tech.ml.dataset.math]
+            [clojure.math.combinatorics :as comb])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -49,6 +50,36 @@
                         ds-column-map
                         ->dataset
                         from-prototype)
+
+
+(defn n-permutations
+  "Return n datasets with all permutations n of the columns possible.
+  N must be less than (count (columns dataset))."
+  [dataset n]
+  (when-not (< n (first (dtype/shape dataset)))
+    (throw (ex-info (format "%d permutations of %d columns"
+                            n (first (dtype/shape dataset))))))
+  (->> (comb/combinations (column-names dataset) n)
+       (map (partial select-columns dataset))))
+
+
+(defn n-feature-permutations
+  "Given a dataset with at least one inference target column, produce all datasets
+  with n feature columns and the label columns."
+  [dataset n]
+  (let [label-columns (col-filters/target? dataset)
+        feature-columns (col-filters/not label-columns dataset)]
+    (when-not (seq label-columns)
+      (throw (ex-info "No label columns indicated" {})))
+    (->> (n-permutations (select-columns dataset feature-columns) n)
+         (map
+          #(ds-proto/from-prototype
+            dataset
+            (dataset-name dataset)
+            (concat
+             (columns %)
+             (columns (select-columns dataset label-columns))))))))
+
 
 (fn-impl/export-symbols tech.ml.dataset.modelling
                         set-inference-target

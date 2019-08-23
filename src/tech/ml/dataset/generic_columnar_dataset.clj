@@ -134,6 +134,11 @@
     (dtype-proto/copy-raw->item! (ds/columns raw-data) ary-target
                                  target-offset options))
 
+  Iterable
+  (iterator [item]
+    (.iterator ^Iterable
+               (ds-proto/columns item)))
+
   Object
   (toString [item]
     (format "%s %s:\n%s"
