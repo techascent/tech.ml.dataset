@@ -34,4 +34,5 @@
         print-ds (dataset/select dataset column-names index-range)
         column-names (dataset/column-names print-ds)]
     (print-table column-names (-> print-ds
-                                  (dataset/->flyweight)))))
+                                  (dataset/->flyweight
+                                   :error-on-missing-values? false)))))

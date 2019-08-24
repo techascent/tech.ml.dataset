@@ -49,6 +49,7 @@
                         ds-map-values
                         ds-column-map
                         ->dataset
+                        ->>dataset
                         from-prototype)
 
 

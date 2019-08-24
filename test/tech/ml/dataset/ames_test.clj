@@ -30,8 +30,7 @@
            (dtype/->vector new-col)))))
 
 
-(def src-ds (tablesaw/path->tablesaw-dataset
-             "data/ames-house-prices/train.csv"))
+(def src-ds (ds/->dataset "data/ames-house-prices/train.csv"))
 
 
 (defn missing-pipeline
@@ -367,3 +366,9 @@
           (is (= 127 (count (ds/columns dataset))))
           (is (= 22 (count (ds/columns pca-ds))))
           (is (= 1 (count (cf/target? pca-ds)))))))))
+
+
+(deftest tostring-regression
+  (testing "tostring has to work with missing values"
+    (is (string?
+         (.toString ^Object src-ds)))))

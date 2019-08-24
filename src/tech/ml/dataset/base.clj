@@ -3,7 +3,8 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]
-            [tech.parallel.require :as parallel-req]))
+            [tech.parallel.require :as parallel-req])
+  (:import [java.io InputStream]))
 
 
 (set! *warn-on-reflection* true)
@@ -323,16 +324,28 @@ the correct type."
 
 
 (defn ->dataset
-  ([dataset {:keys [table-name]
-             :or {table-name "_unnamed"}
-             :as options}]
-   (if (satisfies? ds-proto/PColumnarDataset dataset)
-     dataset
-     (if (and (sequential? dataset)
-              (or (not (seq dataset))
-                  (map? (first dataset))))
-       (map-seq->dataset dataset options)
-       (throw (ex-info "Dataset appears to be empty or not convertible to a dataset"
-                       {:dataset dataset})))))
+  ([dataset
+    {:keys [table-name]
+     :as options}]
+   (let [dataset
+         (cond
+           (satisfies? ds-proto/PColumnarDataset dataset)
+           dataset
+           (or (instance? InputStream dataset)
+               (string? dataset))
+           (apply
+            (parallel-req/require-resolve 'tech.libs.tablesaw/path->tablesaw-dataset)
+            dataset (apply concat options))
+           :else
+           (map-seq->dataset dataset options))]
+     (if table-name
+       (ds-proto/set-dataset-name dataset table-name)
+       dataset)))
   ([dataset]
    (->dataset dataset {})))
+
+(defn ->>dataset
+  ([options dataset]
+   (->dataset dataset options))
+  ([dataset]
+   (->dataset dataset)))
