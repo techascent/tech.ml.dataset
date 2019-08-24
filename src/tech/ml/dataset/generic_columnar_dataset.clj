@@ -6,7 +6,9 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [clojure.set :as c-set])
-  (:import [java.io Writer]))
+  (:import [java.io Writer]
+           [clojure.lang IFn]
+           [java.util Map]))
 
 
 (declare make-dataset)
@@ -134,10 +136,20 @@
     (dtype-proto/copy-raw->item! (ds/columns raw-data) ary-target
                                  target-offset options))
 
+  IFn
+  (invoke [item col-name]
+    (ds-proto/column item col-name))
+  (invoke [item col-name new-col]
+    (ds-proto/add-column item (ds-col/set-name new-col col-name)))
+  (applyTo [this arg-seq]
+    (case (count arg-seq)
+      1 (.invoke this (first arg-seq))
+      2 (.invoke this (first arg-seq) (second arg-seq))))
+
   Iterable
   (iterator [item]
-    (.iterator ^Iterable
-               (ds-proto/columns item)))
+    (->> (ds-proto/columns item)
+         (.iterator)))
 
   Object
   (toString [item]
