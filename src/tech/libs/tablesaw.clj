@@ -5,10 +5,11 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.base :as dtype-base]
             [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.v2.datatype.pprint :as dtype-pp]
             [clojure.set :as c-set]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.generic-columnar-dataset :as columnar-dataset]
-            [tech.jna :as jna])
+            [tech.io :as io])
   (:import [tech.tablesaw.api Table ColumnType
             NumericColumn DoubleColumn
             StringColumn BooleanColumn]
@@ -16,7 +17,8 @@
            [tech.tablesaw.io.csv CsvReadOptions
             CsvReadOptions$Builder]
            [java.util UUID]
-           [java.io InputStream]
+           [java.io InputStream BufferedInputStream
+            ByteArrayInputStream]
            [org.apache.commons.math3.stat.descriptive.moment Skewness]))
 
 
@@ -40,14 +42,14 @@
 (declare make-column)
 
 
-(defrecord TablesawColumn [^Column col metadata cache]
+(deftype TablesawColumn [^Column col metadata cache]
   col-proto/PIsColumn
   (is-column? [this] true)
 
   col-proto/PColumn
   (column-name [this] (or (:name metadata) (.name col)))
   (set-name [this colname]
-    (->TablesawColumn col (assoc metadata :name colname) {}))
+    (TablesawColumn. col (assoc metadata :name colname) {}))
 
   (supported-stats [this] (col-proto/supported-stats col))
 
@@ -57,12 +59,12 @@
                            :datatype (dtype/get-datatype col)}))
 
   (set-metadata [this data-map]
-    (->TablesawColumn col data-map cache))
+    (TablesawColumn. col data-map cache))
 
   (cache [this] cache)
 
   (set-cache [this cache-map]
-    (->TablesawColumn col metadata cache-map))
+    (TablesawColumn. col metadata cache-map))
 
   (missing [this] (col-proto/missing col))
 
@@ -88,7 +90,9 @@
              (col-proto/stats col missing-stats))))
 
   (correlation [this other-column correlation-type]
-    (col-proto/correlation col (:col other-column) correlation-type))
+    (col-proto/correlation col
+                           (.col ^TablesawColumn other-column)
+                           correlation-type))
 
   (column-values [this] (col-proto/column-values col))
 
@@ -111,7 +115,8 @@
                                 (col-proto/column-values this)
                                 metadata))
 
-  (to-double-array [this error-missing?] (col-proto/to-double-array col error-missing?))
+  (to-double-array [this error-missing?]
+    (col-proto/to-double-array col error-missing?))
 
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-base/get-datatype col))
@@ -165,7 +170,7 @@
 
   dtype-proto/PBuffer
   (sub-buffer [item offset length]
-    (->TablesawColumn
+    (TablesawColumn.
      (dtype-proto/sub-buffer col offset length)
      metadata {}))
 
@@ -174,14 +179,33 @@
   (->array-copy [src] (dtype-proto/->array-copy col))
 
   dtype-proto/PCountable
-  (ecount [item] (dtype-proto/ecount col)))
+  (ecount [item] (dtype-proto/ecount col))
+
+  Object
+  (toString [item]
+    (let [n-items (dtype/ecount item)
+          format-str (if (> n-items 20)
+                       "#tablesaw-column<%s>%s\n%s\n[%s...]"
+                       "#tablesaw-column<%s>%s\n%s\n[%s]")]
+      (format format-str
+              (name (dtype/get-datatype item))
+              [n-items]
+              (col-proto/column-name item)
+              (-> (dtype/->reader item)
+                  (dtype-proto/sub-buffer 0 (min 20 n-items))
+                  (dtype-pp/print-reader-data))))))
+
+
+(defmethod print-method TablesawColumn
+  [col ^java.io.Writer w]
+  (.write w (.toString ^Object col)))
 
 
 (defn make-column
   [datatype-col metadata & [cache]]
   (if (instance? TablesawColumn datatype-col)
     (throw (ex-info "Nested" {})))
-  (->TablesawColumn datatype-col metadata cache))
+  (TablesawColumn. datatype-col metadata cache))
 
 
 (defmethod dtype-proto/make-container :tablesaw-column
@@ -197,22 +221,26 @@
    (make-column options {})))
 
 
-(defn ^tech.tablesaw.io.csv.CsvReadOptions$Builder
-  ->csv-builder [path & {:keys [separator header? date-format]}]
-  (let [^CsvReadOptions$Builder builder
-        (cond
-          (instance? InputStream path)
-          (CsvReadOptions/builder ^InputStream path)
-          (string? path)
-          (CsvReadOptions/builder ^String path)
-          :else
-          (throw (ex-info "Failed to make builder" {})))]
-    (if separator
-      (doto builder
-        (.separator separator)
-        (.header (boolean header?)))
-      (doto builder
-        (.header (boolean header?))))))
+(defn autodetect-csv-separator
+  [^BufferedInputStream input-stream & options]
+  (.mark input-stream 200)
+  (let [byte-data (byte-array 200)
+        num-read (.read input-stream byte-data)
+        _ (.reset input-stream)]
+    (apply io/autodetect-csv-separator (ByteArrayInputStream. byte-data 0 num-read)
+           options)))
+
+
+(defn ^CsvReadOptions$Builder
+  ->csv-builder [path & options]
+  (let [^BufferedInputStream input-stream (apply io/buffered-input-stream
+                                                 path options)
+        separator (apply autodetect-csv-separator input-stream options)
+        opt-map (apply hash-map options)]
+    (doto (CsvReadOptions/builder input-stream)
+      (.separator separator)
+      (.header (boolean (or (:header? opt-map)
+                            true))))))
 
 
 (defn tablesaw-columns->tablesaw-dataset
@@ -236,10 +264,14 @@
 
 
 (defn path->tablesaw-dataset
-  [path & {:keys [separator quote]}]
-  (-> (Table/read)
-      (.csv (->csv-builder path :separator separator :header? true))
-      ->tablesaw-dataset))
+  [path & options]
+  (let [input (if (and (string? path)
+                       (.endsWith ^String path ".gz"))
+                (io/gzip-input-stream path)
+                path)]
+       (-> (Table/read)
+           (.csv ^CsvReadOptions$Builder (apply ->csv-builder input options))
+           ->tablesaw-dataset)))
 
 
 (defn col-dtype-cast

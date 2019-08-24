@@ -35,7 +35,8 @@
                      (vec missing-columns)))
         non-numeric (->> (columns dataset)
                          (map ds-col/metadata)
-                         (remove #(ml-utils/numeric-datatype? (:datatype %)))
+                         (remove #(ml-utils/numeric-datatype?
+                                   (:datatype %)))
                          (map :name)
                          seq)
         _ (when non-numeric
@@ -44,7 +45,8 @@
         dataset (select dataset
                         (->> (columns dataset)
                              (map ds-col/column-name)
-                             (remove (set (concat (map :column-name missing-columns)
+                             (remove (set (concat (map ds-col/column-name
+                                                       missing-columns)
                                                   non-numeric))))
                         :all)
         lhs-colseq (if (seq colname-seq)
@@ -56,10 +58,11 @@
            [(ds-col/column-name lhs)
             (->> rhs-colseq
                  (map (fn [rhs]
+                        (when-not rhs
+                          (throw (ex-info "Failed" {})))
                         (let [corr (ds-col/correlation lhs rhs correlation-type)]
                           (if (dfn/valid? corr)
-                            [(ds-col/column-name rhs)
-                             (ds-col/correlation lhs rhs correlation-type)]
+                            [(ds-col/column-name rhs) corr]
                             (do
                               (log/warnf "Correlation failed: %s-%s"
                                          (ds-col/column-name lhs)
