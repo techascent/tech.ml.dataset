@@ -14,6 +14,7 @@
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
+            [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
@@ -108,12 +109,41 @@
                         impute-missing-by-centroid-averages)
 
 
+(defn descriptive-stats
+  "Get descriptive statistics across the columns of the dataset.
+  In addition to the standard stats"
+  [dataset]
+  (let [stat-names [:col-name :datatype :n-valid :n-missing
+                    :mean :mode :min :max :standard-deviation :skew]
+        stats-ds (->> (->dataset dataset)
+                      (map (fn [ds-col]
+                             (let [n-missing (count (ds-col/missing ds-col))
+                                   n-valid (- (dtype/ecount ds-col)
+                                              n-missing)]
+                               (merge
+                                {:col-name (ds-col/column-name ds-col)
+                                 :datatype (dtype/get-datatype ds-col)
+                                 :n-valid n-valid
+                                 :n-missing n-missing}
+                                (if (casting/numeric-type? (dtype/get-datatype
+                                                            ds-col))
+                                  (ds-col/stats ds-col #{:min :mean :max
+                                                         :standard-deviation :skew})
+                                  {:mode (->> (dtype/->reader ds-col)
+                                              frequencies
+                                              (sort-by second >)
+                                              ffirst)})))))
+                      (sort-by :col-name)
+                      ->dataset)]
+    (select-columns stats-ds stat-names)))
+
+
 
 (defn ->flyweight
-  "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown on
-  missing values or if nil should be inserted in the map.  IF a label map is passed in
-  then for the columns that are present in the label map a reverse mapping is done such
-  that the flyweight maps contain the labels and not their encoded values."
+  "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown
+  on missing values or if nil should be inserted in the map.  IF a label map is passed
+  in then for the columns that are present in the label map a reverse mapping is done
+  such that the flyweight maps contain the labels and not their encoded values."
   [dataset & {:keys [column-name-seq
                      error-on-missing-values?
                      number->string?]

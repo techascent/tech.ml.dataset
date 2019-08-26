@@ -9,7 +9,8 @@
              :as base]
             [tech.parallel.for :as parallel-for]
             [tech.parallel.require :as parallel-req]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.set :as c-set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
 
 
@@ -27,8 +28,8 @@
   :kendall
 
   :pearson is the default."
-  [dataset & [correlation-type
-              colname-seq]]
+  [dataset & {:keys [correlation-type
+                     colname-seq]}]
   (let [missing-columns (columns-with-missing-seq dataset)
         _ (when missing-columns
             (println "WARNING - excluding columns with missing values:\n"
@@ -42,6 +43,13 @@
         _ (when non-numeric
             (println "WARNING - excluding non-numeric columns:\n"
                      (vec non-numeric)))
+        _ (when-let [selected-non-numeric
+                     (seq (c-set/intersection (set colname-seq)
+                                              (set non-numeric)))]
+            (throw (ex-info (format "Selected columns are non-numeric: %s"
+                                    selected-non-numeric)
+                            {:selected-columns colname-seq
+                             :non-numeric-columns non-numeric})))
         dataset (select dataset
                         (->> (columns dataset)
                              (map ds-col/column-name)

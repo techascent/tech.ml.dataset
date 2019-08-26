@@ -215,3 +215,16 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
     pipe-ops/pca dataset column-filter op-args))
   ([dataset]
    (pca dataset cf/numeric-and-non-categorical-and-not-target)))
+
+
+(defn correlation-table
+  "See dataset/correlation table.  This version removes missing values
+  and converts all columns to be numeric.  So this will always work."
+  [dataset & {:keys [colname-seq
+                     correlation-type]}]
+  (-> dataset
+      string->number
+      ->datatype
+      remove-missing
+      (ds/correlation-table :colname-seq colname-seq
+                            :correlation-type correlation-type)))

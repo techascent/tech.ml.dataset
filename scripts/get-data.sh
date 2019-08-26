@@ -15,6 +15,8 @@ pushd ames-house-prices
 
 chmod 644 *
 
+gzip -k train.csv
+
 popd
 
 popd
