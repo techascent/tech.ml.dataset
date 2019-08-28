@@ -118,30 +118,31 @@
                     :mean :mode :min :max :standard-deviation :skew]
         stats-ds
         (->> (->dataset dataset)
-             (map (fn [ds-col]
-                    (let [n-missing (count (ds-col/missing ds-col))
-                          n-valid (- (dtype/ecount ds-col)
-                                     n-missing)
-                          col-dtype (dtype/get-datatype ds-col)
-                          col-reader (dtype/->reader ds-col
-                                                     col-dtype
-                                                     {:missing-policy :elide})]
-                      (merge
-                       {:col-name (ds-col/column-name ds-col)
-                        :datatype (col-dtype)
-                        :n-valid n-valid
-                        :n-missing n-missing}
-                       (if (and (not (:categorical? (ds-col/metadata ds-col)))
-                                (casting/numeric-type? col-dtype))
-                         (dfn/descriptive-stats ds-col
-                                                #{:min :mean :max
-                                                  :standard-deviation :skew})
-                         {:mode (->>
-                                     frequencies
-                                     (sort-by second >)
-                                     ffirst)})))))
+             (pmap (fn [ds-col]
+                     (let [n-missing (count (ds-col/missing ds-col))
+                           n-valid (- (dtype/ecount ds-col)
+                                      n-missing)
+                           col-dtype (dtype/get-datatype ds-col)
+                           col-reader (dtype/->reader ds-col
+                                                      col-dtype
+                                                      {:missing-policy :elide})]
+                       (merge
+                        {:col-name (ds-col/column-name ds-col)
+                         :datatype col-dtype
+                         :n-valid n-valid
+                         :n-missing n-missing}
+                        (if (and (not (:categorical? (ds-col/metadata ds-col)))
+                                 (casting/numeric-type? col-dtype))
+                          (dfn/descriptive-stats ds-col
+                                                 #{:min :mean :max
+                                                   :standard-deviation :skew})
+                          {:mode (->> col-reader
+                                      frequencies
+                                      (sort-by second >)
+                                      ffirst)})))))
              (sort-by :col-name)
              ->dataset)]
+    ;;This orders the columns by the ordering of stat-names
     (select-columns stats-ds stat-names)))
 
 

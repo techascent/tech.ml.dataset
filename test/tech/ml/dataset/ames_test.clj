@@ -7,6 +7,7 @@
                      pipeline-inference-context]]
             [tech.ml.dataset.pipeline.base
              :refer [with-ds]]
+            [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.pipeline.column-filters
@@ -372,3 +373,16 @@
   (testing "tostring has to work with missing values"
     (is (string?
          (.toString ^Object src-ds)))))
+
+
+(deftest desc-stats-and-correlation
+  []
+  (let [stats-data (ds/descriptive-stats src-ds)
+        corr-data (ds-pipe/correlation-table src-ds :colname-seq ["SalePrice"])]
+    (is (= [10 81]
+           (dtype/shape stats-data)))
+    (is (= 81
+           (->> corr-data
+                first
+                second
+                count)))))
