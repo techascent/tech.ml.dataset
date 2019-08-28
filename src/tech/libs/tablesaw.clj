@@ -9,7 +9,8 @@
             [clojure.set :as c-set]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.generic-columnar-dataset :as columnar-dataset]
-            [tech.io :as io])
+            [tech.io :as io]
+            [clojure.data.csv :as csv])
   (:import [tech.tablesaw.api Table ColumnType
             NumericColumn DoubleColumn
             StringColumn BooleanColumn]
@@ -231,16 +232,77 @@
            options)))
 
 
+(defmulti keyword->tablesaw-column-type
+  (fn [col-type-kwd]
+    col-type-kwd))
+
+
+(defmethod keyword->tablesaw-column-type :default
+  [col-type-kwd]
+  (if (instance? ColumnType col-type-kwd)
+    col-type-kwd
+    (case col-type-kwd
+      :int16 ColumnType/SHORT
+      :int32 ColumnType/INTEGER
+      :int64 ColumnType/LONG
+      :float32 ColumnType/FLOAT
+      :float64 ColumnType/DOUBLE
+      :string ColumnType/STRING)))
+
+
+(defn autodetect-column-types
+  [^BufferedInputStream input-stream column-type-detect-fn options]
+  (let [num-bytes (long (or (:autodetect-max-bytes options)
+                            4096))
+        _ (.mark input-stream num-bytes)
+        byte-data (byte-array num-bytes)
+        num-read (.read input-stream byte-data)
+        _ (.reset input-stream)
+        ;;the last line must be incomplete
+         csv-seq (-> (ByteArrayInputStream. byte-data)
+                     (io/reader)
+                     (csv/read-csv :separator (:separator options)))
+        ;;deal with last line exception
+        csv-seq (loop [cleaned-seq []
+                       csv-seq csv-seq]
+                  (let [next-line
+                        (try
+                          (first csv-seq)
+                          (catch Throwable e
+                            nil))]
+                    (if-not next-line
+                      cleaned-seq
+                      (recur (conj cleaned-seq next-line)
+                             (rest csv-seq)))))]
+    (->> (column-type-detect-fn csv-seq)
+         (map keyword->tablesaw-column-type)
+         (into-array ColumnType))))
+
+
 (defn ^CsvReadOptions$Builder
   ->csv-builder [path & options]
   (let [^BufferedInputStream input-stream (apply io/buffered-input-stream
                                                  path options)
         separator (apply autodetect-csv-separator input-stream options)
-        opt-map (apply hash-map options)]
-    (doto (CsvReadOptions/builder input-stream)
+        opt-map (apply hash-map options)
+
+        column-types (or (:column-types opt-map)
+                         (when (:column-type-fn opt-map)
+                           (autodetect-column-types
+                            input-stream
+                            (:column-type-fn opt-map)
+                            (assoc opt-map :separator separator))))]
+    (cond-> (CsvReadOptions/builder input-stream)
+      true
       (.separator separator)
+      true
       (.header (boolean (or (:header? opt-map)
-                            true))))))
+                            true)))
+      column-types
+      (.columnTypes
+       (into-array ColumnType
+                   ^"[Ltech.tablesaw.api.ColumnType;"
+                   column-types)))))
 
 
 (defn tablesaw-columns->tablesaw-dataset
