@@ -63,6 +63,9 @@
     (throw (ex-info (format "%d permutations of %d columns"
                             n (first (dtype/shape dataset))))))
   (->> (comb/combinations (column-names dataset) n)
+       (map set)
+       ;;assume order doesn't matter
+       distinct
        (map (partial select-columns dataset))))
 
 
