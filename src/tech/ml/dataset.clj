@@ -3,6 +3,7 @@
   in memory datasets."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional.impl :as fn-impl]
+            [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]
@@ -115,26 +116,32 @@
   [dataset]
   (let [stat-names [:col-name :datatype :n-valid :n-missing
                     :mean :mode :min :max :standard-deviation :skew]
-        stats-ds (->> (->dataset dataset)
-                      (map (fn [ds-col]
-                             (let [n-missing (count (ds-col/missing ds-col))
-                                   n-valid (- (dtype/ecount ds-col)
-                                              n-missing)]
-                               (merge
-                                {:col-name (ds-col/column-name ds-col)
-                                 :datatype (dtype/get-datatype ds-col)
-                                 :n-valid n-valid
-                                 :n-missing n-missing}
-                                (if (casting/numeric-type? (dtype/get-datatype
-                                                            ds-col))
-                                  (ds-col/stats ds-col #{:min :mean :max
-                                                         :standard-deviation :skew})
-                                  {:mode (->> (dtype/->reader ds-col)
-                                              frequencies
-                                              (sort-by second >)
-                                              ffirst)})))))
-                      (sort-by :col-name)
-                      ->dataset)]
+        stats-ds
+        (->> (->dataset dataset)
+             (map (fn [ds-col]
+                    (let [n-missing (count (ds-col/missing ds-col))
+                          n-valid (- (dtype/ecount ds-col)
+                                     n-missing)
+                          col-dtype (dtype/get-datatype ds-col)
+                          col-reader (dtype/->reader ds-col
+                                                     col-dtype
+                                                     {:missing-policy :elide})]
+                      (merge
+                       {:col-name (ds-col/column-name ds-col)
+                        :datatype (col-dtype)
+                        :n-valid n-valid
+                        :n-missing n-missing}
+                       (if (and (not (:categorical? (ds-col/metadata ds-col)))
+                                (casting/numeric-type? col-dtype))
+                         (dfn/descriptive-stats ds-col
+                                                #{:min :mean :max
+                                                  :standard-deviation :skew})
+                         {:mode (->>
+                                     frequencies
+                                     (sort-by second >)
+                                     ffirst)})))))
+             (sort-by :col-name)
+             ->dataset)]
     (select-columns stats-ds stat-names)))
 
 

@@ -6,6 +6,7 @@
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.nio-buffer :as nio-buffer]
+            [tech.v2.datatype.readers.indexed :as indexed-rdr]
             [tech.v2.datatype.list :as dtype-list]
             [tech.ml.protocols.column :as col-proto]
             [tech.ml.utils :refer [column-safe-name]]
@@ -170,6 +171,30 @@
         :quartile-3]))
 
 
+(defn- column-reader->reader
+  [^Column col col-reader options]
+  (let [missing-policy (get options :missing-policy :include)]
+    (->
+     (case missing-policy
+       :elide
+       (let [valid-indexes (->> (range (dtype/ecount col))
+                                (remove (set (col-proto/missing col)))
+                                long-array)]
+         (indexed-rdr/make-indexed-reader valid-indexes
+                                          col-reader
+                                          {}))
+       :include
+       col-reader
+       :error
+       (if (= 0 (count (col-proto/missing col)))
+         col-reader
+         (throw (ex-info (format "Column has missing indexes: %s"
+                                 (vec (col-proto/missing col)))
+                         {}))))
+     ;;Allow reader marshalling to change datatype
+     (dtype-proto/->reader options))))
+
+
 (extend-type Column
   col-proto/PIsColumn
   (is-column? [this] true)
@@ -284,12 +309,14 @@
 
   dtype-proto/PToReader
   (convertible-to-reader? [item] true)
-  (->reader [col options]
-    (-> (reify ObjectReader
-          (getDatatype [reader] (dtype-proto/get-datatype col))
-          (lsize [reader] (base/ecount col))
-          (read [reader idx] (.get col idx)))
-        (dtype-proto/->reader options)))
+  (->reader [item options]
+    (column-reader->reader
+     item
+     (reify ObjectReader
+       (getDatatype [reader] (dtype-proto/get-datatype item))
+       (lsize [reader] (base/ecount item))
+       (read [reader idx] (.get item idx)))
+     options))
 
 
   dtype-proto/PToWriter
@@ -371,9 +398,12 @@
 
      dtype-proto/PToReader
      {:convertible-to-reader? (constantly true)
-      :->reader (fn [item# options#]
-                  (dtype-proto/->reader (dtype-proto/as-list item#)
-                                        options#))}
+      :->reader
+      (fn [item# options#]
+        (column-reader->reader
+         item#
+         (dtype-proto/->reader (dtype-proto/as-list item#) options#)
+         options#))}
 
      dtype-proto/PToWriter
      {:convertible-to-writer? (constantly true)
