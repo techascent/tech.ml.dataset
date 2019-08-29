@@ -1,7 +1,7 @@
 {:paths ["src"]
  :deps {org.clojure/clojure              {:mvn/version "1.10.1"}
         camel-snake-kebab                {:mvn/version "0.4.0"}
-        techascent/tech.datatype         {:mvn/version "4.9"}
+        techascent/tech.datatype         {:mvn/version "4.10"}
         techascent/tech.io               {:mvn/version "3.6"}
         tech.tablesaw/tablesaw-core      {:mvn/version "0.34.2"}
         com.github.haifengl/smile-core   {:mvn/version "1.5.3"}
