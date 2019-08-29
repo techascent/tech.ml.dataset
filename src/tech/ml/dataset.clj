@@ -144,9 +144,13 @@
                                       (sort-by second >)
                                       ffirst)})))))
              (sort-by :col-name)
-             ->dataset)]
-    ;;This orders the columns by the ordering of stat-names
-    (select-columns stats-ds stat-names)))
+             ->dataset)
+        existing-colname-set (->> (column-names stats-ds)
+                                  set)]
+    ;;This orders the columns by the ordering of stat-names but if for instance
+    ;;there were no numeric or no string columns it still works.
+    (select-columns stats-ds (->> stat-names
+                                  (filter existing-colname-set)))))
 
 
 
