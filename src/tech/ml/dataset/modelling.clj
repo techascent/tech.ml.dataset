@@ -124,18 +124,19 @@
   to the original source column."
   [dataset colname-seq]
   (let [colname-set (set colname-seq)
-        reverse-map (->> (dataset-label-map dataset)
-                         (mapcat (fn [[colname colmap]]
-                                   ;;If this is one hot *and* every one hot is represented in the
-                                   ;;column name sequence, then we can recover the original column.
-                                   (when (and (categorical/is-one-hot-label-map? colmap)
-                                              (every? colname-set (->> colmap
-                                                                       vals
-                                                                       (map first))))
-                                     (->> (vals colmap)
-                                          (map (fn [[derived-col col-idx]]
-                                                 [derived-col colname]))))))
-                         (into {}))]
+        reverse-map
+        (->> (dataset-label-map dataset)
+             (mapcat (fn [[colname colmap]]
+                       ;;If this is one hot *and* every one hot is represented in the
+                       ;;column name sequence, then we can recover the original column.
+                       (when (and (categorical/is-one-hot-label-map? colmap)
+                                  (every? colname-set (->> colmap
+                                                           vals
+                                                           (map first))))
+                         (->> (vals colmap)
+                              (map (fn [[derived-col col-idx]]
+                                     [derived-col colname]))))))
+             (into {}))]
     (->> colname-seq
          (map (fn [derived-name]
                 (if-let [original-name (get reverse-map derived-name)]
@@ -148,34 +149,39 @@
   "Given 1 dataset, prepary K datasets using the k-fold algorithm.
   Randomize dataset defaults to true which will realize the entire dataset
   so use with care if you have large datasets."
-  [dataset k {:keys [randomize-dataset?]
-              :or {randomize-dataset? true}
-              :as options}]
-  (let [dataset (->dataset dataset options)
-        [n-cols n-rows] (dtype/shape dataset)
-        indexes (cond-> (range n-rows)
-                  randomize-dataset? shuffle)
-        fold-size (inc (quot (long n-rows) k))
-        folds (vec (partition-all fold-size indexes))]
-    (for [i (range k)]
-      {:test-ds (select dataset :all (nth folds i))
-       :train-ds (select dataset :all (->> (keep-indexed #(if (not= %1 i) %2) folds)
-                                           (apply concat )))})))
+  ([dataset k {:keys [randomize-dataset?]
+               :or {randomize-dataset? true}
+               :as options}]
+   (let [dataset (->dataset dataset options)
+         [n-cols n-rows] (dtype/shape dataset)
+         indexes (cond-> (range n-rows)
+                   randomize-dataset? shuffle)
+         fold-size (inc (quot (long n-rows) k))
+         folds (vec (partition-all fold-size indexes))]
+     (for [i (range k)]
+       {:test-ds (select dataset :all (nth folds i))
+        :train-ds (select dataset :all (->> (keep-indexed #(if (not= %1 i) %2) folds)
+                                            (apply concat )))})))
+  ([dataset k]
+   (->k-fold-datasets dataset k {})))
 
 
 (defn ->train-test-split
-  [dataset {:keys [randomize-dataset? train-fraction]
-            :or {randomize-dataset? true
-                 train-fraction 0.7}
-            :as options}]
-  (let [dataset (->dataset dataset options)
-        [n-cols n-rows] (dtype/shape dataset)
-        indexes (cond-> (range n-rows)
-                  randomize-dataset? shuffle)
-        n-elems (long n-rows)
-        n-training (long (Math/round (* n-elems (double train-fraction))))]
-    {:train-ds (select dataset :all (take n-training indexes))
-     :test-ds (select dataset :all (drop n-training indexes))}))
+  ([dataset {:keys [randomize-dataset? train-fraction]
+             :or {randomize-dataset? true
+                  train-fraction 0.7}
+             :as options}]
+   (let [dataset (->dataset dataset options)
+         [n-cols n-rows] (dtype/shape dataset)
+         indexes (cond-> (range n-rows)
+                   randomize-dataset? shuffle)
+         n-elems (long n-rows)
+         n-training (long (Math/round (* n-elems
+                                         (double train-fraction))))]
+     {:train-ds (select dataset :all (take n-training indexes))
+      :test-ds (select dataset :all (drop n-training indexes))}))
+  ([dataset]
+   (->train-test-split dataset {})))
 
 
 (defn ->row-major
@@ -214,7 +220,10 @@
              first))
       all-col-names)))
   ([dataset options]
-   (->row-major dataset (merge {:features (col-filters/feature? dataset)}
-                               (when-let [label-colnames (col-filters/inference? dataset)]
-                                 {:label label-colnames}))
-                options)))
+   (->row-major dataset (merge
+                         {:features (col-filters/feature? dataset)}
+                         (when-let [label-colnames (col-filters/inference? dataset)]
+                           {:label label-colnames}))
+                options))
+  ([dataset]
+   (->row-major dataset {})))
