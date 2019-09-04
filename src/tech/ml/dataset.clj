@@ -77,14 +77,12 @@
         feature-columns (col-filters/not label-columns dataset)]
     (when-not (seq label-columns)
       (throw (ex-info "No label columns indicated" {})))
-    (->> (n-permutations (select-columns dataset feature-columns) n)
-         (map
-          #(ds-proto/from-prototype
-            dataset
-            (dataset-name dataset)
-            (concat
-             (columns %)
-             (columns (select-columns dataset label-columns))))))))
+    (->> (comb/combinations feature-columns n)
+         (map set)
+         ;;assume order doesn't matter
+         distinct
+         (map (comp (partial select-columns dataset)
+                    (partial concat label-columns))))))
 
 
 (fn-impl/export-symbols tech.ml.dataset.modelling
