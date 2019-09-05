@@ -50,24 +50,28 @@
                                       (assoc existing :datatype :string)
 
                                       (number? row-val)
-                                      (assoc existing
-                                             :min-val (if min-val
-                                                        (apply min [min-val row-val])
-                                                        row-val)
-                                             :max-val (if max-val
-                                                        (apply max [max-val row-val])
-                                                        row-val)
-                                             :datatype (if (integer? row-val)
-                                                         (if (= datatype :boolean)
-                                                           :boolean
-                                                           (or datatype :integer))
-                                                         :float))
+                                      (if (#{:string :object} datatype)
+                                        (assoc existing :datatype :object)
+                                        (assoc existing
+                                               :min-val (if min-val
+                                                          (apply min [min-val row-val])
+                                                          row-val)
+                                               :max-val (if max-val
+                                                          (apply max [max-val row-val])
+                                                          row-val)
+                                               :datatype (if (integer? row-val)
+                                                           (if (= datatype :boolean)
+                                                             :boolean
+                                                             (or datatype :integer))
+                                                           :float)))
                                       (boolean? row-val)
-                                      (assoc existing
-                                             :datatype
-                                             (if (#{:integer :float} datatype)
-                                               datatype
-                                               :boolean))))))
+                                      (if (#{:string :object} datatype)
+                                        (assoc existing :datatype :object)
+                                        (assoc existing
+                                               :datatype
+                                               (if (#{:integer :float} datatype)
+                                                 datatype
+                                                 :boolean)))))))
                          defs
                          next-row))
                {})
@@ -96,4 +100,5 @@
                            :string :string
                            :boolean :boolean
                            ;;Let other people sort it out.
-                           :keyword :keyword))})))))))
+                           :keyword :keyword
+                           :object :object))})))))))

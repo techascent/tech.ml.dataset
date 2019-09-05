@@ -477,7 +477,10 @@
        :float32 (FloatColumn/create column-name elem-count)
        :float64 (DoubleColumn/create column-name elem-count)
        :string (StringColumn/create column-name elem-count)
-       :boolean (BooleanColumn/create column-name elem-count))))
+       :boolean (BooleanColumn/create column-name elem-count)
+       ;;There is no object column in tablesaw
+       ;;:object (ObjectColumn/create column-name elem-count)
+       )))
   ([datatype elem-count]
    (make-empty-column datatype elem-count {}))
   ([datatype]
