@@ -141,8 +141,10 @@
 
 (defn add-or-update-column
   "If column exists, replace.  Else append new column."
-  [dataset column]
-  (ds-proto/add-or-update-column dataset column))
+  ([dataset colname column]
+   (ds-proto/add-or-update-column dataset colname column))
+  ([dataset column]
+   (add-or-update-column dataset (ds-col/column-name column) column)))
 
 
 (defn select

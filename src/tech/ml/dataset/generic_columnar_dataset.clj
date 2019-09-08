@@ -74,11 +74,15 @@
                                    new-col-data {:name (ds-col/column-name col)})))
        metadata)))
 
-  (add-or-update-column [dataset column]
-    (let [col-name (ds-col/column-name column)]
+  (add-or-update-column [dataset col-name new-col-data]
+    (let [col-data (if (ds-col/is-column? new-col-data)
+                     (ds-col/set-name new-col-data col-name)
+                     (ds-col/new-column (first dataset)
+                                        (dtype/get-datatype new-col-data)
+                                        new-col-data {:name col-name}))]
       (if (contains? colmap col-name)
-        (ds/update-column dataset col-name (constantly column))
-        (ds/add-column dataset column))))
+        (ds/update-column dataset col-name (constantly col-data))
+        (ds/add-column dataset col-data))))
 
   (select [dataset column-name-seq index-seq]
     (let [all-names column-names

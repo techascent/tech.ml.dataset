@@ -19,7 +19,7 @@
   (update-column [dataset col-name update-fn]
     "Update a column returning a new dataset.  update-fn is a column->column transformation.
 Error if column does not exist.")
-  (add-or-update-column [dataset column]
+  (add-or-update-column [dataset col-name col-data]
     "If column exists, replace.  Else append new column.")
   (select [dataset colname-seq index-seq]
     "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
