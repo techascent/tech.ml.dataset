@@ -1,12 +1,14 @@
 (ns tech.ml.dataset-test
   (:require [tech.ml.dataset :as dataset]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.v2.tensor :as tens]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
             [clojure.test :refer :all]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.unary-op :as unary-op]
             [clojure.java.io :as io]
             [clojure.string :as s]
             [camel-snake-kebab.core :refer [->kebab-case]])
@@ -110,3 +112,18 @@
   (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
     (is (= (dataset/column-names ds)
            (map ds-col/column-name ds)))))
+
+
+(deftest string-column-add-or-update
+  (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
+               (dataset/update-column :fruit-name
+                                      #(->> (dtype/->reader %)
+                                            (unary-op/unary-reader
+                                             :string
+                                             (.concat ^String x "-fn")))))]
+    (is (= ["apple-fn" "apple-fn" "apple-fn" "mandarin-fn" "mandarin-fn"
+            "mandarin-fn" "mandarin-fn" "mandarin-fn" "apple-fn" "apple-fn"]
+           (->> (ds :fruit-name)
+                (dtype/->reader)
+                (take 10)
+                vec)))))

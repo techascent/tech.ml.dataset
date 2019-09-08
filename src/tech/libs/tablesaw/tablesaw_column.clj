@@ -441,30 +441,6 @@
   (get-datatype [col] :string))
 
 
-
-(defn make-column
-  "Make a new tablesaw column.  Note that this does not make
-  columns with missing values.  For that, use make-empty-column."
-  ([datatype elem-count-or-seq {:keys [name]
-                                :or {name "_unnamed"}
-                                :as options}]
-   (let [^String column-name (column-safe-name name)]
-     ;;If numeric column, then use this pathway.
-     (let [src-data (dtype-proto/make-container
-                     :java-array datatype
-                     elem-count-or-seq options)]
-       (case datatype
-         :int16 (ShortColumn/create column-name ^shorts src-data)
-         :int32 (IntColumn/create column-name ^ints src-data)
-         :int64 (LongColumn/create column-name ^longs src-data)
-         :float32 (FloatColumn/create column-name ^floats src-data)
-         :float64 (DoubleColumn/create column-name ^doubles src-data)
-         :boolean (BooleanColumn/create column-name ^booleans src-data)
-         :string (StringColumn/create column-name ^"[Ljava.lang.String;" src-data)))))
-  ([datatype elem-count-or-seq]
-   (make-column datatype elem-count-or-seq {})))
-
-
 (defn make-empty-column
   ([datatype elem-count {:keys [name]
                          :or {name "_unnamed"}}]
@@ -485,3 +461,21 @@
    (make-empty-column datatype elem-count {}))
   ([datatype]
    (make-empty-column datatype 0 {})))
+
+
+(defn make-column
+  "Make a new tablesaw column.  Note that this does not make
+  columns with missing values.  For that, use make-empty-column."
+  ([datatype elem-count-or-seq {:keys [name]
+                                :or {name "_unnamed"}
+                                :as options}]
+   (let [^String column-name (column-safe-name name)
+         num-elems (int (if (number? elem-count-or-seq)
+                          elem-count-or-seq
+                          (dtype/ecount elem-count-or-seq)))
+         new-column (make-empty-column datatype num-elems {:name name})]
+     (when (not (number? elem-count-or-seq))
+       (dtype/copy! elem-count-or-seq new-column))
+     new-column))
+  ([datatype elem-count-or-seq]
+   (make-column datatype elem-count-or-seq {})))
