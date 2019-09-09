@@ -1,10 +1,16 @@
 (ns tech.ml.dataset.base
   (:require [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.unary-op :as unary-op]
+            [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.utils :as ml-utils]
             [tech.parallel.require :as parallel-req])
-  (:import [java.io InputStream]))
+  (:import [java.io InputStream]
+           [tech.v2.datatype ObjectReader]
+           [java.util List]))
 
 
 (set! *warn-on-reflection* true)
@@ -176,8 +182,34 @@ index-seq - either keyword :all or list of indexes.  May contain duplicates."
 
 Values are in order of column-name-seq.  Duplicate names are allowed and result in
 duplicate values."
+  [dataset & [reader-options]]
+  (->> (ds-proto/columns dataset)
+       (map dtype/->reader)
+       ;;produce row-wise vectors of data
+       (apply map vector)
+       ;;Index them.
+       (map-indexed vector)))
+
+
+(defn value-reader
+  "Return a reader that produces a vector of column values per index."
+  ^ObjectReader [dataset]
+  (let [n-elems (long (second (dtype/shape dataset)))
+        readers (->> (columns dataset)
+                     (map dtype/->reader))]
+    (reify ObjectReader
+      (lsize [rdr] n-elems)
+      (read [rdr idx] (vec (map #(.get ^List % idx) readers))))))
+
+
+(defn mapseq-reader
+  "Return a reader that produces a map of column-name->column-value"
   [dataset]
-  (ds-proto/index-value-seq dataset))
+  (let [colnames (column-names dataset)]
+    (->> (value-reader dataset)
+         (unary-op/unary-reader
+          :object
+          (zipmap colnames x)))))
 
 
 (defn supported-column-stats
@@ -196,56 +228,72 @@ the correct type."
 
 
 (defn ds-filter
-  "dataset->dataset transformation"
+  "dataset->dataset transformation.  Predicate is passed a map of
+  colname->column-value."
   [predicate dataset & [column-name-seq]]
-  ;;interleave, partition count would also work.
-  (let [column-name-seq (or column-name-seq
-                            (->> (columns dataset)
-                                 (mapv ds-col/column-name)))]
-    (->> (index-value-seq (select dataset column-name-seq :all))
-         (filter (fn [[idx col-values]]
-                   (predicate (zipmap column-name-seq
-                                      col-values))))
-         (map first)
-         (select dataset :all))))
+  (->> (or column-name-seq (column-names dataset))
+       (select-columns dataset)
+       (mapseq-reader)
+       (dfn/argfilter predicate)
+       (select dataset :all)))
+
+
+(defn ds-filter-column
+  "Filter a given column by a predicate.  Predicate is passed column values.
+  truthy values are kept.  Returns a dataset."
+  [predicate colname dataset]
+  (->> (column dataset colname)
+       (dfn/argfilter predicate)
+       (select dataset :all)))
 
 
 (defn ds-group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  Y values where Y is the count of column-name-seq or :all."
+  a map of colname->column-value.  Selecting which columns are used in the key-fn
+  using column-name-seq is optional but will greatly improve performance."
   [key-fn dataset & [column-name-seq]]
-  (let [column-name-seq (vec (or column-name-seq
-                                 (->> (columns dataset)
-                                      (map ds-col/column-name))))]
-    (->> (index-value-seq (select dataset column-name-seq :all))
-         (group-by (fn [[idx col-values]]
-                     (->> (zipmap column-name-seq
-                                  col-values)
-                          key-fn)))
-         (map (fn [[k v]]
-                [k (select dataset :all (map first v))]))
-         (into {}))))
+  (->> (or column-name-seq (column-names dataset))
+       (select-columns dataset)
+       mapseq-reader
+       (map-indexed vector)
+       (group-by (comp key-fn second))
+       (map (fn [[k v]] [k (select dataset :all (map first v))]))
+       (into {})))
+
+
+(defn ds-group-by-column
+  "Return a map of column-value->dataset."
+  [colname dataset]
+  (->> (column dataset colname)
+       (dtype/->reader)
+       (map-indexed vector)
+       (group-by second)
+       (map (fn [[k v]]
+              [k (-> (select dataset :all (map first v))
+                     (set-dataset-name k))]))
+       (into {})))
 
 
 (defn ds-sort-by
   ([key-fn compare-fn dataset column-name-seq]
-   (let [column-name-seq (when-not (= :all column-name-seq)
-                           column-name-seq)
-         column-name-seq (or column-name-seq
-                             (->> (columns dataset)
-                                  (mapv ds-col/column-name)))]
-     (->> (index-value-seq (select dataset column-name-seq :all))
-          (sort-by (fn [[idx col-values]]
-                     (->> (zipmap column-name-seq
-                                  col-values)
-                          key-fn))
-                   compare-fn)
-          (map first)
-          (select dataset :all))))
+   (->> (or column-name-seq (column-names dataset))
+        (select-columns dataset)
+        (mapseq-reader)
+        (map-indexed vector)
+        (sort-by (comp key-fn second) compare-fn)
+        (map first)
+        (select dataset :all)))
   ([key-fn compare-fn dataset]
    (ds-sort-by key-fn compare-fn dataset :all))
   ([key-fn dataset]
-   (ds-sort-by key-fn < dataset :all)))
+   (ds-sort-by key-fn compare dataset :all)))
+
+
+(defn ds-sort-by-column
+  ([colname compare-fn dataset]
+   (ds-sort-by #(get % colname) compare-fn dataset [colname]))
+  ([colname dataset]
+   (ds-sort-by-column colname < dataset)))
 
 
 (defn ds-concat
@@ -269,18 +317,14 @@ the correct type."
                                distinct)))
       (throw (ex-info "Dataset is missing a column" {})))
     (->> column-list
-         (mapv (fn [[colname columns]]
-                 (let [columns (map :column columns)
-                       newcol-ecount (apply + 0 (map dtype/ecount columns))
-                       first-col (first columns)
-                       new-col (ds-col/new-column first-col
-                                                  (dtype/get-datatype first-col)
-                                                  newcol-ecount
-                                                  (ds-col/metadata first-col))]
-                   (dtype/copy-raw->item! columns
-                                          new-col 0
-                                          {:unchecked? true})
-                   new-col)))
+         (map (fn [[colname columns]]
+                (let [columns (map :column columns)
+                      column-values (reader-concat/concat-readers columns)
+                      first-col (first columns)]
+                  (ds-col/new-column first-col
+                                     (dtype/get-datatype first-col)
+                                     column-values
+                                     (ds-col/metadata first-col)))))
          (ds-proto/from-prototype dataset (dataset-name dataset))
          (#(set-metadata % {:label-map label-map})))))
 

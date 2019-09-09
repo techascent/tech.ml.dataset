@@ -25,12 +25,6 @@ Error if column does not exist.")
     "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
 colname-seq - either keyword :all or list of column names with no duplicates.
 index-seq - either keyword :all or list of indexes.  May contain duplicates.")
-  (index-value-seq [dataset]
-    "Get a sequence of tuples:
-[idx col-value-vec]
-
-Values are in order of column-name-seq.  Duplicate names are allowed and result in
-duplicate values.")
   (supported-column-stats [dataset]
     "Return the set of natively supported stats for the dataset.  This must be at least
 #{:mean :variance :median :skew}.")

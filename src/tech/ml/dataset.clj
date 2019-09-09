@@ -43,6 +43,8 @@
                         select
                         select-columns
                         add-or-update-column
+                        value-reader
+                        mapseq-reader
                         ds-group-by
                         ds-sort-by
                         ds-filter

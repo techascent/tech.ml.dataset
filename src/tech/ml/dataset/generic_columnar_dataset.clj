@@ -113,12 +113,6 @@
             vec)
        metadata)))
 
-  (index-value-seq [dataset]
-    (let [col-value-seq (->> (ds-proto/columns dataset)
-                             (mapv (fn [col]
-                                     (ds-col/column-values col))))]
-      (->> (apply map vector col-value-seq)
-           (map-indexed vector))))
 
   (supported-column-stats [dataset]
     (ds-col/supported-stats (first (vals colmap))))

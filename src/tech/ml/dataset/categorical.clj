@@ -5,6 +5,7 @@
   a reduced number of possible categories, usually one categorical value per
   column."
   (:require [tech.ml.protocols.dataset :as ds]
+            [tech.ml.dataset.base :as ds-base]
             [tech.ml.protocols.column :as ds-col]
             [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
@@ -262,9 +263,10 @@
                          (map first)
                          distinct)]
     (->> (ds/select dataset colname-seq :all)
-         ds/index-value-seq
-         (map #(apply (inverse-map-one-hot-column-values-fn src-column column-label-map)
-                      (second %))))))
+         (ds-base/value-reader)
+         (map #(apply (inverse-map-one-hot-column-values-fn
+                       src-column column-label-map)
+                      %)))))
 
 
 (defn column-values->categorical
