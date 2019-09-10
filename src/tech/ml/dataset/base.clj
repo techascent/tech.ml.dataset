@@ -254,7 +254,7 @@ the correct type."
   [key-fn dataset & [column-name-seq]]
   (->> (or column-name-seq (column-names dataset))
        (select-columns dataset)
-       mapseq-reader
+       (mapseq-reader)
        (map-indexed vector)
        (group-by (comp key-fn second))
        (map (fn [[k v]] [k (select dataset :all (map first v))]))
@@ -390,8 +390,42 @@ the correct type."
   ([dataset]
    (->dataset dataset {})))
 
+
 (defn ->>dataset
   ([options dataset]
    (->dataset dataset options))
   ([dataset]
    (->dataset dataset)))
+
+
+(defn name-values-seq->dataset
+  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
+  of unknown (:object) datatype, the first item is checked. If it is a number,
+  then doubles are used.  If it is a string, then strings are used for the
+  column datatype.
+  All sequences must be the same length.
+  Returns a new dataset"
+  [name-values-seq & {:keys [column-container-type dataset-name]
+                      :or {column-container-type :tablesaw-column
+                           dataset-name "_unnamed"}}]
+  (when (= column-container-type :tablesaw-column)
+    (require '[tech.libs.tablesaw]))
+  (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
+                   distinct)]
+    (when-not (= 1 (count sizes))
+      (throw (ex-info (format "Different sized columns detected: %s" sizes) {})))
+    (->> name-values-seq
+         (map (fn [[colname values-seq]]
+                (let [col-dtype (dtype/get-datatype values-seq)
+                      col-dtype (if (= col-dtype :object)
+                                  (if (number? (first values-seq))
+                                    :float64
+                                    :string)
+                                  col-dtype)]
+                  (dtype/make-container column-container-type
+                                        col-dtype
+                                        values-seq
+                                        {:name colname}))))
+         ((parallel-req/require-resolve
+           'tech.ml.dataset.generic-columnar-dataset/make-dataset)
+          dataset-name))))

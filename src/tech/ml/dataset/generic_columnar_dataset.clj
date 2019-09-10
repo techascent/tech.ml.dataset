@@ -159,13 +159,17 @@
 
 
 (defn make-dataset
-  [table-name column-seq ds-metadata]
-  (GenericColumnarDataset. table-name
-                           (map ds-col/column-name column-seq)
-                           (->> column-seq
-                                (map (juxt ds-col/column-name identity))
-                                (into {}))
-                           ds-metadata))
+  ([table-name column-seq ds-metadata]
+   (GenericColumnarDataset. table-name
+                            (map ds-col/column-name column-seq)
+                            (->> column-seq
+                                 (map (juxt ds-col/column-name identity))
+                                 (into {}))
+                            ds-metadata))
+  ([table-name column-seq]
+   (make-dataset table-name column-seq {}))
+  ([column-seq]
+   (make-dataset "_unnamed" column-seq {})))
 
 
 (defmethod print-method GenericColumnarDataset

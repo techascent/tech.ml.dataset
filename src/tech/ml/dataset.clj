@@ -54,6 +54,7 @@
                         ds-column-map
                         ->dataset
                         ->>dataset
+                        name-values-seq->dataset
                         from-prototype)
 
 

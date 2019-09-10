@@ -127,3 +127,22 @@
                 (dtype/->reader)
                 (take 10)
                 vec)))))
+
+
+(deftest name-values-seq->dataset-test
+  (is (= [{:a 0.0, :b "a"} {:a 1.0, :b "b"} {:a 2.0, :b "c"}
+          {:a 3.0, :b "d"} {:a 4.0, :b "e"}]
+         (-> (dataset/name-values-seq->dataset
+              {:a (double-array (range 5))
+               :b ["a" "b" "c" "d" "e"]})
+             (dataset/mapseq-reader))))
+  (is (thrown? Throwable
+               (dataset/name-values-seq->dataset
+                {:a (double-array (range 5))
+                 :b ["a" "b" "c" "d"]})))
+  (is (= [{:a 0, :b "a"} {:a 1, :b "b"} {:a 2, :b "c"}
+          {:a 3, :b "d"} {:a 4, :b "e"}]
+         (-> (dataset/name-values-seq->dataset
+              {:a (long-array (range 5))
+               :b ["a" "b" "c" "d" "e"]})
+             (dataset/mapseq-reader)))))
