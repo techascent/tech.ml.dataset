@@ -370,6 +370,28 @@ the correct type."
 
 
 (defn ->dataset
+  "Create a dataset from either csv/tsv or a sequence of maps.
+   *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
+   ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
+   is csv or tsv and then `tablesaw` has column datatype detection mechanisms which
+   can be overridden.
+   *  A sequence of maps may be passed in in which case the first N maps are scanned in
+   order to derive the column datatypes before the actual columns are created.
+  Options:
+  :table-name - set the name of the dataset
+  :columns-types - sequence of tech.datatype datatype keywords that matches column
+     order.  This overrides the tablesaw autodetect mechanism.
+  :column-type-fn - Function that gets passed the first N rows of the csv or tsv and
+     returns a sequence of datatype keywords that match column order.  The column names
+     -if available- are passed as the first row of the csv/tsv.  This overrides the
+     tablesaw autodetect mechanism.
+  :header? - True of the first row of the csv/tsv contains the column names.  Defaults
+     to true.
+  :separator - The separator to use.  If not specified an autodetect mechanism is used.
+  :column-definitions - If a sequence of maps is used, this overrides the column
+  datatype detection mechanism.
+
+  Returns a new dataset"
   ([dataset
     {:keys [table-name]
      :as options}]
@@ -392,6 +414,7 @@ the correct type."
 
 
 (defn ->>dataset
+  "Please see documentation of ->dataset.  Options are the same."
   ([options dataset]
    (->dataset dataset options))
   ([dataset]

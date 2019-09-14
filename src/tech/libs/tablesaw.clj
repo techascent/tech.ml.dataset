@@ -285,13 +285,13 @@
                                                  path options)
         separator (apply autodetect-csv-separator input-stream options)
         opt-map (apply hash-map options)
-
-        column-types (or (:column-types opt-map)
-                         (when (:column-type-fn opt-map)
-                           (autodetect-column-types
-                            input-stream
-                            (:column-type-fn opt-map)
-                            (assoc opt-map :separator separator))))]
+        column-types (or
+                      (when-let [coltypes (:column-types opt-map)]
+                        (map keyword->tablesaw-column-type coltypes))
+                      (when-let [col-fn (:column-type-fn opt-map)]
+                        (autodetect-column-types
+                         input-stream col-fn
+                         (assoc opt-map :separator separator))))]
     (cond-> (CsvReadOptions/builder input-stream)
       true
       (.separator separator)

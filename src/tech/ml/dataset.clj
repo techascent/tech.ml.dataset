@@ -46,8 +46,11 @@
                         value-reader
                         mapseq-reader
                         ds-group-by
+                        ds-group-by-column
                         ds-sort-by
+                        ds-sort-by-column
                         ds-filter
+                        ds-filter-column
                         ds-concat
                         ds-take-nth
                         ds-map-values
