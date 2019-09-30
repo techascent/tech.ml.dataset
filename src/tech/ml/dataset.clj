@@ -5,13 +5,9 @@
             [tech.v2.datatype.functional.impl :as fn-impl]
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.utils :as ml-utils]
             [tech.parallel.require :as parallel-req]
-            [clojure.set :as c-set]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
-            [tech.ml.dataset.options :as options]
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
@@ -58,7 +54,8 @@
                         ->dataset
                         ->>dataset
                         name-values-seq->dataset
-                        from-prototype)
+                        from-prototype
+                        dataset->string)
 
 
 (defn n-permutations
@@ -67,7 +64,8 @@
   [dataset n]
   (when-not (< n (first (dtype/shape dataset)))
     (throw (ex-info (format "%d permutations of %d columns"
-                            n (first (dtype/shape dataset))))))
+                            n (first (dtype/shape dataset)))
+                    {})))
   (->> (comb/combinations (column-names dataset) n)
        (map set)
        ;;assume order doesn't matter
@@ -219,9 +217,3 @@
     (if (= 1 (count original-label-column-names))
       (map #(get % (first original-label-column-names)) flyweight-labels)
       flyweight-labels)))
-
-
-(defn dataset->string
-  ^String [ds]
-  (with-out-str
-    ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))

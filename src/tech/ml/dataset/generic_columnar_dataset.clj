@@ -1,8 +1,7 @@
 (ns tech.ml.dataset.generic-columnar-dataset
   (:require [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset :as ds]
             [tech.ml.protocols.dataset :as ds-proto]
-            [tech.v2.datatype.base :as dtype-base]
+            [tech.ml.dataset.base :as ds]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [clojure.set :as c-set])
@@ -39,7 +38,7 @@
   (add-column [dataset col]
     (let [existing-names (set column-names)
           new-col-name (ds-col/column-name col)]
-      (when-let [existing (existing-names new-col-name)]
+      (when (existing-names new-col-name)
         (throw (ex-info (format "Column of same name (%s) already exists in columns"
                                 new-col-name)
                         {:existing-columns existing-names

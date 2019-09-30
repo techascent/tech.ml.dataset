@@ -6,7 +6,6 @@
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.utils :as ml-utils]
             [tech.parallel.require :as parallel-req])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
@@ -184,7 +183,7 @@ Values are in order of column-name-seq.  Duplicate names are allowed and result 
 duplicate values."
   [dataset & [reader-options]]
   (->> (ds-proto/columns dataset)
-       (map dtype/->reader)
+       (map #(dtype-proto/->reader % reader-options))
        ;;produce row-wise vectors of data
        (apply map vector)
        ;;Index them.
@@ -317,7 +316,7 @@ the correct type."
                                distinct)))
       (throw (ex-info "Dataset is missing a column" {})))
     (->> column-list
-         (map (fn [[colname columns]]
+         (map (fn [[_colname columns]]
                 (let [columns (map :column columns)
                       column-values (reader-concat/concat-readers columns)
                       first-col (first columns)]
@@ -339,7 +338,7 @@ the correct type."
   "Note this returns a sequence, not a dataset."
   [dataset map-fn & [column-name-seq]]
   (->> (index-value-seq (select dataset (or (seq column-name-seq) :all) :all))
-       (map (fn [[idx col-values]]
+       (map (fn [[_idx col-values]]
               (apply map-fn col-values)))))
 
 
@@ -356,17 +355,21 @@ the correct type."
 
 (defn map-seq->dataset
   "Given a sequence of maps, construct a dataset.  Defaults to a tablesaw-based
-  dataset."
-  [map-seq {:keys [scan-depth
-                   column-definitions
-                   table-name
+  dataset.  Options are:
+  :scan-depth - number of maps to scan in order to decifer column type.
+  :column-definintions - sequence of {:name :datatype} maps that decide the columns
+  without using autoscan.
+  :table-name - name of the new table
+  :dataset-constructor - Function to use to transform the sequence of maps into a
+  dataset.  Defaults to a tablesaw-based dataset."
+  [map-seq {:keys [table-name
                    dataset-constructor]
-            :or {scan-depth 100
-                 table-name "_unnamed"
+            :or {table-name "_unnamed"
                  dataset-constructor 'tech.libs.tablesaw/map-seq->tablesaw-dataset}
             :as options}]
-  ((parallel-req/require-resolve dataset-constructor)
-   map-seq options))
+  (-> ((parallel-req/require-resolve dataset-constructor)
+       map-seq options)
+      (set-dataset-name table-name)))
 
 
 (defn ->dataset
@@ -389,7 +392,7 @@ the correct type."
      to true.
   :separator - The separator to use.  If not specified an autodetect mechanism is used.
   :column-definitions - If a sequence of maps is used, this overrides the column
-  datatype detection mechanism.
+  datatype detection mechanism.  See map-seq->dataset for explanation.
 
   Returns a new dataset"
   ([dataset
@@ -452,3 +455,9 @@ the correct type."
          ((parallel-req/require-resolve
            'tech.ml.dataset.generic-columnar-dataset/make-dataset)
           dataset-name))))
+
+
+(defn dataset->string
+  ^String [ds]
+  (with-out-str
+    ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))

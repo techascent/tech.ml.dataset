@@ -100,7 +100,7 @@
 
 
 (defn inverse-map-categorical-col-fn
-  [src-column column-categorical-map]
+  [_src-column column-categorical-map]
   (let [inverse-map (c-set/map-invert column-categorical-map)]
     (fn [col-val]
       (if-let [col-label (get inverse-map (long col-val))]
@@ -114,8 +114,7 @@
 (defn inverse-map-categorical-columns
   [dataset src-column column-categorical-map]
   (let [column-values (-> (ds/column dataset src-column)
-                          ds-col/column-values)
-        inverse-map (c-set/map-invert column-categorical-map)]
+                          ds-col/column-values)]
     (->> column-values
          (mapv (inverse-map-categorical-col-fn
                 src-column column-categorical-map)))))
@@ -123,7 +122,7 @@
 
 (defn is-one-hot-label-map?
   [label-map]
-  (let [[col-val col-entry] (first label-map)]
+  (let [[_col-val col-entry] (first label-map)]
     (not (number? col-entry))))
 
 
@@ -194,7 +193,7 @@
         context (get one-hot-map column-name)
         col-values (ds-col/column-values column)
         new-column-map (->> context
-                            (map (fn [[argval [new-column-name colval]]]
+                            (map (fn [[_argval [new-column-name _colval]]]
                                    [new-column-name
                                     (dtype/make-array-of-type
                                      new-dtype (dtype/ecount column))]))

@@ -74,7 +74,8 @@
                             (do
                               (log/warnf "Correlation failed: %s-%s"
                                          (ds-col/column-name lhs)
-                                         (ds-col/column-name rhs)))))))
+                                         (ds-col/column-name rhs))
+                              nil)))))
                  (remove nil?)
                  (sort-by (comp #(Math/abs (double %)) second) >))])
          (into {}))))
@@ -179,9 +180,9 @@
 
 (defn nan-aware-mean
   ^double [^doubles col-data]
-  (let [col-len (alength col-data)]
-    (let [[sum n-elems]
-          (loop [sum (double 0)
+  (let [col-len (alength col-data)
+        [sum n-elems]
+        (loop [sum (double 0)
                  n-elems (int 0)
                  idx (int 0)]
             (if (< idx col-len)
@@ -194,9 +195,9 @@
                          n-elems
                          (unchecked-add idx 1))))
               [sum n-elems]))]
-      (if-not (= 0 (long n-elems))
-        (/ sum (double n-elems))
-        Double/NaN))))
+    (if-not (= 0 (long n-elems))
+      (/ sum (double n-elems))
+      Double/NaN)))
 
 
 (defn nan-aware-squared-distance
@@ -212,12 +213,10 @@
 (defn group-rows-by-nearest-centroid
   [dataset ^"[[D" row-major-centroids & [error-on-missing?]]
   (let [[num-centroids num-columns] (dtype/shape row-major-centroids)
-        [ds-cols ds-rows] (dtype/shape dataset)
+        [ds-cols _ds-rows] (dtype/shape dataset)
         num-centroids (int num-centroids)
         num-columns (int num-columns)
-        ds-cols (int ds-cols)
-        ds-rows (int ds-rows)]
-
+        ds-cols (int ds-cols)]
     (when-not (= num-columns ds-cols)
       (throw (ex-info (format "Centroid/Dataset column count mismatch - %s vs %s"
                               num-columns ds-cols)
@@ -311,7 +310,7 @@
                  (mapv (fn [[centroid-idx grouping]]
                          {:centroid-idx centroid-idx
                           :row-indexes (set (map :row-idx grouping))})))
-            [n-cols n-rows] (dtype/shape dataset)
+            [_n-cols n-rows] (dtype/shape dataset)
             n-rows (int n-rows)
             ^doubles global-means global-means]
         (->> columns-with-missing

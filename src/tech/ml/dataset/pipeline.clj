@@ -1,18 +1,11 @@
 (ns tech.ml.dataset.pipeline
   "A set of common 'pipeline' operations you probably will want to run on a dataset."
   (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype.functional.impl :as fn-impl]
-            [tech.v2.datatype.reader :as reader]
-            [tech.ml.protocols.etl :as etl-proto]
             [tech.ml.dataset :as ds]
-            [tech.ml.dataset.options :as options]
-            [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.pipeline.column-filters :as cf]
-            [tech.ml.dataset.pipeline.pipeline-operators
-             :refer [def-multiple-column-etl-operator]
-             :as pipe-ops]
+            [tech.ml.dataset.pipeline.pipeline-operators :as pipe-ops]
             [tech.ml.dataset.pipeline.base :as pipe-base])
   (:refer-clojure :exclude [replace filter]))
 
@@ -43,7 +36,7 @@
   Replace any string values with numeric values.  Updates the label map
   of the options.  Arguments may be notion or a vector of either expected
   strings or tuples of expected strings to their hardcoded values."
-  ([dataset column-filter table-value-list & {:keys [datatype] :as op-args}]
+  ([dataset column-filter table-value-list & {:as op-args}]
    (pipe-ops/inline-perform-operator
     pipe-ops/string->number dataset column-filter
     (assoc op-args
@@ -62,7 +55,7 @@
   example argument:
   {:main [\"apple\" \"mandarin\"]
  :other :rest}"
-  ([dataset column-filter table-value-list & {:keys [datatype] :as op-args}]
+  ([dataset column-filter table-value-list & {:as op-args}]
    (pipe-ops/inline-perform-operator
     pipe-ops/one-hot dataset column-filter
     (assoc op-args
@@ -144,8 +137,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
 (defn range-scale
   "Range-scale a set of columns to be within either [-1 1] or the range provided
   by the first argument.  Will fail if columns have missing values."
-  ([dataset column-filter value-range & {:keys [datatype]
-                                         :as op-args}]
+  ([dataset column-filter value-range & {:as op-args}]
    (pipe-ops/inline-perform-operator
     pipe-ops/range-scaler dataset column-filter
     (assoc op-args
@@ -159,7 +151,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
 (defn std-scale
   "Scale columns to have 0 mean and 1 std deviation.  Will fail if columns
   contain missing values."
-  ([dataset column-filter & {:keys [use-mean? use-std? datatype]
+  ([dataset column-filter & {:keys [use-mean? use-std?]
                               :or {use-mean? true
                                    use-std? true}
                              :as op-args}]
@@ -208,9 +200,7 @@ or a callable fn.  If callable fn, the fn is passed the dataset and column-name"
 
 
 (defn pca
-  ([dataset column-filter & {:keys [method variance n-components]
-                             :or {method :svd
-                                  variance 0.95} :as op-args}]
+  ([dataset column-filter & {:as op-args}]
    (pipe-ops/inline-perform-operator
     pipe-ops/pca dataset column-filter op-args))
   ([dataset]

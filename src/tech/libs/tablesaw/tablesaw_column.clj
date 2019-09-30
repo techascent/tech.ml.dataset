@@ -4,10 +4,7 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.nio-buffer :as nio-buffer]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
-            [tech.v2.datatype.list :as dtype-list]
             [tech.ml.protocols.column :as col-proto]
             [tech.ml.utils :refer [column-safe-name]]
             [tech.jna :as jna])
@@ -467,10 +464,8 @@
   "Make a new tablesaw column.  Note that this does not make
   columns with missing values.  For that, use make-empty-column."
   ([datatype elem-count-or-seq {:keys [name]
-                                :or {name "_unnamed"}
-                                :as options}]
-   (let [^String column-name (column-safe-name name)
-         num-elems (int (if (number? elem-count-or-seq)
+                                :or {name "_unnamed"}}]
+   (let [num-elems (int (if (number? elem-count-or-seq)
                           elem-count-or-seq
                           (dtype/ecount elem-count-or-seq)))
          new-column (make-empty-column datatype num-elems {:name name})]

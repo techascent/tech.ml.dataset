@@ -1,7 +1,7 @@
 (ns tech.ml.dataset.modelling
   (:require [tech.v2.datatype :as dtype]
             [tech.ml.dataset.base
-             :refer [column-names update-columns column columns
+             :refer [column-names update-columns
                      ->dataset select ds-map-values
                      metadata maybe-column]
              :as ds-base]
@@ -134,7 +134,7 @@
                                                            vals
                                                            (map first))))
                          (->> (vals colmap)
-                              (map (fn [[derived-col col-idx]]
+                              (map (fn [[derived-col _col-idx]]
                                      [derived-col colname]))))))
              (into {}))]
     (->> colname-seq
@@ -153,7 +153,7 @@
                :or {randomize-dataset? true}
                :as options}]
    (let [dataset (->dataset dataset options)
-         [n-cols n-rows] (dtype/shape dataset)
+         [_n-cols n-rows] (dtype/shape dataset)
          indexes (cond-> (range n-rows)
                    randomize-dataset? shuffle)
          fold-size (inc (quot (long n-rows) k))
@@ -172,7 +172,7 @@
                   train-fraction 0.7}
              :as options}]
    (let [dataset (->dataset dataset options)
-         [n-cols n-rows] (dtype/shape dataset)
+         [_n-cols n-rows] (dtype/shape dataset)
          indexes (cond-> (range n-rows)
                    randomize-dataset? shuffle)
          n-elems (long n-rows)

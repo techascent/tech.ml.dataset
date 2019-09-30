@@ -1,6 +1,5 @@
 (ns tech.libs.tablesaw
   (:require [tech.libs.tablesaw.tablesaw-column :as dtype-tbl]
-            [tech.ml.dataset :as ds]
             [tech.ml.protocols.column :as col-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.base :as dtype-base]
@@ -210,7 +209,7 @@
 
 
 (defmethod dtype-proto/make-container :tablesaw-column
-  [container-type datatype elem-count-or-seq
+  [_container-type datatype elem-count-or-seq
    {:keys [empty?] :as options}]
   (when (and empty?
              (not (number? elem-count-or-seq)))
@@ -256,7 +255,6 @@
                             4096))
         _ (.mark input-stream num-bytes)
         byte-data (byte-array num-bytes)
-        num-read (.read input-stream byte-data)
         _ (.reset input-stream)
         ;;the last line must be incomplete
          csv-seq (-> (ByteArrayInputStream. byte-data)
@@ -268,7 +266,7 @@
                   (let [next-line
                         (try
                           (first csv-seq)
-                          (catch Throwable e
+                          (catch Throwable _e
                             nil))]
                     (if-not next-line
                       cleaned-seq
@@ -348,11 +346,10 @@
 
 
 (defn map-seq->tablesaw-dataset
-  [map-seq-dataset {:keys [scan-depth
-                           column-definitions
+  "Scan a sequence of maps and produce a tablesaw dataset."
+  [map-seq-dataset {:keys [column-definitions
                            table-name]
-                    :or {scan-depth 100
-                         table-name "_unnamed"}
+                    :or {table-name "_unnamed"}
                     :as options}   ]
 
   (let [column-definitions
@@ -362,8 +359,7 @@
         ;;force the dataset here as knowing the count helps
         column-map (->> column-definitions
                         (map (fn [{colname :name
-                                   datatype :datatype
-                                   :as coldef}]
+                                   datatype :datatype}]
                                (let [datatype (if (= datatype :keyword)
                                                 :string
                                                 datatype)]
@@ -371,20 +367,19 @@
                                   (dtype-tbl/make-empty-column
                                    datatype 0 {:name colname})])))
                         (into {}))
-        all-column-names (set (keys column-map))
-        max-idx (reduce (fn [max-idx [idx item-row]]
-                          (doseq [[item-name item-val] item-row]
-                            (let [^Column col (get column-map item-name)
-                                  missing (- (int idx) (.size col))]
-                              (dotimes [idx missing]
-                                (.appendMissing col))
-                              (if-not (nil? item-val)
-                                (.append col (col-dtype-cast
-                                              item-val (dtype/get-datatype col)))
-                                (.appendMissing col))))
-                          idx)
-                        0
-                        (map-indexed vector map-seq-dataset))
+        _ (->> map-seq-dataset
+               (map-indexed
+                (fn [idx item-row]
+                  (doseq [[item-name item-val] item-row]
+                    (let [^Column col (get column-map item-name)
+                          missing (- (int idx) (.size col))]
+                      (dotimes [_idx missing]
+                        (.appendMissing col))
+                      (if-not (nil? item-val)
+                        (.append col (col-dtype-cast
+                                      item-val (dtype/get-datatype col)))
+                        (.appendMissing col))))))
+               (dorun))
         column-seq (vals column-map)
         max-ecount (long (if (seq column-seq)
                            (apply max (map dtype/ecount column-seq))
@@ -392,6 +387,6 @@
     ;;Ensure all columns are same length
     (doseq [^Column col column-seq]
       (let [missing-count (- max-ecount (.size col))]
-        (dotimes [idx missing-count]
+        (dotimes [_idx missing-count]
           (.appendMissing col))))
     (tablesaw-columns->tablesaw-dataset table-name column-map)))

@@ -2,7 +2,6 @@
   "PCA and K-PCA using smile implementations."
   (:require [tech.v2.tensor :as tens]
             [tech.v2.datatype.functional :as dtype-fn]
-            [tech.ml.dataset :as ds]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.v2.datatype :as dtype])
   (:import [smile.projection PCA]
@@ -40,9 +39,8 @@
    :eigenvalues - vec of eigenvalues
    :eigenvectors - matrix of eigenvectors
   }"
-  [dataset & {:keys [method datatype]
-              :or {method :svd
-                   datatype :float64}}]
+  [dataset & {:keys [method]
+              :or {method :svd}}]
   (let [array-of-arrays (->> (ds-tens/dataset->row-major-tensor dataset :float64)
                              (tens/rows)
                              (map dtype/->array-copy)
@@ -66,10 +64,9 @@
   "PCA transform the dataset returning a new dataset."
   [dataset pca-info n-components result-datatype]
   (let [dataset-tens (ds-tens/dataset->column-major-tensor dataset result-datatype)
-        [n-cols n-rows] (dtype/shape dataset-tens)
+        [n-cols _n-rows] (dtype/shape dataset-tens)
         eigenvectors (tens/->tensor (:eigenvectors pca-info))
-        [n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
-        [n-mean-cols] (dtype/shape (:means pca-info))
+        [_n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
         _ (when-not (= (long n-cols) (long n-eig-cols))
             (throw (ex-info "Things aren't lining up."
                             {:eigenvectors (dtype/shape (:eigenvectors pca-info))

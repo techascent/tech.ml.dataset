@@ -21,7 +21,7 @@
 
 
 (defmacro def-single-column-etl-operator
-  [op-symbol docstring op-context-code op-code]
+  [op-symbol _docstring op-context-code op-code]
   `(def ~op-symbol
      (reify PETLSingleColumnOperator
        (build-etl-context [~'op ~'dataset ~'column-name ~'op-args]
@@ -31,7 +31,7 @@
 
 
 (defmacro def-multiple-column-etl-operator
-  [op-symbol docstring op-context-code op-code]
+  [op-symbol _docstring op-context-code op-code]
   `(def ~op-symbol
      (reify PETLMultipleColumnOperator
        (build-etl-context-columns [~'op ~'dataset ~'column-name-seq ~'op-args]
@@ -201,18 +201,17 @@ Arguments may be notion or a vector of either expected strings or tuples of expe
 strings to their hardcoded values."
   ;;Label maps are special and used outside of this context do we have
   ;;treat them separately
-  (do (categorical/build-categorical-map
-       dataset column-name-seq
-       (:table-value-list op-args)))
-  (do
-    (-> (ds/update-columns dataset column-name-seq
-                           (partial categorical/column-categorical-map
-                                    context
-                                    (context-datatype op-args)))
-        (ds/set-metadata (update (ds/metadata dataset)
-                                 :label-map
-                                 merge
-                                 context)))))
+  (categorical/build-categorical-map
+   dataset column-name-seq
+   (:table-value-list op-args))
+  (-> (ds/update-columns dataset column-name-seq
+                         (partial categorical/column-categorical-map
+                                  context
+                                  (context-datatype op-args)))
+      (ds/set-metadata (update (ds/metadata dataset)
+                               :label-map
+                               merge
+                               context))))
 
 
 (def-single-column-etl-operator replace-missing
