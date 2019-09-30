@@ -14,3 +14,4 @@ example/data
 example/results.nippy
 .cpcache
 data
+.cache
