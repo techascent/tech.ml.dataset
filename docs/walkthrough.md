@@ -190,6 +190,8 @@ The dataset system offers two methods to select subrects of information from the
 dataset.  This results in a new dataset.
 
 ```clojure
+(def ames-ds (ds/->dataset "file://data/ames-house-prices/train.csv.gz"))
+#'user/ames-ds
 user> (ds/column-names ames-ds)
 ("Id"
  "MSSubClass"
@@ -429,6 +431,10 @@ TotalBath
 We can also create do totally dynamic operation to create a new column by implementing
 the appropriate reader interface from the datatype library:
 ```clojure
+user> (import '[tech.v2.datatype ObjectReader])
+tech.v2.datatype.ObjectReader
+user> (require '[tech.v2.datatype.typecast :as typecast])
+nil
 user> (def named-baths
         (ds/add-or-update-column
          updated-ames
