@@ -408,7 +408,7 @@ both `java.util.List` and `java.util.RandomAccess` can be converted to a reader 
 any datatype.  Columns are exactly this so we can add a new column to the dataset
 that is a linear combination of other columns using add-or-update-column:
 
-
+```clojure
 user> (require '[tech.v2.datatype.functional :as dfn])
 nil
 user> (def updated-ames
