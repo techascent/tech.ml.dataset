@@ -428,8 +428,8 @@ TotalBath
 [3.500, 2.500, 3.500, 2.000, 3.500, 2.500, 3.000, 3.500, 2.000, 2.000, 2.000, 4.000, 2.000, 2.000, 2.500, 1.000, 2.000, 2.000, 2.500, 1.000, ...]
 ```
 
-We can also create do totally dynamic operation to create a new column by implementing
-the appropriate reader interface from the datatype library:
+We can also implement a completely dynamic operation to create a new column by 
+implementing the appropriate reader interface from the datatype library:
 ```clojure
 user> (import '[tech.v2.datatype ObjectReader])
 tech.v2.datatype.ObjectReader
