@@ -10,6 +10,9 @@ columnwise databases.  The backing store behind tech.ml.dataset is
 near future for [Apache Arrow](https://github.com/apache/arrow).
 
 
+For a quick code-oriented intro, please see the [walkthrough](docs/walkthrough.md).
+
+
 An example of using the dataset for [advanced regression techniques](https://github.com/cnuernber/ames-house-prices/blob/master/ames-housing-prices-clojure.md).
 
 
