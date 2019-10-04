@@ -405,7 +405,7 @@ user> (->> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "G
 
 ## Elementwise Operations
 
-Anything convertible to a such persisent vectors or anything deriving from
+Anything convertible to a reader such as persisent vectors or anything deriving from
 both `java.util.List` and `java.util.RandomAccess` can be converted to a reader of
 any datatype.  Columns are exactly this so we can add a new column to the dataset
 that is a linear combination of other columns using add-or-update-column:
@@ -443,6 +443,8 @@ user> (def named-baths
          (let [total-baths (typecast/datatype->reader
                             :float64 (updated-ames "TotalBath"))]
            (reify ObjectReader
+		     ;;Since this is an object reader, we have to specify string as the datatype.
+			 ;;Tablesaw doesn't support object columns at this point.
              (getDatatype [rdr] :string)
              (lsize [rdr] (.lsize total-baths))
              (read [rdr idx]
