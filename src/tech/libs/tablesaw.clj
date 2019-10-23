@@ -16,10 +16,12 @@
            [tech.tablesaw.columns Column]
            [tech.tablesaw.io.csv CsvReadOptions
             CsvReadOptions$Builder]
+           [tech.tablesaw.io Source]
            [java.util UUID]
            [java.io InputStream BufferedInputStream
             ByteArrayInputStream]
-           [org.apache.commons.math3.stat.descriptive.moment Skewness]))
+           [org.apache.commons.math3.stat.descriptive.moment Skewness]
+           [tech.tablesaw.io ColumnTypeDetector ReadOptions ReadOptions$Builder]))
 
 
 
@@ -223,8 +225,8 @@
 
 (defn autodetect-csv-separator
   [^BufferedInputStream input-stream & options]
-  (.mark input-stream 200)
-  (let [byte-data (byte-array 200)
+  (.mark input-stream 1000)
+  (let [byte-data (byte-array 1000)
         num-read (.read input-stream byte-data)
         _ (.reset input-stream)]
     (apply io/autodetect-csv-separator (ByteArrayInputStream. byte-data 0 num-read)
@@ -246,35 +248,77 @@
       :int64 ColumnType/LONG
       :float32 ColumnType/FLOAT
       :float64 ColumnType/DOUBLE
+      :boolean ColumnType/BOOLEAN
       :string ColumnType/STRING)))
+
+
+(defn to-minimal-csv-seq
+  "Read a smaller csv up to a given character limit."
+  [^BufferedInputStream input-stream options]
+  ;;Need enough bytes that we can reliably autodetect a lot of files.
+  (let [num-bytes (long (or (:autodetect-max-bytes options)
+                            65536))
+        _ (.mark input-stream num-bytes)
+        byte-data (byte-array num-bytes)
+        bytes-read (.read input-stream byte-data)
+        _ (.reset input-stream)
+        ;;the last line must be incomplete
+         csv-seq (-> (ByteArrayInputStream. byte-data 0 bytes-read)
+                     (io/reader)
+                     (csv/read-csv :separator (:separator options)))]
+    ;;deal with last line exception
+    (loop [cleaned-seq []
+           csv-seq csv-seq]
+      (let [next-line
+            (try
+              (first csv-seq)
+              (catch Throwable _e
+                nil))]
+        (if-not next-line
+          cleaned-seq
+          (recur (conj cleaned-seq next-line)
+                 (rest csv-seq)))))))
 
 
 (defn autodetect-column-types
   [^BufferedInputStream input-stream column-type-detect-fn options]
-  (let [num-bytes (long (or (:autodetect-max-bytes options)
-                            4096))
-        _ (.mark input-stream num-bytes)
-        byte-data (byte-array num-bytes)
-        _ (.reset input-stream)
-        ;;the last line must be incomplete
-         csv-seq (-> (ByteArrayInputStream. byte-data)
-                     (io/reader)
-                     (csv/read-csv :separator (:separator options)))
-        ;;deal with last line exception
-        csv-seq (loop [cleaned-seq []
-                       csv-seq csv-seq]
-                  (let [next-line
-                        (try
-                          (first csv-seq)
-                          (catch Throwable _e
-                            nil))]
-                    (if-not next-line
-                      cleaned-seq
-                      (recur (conj cleaned-seq next-line)
-                             (rest csv-seq)))))]
-    (->> (column-type-detect-fn csv-seq)
-         (map keyword->tablesaw-column-type)
-         (into-array ColumnType))))
+  (->> (to-minimal-csv-seq input-stream options)
+       (column-type-detect-fn)
+       (map keyword->tablesaw-column-type)
+       (into-array ColumnType)))
+
+
+(defn extended-column-types
+  []
+  (let [rdr-type ReadOptions
+        target-field (.getDeclaredField rdr-type "EXTENDED_TYPES")
+        _ (.setAccessible target-field true)]
+    (.get target-field nil)))
+
+
+(defn construct-read-options
+  ^ReadOptions []
+  (let [ctor (.getDeclaredConstructor ReadOptions$Builder (make-array Class 0))
+        _ (.setAccessible ctor true)
+        builder (.newInstance ctor (make-array Object 0))
+        build-method (.getDeclaredMethod ^Class (type builder)
+                                         "build" (make-array Class 0))]
+    (.setAccessible build-method true)
+    (.invoke build-method builder (make-array Object 0))))
+
+
+(defn tablesaw-detect-column-types
+  [^BufferedInputStream input-stream options]
+  (let [read-options (construct-read-options)
+        detector (ColumnTypeDetector. ^Java.util.List (extended-column-types))
+        ^java.lang.Iterable iterable
+        (->> (to-minimal-csv-seq input-stream options)
+             ;;drop column names
+             (rest)
+             (map #(into-array String %)))]
+    (.detectColumnTypes detector
+                        (.iterator iterable)
+                        read-options)))
 
 
 (defn ^CsvReadOptions$Builder
@@ -282,20 +326,20 @@
   (let [^BufferedInputStream input-stream (apply io/buffered-input-stream
                                                  path options)
         separator (apply autodetect-csv-separator input-stream options)
-        opt-map (apply hash-map options)
-        column-types (or
-                      (when-let [coltypes (:column-types opt-map)]
-                        (map keyword->tablesaw-column-type coltypes))
-                      (when-let [col-fn (:column-type-fn opt-map)]
-                        (autodetect-column-types
-                         input-stream col-fn
-                         (assoc opt-map :separator separator))))]
+        opt-map (assoc (apply hash-map options) :separator separator)
+        ;;We have to detect all of the column types here.
+        column-types (if-let [coltypes (:column-types opt-map)]
+                       (map keyword->tablesaw-column-type coltypes)
+                       (if-let [col-fn (:column-type-fn opt-map)]
+                         (autodetect-column-types input-stream col-fn opt-map)
+                         (tablesaw-detect-column-types input-stream opt-map)))]
     (cond-> (CsvReadOptions/builder input-stream)
       true
       (.separator separator)
       true
-      (.header (boolean (or (:header? opt-map)
-                            true)))
+      (.header (boolean (if (nil? (:header? opt-map))
+                          true
+                          (:header? opt-map))))
       column-types
       (.columnTypes
        (into-array ColumnType
@@ -350,8 +394,7 @@
   [map-seq-dataset {:keys [column-definitions
                            table-name]
                     :or {table-name "_unnamed"}
-                    :as options}   ]
-
+                    :as options}]
   (let [column-definitions
         (if column-definitions
           column-definitions

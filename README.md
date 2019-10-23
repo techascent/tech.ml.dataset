@@ -5,9 +5,9 @@
 
 
 Dataset and ETL pipeline for machine learning.  Datasets are currently in-memory
-columnwise databases.  The backing store behind tech.ml.dataset is
-[tablesaw](https://github.com/jtablesaw/tablesaw).  Further support is intended in the
-near future for [Apache Arrow](https://github.com/apache/arrow).
+columnwise databases and we support parsing from file or input-stream which means
+we support gzipped csv/tsv files.  The backing store behind tech.ml.dataset is
+[tablesaw](https://github.com/jtablesaw/tablesaw).
 
 
 For a quick code-oriented intro, please see the [walkthrough](docs/walkthrough.md).
