@@ -21,7 +21,8 @@
            [java.io InputStream BufferedInputStream
             ByteArrayInputStream]
            [org.apache.commons.math3.stat.descriptive.moment Skewness]
-           [tech.tablesaw.io ColumnTypeDetector ReadOptions ReadOptions$Builder]))
+           [tech.tablesaw.io ColumnTypeDetector ReadOptions ReadOptions$Builder]
+           [tech.v2.datatype ObjectReader]))
 
 
 
@@ -182,6 +183,11 @@
 
   dtype-proto/PCountable
   (ecount [item] (dtype-proto/ecount col))
+
+  ObjectReader
+  (lsize [item] (long (dtype-proto/ecount col)))
+  (read [item idx]
+    (.get col idx))
 
   Object
   (toString [item]
