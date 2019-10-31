@@ -146,3 +146,28 @@
               {:a (long-array (range 5))
                :b ["a" "b" "c" "d" "e"]})
              (dataset/mapseq-reader)))))
+
+
+(deftest unique-by-test
+  (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
+    (is (= [7 4]
+           (dtype/shape (dataset/unique-by :fruit-name ds))))
+    (is (= [7 4]
+           (dtype/shape (dataset/unique-by-column :fruit-name ds))))
+    (is (= #{"apple" "orange" "lemon" "mandarin"}
+           (->> (dataset/column (dataset/unique-by-column :fruit-name ds)
+                                :fruit-name)
+                set)))
+
+    (is (= [7 24]
+           (dtype/shape (dataset/unique-by :width ds))))
+    (is (= [7 24]
+           (dtype/shape (dataset/unique-by-column :width ds))))
+    (is (dtype-fn/equals [5.8 5.9 6.0 6.1 6.2 6.3 6.5
+                          6.7 6.8 6.9 7.0 7.1 7.2 7.3
+                          7.4 7.5 7.6 7.7 7.8 8.0 8.4
+                          9.0 9.2 9.6]
+                         (->> (dataset/column (dataset/unique-by-column :width ds)
+                                              :width)
+                              sort
+                              vec)))))

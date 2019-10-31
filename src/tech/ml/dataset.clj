@@ -47,6 +47,8 @@
                         ds-sort-by-column
                         ds-filter
                         ds-filter-column
+                        unique-by
+                        unique-by-column
                         ds-concat
                         ds-take-nth
                         ds-map-values

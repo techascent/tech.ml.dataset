@@ -328,6 +328,33 @@ the correct type."
          (#(set-metadata % {:label-map label-map})))))
 
 
+(defn unique-by
+  "Map-fn function gets passed map for each row.  The dataset is iterated in order
+  and the first row is taken where map-fn is distinct.  This function takes memory
+  on the order of num-distinct of the dataset in addition to the dataset."
+  [map-fn dataset & {:keys [column-name-seq keep-fn]
+                     :or {keep-fn ffirst}}]
+  (->> (or column-name-seq (column-names dataset))
+       (select-columns dataset)
+       (mapseq-reader)
+       (map-indexed vector)
+       (group-by (comp map-fn second))
+       (map (fn [[_ v]] (keep-fn v)))
+       (select dataset :all)))
+
+
+(defn unique-by-column
+  "Return a dataset unique by the chosen column.  Keep-fn is applied to the sequence
+  of indexes/column-values and has to return an index."
+  [colname dataset & {:keys [keep-fn]
+                      :or {keep-fn ffirst}}]
+  (->> (column dataset colname)
+       (map-indexed vector)
+       (group-by second)
+       (map (fn [[_ v]] (keep-fn v)))
+       (select dataset :all)))
+
+
 (defn ds-take-nth
   [n-val dataset]
   (select dataset :all (->> (range (second (dtype/shape dataset)))
