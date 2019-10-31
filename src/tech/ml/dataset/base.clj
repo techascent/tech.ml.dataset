@@ -367,9 +367,8 @@ the correct type."
    boolean-aggregate-fn
    default-aggregate-fn
    column-seq]
-  (let [prototype-column (first column-seq)
-        col-dtype (dtype/get-datatype (first column-seq))]
-    (->>
+  (let [col-dtype (dtype/get-datatype (first column-seq))]
+    (->
      (cond
        (casting/numeric-type? col-dtype)
        (mapv numeric-aggregate-fn column-seq)
@@ -377,10 +376,9 @@ the correct type."
        (mapv boolean-aggregate-fn column-seq)
        :else
        (mapv default-aggregate-fn column-seq))
-     (ds-col/new-column prototype-column
-                        (if (= col-dtype :boolean)
-                          :int64
-                          col-dtype)))))
+     (dtype/->reader ( (= col-dtype :boolean)
+                       :int64
+                       col-dtype)))))
 
 
 (defn- finish-aggregate-by
