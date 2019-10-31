@@ -2,6 +2,7 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
@@ -246,27 +247,37 @@ the correct type."
        (select dataset :all)))
 
 
-(defn ds-group-by
-  "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value.  Selecting which columns are used in the key-fn
-  using column-name-seq is optional but will greatly improve performance."
+(defn group-by->indexes
   [key-fn dataset & [column-name-seq]]
   (->> (or column-name-seq (column-names dataset))
        (select-columns dataset)
        (mapseq-reader)
        (map-indexed vector)
-       (group-by (comp key-fn second))
+       (group-by (comp key-fn second))))
+
+
+(defn ds-group-by
+  "Produce a map of key-fn-value->dataset.  key-fn is a function taking
+  a map of colname->column-value.  Selecting which columns are used in the key-fn
+  using column-name-seq is optional but will greatly improve performance."
+  [key-fn dataset & [column-name-seq]]
+  (->> (group-by->indexes key-fn dataset column-name-seq)
        (map (fn [[k v]] [k (select dataset :all (map first v))]))
        (into {})))
+
+
+(defn group-by-column->indexes
+  [colname dataset]
+  (->> (column dataset colname)
+       (dtype/->reader)
+       (map-indexed vector)
+       (group-by second)))
 
 
 (defn ds-group-by-column
   "Return a map of column-value->dataset."
   [colname dataset]
-  (->> (column dataset colname)
-       (dtype/->reader)
-       (map-indexed vector)
-       (group-by second)
+  (->> (group-by-column->indexes colname dataset)
        (map (fn [[k v]]
               [k (-> (select dataset :all (map first v))
                      (set-dataset-name k))]))
@@ -329,30 +340,120 @@ the correct type."
 
 
 (defn unique-by
-  "Map-fn function gets passed map for each row.  The dataset is iterated in order
-  and the first row is taken where map-fn is distinct.  This function takes memory
-  on the order of num-distinct of the dataset in addition to the dataset."
+  "Map-fn function gets passed map for each row, rows are grouped by the
+  return value.  Keep-fn is used to decide the index to keep.
+
+  :keep-fn - Function from (seq [idx col-val])->idx.  Defaults to ffirst."
   [map-fn dataset & {:keys [column-name-seq keep-fn]
-                     :or {keep-fn ffirst}}]
-  (->> (or column-name-seq (column-names dataset))
-       (select-columns dataset)
-       (mapseq-reader)
-       (map-indexed vector)
-       (group-by (comp map-fn second))
+                    :or {keep-fn ffirst}}]
+  (->> (group-by->indexes map-fn dataset column-name-seq)
        (map (fn [[_ v]] (keep-fn v)))
        (select dataset :all)))
 
 
 (defn unique-by-column
-  "Return a dataset unique by the chosen column.  Keep-fn is applied to the sequence
-  of indexes/column-values and has to return an index."
+  "Map-fn function gets passed map for each row, rows are grouped by the
+  return value.  Keep-fn is used to decide the index to keep.
+
+  :keep-fn - Function from (seq [idx col-val])->idx.  Defaults to ffirst."
   [colname dataset & {:keys [keep-fn]
                       :or {keep-fn ffirst}}]
-  (->> (column dataset colname)
-       (map-indexed vector)
-       (group-by second)
+  (->> (group-by-column->indexes colname dataset)
        (map (fn [[_ v]] (keep-fn v)))
        (select dataset :all)))
+
+(defn- perform-aggregation
+  [numeric-aggregate-fn
+   boolean-aggregate-fn
+   default-aggregate-fn
+   column-seq]
+  (let [prototype-column (first column-seq)
+        col-dtype (dtype/get-datatype (first column-seq))]
+    (->>
+     (cond
+       (casting/numeric-type? col-dtype)
+       (mapv numeric-aggregate-fn column-seq)
+       (= :boolean col-dtype)
+       (mapv boolean-aggregate-fn column-seq)
+       :else
+       (mapv default-aggregate-fn column-seq))
+     (ds-col/new-column prototype-column
+                        (if (= col-dtype :boolean)
+                          :int64
+                          col-dtype)))))
+
+
+(defn- finish-aggregate-by
+  [dataset index-groups
+   numeric-aggregate-fn
+   boolean-aggregate-fn
+   default-aggregate-fn
+   count-column-name]
+  (let [index-sequences (->> index-groups
+                             (map (fn [[_ v]]
+                                    (int-array (map first v)))))
+        count-column-name (or count-column-name
+                              (if (keyword? (first (column-names dataset)))
+                                :index-counts
+                                "index-counts"))
+        new-ds
+        (->> (columns dataset)
+             (map
+              (fn [column]
+                (->> index-sequences
+                     (map (partial ds-col/select column))
+                     (perform-aggregation numeric-aggregate-fn
+                                          boolean-aggregate-fn
+                                          default-aggregate-fn))))
+             (ds-proto/from-prototype dataset (dataset-name dataset)))]
+    (add-or-update-column new-ds count-column-name
+                          (long-array (mapv count index-sequences)))))
+
+(defn count-true
+  [boolean-seq]
+  (-> (dtype/->reader boolean-seq :int64)
+      (dfn/reduce-+)))
+
+
+(defn aggregate-by
+  "Group the dataset by map-fn, then aggregate by the aggregate fn.
+  Returns aggregated datatset.
+  :aggregate-fn - passed a sequence of columns and must return a new column
+  with the same number of entries as the count of the column sequences."
+  [map-fn dataset & {:keys [column-name-seq
+                            numeric-aggregate-fn
+                            boolean-aggregate-fn
+                            default-aggregate-fn
+                            count-column-name]
+                     :or {numeric-aggregate-fn dfn/reduce-+
+                          boolean-aggregate-fn count-true
+                          default-aggregate-fn first}}]
+  (finish-aggregate-by dataset
+                       (group-by->indexes map-fn dataset column-name-seq)
+                       numeric-aggregate-fn
+                       boolean-aggregate-fn
+                       default-aggregate-fn
+                       count-column-name))
+
+
+(defn aggregate-by-column
+  "Group the dataset by map-fn, then aggregate by the aggregate fn.
+  Returns aggregated datatset.
+  :aggregate-fn - passed a sequence of columns and must return a new column
+  with the same number of entries as the count of the column sequences."
+  [colname dataset & {:keys [numeric-aggregate-fn
+                             boolean-aggregate-fn
+                             default-aggregate-fn
+                             count-column-name]
+                      :or {numeric-aggregate-fn dfn/reduce-+
+                           boolean-aggregate-fn count-true
+                           default-aggregate-fn first}}]
+  (finish-aggregate-by dataset
+                       (group-by-column->indexes colname dataset)
+                       numeric-aggregate-fn
+                       boolean-aggregate-fn
+                       default-aggregate-fn
+                       count-column-name))
 
 
 (defn ds-take-nth

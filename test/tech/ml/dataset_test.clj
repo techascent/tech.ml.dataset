@@ -171,3 +171,9 @@
                                               :width)
                               sort
                               vec)))))
+
+
+(deftest aggregate-by-test
+  (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
+
+    ))

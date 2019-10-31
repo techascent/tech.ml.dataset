@@ -11,6 +11,7 @@
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
+            [tech.libs.tablesaw]
             [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
@@ -43,12 +44,16 @@
                         mapseq-reader
                         ds-group-by
                         ds-group-by-column
+                        group-by->indexes
+                        group-by-column->indexes
                         ds-sort-by
                         ds-sort-by-column
                         ds-filter
                         ds-filter-column
                         unique-by
                         unique-by-column
+                        aggregate-by
+                        aggregate-by-column
                         ds-concat
                         ds-take-nth
                         ds-map-values
