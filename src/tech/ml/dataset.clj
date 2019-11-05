@@ -145,7 +145,7 @@
                          :n-missing n-missing}
                         (if (and (not (:categorical? (ds-col/metadata ds-col)))
                                  (casting/numeric-type? col-dtype))
-                          (dfn/descriptive-stats ds-col
+                          (dfn/descriptive-stats col-reader
                                                  #{:min :mean :max
                                                    :standard-deviation :skew})
                           {:mode (->> col-reader
