@@ -24,6 +24,14 @@
   [dataset ds-name]
   (ds-proto/set-dataset-name dataset ds-name))
 
+(defn ds-row-count
+  [dataset]
+  (second (dtype/shape dataset)))
+
+(defn ds-column-count
+  [dataset]
+  (first (dtype/shape dataset)))
+
 (defn metadata
   [dataset]
   (ds-proto/metadata dataset))
