@@ -118,6 +118,32 @@
    (->> (histogram-schema ds col options)
         (json/write-str))))
 
+(defn- time-series-schema
+  [ds x-col y-col]
+  (base-schema
+   :axes [{:orient "bottom" :scale "x"}
+          {:orient "left" :scale "y"}]
+   :data [{:name "table"
+           :values (ds/mapseq-reader (ds/select-columns ds [x-col y-col]))}]
+   :marks [{:encode {:enter {:stroke {:value "#222"}
+                             :strokeWidth {:value 2}
+                             :x {:field x-col :scale "x"}
+                             :y {:field y-col :scale "y"}}}
+            :from {:data "table"}
+            :type "line"}]
+   :scales [{:domain {:data "table" :field x-col}
+             :name "x"
+             :range "width"
+             :type "utc"}
+            (scale :domain {:data "table" :field y-col}
+                   :name "y"
+                   :range "height")]))
+
+(defn time-series
+  [ds x-col y-col]
+  (->> (time-series-schema ds x-col y-col)
+       (json/write-str)))
+
 (comment
 
   (defn- clip
@@ -128,6 +154,28 @@
   (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
       (scatterplot "Longitude" "Total Passing Vehicle Volume")
       (clip))
+
+  (-> (slurp "https://vega.github.io/vega/data/cars.json")
+      (clojure.data.json/read-str :key-fn keyword)
+      (ds/->dataset)
+      (histogram :Displacement {:bin-count 15})
+      (clip))
+
+  (let [ds (->> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv")
+                (ds/ds-filter (fn [{:strs [symbol]}] (= "MSFT" symbol))))
+        sdf (java.text.SimpleDateFormat. "MMM dd yyyy")
+        utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
+    (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
+        (time-series "inst" "price")
+        (clip)))
+
+  (let [ds (-> (ds/->dataset "https://vega.github.io/vega/data/seattle-temps.csv")
+               (ds/select :all (range 1000)))
+        sdf (java.text.SimpleDateFormat. "yyyy/MM/dd HH:mm")
+        utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
+    (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
+        (time-series "inst" "temp")
+        (clip)))
 
   ;; Then, paste into: https://vega.github.io/editor
 
