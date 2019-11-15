@@ -7,6 +7,7 @@
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.io :as io]
             [tech.parallel.require :as parallel-req])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
@@ -316,35 +317,38 @@ the correct type."
 
 (defn ds-concat
   [dataset & other-datasets]
-  (let [datasets  (concat [dataset] (remove nil? other-datasets))
-        column-list
-        (->> datasets
-             (mapcat (fn [dataset]
-                       (->> (columns dataset)
-                            (mapv (fn [col]
-                                    (assoc (ds-col/metadata col)
-                                           :column
-                                           col
-                                           :table-name (dataset-name dataset)))))))
-             (group-by :name))
-        label-map (->> datasets
-                       (map (comp :label-map metadata))
-                       (apply merge))]
-    (when-not (= 1 (count (->> (vals column-list)
-                               (map count)
-                               distinct)))
-      (throw (ex-info "Dataset is missing a column" {})))
-    (->> column-list
-         (map (fn [[_colname columns]]
-                (let [columns (map :column columns)
-                      column-values (reader-concat/concat-readers columns)
-                      first-col (first columns)]
-                  (ds-col/new-column first-col
-                                     (dtype/get-datatype first-col)
-                                     column-values
-                                     (ds-col/metadata first-col)))))
-         (ds-proto/from-prototype dataset (dataset-name dataset))
-         (#(set-metadata % {:label-map label-map})))))
+  (let [datasets (->> (concat [dataset] (remove nil? other-datasets))
+                      (remove nil?)
+                      seq)]
+    (when-let [dataset (first datasets)]
+      (let [column-list
+            (->> datasets
+                 (mapcat (fn [dataset]
+                           (->> (columns dataset)
+                                (mapv (fn [col]
+                                        (assoc (ds-col/metadata col)
+                                               :column
+                                               col
+                                               :table-name (dataset-name dataset)))))))
+                 (group-by :name))
+            label-map (->> datasets
+                           (map (comp :label-map metadata))
+                           (apply merge))]
+        (when-not (= 1 (count (->> (vals column-list)
+                                   (map count)
+                                   distinct)))
+          (throw (ex-info "Dataset is missing a column" {})))
+        (->> column-list
+             (map (fn [[_colname columns]]
+                    (let [columns (map :column columns)
+                          column-values (reader-concat/concat-readers columns)
+                          first-col (first columns)]
+                      (ds-col/new-column first-col
+                                         (dtype/get-datatype first-col)
+                                         column-values
+                                         (ds-col/metadata first-col)))))
+             (ds-proto/from-prototype dataset (dataset-name dataset))
+             (#(set-metadata % {:label-map label-map})))))))
 
 
 (defn unique-by
@@ -536,11 +540,35 @@ the correct type."
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
-           (or (instance? InputStream dataset)
-               (string? dataset))
+           (instance? InputStream dataset)
            (apply
             (parallel-req/require-resolve 'tech.libs.tablesaw/path->tablesaw-dataset)
             dataset (apply concat options))
+
+           (string? dataset)
+           (let [^String dataset dataset
+                 gzipped? (.endsWith dataset ".gz")
+                 json? (or (.endsWith dataset ".json")
+                           (.endsWith dataset ".json.gz"))
+                 tsv? (or (.endsWith dataset ".tsv")
+                          (.endsWith dataset ".tsv.gz"))
+                 options (if (and tsv? (not (contains? options :separator)))
+                           (assoc options :separator \tab)
+                           options)
+                 options (if (and json? (not (contains? options :key-fn)))
+                           (assoc options :key-fn keyword)
+                           options)
+                 open-fn (if json?
+                           #(-> (apply io/get-json % (apply concat options))
+                                (map-seq->dataset options))
+                           #(apply
+                             (parallel-req/require-resolve
+                              'tech.libs.tablesaw/path->tablesaw-dataset)
+                             % (apply concat options)))]
+             (with-open [istream (if gzipped?
+                                   (io/gzip-input-stream dataset)
+                                   (io/input-stream dataset))]
+               (open-fn istream)))
            :else
            (map-seq->dataset dataset options))]
      (if table-name

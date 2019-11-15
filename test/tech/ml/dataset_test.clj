@@ -3,7 +3,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.v2.tensor :as tens]
-            [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
             [clojure.test :refer :all]
@@ -90,7 +90,7 @@
                                                 (into-array (Class/forName "[D"))))
                                  (tens/->tensor))]
     ;;Make sure we get the same answer as smile.
-    (is (dtype-fn/equals trans-tens
+    (is (dfn/equals trans-tens
                          smile-transformed-ds
                          0.01))))
 
@@ -163,7 +163,7 @@
            (dtype/shape (dataset/unique-by :width ds))))
     (is (= [7 24]
            (dtype/shape (dataset/unique-by-column :width ds))))
-    (is (dtype-fn/equals [5.8 5.9 6.0 6.1 6.2 6.3 6.5
+    (is (dfn/equals [5.8 5.9 6.0 6.1 6.2 6.3 6.5
                           6.7 6.8 6.9 7.0 7.1 7.2 7.3
                           7.4 7.5 7.6 7.7 7.8 8.0 8.4
                           9.0 9.2 9.6]
@@ -173,7 +173,34 @@
                               vec)))))
 
 
-(deftest aggregate-by-test
-  (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
+(deftest ds-concat-nil-pun
+  (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
+               (dataset/select :all (range 10)))
+        d1 (dataset/ds-concat nil ds)
+        d2 (dataset/ds-concat ds nil nil)
+        nothing (dataset/ds-concat nil nil nil)]
+    (is (= (vec (ds :fruit-name))
+           (vec (d1 :fruit-name))))
+    (is (= (vec (ds :fruit-name))
+           (vec (d2 :fruit-name))))
+    (is (nil? nothing))))
 
-    ))
+
+(deftest update-column-datatype-detect
+  (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
+               (dataset/select :all (range 10)))
+        updated (dataset/update-column ds :width #(->> %
+                                                       (map (fn [data]
+                                                              (* 10 data)))))
+        add-or-updated (dataset/add-or-update-column
+                        ds :width (->> (ds :width)
+                                       (map (fn [data]
+                                              (* 10 data)))))
+        width-answer (->> (ds :width)
+                          (mapv (fn [data]
+                                  (* 10 data))))]
+
+    (is (dfn/equals width-answer
+                    (updated :width)))
+    (is (dfn/equals width-answer
+                    (add-or-updated :width)))))

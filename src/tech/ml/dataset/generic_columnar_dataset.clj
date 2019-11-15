@@ -13,6 +13,18 @@
 (declare make-dataset)
 
 
+(defn- new-column-datatype
+  [coldata]
+  (if (= :object (dtype/get-datatype coldata))
+    (let [first-item (first coldata)]
+      (cond
+        (integer? first-item) :int64
+        (number? first-item) :float64
+        :else
+        :string))
+    (dtype/get-datatype coldata)))
+
+
 (deftype GenericColumnarDataset [table-name
                                  column-names
                                  colmap
@@ -62,14 +74,15 @@
                       {:col-name col-name
                        :col-names (keys colmap)})))
     (let [col (get colmap col-name)
-          new-col-data (col-fn col)]
+          new-col-data (col-fn col)
+          new-col-dtype (new-column-datatype col)]
       (GenericColumnarDataset.
        table-name
        column-names
        (assoc colmap col-name
               (if (ds-col/is-column? new-col-data)
                 (ds-col/set-name new-col-data col-name)
-                (ds-col/new-column col (dtype/get-datatype new-col-data)
+                (ds-col/new-column col new-col-dtype
                                    new-col-data {:name (ds-col/column-name col)})))
        metadata)))
 
@@ -77,7 +90,7 @@
     (let [col-data (if (ds-col/is-column? new-col-data)
                      (ds-col/set-name new-col-data col-name)
                      (ds-col/new-column (first dataset)
-                                        (dtype/get-datatype new-col-data)
+                                        (new-column-datatype new-col-data)
                                         new-col-data {:name col-name}))]
       (if (contains? colmap col-name)
         (ds/update-column dataset col-name (constantly col-data))

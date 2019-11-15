@@ -5,7 +5,6 @@
             [tech.v2.datatype.functional.impl :as fn-impl]
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.column :as ds-col]
-            [tech.parallel.require :as parallel-req]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.base]
