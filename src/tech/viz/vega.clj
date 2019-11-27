@@ -1,4 +1,5 @@
-(ns tech.ml.dataset.vega
+(ns tech.viz.vega
+  "Vega vizualizations of datasets."
   (:require [clojure.data.json :as json]
             [tech.v2.datatype :as dtype]
             [tech.v2.tensor.color-gradients :as gradient]
@@ -6,30 +7,30 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Functions for generating vega JS specs for visualization
-(defn- base-schema
-  [& {:keys [$schema autosize width height]
-      :or {$schema "https://vega.github.io/schema/vega/v5.json"
-           autosize {:type "fit" :resize true :contains "padding"}
-           width 800 height 450}
-      :as m}]
-  (merge m {:$schema $schema :autosize autosize
-            :width width :height height}))
+(defn base-schema
+  [options & {:as m}]
+  (merge {:$schema "https://vega.github.io/schema/vega/v5.json"
+          :autosize {:type "fit" :resize true :contains "padding"}
+          :width 800 :height 450}
+         options m))
 
-(defn- axis
+(defn axis
   [& {:keys [domain grid]
       :or {domain false grid true}
       :as m}]
   (merge m {:domain domain :grid grid}))
 
-(defn- scale
+(defn scale
   [& {:keys [nice round type zero]
       :or {nice true round true type "linear" zero true}
       :as m}]
   (merge m {:nice nice :round round :type type :zero zero}))
 
-(defn- scatterplot-schema
-  [ds x-col y-col]
+(defn scatterplot
+  "Render a scatterplot to a vega datastructure"
+  [ds x-col y-col & [options]]
   (base-schema
+   options
    :axes [(axis :orient "bottom"
                 :scale "x"
                 :title x-col)
@@ -55,13 +56,16 @@
                    :range "height"
                    :zero false)]))
 
-(defn scatterplot
-  [ds x-col y-col]
-  (->> (scatterplot-schema ds x-col y-col)
+
+(defn scatterplot->str
+  [ds x-col y-col & [options]]
+  (->> (scatterplot ds x-col y-col options)
        (json/write-str)))
 
-(defn histogram-schema
-  [ds col {:keys [bin-count]}]
+
+(defn histogram
+  "Render a histograph to a vega datastructure"
+  [ds col & [{:keys [bin-count] :as options}]]
   (let [raw-values (ds col)
         [minimum maximum] ((juxt #(apply min %)
                                  #(apply max %)) raw-values)
@@ -88,7 +92,7 @@
                     (map dtype/->vector)
                     (map (fn [[b g r]] (format "#%02X%02X%02X" r g b))))
         values (map (fn [v c] (assoc v :color c)) values colors)]
-    (base-schema
+    (base-schema options
      :axes [{:orient "bottom" :scale "xscale" :tickCount 5}
             {:orient "left" :scale "yscale" :tickCount 5}]
      :data [{:name "binned"
@@ -111,16 +115,17 @@
                      :range "height"
                      :name "yscale")])))
 
-(defn histogram
-  ([ds col]
-   (histogram ds col {}))
-  ([ds col options]
-   (->> (histogram-schema ds col options)
-        (json/write-str))))
+(defn histogram->str
+  ([ds col & [options]]
+   (-> (histogram ds col options)
+       (json/write-str))))
 
-(defn- time-series-schema
-  [ds x-col y-col]
+
+(defn time-series
+  "Render a time series to a vega datastructure"
+  [ds x-col y-col & [options]]
   (base-schema
+   options
    :axes [{:orient "bottom" :scale "x"}
           {:orient "left" :scale "y"}]
    :data [{:name "table"
@@ -139,43 +144,42 @@
                    :name "y"
                    :range "height")]))
 
-(defn time-series
-  [ds x-col y-col]
-  (->> (time-series-schema ds x-col y-col)
+(defn time-series->str
+  [ds x-col y-col & [options]]
+  (->> (time-series ds x-col y-col options)
        (json/write-str)))
 
 (comment
 
-  (defn- clip
-    [s]
-    (-> (.getSystemClipboard (java.awt.Toolkit/getDefaultToolkit))
-        (.setContents (java.awt.datatransfer.StringSelection. s) nil)))
+  (require '[tech.viz.desktop :refer [->clipboard]])
 
   (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
-      (scatterplot "Longitude" "Total Passing Vehicle Volume")
-      (clip))
+      (scatterplot->str "Longitude" "Total Passing Vehicle Volume")
+      (->clipboard))
+
+  ;;Now open https://vega.github.io/editor/ and paste.
 
   (-> (slurp "https://vega.github.io/vega/data/cars.json")
       (clojure.data.json/read-str :key-fn keyword)
       (ds/->dataset)
-      (histogram :Displacement {:bin-count 15})
-      (clip))
+      (histogram->str :Displacement {:bin-count 15})
+      (->clipboard))
 
   (let [ds (->> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv")
                 (ds/ds-filter (fn [{:strs [symbol]}] (= "MSFT" symbol))))
         sdf (java.text.SimpleDateFormat. "MMM dd yyyy")
         utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
     (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
-        (time-series "inst" "price")
-        (clip)))
+        (time-series->str "inst" "price")
+        (->clipboard)))
 
   (let [ds (-> (ds/->dataset "https://vega.github.io/vega/data/seattle-temps.csv")
                (ds/select :all (range 1000)))
         sdf (java.text.SimpleDateFormat. "yyyy/MM/dd HH:mm")
         utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
     (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
-        (time-series "inst" "temp")
-        (clip)))
+        (time-series->str "inst" "temp")
+        (->clipboard)))
 
   ;; Then, paste into: https://vega.github.io/editor
 
