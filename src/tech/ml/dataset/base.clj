@@ -261,8 +261,7 @@ the correct type."
   (->> (or column-name-seq (column-names dataset))
        (select-columns dataset)
        (mapseq-reader)
-       (map-indexed vector)
-       (group-by (comp key-fn second))))
+       (dfn/arggroup-by key-fn)))
 
 
 (defn ds-group-by
@@ -271,7 +270,7 @@ the correct type."
   using column-name-seq is optional but will greatly improve performance."
   [key-fn dataset & [column-name-seq]]
   (->> (group-by->indexes key-fn dataset column-name-seq)
-       (map (fn [[k v]] [k (select dataset :all (map first v))]))
+       (map (fn [[k v]] [k (select dataset :all v)]))
        (into {})))
 
 
@@ -279,8 +278,7 @@ the correct type."
   [colname dataset]
   (->> (column dataset colname)
        (dtype/->reader)
-       (map-indexed vector)
-       (group-by second)))
+       (dfn/arggroup-by identity)))
 
 
 (defn ds-group-by-column
@@ -288,7 +286,7 @@ the correct type."
   [colname dataset]
   (->> (group-by-column->indexes colname dataset)
        (map (fn [[k v]]
-              [k (-> (select dataset :all (map first v))
+              [k (-> (select dataset :all v)
                      (set-dataset-name k))]))
        (into {})))
 
@@ -350,16 +348,20 @@ the correct type."
              (ds-proto/from-prototype dataset (dataset-name dataset))
              (#(set-metadata % {:label-map label-map})))))))
 
+(defn default-unique-by-keep-fn
+  [argkey idx-seq]
+  (first idx-seq))
+
 
 (defn unique-by
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from (seq [idx col-val])->idx.  Defaults to ffirst."
+  :keep-fn - Function from key,idx-seq->idx-seq.  Defaults to first."
   [map-fn dataset & {:keys [column-name-seq keep-fn]
-                    :or {keep-fn ffirst}}]
+                    :or {keep-fn default-unique-by-keep-fn}}]
   (->> (group-by->indexes map-fn dataset column-name-seq)
-       (map (fn [[_ v]] (keep-fn v)))
+       (map (fn [[k v]] (keep-fn k v)))
        (select dataset :all)))
 
 
@@ -367,11 +369,11 @@ the correct type."
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from (seq [idx col-val])->idx.  Defaults to ffirst."
+  :keep-fn - Function from key, idx-seq->idx0seq.  Defaults to first."
   [colname dataset & {:keys [keep-fn]
-                      :or {keep-fn ffirst}}]
+                      :or {keep-fn default-unique-by-keep-fn}}]
   (->> (group-by-column->indexes colname dataset)
-       (map (fn [[_ v]] (keep-fn v)))
+       (map (fn [[k v]] (keep-fn k v)))
        (select dataset :all)))
 
 (defn- perform-aggregation
@@ -401,7 +403,7 @@ the correct type."
    count-column-name]
   (let [index-sequences (->> index-groups
                              (map (fn [[_ v]]
-                                    (int-array (map first v)))))
+                                    (int-array v))))
         count-column-name (or count-column-name
                               (if (keyword? (first (column-names dataset)))
                                 :index-counts
