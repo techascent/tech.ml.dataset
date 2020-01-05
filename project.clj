@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "1.65"
+(defproject techascent/tech.ml.dataset "1.66-SNAPSHOT"
   :description "Dataset and ETL pipeline for machine learning"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
