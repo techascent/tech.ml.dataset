@@ -2,7 +2,7 @@
  :deps {org.clojure/clojure              {:mvn/version "1.10.1"}
         camel-snake-kebab                {:mvn/version "0.4.0"}
         techascent/tech.datatype         {:mvn/version "4.72"}
-        techascent/tech.io               {:mvn/version "3.10"}
+        techascent/tech.io               {:mvn/version "3.11"}
         tech.tablesaw/tablesaw-core      {:mvn/version "0.34.2"}
         com.github.haifengl/smile-core   {:mvn/version "1.5.3"}
         com.github.haifengl/smile-netlib {:mvn/version "1.5.3"}}}
