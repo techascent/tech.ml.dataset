@@ -53,9 +53,9 @@
         dataset (select dataset
                         (->> (columns dataset)
                              (map ds-col/column-name)
-                             (remove (set (concat (map ds-col/column-name
-                                                       missing-columns)
-                                                  non-numeric))))
+                             (remove (set (concat
+                                           (map :column-name  missing-columns)
+                                           non-numeric))))
                         :all)
         lhs-colseq (if (seq colname-seq)
                      (map (partial base/column dataset) colname-seq)
