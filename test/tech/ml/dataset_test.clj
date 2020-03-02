@@ -204,3 +204,9 @@
                     (updated :width)))
     (is (dfn/equals width-answer
                     (add-or-updated :width)))))
+
+
+(deftest filter-fail-regression
+  (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
+    (is (= ["mandarin" "mandarin" "mandarin" "mandarin"]
+           (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))

@@ -267,7 +267,7 @@
   (select [col idx-seq]
     (let [^ints int-data (if (instance? (Class/forName "[I") idx-seq)
                            idx-seq
-                           (int-array idx-seq))]
+                           (dtype/make-container :java-array :int32 idx-seq))]
       ;;We can't cache much metadata now as we don't really know.
       (.subset col int-data)))
 
@@ -314,6 +314,12 @@
        (lsize [reader] (base/ecount item))
        (read [reader idx] (.get item idx)))
      options))
+
+  dtype-proto/PBuffer
+  (sub-buffer [item offset len]
+    (let [offset (long offset)
+          len (long len)]
+      (col-proto/select item (range offset (+ offset len)))))
 
 
   dtype-proto/PToWriter
