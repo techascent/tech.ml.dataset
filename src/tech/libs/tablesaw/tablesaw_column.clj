@@ -315,11 +315,19 @@
        (read [reader idx] (.get item idx)))
      options))
 
+
   dtype-proto/PBuffer
   (sub-buffer [item offset len]
     (let [offset (long offset)
           len (long len)]
-      (col-proto/select item (range offset (+ offset len)))))
+      (reify
+        ObjectReader
+        (getDatatype [reader] (dtype-proto/get-datatype item))
+        (lsize [reader] len)
+        (read [reader idx] (.get item (+ idx offset)))
+        ObjectWriter
+        (write [writer idx value]
+          (.set item (+ idx offset) value)))))
 
 
   dtype-proto/PToWriter

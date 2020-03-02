@@ -209,4 +209,8 @@
 (deftest filter-fail-regression
   (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
     (is (= ["mandarin" "mandarin" "mandarin" "mandarin"]
+           (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))
+    (dtype/copy! ["one" "two" "three" "four"]
+                 (dtype/sub-buffer (ds :fruit-name) 4 4))
+    (is (= ["one" "two" "three" "four"]
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))

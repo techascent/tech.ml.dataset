@@ -173,9 +173,7 @@
 
   dtype-proto/PBuffer
   (sub-buffer [item offset length]
-    (TablesawColumn.
-     (dtype-proto/sub-buffer col offset length)
-     metadata {}))
+    (dtype-proto/sub-buffer col offset length))
 
   dtype-proto/PToArray
   (->sub-array [src] (dtype-proto/->sub-array col))

@@ -75,7 +75,7 @@
                        :col-names (keys colmap)})))
     (let [col (get colmap col-name)
           new-col-data (col-fn col)
-          new-col-dtype (new-column-datatype col)]
+          new-col-dtype (new-column-datatype new-col-data)]
       (GenericColumnarDataset.
        table-name
        column-names
