@@ -162,6 +162,17 @@
    (add-or-update-column dataset (ds-col/column-name column) column)))
 
 
+(defn rename-columns
+  "Rename a map of columns."
+  [dataset colname-map]
+  (reduce-kv (fn [dataset col-name new-col-name]
+               (-> dataset
+                   (add-or-update-column new-col-name (dataset col-name))
+                   (remove-column col-name)))
+             dataset
+             colname-map))
+
+
 (defn select
   "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
 colname-seq - either keyword :all or list of column names with no duplicates.

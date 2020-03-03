@@ -38,6 +38,7 @@
                         update-column
                         order-column-names
                         update-columns
+                        rename-columns
                         select
                         select-columns
                         add-or-update-column
