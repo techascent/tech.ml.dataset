@@ -506,7 +506,8 @@ user> (->> (sorted-named-baths "NamedBaths")
 
 - gzipped tsv
 ```clojure
-tech.ml.dataset-test> (io/mapseq->csv! (io/gzip-output-stream! "file://test.tsv.gz" )
-                                       (dataset/mapseq-reader test-ds )
-                                       :separator \tab)
+user> (with-open [outs (io/gzip-output-stream! "file://test.tsv.gz")]
+        (io/mapseq->csv!
+         (dataset/mapseq-reader test-ds )
+         :separator \tab))
 ```
