@@ -64,7 +64,8 @@
                         ->>dataset
                         name-values-seq->dataset
                         from-prototype
-                        dataset->string)
+                        dataset->string
+                        join-by-column)
 
 
 (defn n-permutations
