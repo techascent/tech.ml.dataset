@@ -13,7 +13,8 @@
             [tech.parallel.require :as parallel-req])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
-           [java.util List]))
+           [java.util List]
+           [it.unimi.dsi.fastutil.longs LongArrayList]))
 
 
 (set! *warn-on-reflection* true)
@@ -646,28 +647,18 @@ the correct type."
   [colname lhs rhs & {:keys [error-on-missing?]}]
   (let [idx-groups (group-by-column->indexes colname lhs)
         rhs-col (typecast/datatype->reader :object (rhs colname))
-        lhs-indexes (dtype/make-container :list :int64 0)
-        lhs-mutable (typecast/datatype->mutable :int64 lhs-indexes)
-        rhs-indexes (dtype/make-container :list :int64 0)
-        rhs-mutable (typecast/datatype->mutable :int64 rhs-indexes)
+        lhs-indexes (LongArrayList.)
+        rhs-indexes (LongArrayList.)
         n-elems (dtype/ecount rhs-col)]
     ;;This would have to be parallelized and thus have a separate set of indexes
     ;;that were merged later in order to really be nice.  tech.datatype has no
     ;;parallized operation that will result in this.
     (loop [idx 0]
       (when (< idx n-elems)
-        (if-let [item (typecast/datatype->reader
-                       :int64
-                       (get idx-groups (.read rhs-col idx)))]
+        (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
           (do
-            (dtype/insert-block! rhs-indexes
-                                 (.lsize rhs-mutable)
-                                 (const-rdr/make-const-reader idx
-                                                              :int64
-                                                              (.lsize item)))
-            (dtype/insert-block! lhs-indexes
-                                 (.lsize lhs-mutable)
-                                 item))
+            (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+            (.addAll lhs-indexes item))
           (when error-on-missing?
             (throw (Exception. (format "Failed to find column value %s"
                                        (.read rhs-col idx))))))

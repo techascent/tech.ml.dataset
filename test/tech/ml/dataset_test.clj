@@ -214,3 +214,17 @@
                  (dtype/sub-buffer (ds :fruit-name) 4 4))
     (is (= ["one" "two" "three" "four"]
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
+
+
+
+(defn large-join-test
+  []
+  (let [ds1 (dataset/name-values-seq->dataset
+            {:a (range 100000)
+             :b (flatten (repeat 10000 ["a" "b" "c" "d" "e"
+                                        "f" "g" "h" "i" "j"]))})
+        ds2 (dataset/name-values-seq->dataset
+            {:a (range 100000)
+             :c (flatten (repeat 10000 ["a" "b" "c" "d" "e"
+                                        "f" "g" "h" "i" "j"]))})]
+    (dataset/join-by-column :a ds1 ds2)))
