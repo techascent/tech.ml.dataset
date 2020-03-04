@@ -3,8 +3,10 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.readers.concat :as reader-concat]
+            [tech.v2.datatype.readers.const :as const-rdr]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.io :as io]
@@ -636,3 +638,42 @@ the correct type."
   ^String [ds]
   (with-out-str
     ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
+
+
+(defn join-by-column
+  "Join by column.  For efficiency, lhs should be smaller than rhs as it is sorted
+  in memory."
+  [colname lhs rhs & {:keys [error-on-missing?]}]
+  (let [idx-groups (group-by-column->indexes colname lhs)
+        rhs-col (typecast/datatype->reader :object (rhs colname))
+        lhs-indexes (dtype/make-container :list :int64 0)
+        lhs-mutable (typecast/datatype->mutable :int64 lhs-indexes)
+        rhs-indexes (dtype/make-container :list :int64 0)
+        rhs-mutable (typecast/datatype->mutable :int64 rhs-indexes)
+        n-elems (dtype/ecount rhs-col)]
+    ;;This would have to be parallelized and thus have a separate set of indexes
+    ;;that were merged later in order to really be nice.  tech.datatype has no
+    ;;parallized operation that will result in this.
+    (loop [idx 0]
+      (when (< idx n-elems)
+        (if-let [item (typecast/datatype->reader
+                       :int64
+                       (get idx-groups (.read rhs-col idx)))]
+          (do
+            (dtype/insert-block! rhs-indexes
+                                 (.lsize rhs-mutable)
+                                 (const-rdr/make-const-reader idx
+                                                              :int64
+                                                              (.lsize item)))
+            (dtype/insert-block! lhs-indexes
+                                 (.lsize lhs-mutable)
+                                 item))
+          (when error-on-missing?
+            (throw (Exception. (format "Failed to find column value %s"
+                                       (.read rhs-col idx))))))
+        (recur (unchecked-inc idx))))
+    (let [lhs-cols (->> (columns lhs)
+                        (map #(ds-col/select % lhs-indexes)))
+          rhs-cols (->> (columns (remove-column rhs colname))
+                        (map #(ds-col/select % rhs-indexes)))]
+      (from-prototype lhs "join-table" (concat lhs-cols rhs-cols)))))
