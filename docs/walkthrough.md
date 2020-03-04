@@ -428,7 +428,7 @@ TotalBath
 [3.500, 2.500, 3.500, 2.000, 3.500, 2.500, 3.000, 3.500, 2.000, 2.000, 2.000, 4.000, 2.000, 2.000, 2.500, 1.000, 2.000, 2.000, 2.500, 1.000, ...]
 ```
 
-We can also implement a completely dynamic operation to create a new column by 
+We can also implement a completely dynamic operation to create a new column by
 implementing the appropriate reader interface from the datatype library:
 ```clojure
 user> (import '[tech.v2.datatype ObjectReader])
@@ -488,4 +488,25 @@ user> (->> (sorted-named-baths "NamedBaths")
  "somewhat doable"
  "somewhat doable"
  "somewhat doable")
+```
+
+## Writing A Dataset Out
+
+- pure csv
+```clojure
+(tech.io/mapseq->csv! "file://test.csv" (dataset/mapseq-reader test-ds ))
+```
+
+- tsv
+```clojure
+   (io/mapseq->csv! "file://test.tsv"
+                    (dataset/mapseq-reader test-ds )
+                    :separator \tab)
+```
+
+- gzipped tsv
+```clojure
+tech.ml.dataset-test> (io/mapseq->csv! (io/gzip-output-stream! "file://test.tsv.gz" )
+                                       (dataset/mapseq-reader test-ds )
+                                       :separator \tab)
 ```
