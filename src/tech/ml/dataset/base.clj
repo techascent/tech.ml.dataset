@@ -645,7 +645,8 @@ the correct type."
   "Join by column.  For efficiency, lhs should be smaller than rhs as it is sorted
   in memory."
   [colname lhs rhs & {:keys [error-on-missing?]}]
-  (let [idx-groups (group-by-column->indexes colname lhs)
+  (let [_ (println "initial group by")
+        idx-groups (time (group-by-column->indexes colname lhs))
         rhs-col (typecast/datatype->reader :object (rhs colname))
         lhs-indexes (LongArrayList.)
         rhs-indexes (LongArrayList.)
@@ -653,18 +654,22 @@ the correct type."
     ;;This would have to be parallelized and thus have a separate set of indexes
     ;;that were merged later in order to really be nice.  tech.datatype has no
     ;;parallized operation that will result in this.
-    (loop [idx 0]
-      (when (< idx n-elems)
-        (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
-          (do
-            (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
-            (.addAll lhs-indexes item))
-          (when error-on-missing?
-            (throw (Exception. (format "Failed to find column value %s"
-                                       (.read rhs-col idx))))))
-        (recur (unchecked-inc idx))))
-    (let [lhs-cols (->> (columns lhs)
-                        (map #(ds-col/select % lhs-indexes)))
-          rhs-cols (->> (columns (remove-column rhs colname))
-                        (map #(ds-col/select % rhs-indexes)))]
-      (from-prototype lhs "join-table" (concat lhs-cols rhs-cols)))))
+    _ (println "array list join")
+    (time
+     (loop [idx 0]
+       (when (< idx n-elems)
+         (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
+           (do
+             (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+             (.addAll lhs-indexes item))
+           (when error-on-missing?
+             (throw (Exception. (format "Failed to find column value %s"
+                                        (.read rhs-col idx))))))
+         (recur (unchecked-inc idx)))))
+    (println "final column select")
+    (time
+     (let [lhs-cols (->> (columns lhs)
+                         (map #(ds-col/select % lhs-indexes)))
+           rhs-cols (->> (columns (remove-column rhs colname))
+                         (map #(ds-col/select % rhs-indexes)))]
+       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols))))))
