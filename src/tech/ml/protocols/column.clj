@@ -26,6 +26,8 @@ should have :target? true.")
     "Indexes of missing values")
   (is-missing? [col idx]
     "Return true if this index is missing.")
+  (set-missing [col long-rdr]
+    "Set this group of indexes as the missing set")
   (unique [col]
     "Set of all unique values")
   (stats [col stats-set]
@@ -40,9 +42,7 @@ Supported types are:
 :kendall")
   (select [col idx-seq]
     "Return a new column with the subset of indexes")
-  (empty-column [col datatype elem-count metadata]
-    "Return a new column of this supertype where all values are missing.")
-  (new-column [col datatype elem-count-or-values metadata]
+  (new-column [col datatype elem-count-or-values missing-set metadata]
     "Return a new column of this supertype with these values")
   (clone [col]
     "Return a clone of this column.")

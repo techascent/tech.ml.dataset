@@ -2,7 +2,9 @@
   (:require [tech.io :as io]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.typecast :as typecast])
+            [tech.v2.datatype.typecast :as typecast]
+            [tech.v2.datatype.casting :as casting]
+            [tech.ml.dataset.impl.column :as col-impl])
   (:import [com.univocity.parsers.common AbstractParser]
            [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
            [java.io Reader InputStream]
@@ -84,13 +86,9 @@
 
 (defmacro dtype->missing-val
   [datatype]
-  (case datatype
-    :boolean `false
-    :int16 `Short/MAX_VALUE
-    :int32 `Integer/MAX_VALUE
-    :int64 `Long/MAX_VALUE
-    :float32 `Float/NaN
-    :float64 `Double/NaN))
+  `(casting/datatype->cast-fn :unknown
+                              ~datatype
+                              @(col-impl/dtype->missing-val-map ~datatype)))
 
 
 (defmacro simple-col-parser
@@ -312,11 +310,24 @@
 
 
 (defn csv->columns
-  "Non-lazily and serially parse the columns"
+  "Non-lazily and serially parse the columns.  Returns a vector of maps of
+  {
+   :name column-name
+   :missing long-reader of in-order missing indexes
+   :data typed reader/writer of data.
+  }
+  options:
+  header-row? - Defaults to true, indicates the first row is a header.
+  parser-fn - function taking colname and sequence of column values to decide
+        parsing strategy.  Defaults to nil in which case the default parser is used.
+        Return value must implement PColumnParser.
+  parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
+
+  If the parser-fn is confusing, just pass in println and that may help and let it error out."
   [input & {:keys [header-row? parser-fn
-                   initial-scan-len]
+                   parser-scan-len]
             :or {header-row? true
-                 initial-scan-len 100}}]
+                 parser-scan-len 100}}]
   (let [rows (raw-row-iterable input)
         data (iterator-seq (.iterator rows))
         initial-row (first data)
@@ -325,9 +336,9 @@
                data)
         n-cols (count initial-row)
         ^List column-parsers (vec (if parser-fn
-                                    (let [scan-rows (take initial-scan-len data)
+                                    (let [scan-rows (take parser-scan-len data)
                                           scan-cols (->> (apply interleave scan-rows)
-                                                         (partition initial-scan-len))]
+                                                         (partition parser-scan-len))]
                                       (map parser-fn initial-row scan-cols))
                                     (repeatedly n-cols default-column-parser)))]
     (doseq [^"[Ljava.lang.String;" row data]
@@ -344,4 +355,7 @@
     (mapv (fn [init-row-data parser]
             (assoc (column-data parser)
                    :name init-row-data))
-          initial-row column-parsers)))
+          (if header-row?
+            initial-row
+            (range n-cols))
+          column-parsers)))
