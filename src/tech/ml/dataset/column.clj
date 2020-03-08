@@ -49,33 +49,16 @@
        (set-metadata col)))
 
 
-(defn cache
-  "Return the cache map for this column.  Cache maps are
-never duplcated or copied."
-  [col]
-  (col-proto/cache col))
-
-
-(defn set-cache
-  "Set the cache on the column returning a new column. Cache maps
-are never duplicated or copied."
-  [col cache-map]
-  (col-proto/set-cache col cache-map))
-
-
-(defn merge-cache
-  "Merge the existing cache with new cache map.  Cache maps
-  are never duplicated or copied."
-  [col cache-map]
-  (->> (merge (cache col)
-              cache-map)
-       (set-cache col)))
-
-
 (defn missing
   "Indexes of missing values"
   [col]
   (col-proto/missing col))
+
+
+(defn is-missing?
+  "Return true if this index is missing."
+  [col idx]
+  (col-proto/is-missing? col idx))
 
 
 (defn unique
@@ -102,34 +85,6 @@ Implementations should check their metadata before doing calculations."
   Returns floating point number between [-1 1]"
   [lhs rhs correlation-type]
   (col-proto/correlation lhs rhs correlation-type))
-
-
-(defn column-values
-  "Return a 'thing convertible to a sequence' of values for this column.
-May be a java array or something else.  Likely to error on missing."
-  [col]
-  (col-proto/column-values col))
-
-
-(defn is-missing?
-  "Return true if this index is missing."
-  [col idx]
-  (col-proto/is-missing? col idx))
-
-
-(defn get-column-value
-  "Get a value fro mthe column.  Error on missing values."
-  [col idx]
-  (col-proto/get-column-value col idx))
-
-
-(defn set-values
-  "Set values in the column returning a new column with same name and datatype.  Values
-which cannot be simply coerced to the datatype are an error."
-  [col idx-val-seq]
-  (if (seq idx-val-seq)
-    (col-proto/set-values col idx-val-seq)
-    col))
 
 
 (defn select

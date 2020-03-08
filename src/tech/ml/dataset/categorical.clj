@@ -78,7 +78,7 @@
   "Given a categorical map for a given column, produce a new column
   of the desired datatype with the values mapped to the table values."
   [categorical-map new-dtype old-column]
-  (let [existing-values (ds-col/column-values old-column)
+  (let [existing-values (dtype/->reader old-column)
         column-name (ds-col/column-name old-column)
         categorical-map (get categorical-map column-name)
         data-values
@@ -114,7 +114,7 @@
 (defn inverse-map-categorical-columns
   [dataset src-column column-categorical-map]
   (let [column-values (-> (ds/column dataset src-column)
-                          ds-col/column-values)]
+                          (dtype/->reader))]
     (->> column-values
          (mapv (inverse-map-categorical-col-fn
                 src-column column-categorical-map)))))
@@ -191,7 +191,7 @@
   (let [column (ds/column dataset column-name)
         dataset (ds/remove-column dataset column-name)
         context (get one-hot-map column-name)
-        col-values (ds-col/column-values column)
+        col-values (dtype/->reader column)
         new-column-map (->> context
                             (map (fn [[_argval [new-column-name _colval]]]
                                    [new-column-name

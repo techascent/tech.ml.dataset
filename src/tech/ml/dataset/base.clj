@@ -6,7 +6,6 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.readers.concat :as reader-concat]
-            [tech.v2.datatype.readers.const :as const-rdr]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.io :as io]
