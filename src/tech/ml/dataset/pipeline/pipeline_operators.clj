@@ -269,12 +269,11 @@ strings with a known value."
    (fn [col]
      (let [result-dtype (or (:result-datatype op-args)
                             (dtype/get-datatype col))
-           map-fn (:value-map context)]
+           map-fn (:value-map context)
+           new-col-name (or (:result-name op-args)
+                            (ds-col/column-name col))]
        (as-> (mapv #(get map-fn % %) (dtype/->reader col)) col-values
-         (ds-col/new-column col result-dtype col-values
-                            (assoc (ds-col/metadata col)
-                                   :name (or (:result-name op-args)
-                                             (ds-col/column-name col)))))))))
+         (ds-col/new-column column-name col-values (ds-col/metadata col)))))))
 
 
 (def-single-column-etl-operator update-column
@@ -296,7 +295,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
          (let [new-col-dtype etl-dtype
                col-values (dtype/->reader col)
                data-values (dtype/make-array-of-type new-col-dtype col-values)]
-           (ds-col/new-column col new-col-dtype data-values))
+           (ds-col/new-column (ds-col/column-name col) data-values))
          col)))))
 
 
@@ -336,7 +335,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
                    (ds/update-column
                     dataset (ds-col/column-name col)
                     (fn [incoming-col]
-                      (ds-col/new-column incoming-col etl-dtype
+                      (ds-col/new-column (ds-col/column-name incoming-col)
                                          (tens/select backing-store col-idx :all)
                                          (dissoc (ds-col/metadata incoming-col)
                                                  :categorical?)))))

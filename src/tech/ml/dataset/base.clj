@@ -103,21 +103,11 @@
 
 (defn new-column
   "Create a new column from some values."
-  ([dataset column-name values {:keys [datatype
-                                       container-type]
-                                :or {container-type :tablesaw-column}
-                                :as options}]
-   (let [datatype (or datatype (dtype/get-datatype values))]
-     (->> (if (ds-col/is-column? values)
-            (ds-col/set-name values column-name)
-            (if-let [col (first (columns dataset))]
-              (ds-col/new-column col datatype values {:name column-name})
-              (dtype/make-container container-type datatype values
-                                    (assoc options
-                                           :column-name column-name))))
-          (add-column dataset))))
-  ([dataset column-name values]
-   (new-column dataset column-name values {})))
+  [dataset column-name values]
+  (->> (if (ds-col/is-column? values)
+         (ds-col/set-name values column-name)
+         (ds-col/new-column column-name values))
+       (add-column dataset)))
 
 
 (defn remove-column
@@ -341,8 +331,7 @@ the correct type."
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
                           first-col (first columns)]
-                      (ds-col/new-column first-col
-                                         (dtype/get-datatype first-col)
+                      (ds-col/new-column (ds-col/column-name first-col)
                                          column-values
                                          (ds-col/metadata first-col)))))
              (ds-proto/from-prototype dataset (dataset-name dataset))

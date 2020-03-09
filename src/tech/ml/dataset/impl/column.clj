@@ -248,9 +248,16 @@
   column and datatype protocols to allow efficient columnwise operations of
   the rest of tech.ml.dataset"
   ([name data metadata missing]
+   (when-not (or (nil? metadata)
+                 (map? metadata))
+     (throw (Exception. "Metadata must be a persistent map")))
    (let [missing (if (instance? Set missing)
                    missing
-                   (set missing))]
+                   (set missing))
+         metadata (if (and (not (contains? metadata :categorical?))
+                           (#{:string :text} (dtype/get-datatype data)))
+                    (assoc metadata :categorical? true)
+                    metadata)]
      (Column. missing data (dtype/ecount data) (assoc metadata :name name))))
   ([name data metadata]
    (new-column name data metadata #{}))

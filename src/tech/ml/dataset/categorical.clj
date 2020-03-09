@@ -95,9 +95,10 @@
                                         :possible-values (set (keys categorical-map))
                                         :column-name column-name}))))))
          {:unchecked? true})]
-    (col-impl/new-column column-name data-values (ds-col/missing old-column)
+    (col-impl/new-column column-name data-values
                          (assoc (ds-col/metadata old-column)
-                                :label-map categorical-map))))
+                                :label-map categorical-map)
+                         (ds-col/missing old-column))))
 
 
 (defn inverse-map-categorical-col-fn
