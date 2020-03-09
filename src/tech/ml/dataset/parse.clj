@@ -7,7 +7,8 @@
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl])
   (:import [com.univocity.parsers.common AbstractParser]
            [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
-           [java.io Reader InputStream]
+           [java.io Reader InputStream Closeable]
+           [java.lang AutoCloseable]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [java.util.function Function]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
@@ -20,6 +21,8 @@
 
 (set! *warn-on-reflection* true)
 
+
+;;TODO -
 
 (defn create-csv-parser
   ^AbstractParser []
@@ -46,8 +49,15 @@
            (hasNext [this]
              (not (nil? @cur-row)))
            (next [this]
-             (let [retval @cur-row]
-               (reset! cur-row (.parseNext parser))
+             (let [retval @cur-row
+                   next-val (.parseNext parser)]
+               (reset! cur-row next-val)
+               (when-not next-val
+                 (cond
+                   (instance? Closeable reader)
+                   (.close ^Closeable reader)
+                   (instance? AutoCloseable reader)
+                   (.close ^AutoCloseable reader)))
                retval)))))))
   (^Iterable [input]
    (raw-row-iterable input (create-csv-parser))))
@@ -254,7 +264,8 @@
   parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
 
   If the parser-fn is confusing, just pass in println and that may help and let it error out."
-  [input & {:keys [header-row? parser-fn
+  [input & {:keys [header-row?
+                   parser-fn
                    parser-scan-len]
             :or {header-row? true
                  parser-scan-len 100}}]
