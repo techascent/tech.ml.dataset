@@ -19,10 +19,8 @@
                        (->> (range n-cols)
                             (map
                              #(ds-col/new-column
-                               first-col
-                               datatype
-                               (tens/select tens % :all)
-                               {:name %}))))))
+                               %
+                               (tens/select tens % :all)))))))
 
 
 (defn row-major-tensor->dataset

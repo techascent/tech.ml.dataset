@@ -1,7 +1,11 @@
 (ns tech.ml.dataset.column
   (:require [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
-            [tech.v2.datatype :as dtype]))
+            [tech.ml.dataset.string-table :as str-table]
+            [tech.parallel.for :as parallel-for]
+            [tech.v2.datatype :as dtype])
+  (:import [it.unimi.dsi.fastutil.longs LongArrayList]
+           [java.util List]))
 
 
 (defn is-column?
@@ -101,13 +105,85 @@ Implementations should check their metadata before doing calculations."
   (col-proto/clone col))
 
 
+(def object-primitive-array-types
+  {(Class/forName "[Ljava.lang.Boolean;") :boolean
+   (Class/forName "[Ljava.lang.Byte;") :int8
+   (Class/forName "[Ljava.lang.Short;") :int16
+   (Class/forName "[Ljava.lang.Integer;") :int32
+   (Class/forName "[Ljava.lang.Long;") :int64
+   (Class/forName "[Ljava.lang.Float;") :float32
+   (Class/forName "[Ljava.lang.Double;") :float64})
+
+
+(defn process-object-primitive-array-data
+  [obj-data]
+  (let [dst-container-type (get object-primitive-array-types (type obj-data))
+        ^objects obj-data obj-data
+        n-items (dtype/ecount obj-data)
+        sparse-val (get @col-impl/dtype->missing-val-map dst-container-type)
+        ^List dst-data (dtype/make-container :list dst-container-type n-items)
+        sparse-indexes (LongArrayList.)]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (aget obj-data idx)]
+       (if (not (nil? obj-data))
+         (.set dst-data idx obj-data)
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
+(defn scan-string-data-for-missing
+  [^List obj-data]
+  (let [n-items (dtype/ecount obj-data)
+        ^List dst-data (col-impl/make-container :string n-items)
+        sparse-indexes (LongArrayList.)
+        sparse-val ""]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (.get obj-data idx)]
+       (if (not (nil? obj-data))
+         (.set dst-data idx obj-data)
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
+(defn ensure-column-reader
+  [values-seq]
+  (let [values-seq (if (dtype/reader? values-seq)
+                     values-seq
+                     (vec values-seq))]
+    (if (= :object (dtype/get-datatype values-seq))
+      (cond
+        (contains? object-primitive-array-types (type values-seq))
+        (process-object-primitive-array-data values-seq)
+        (boolean? (first values-seq))
+        {:data (dtype/->reader values-seq :boolean)}
+        (number? (first values-seq))
+        {:data (dtype/->reader values-seq :float64)}
+        (string? (first values-seq))
+        (scan-string-data-for-missing values-seq)
+        (keyword? (first values-seq))
+        (scan-string-data-for-missing (mapv #(when % (name %)) values-seq))
+        :else
+        {:data values-seq})
+      {:data values-seq})))
+
+
 (defn new-column
-  ([name data]
-   (col-impl/new-column name data))
-  ([name data metadata]
-   (col-impl/new-column name data metadata))
+  ([name data] (new-column name data nil nil))
+  ([name data metadata] (new-column name data metadata nil))
   ([name data metadata missing]
-   (col-impl/new-column name data metadata missing)))
+   (let [{coldata :data
+          scanned-missing :missing} (ensure-column-reader data)]
+     (col-impl/new-column name coldata metadata (or missing scanned-missing)))))
 
 
 (defn ensure-column
@@ -121,7 +197,7 @@ Implementations should check their metadata before doing calculations."
     (let [{:keys [name data missing metadata]} item]
       (when-not (and name data)
         (throw (Exception. "Column data map must have name and data")))
-      (col-impl/new-column name data metadata missing))
+      (col-impl/new-column name (:data (ensure-column-reader data)) metadata missing))
     :else
     (throw (ex-info "item is not convertible to a column without further information"
                     {:item item}))))
@@ -137,9 +213,11 @@ Implementations should check their metadata before doing calculations."
             (map? item)
             (ensure-column item)
             (dtype/reader? item)
-            (col-impl/new-column idx item)
+            (let [{:keys [data missing]} (ensure-column-reader item)]
+              (col-impl/new-column idx data {} missing))
             (instance? Iterable item)
-            (col-impl/new-column idx (vec item))
+            (let [{:keys [data missing]} (ensure-column-reader item)]
+              (col-impl/new-column idx data {} missing))
             :else
             (throw (ex-info "Item does not appear to be either randomly accessable or iterable"
                             {:item item}))))

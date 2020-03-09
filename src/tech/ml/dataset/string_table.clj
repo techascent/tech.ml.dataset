@@ -26,27 +26,29 @@
     (.add this (.size data) str-val)
     true)
   (add [this idx str-val]
-    (when-not (instance? String str-val)
-      (throw (Exception. "Can only use strings")))
-    (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
-                          idx-val
-                          (let [idx-val (.size str->int)]
-                            (.put str->int str-val idx-val)
-                            (.put int->str idx-val str-val)
-                            idx-val)))]
-      (.add data idx item-idx)
-      true))
+    (locking str->int
+      (when-not (instance? String str-val)
+        (throw (Exception. "Can only use strings")))
+      (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
+                            idx-val
+                            (let [idx-val (.size str->int)]
+                              (.put str->int str-val idx-val)
+                              (.put int->str idx-val str-val)
+                              idx-val)))]
+        (.add data idx item-idx)
+        true)))
   (get [this idx] (.get int->str (.get data idx)))
   (set [this idx str-val]
-    (when-not (instance? String str-val)
-      (throw (Exception. "Can only use strings")))
-    (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
-                          idx-val
-                          (let [idx-val (.size str->int)]
-                            (.put str->int str-val idx-val)
-                            (.put int->str idx-val str-val)
-                            idx-val)))]
-      (.set data idx item-idx)))
+    (locking str->int
+      (when-not (instance? String str-val)
+        (throw (Exception. "Can only use strings")))
+      (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
+                            idx-val
+                            (let [idx-val (.size str->int)]
+                              (.put str->int str-val idx-val)
+                              (.put int->str idx-val str-val)
+                              idx-val)))]
+        (.set data idx item-idx))))
   (subList [this start-offset end-offset]
     (StringTable. int->str str->int (.subList data start-offset end-offset)))
   RandomAccess

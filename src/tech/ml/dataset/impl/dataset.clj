@@ -6,6 +6,7 @@
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.print :as ds-print]
+            [tech.ml.dataset.string-table :as str-table]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
@@ -86,8 +87,7 @@
        (assoc colmap col-name
               (if (ds-col/is-column? new-col-data)
                 (ds-col/set-name new-col-data col-name)
-                (ds-col/new-column col new-col-dtype
-                                   new-col-data {:name (ds-col/column-name col)})))
+                (ds-col/new-column (ds-col/column-name col) new-col-data)))
        metadata)))
 
   (add-or-update-column [dataset col-name new-col-data]
@@ -269,3 +269,24 @@
      (new-dataset table-name column-seq)))
   ([map-seq-dataset]
    (map-seq->dataset map-seq-dataset {})))
+
+
+(defn name-values-seq->dataset
+  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
+  of unknown (:object) datatype, the first item is checked. If it is a number,
+  then doubles are used.  If it is a string, then strings are used for the
+  column datatype.
+  All sequences must be the same length.
+  Returns a new dataset"
+  [name-values-seq & {:keys [dataset-name]
+                      :or {dataset-name "_unnamed"}}]
+  (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
+                   distinct)]
+    (when-not (= 1 (count sizes))
+      (throw (ex-info (format "Different sized columns detected: %s" sizes) {})))
+    (->> name-values-seq
+         (map (fn [[colname values-seq]]
+                (if (map? values-seq)
+                  (ds-col/ensure-column values-seq)
+                  (ds-col/new-column colname values-seq))))
+         (new-dataset dataset-name))))
