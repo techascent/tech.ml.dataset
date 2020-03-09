@@ -294,7 +294,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
      (fn [col]
        (if-not (= (dtype/get-datatype col) etl-dtype)
          (let [new-col-dtype etl-dtype
-               col-values (ds-col/column-values col)
+               col-values (dtype/->reader col)
                data-values (dtype/make-array-of-type new-col-dtype col-values)]
            (ds-col/new-column col new-col-dtype data-values))
          col)))))

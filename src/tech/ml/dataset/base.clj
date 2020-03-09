@@ -8,8 +8,11 @@
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
+            [tech.ml.dataset.print :as ds-print]
             [tech.io :as io]
-            [tech.parallel.require :as parallel-req])
+            [tech.parallel.require :as parallel-req]
+            [tech.parallel.utils :as par-util])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
            [java.util List]
@@ -213,25 +216,9 @@ duplicate values."
        (map-indexed vector)))
 
 
-(defn value-reader
-  "Return a reader that produces a vector of column values per index."
-  ^ObjectReader [dataset]
-  (let [n-elems (long (second (dtype/shape dataset)))
-        readers (->> (columns dataset)
-                     (map dtype/->reader))]
-    (reify ObjectReader
-      (lsize [rdr] n-elems)
-      (read [rdr idx] (vec (map #(.get ^List % idx) readers))))))
-
-
-(defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value"
-  [dataset]
-  (let [colnames (column-names dataset)]
-    (->> (value-reader dataset)
-         (unary-op/unary-reader
-          :object
-          (zipmap colnames x)))))
+(par-util/export-symbols tech.ml.dataset.print
+                         value-reader
+                         mapseq-reader)
 
 
 (defn supported-column-stats
@@ -506,23 +493,9 @@ the correct type."
             (map columns)
             (apply map map-fn))))
 
-(defn map-seq->dataset
-  "Given a sequence of maps, construct a dataset.  Defaults to a tablesaw-based
-  dataset.  Options are:
-  :scan-depth - number of maps to scan in order to decifer column type.
-  :column-definintions - sequence of {:name :datatype} maps that decide the columns
-  without using autoscan.
-  :table-name - name of the new table
-  :dataset-constructor - Function to use to transform the sequence of maps into a
-  dataset.  Defaults to a tablesaw-based dataset."
-  [map-seq {:keys [table-name
-                   dataset-constructor]
-            :or {table-name "_unnamed"
-                 dataset-constructor 'tech.libs.tablesaw/map-seq->tablesaw-dataset}
-            :as options}]
-  (-> ((parallel-req/require-resolve dataset-constructor)
-       map-seq options)
-      (set-dataset-name table-name)))
+
+(par-util/export-symbols tech.ml.dataset.impl.dataset
+                         map-seq->dataset)
 
 
 (defn ->dataset

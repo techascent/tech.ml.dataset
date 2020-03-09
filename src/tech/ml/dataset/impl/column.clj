@@ -1,14 +1,17 @@
 (ns tech.ml.dataset.impl.column
   (:require [tech.ml.protocols.column :as ds-col-proto]
+            [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
+            [tech.ml.dataset.string-table :refer [make-string-table]]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype.typecast :as typecast]
+            [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
             [tech.parallel.for :as parallel-for]
             [clojure.set :as set])
-  (:import [java.util Set SortedSet HashSet]
+  (:import [java.util Set SortedSet HashSet ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [tech.v2.datatype ObjectReader DoubleReader]))
 
@@ -26,6 +29,18 @@
     :float64 Double/NaN
     :string ""
     :text ""}))
+
+
+(defn make-container
+  ([dtype n-elems]
+   (case dtype
+     :string (make-string-table n-elems)
+     :text (let [list-data (ArrayList.)]
+             (dotimes [iter n-elems]
+               (.add list-data "")))
+     (dtype/make-container :list dtype n-elems)))
+  ([dtype]
+   (make-container dtype 0)))
 
 
 (defmacro create-missing-reader
@@ -122,6 +137,7 @@
                              (filter #(let [arg (long %)]
                                         (or (< arg offset)
                                             (>= (- arg offset) len))))
+                             (map #(+ (long %) offset))
                              (into #{}))
             new-data (dtype-proto/sub-buffer data offset len)]
         (Column. new-missing new-data len metadata))))
@@ -131,15 +147,25 @@
          (dtype-proto/convertible-to-nio-buffer? data)))
   (->buffer-backing-store [item]
     (dtype-proto/->buffer-backing-store data))
+
+  dtype-proto/PToArray
+  (->sub-array [col]
+    (when (dtype-proto/convertible-to-nio-buffer? col)
+      (let [col-buf (dtype-proto/->buffer-backing-store col)]
+        (when (= (dtype/get-datatype col)
+                 (dtype/get-datatype col-buf))
+          (dtype-proto/->sub-array col-buf)))))
+  (->array-copy [col] (dtype-proto/->array-copy col))
+
+  ds-col-proto/PIsColumn
+  (is-column? [this] true)
   ds-col-proto/PColumn
   (column-name [col] (:name metadata))
   (set-name [col name] (Column. missing data n-elems (assoc metadata :name name)))
   (supported-stats [col] dtype-fn/supported-descriptive-stats)
   (metadata [col] metadata)
   (set-metadata [col data-map] (Column. missing data n-elems data-map))
-  (missing [col] (->> missing
-                      sort
-                      long-array))
+  (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
     (Column. (set (dtype/->reader long-rdr))
@@ -195,18 +221,38 @@
       (dtype/make-container :java-array :float64 col)
       (let [d-reader (typecast/datatype->reader :float64 data)]
         (dtype/make-container :java-array :float64
-                              (dtype/->reader col :float64))))))
+                              (dtype/->reader col :float64)))))
+  Object
+  (toString [item]
+    (let [format-str (if (> n-elems 20)
+                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s...]"
+                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")]
+      (format format-str
+              (name (dtype/get-datatype item))
+              [n-elems]
+              (ds-col-proto/column-name item)
+              (-> (dtype/->reader item)
+                  (dtype-proto/sub-buffer 0 (min 20 n-elems))
+                  (dtype-pp/print-reader-data))))))
 
 
+(defmethod print-method Column
+  [col ^java.io.Writer w]
+  (.write w (.toString ^Object col)))
 
-(defn make-column
+
+(defn new-column
   "Given a map of (something convertible to a long reader) missing indexes,
   (something convertible to a reader) data
   and a (string or keyword) name, return an implementation of enough of the
   column and datatype protocols to allow efficient columnwise operations of
   the rest of tech.ml.dataset"
-  [name data missing]
-  (let [missing (if (instance? Set missing)
-                  missing
-                  (set missing))]
-    (Column. missing data (dtype/ecount data) {:name name})))
+  ([name data metadata missing]
+   (let [missing (if (instance? Set missing)
+                   missing
+                   (set missing))]
+     (Column. missing data (dtype/ecount data) (assoc metadata :name name))))
+  ([name data metadata]
+   (new-column name data metadata #{}))
+  ([name data]
+   (new-column name data {} #{})))

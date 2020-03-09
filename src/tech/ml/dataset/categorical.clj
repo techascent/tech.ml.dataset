@@ -7,6 +7,7 @@
   (:require [tech.ml.protocols.dataset :as ds]
             [tech.ml.dataset.base :as ds-base]
             [tech.ml.protocols.column :as ds-col]
+            [tech.ml.dataset.impl.column :as col-impl]
             [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
             [tech.ml.utils :as utils]))
@@ -93,10 +94,10 @@
                                        {:item-value item-val
                                         :possible-values (set (keys categorical-map))
                                         :column-name column-name}))))))
-                     {:unchecked? true})]
-    (ds-col/new-column old-column new-dtype data-values
-                       (assoc (ds-col/metadata old-column)
-                              :label-map categorical-map))))
+         {:unchecked? true})]
+    (col-impl/new-column column-name data-values (ds-col/missing old-column)
+                         (assoc (ds-col/metadata old-column)
+                                :label-map categorical-map))))
 
 
 (defn inverse-map-categorical-col-fn
@@ -218,10 +219,9 @@
          (reduce (fn [dataset [column-name column-data]]
                    (ds/add-column
                     dataset
-                    (ds-col/new-column column new-dtype column-data
+                    (col-impl/new-column column-name column-data
                                        (assoc
                                         (ds-col/metadata column)
-                                        :name column-name
                                         :label-map context))))
                  dataset))))
 

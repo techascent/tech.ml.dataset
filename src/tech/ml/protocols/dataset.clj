@@ -39,3 +39,7 @@ the correct type."))
     retval
     (throw (ex-info (format "Failed to find column: %s" column-name)
                     {:column-name column-name}))))
+
+(defn column-names
+  [dataset]
+  (map col-proto/column-name (columns dataset)))

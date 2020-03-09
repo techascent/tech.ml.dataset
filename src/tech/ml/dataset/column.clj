@@ -1,5 +1,7 @@
 (ns tech.ml.dataset.column
-  (:require [tech.ml.protocols.column :as col-proto]))
+  (:require [tech.ml.protocols.column :as col-proto]
+            [tech.ml.dataset.impl.column :as col-impl]
+            [tech.v2.datatype :as dtype]))
 
 
 (defn is-column?
@@ -93,24 +95,56 @@ Implementations should check their metadata before doing calculations."
   (col-proto/select col idx-seq))
 
 
-(defn empty-column
-  "Return a new column of this supertype where all values are missing."
-  [col datatype elem-count & [metadata]]
-  (col-proto/empty-column col datatype elem-count
-                          (or metadata (col-proto/metadata col))))
-
-
-(defn new-column
-  "Return a new column of this supertype with these values"
-  [col datatype elem-count-or-values & [metadata]]
-  (col-proto/new-column col datatype elem-count-or-values
-                        (or metadata (col-proto/metadata col))))
-
-
 (defn clone
   "Clone this column not changing anything."
   [col]
   (col-proto/clone col))
+
+
+(defn new-column
+  ([name data]
+   (col-impl/new-column name data))
+  ([name data metadata]
+   (col-impl/new-column name data metadata))
+  ([name data metadata missing]
+   (col-impl/new-column name data metadata missing)))
+
+
+(defn ensure-column
+  "Convert an item to a column if at all possible.  Currently columns either implement
+  the required protocols "
+  [item]
+  (cond
+    (col-proto/is-column? item)
+    item
+    (map? item)
+    (let [{:keys [name data missing metadata]} item]
+      (when-not (and name data)
+        (throw (Exception. "Column data map must have name and data")))
+      (col-impl/new-column name data metadata missing))
+    :else
+    (throw (ex-info "item is not convertible to a column without further information"
+                    {:item item}))))
+
+
+(defn ensure-column-seq
+  [item-seq]
+  ;;mapv to force errors here instead of later
+  (mapv (fn [idx item]
+          (cond
+            (col-proto/is-column? item)
+            item
+            (map? item)
+            (ensure-column item)
+            (dtype/reader? item)
+            (col-impl/new-column idx item)
+            (instance? Iterable item)
+            (col-impl/new-column idx (vec item))
+            :else
+            (throw (ex-info "Item does not appear to be either randomly accessable or iterable"
+                            {:item item}))))
+        (range (count item-seq))
+        item-seq))
 
 
 (defn to-double-array
