@@ -22,7 +22,8 @@
 (set! *warn-on-reflection* true)
 
 
-;;TODO -
+;;TODO - Load a subset of columns from a file.
+;;TODO - simple way to specific datatypes to use for columns
 
 (defn create-csv-parser
   ^AbstractParser []
