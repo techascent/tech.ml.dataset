@@ -35,13 +35,10 @@
                     [str-table (conj value-list item)]))
                 [{} []]
                 table-value-list)
-        ;;Make everything strings.
-        value-list (map utils/column-safe-name value-list)
         ;;Second, known values map so that true and false map reasonably.
         [str-table value-list]
         (reduce (fn [[str-table value-list] item]
-                  (let [known-value (get known-values
-                                         (.toLowerCase (utils/column-safe-name item)))]
+                  (let [known-value (get known-values item)]
                     (if (and known-value
                              (not (contains? (set (vals str-table)) known-value)))
                       [(assoc str-table item known-value)
@@ -132,7 +129,8 @@
   [dataset column-name-seq & [one-hot-table-args]]
   (->> column-name-seq
        (map (fn [colname]
-              (when-not (= :string (dtype/get-datatype (ds/column dataset colname)))
+              (when-not (#{:string :keyword :symbol}
+                         (dtype/get-datatype (ds/column dataset colname)))
                 (throw (ex-info (format "One hot applied to non string column: %s(%s)"
                                         colname (dtype/get-datatype
                                                  (ds/column dataset colname)))

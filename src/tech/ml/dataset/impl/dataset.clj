@@ -1,12 +1,10 @@
 (ns tech.ml.dataset.impl.dataset
   (:require [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
+            [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.print :as ds-print]
-            [tech.ml.dataset.string-table :as str-table]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
@@ -79,8 +77,7 @@
                       {:col-name col-name
                        :col-names (keys colmap)})))
     (let [col (get colmap col-name)
-          new-col-data (col-fn col)
-          new-col-dtype (new-column-datatype new-col-data)]
+          new-col-data (col-fn col)]
       (Dataset.
        table-name
        column-names
@@ -93,9 +90,7 @@
   (add-or-update-column [dataset col-name new-col-data]
     (let [col-data (if (ds-col/is-column? new-col-data)
                      (ds-col/set-name new-col-data col-name)
-                     (ds-col/new-column (first dataset)
-                                        (new-column-datatype new-col-data)
-                                        new-col-data {:name col-name}))]
+                     (ds-col/new-column col-name new-col-data))]
       (if (contains? colmap col-name)
         (ds-proto/update-column dataset col-name (constantly col-data))
         (ds-proto/add-column dataset col-data))))
@@ -199,8 +194,8 @@
   [item-val]
   (cond
     (string? item-val) item-val
-    (keyword? item-val) (name item-val)
-    (symbol? item-val) (name item-val)
+    (keyword? item-val) item-val
+    (symbol? item-val) item-val
     :else (throw (Exception. "Failure to cast item"))))
 
 
@@ -225,13 +220,10 @@
          column-map (->> column-definitions
                          (map (fn [{colname :name
                                     datatype :datatype}]
-                                (let [datatype (if (= datatype :keyword)
-                                                 :string
-                                                 datatype)]
-                                  [colname
-                                   {:name colname
-                                    :data (col-impl/make-container datatype)
-                                    :missing (dtype/make-container :list :int64 0)}])))
+                                [colname
+                                 {:name colname
+                                  :data (col-impl/make-container datatype)
+                                  :missing (dtype/make-container :list :int64 0)}]))
                          (into {}))
          _ (->> map-seq-dataset
                 (map-indexed
@@ -290,3 +282,11 @@
                   (ds-col/ensure-column values-seq)
                   (ds-col/new-column colname values-seq))))
          (new-dataset dataset-name))))
+
+
+(defn parse-dataset
+  ([input options]
+   (->> (apply ds-parse/csv->columns input (apply concat options))
+        (new-dataset (:table-name options) {})))
+  ([input]
+   (parse-dataset input {})))

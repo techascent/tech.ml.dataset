@@ -26,19 +26,21 @@
     (.add this (.size data) str-val)
     true)
   (add [this idx str-val]
-    (locking str->int
-      (when-not (instance? String str-val)
-        (throw (Exception. "Can only use strings")))
-      (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
-                            idx-val
-                            (let [idx-val (.size str->int)]
-                              (.put str->int str-val idx-val)
-                              (.put int->str idx-val str-val)
-                              idx-val)))]
-        (.add data idx item-idx)
-        true)))
+    (when-not (instance? String str-val)
+      (throw (Exception. "Can only use strings")))
+    (let [item-idx (int (if-let [idx-val (.get str->int str-val)]
+                          idx-val
+                          (let [idx-val (.size str->int)]
+                            (.put str->int str-val idx-val)
+                            (.put int->str idx-val str-val)
+                            idx-val)))]
+      (.add data idx item-idx)
+      true))
   (get [this idx] (.get int->str (.get data idx)))
   (set [this idx str-val]
+    ;;dtype/copy! calls set in parallel but will never call add
+    ;;in parallel.  This is unsafe really but add is called during parsing
+    ;;a lot and it has a huge effect for some files.
     (locking str->int
       (when-not (instance? String str-val)
         (throw (Exception. "Can only use strings")))

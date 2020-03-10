@@ -67,5 +67,6 @@
   []
   (let [lhs (ds/->dataset "lhs.csv")
         rhs (ds/->dataset "rhs.csv")]
+    (System/gc)
     (time
      (ds/join-by-column "operatorid" lhs rhs))))

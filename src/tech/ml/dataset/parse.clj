@@ -92,14 +92,16 @@
     :int32 `(Integer/parseInt ~val)
     :int64 `(Long/parseLong ~val)
     :float32 `(Float/parseFloat ~val)
-    :float64 `(Double/parseDouble ~val)))
+    :float64 `(Double/parseDouble ~val)
+    :keyword `(keyword ~val)
+    :symbol `(symbol ~val)))
 
 
 (defmacro dtype->missing-val
   [datatype]
   `(casting/datatype->cast-fn :unknown
                               ~datatype
-                              @(col-impl/dtype->missing-val-map ~datatype)))
+                              (get @col-impl/dtype->missing-val-map ~datatype)))
 
 
 (defmacro simple-col-parser
@@ -192,7 +194,12 @@
                               :string (simple-string-parser)
                               :text (simple-text-parser)]
                              (partition 2)
-                             vec))
+                             (mapv vec)))
+
+(def all-parsers
+  (assoc (into {} default-parser-seq)
+         :keyword (simple-col-parser :keyword)
+         :symbol (simple-col-parser :symbol)))
 
 
 (defprotocol PColumnParser

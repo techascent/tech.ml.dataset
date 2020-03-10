@@ -4,12 +4,10 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.print :as ds-print]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.utils :as par-util])
@@ -483,10 +481,6 @@ the correct type."
             (apply map map-fn))))
 
 
-(par-util/export-symbols tech.ml.dataset.impl.dataset
-                         map-seq->dataset)
-
-
 (defn ->dataset
   "Create a dataset from either csv/tsv or a sequence of maps.
    *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
@@ -518,9 +512,7 @@ the correct type."
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
            (instance? InputStream dataset)
-           (apply
-            (parallel-req/require-resolve 'tech.libs.tablesaw/path->tablesaw-dataset)
-            dataset (apply concat options))
+           (ds-impl/parse-dataset dataset options)
 
            (string? dataset)
            (let [^String dataset dataset
@@ -537,17 +529,14 @@ the correct type."
                            options)
                  open-fn (if json?
                            #(-> (apply io/get-json % (apply concat options))
-                                (map-seq->dataset options))
-                           #(apply
-                             (parallel-req/require-resolve
-                              'tech.libs.tablesaw/path->tablesaw-dataset)
-                             % (apply concat options)))]
+                                (ds-impl/map-seq->dataset options))
+                           ds-impl/parse-dataset)]
              (with-open [istream (if gzipped?
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
                (open-fn istream)))
            :else
-           (map-seq->dataset dataset options))]
+           (ds-impl/map-seq->dataset dataset options))]
      (if table-name
        (ds-proto/set-dataset-name dataset table-name)
        dataset)))

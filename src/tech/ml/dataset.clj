@@ -62,14 +62,14 @@
                         ds-column-map
                         ->dataset
                         ->>dataset
-                        name-values-seq->dataset
                         from-prototype
                         dataset->string
                         join-by-column)
 
 
 (par-util/export-symbols tech.ml.dataset.impl.dataset
-                         new-dataset)
+                         new-dataset
+                         name-values-seq->dataset)
 
 
 (defn n-permutations

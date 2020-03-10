@@ -1,7 +1,6 @@
 (ns tech.ml.dataset.column
   (:require [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.string-table :as str-table]
             [tech.parallel.for :as parallel-for]
             [tech.v2.datatype :as dtype])
   (:import [it.unimi.dsi.fastutil.longs LongArrayList]
@@ -136,12 +135,12 @@ Implementations should check their metadata before doing calculations."
      :missing sparse-indexes}))
 
 
-(defn scan-string-data-for-missing
-  [^List obj-data]
+(defn scan-object-data-for-missing
+  [container-dtype ^List obj-data]
   (let [n-items (dtype/ecount obj-data)
-        ^List dst-data (col-impl/make-container :string n-items)
+        ^List dst-data (col-impl/make-container container-dtype n-items)
         sparse-indexes (LongArrayList.)
-        sparse-val ""]
+        sparse-val (get @col-impl/dtype->missing-val-map container-dtype)]
     (parallel-for/parallel-for
      idx
      n-items
@@ -169,9 +168,11 @@ Implementations should check their metadata before doing calculations."
         (number? (first values-seq))
         {:data (dtype/->reader values-seq :float64)}
         (string? (first values-seq))
-        (scan-string-data-for-missing values-seq)
+        (scan-object-data-for-missing :string values-seq)
         (keyword? (first values-seq))
-        (scan-string-data-for-missing (mapv #(when % (name %)) values-seq))
+        (scan-object-data-for-missing :keyword values-seq)
+        (symbol? (first values-seq))
+        (scan-object-data-for-missing :symbol values-seq)
         :else
         {:data values-seq})
       {:data values-seq})))

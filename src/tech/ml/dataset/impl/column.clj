@@ -28,7 +28,9 @@
     :float32 Float/NaN
     :float64 Double/NaN
     :string ""
-    :text ""}))
+    :text ""
+    :keyword nil
+    :symbol nil}))
 
 
 (defn make-container
@@ -73,6 +75,20 @@
           (.read rdr idx))))))
 
 
+(defn create-object-missing-reader
+  [missing data n-elems options]
+  (let [rdr (typecast/datatype->reader :object data)
+        missing-val nil
+        n-elems (long n-elems)]
+    (reify ObjectReader
+      (getDatatype [this] (.getDatatype rdr))
+      (lsize [this] n-elems)
+      (read [this idx]
+        (if (contains? missing idx)
+          missing-val
+          (.read rdr idx))))))
+
+
 (deftype Column
     [^Set missing
      data
@@ -90,7 +106,6 @@
           missing-policy (if-not any-missing?
                             :include
                             missing-policy)
-          unchecked? (:unchecked? options)
           col-reader (if (or (= :elide missing-policy)
                              (not any-missing?))
                        (dtype/->reader data options)
@@ -103,6 +118,8 @@
                          :float64 (create-missing-reader :float64 missing data n-elems options)
                          :string (create-string-text-missing-reader missing data n-elems options)
                          :text (create-string-text-missing-reader missing data n-elems options)
+                         :keyword (create-object-missing-reader missing data n-elems options)
+                         :symbol (create-object-missing-reader missing data n-elems options)
                          (let [src-obj-rdr (typecast/datatype->reader :object data)]
                            (reify ObjectReader
                              (getDatatype [rdr] (.getDatatype src-obj-rdr))
@@ -113,8 +130,7 @@
                                  (.read src-obj-rdr idx)))))))
           new-reader (case missing-policy
                        :elide
-                       (let [n-missing (.size missing)
-                             valid-indexes (->> (range (dtype/ecount data))
+                       (let [valid-indexes (->> (range (dtype/ecount data))
                                                 (remove #(.contains missing (long %)))
                                                 long-array)]
                          (indexed-rdr/make-indexed-reader valid-indexes
@@ -156,6 +172,9 @@
                  (dtype/get-datatype col-buf))
           (dtype-proto/->sub-array col-buf)))))
   (->array-copy [col] (dtype-proto/->array-copy col))
+  Iterable
+  (iterator [col]
+    (.iterator ^Iterable (dtype/->reader col)))
 
   ds-col-proto/PIsColumn
   (is-column? [this] true)
@@ -203,12 +222,6 @@
          (when (.contains missing (.read idx-rdr idx))
            (.add result-set idx)))
         (Column. result-set (dtype/indexed-reader idx-rdr data) n-idx-elems metadata))))
-  (new-column [col datatype elem-count-or-values missing-set metadata]
-    (let [new-container (dtype/make-container :java-array datatype elem-count-or-values)]
-      (Column. missing-set
-               new-container
-               (dtype/ecount new-container)
-               metadata)))
   (clone [col]
     (Column. (set missing) (dtype/clone data) n-elems metadata))
   (to-double-array [col error-on-missing?]
@@ -255,7 +268,7 @@
                    missing
                    (set missing))
          metadata (if (and (not (contains? metadata :categorical?))
-                           (#{:string :text} (dtype/get-datatype data)))
+                           (#{:string :keyword :symbol} (dtype/get-datatype data)))
                     (assoc metadata :categorical? true)
                     metadata)]
      (Column. missing data (dtype/ecount data) (assoc metadata :name name))))
