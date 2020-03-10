@@ -1,6 +1,5 @@
 (ns tech.ml.dataset.impl.column
   (:require [tech.ml.protocols.column :as ds-col-proto]
-            [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.string-table :refer [make-string-table]]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
@@ -9,8 +8,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
-            [tech.parallel.for :as parallel-for]
-            [clojure.set :as set])
+            [tech.parallel.for :as parallel-for])
   (:import [java.util Set SortedSet HashSet ArrayList Collections]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
@@ -106,19 +104,20 @@
           missing-policy (if-not any-missing?
                             :include
                             missing-policy)
-          col-reader (if (or (= :elide missing-policy)
-                             (not any-missing?))
-                       (dtype/->reader data options)
-                       (case (or (:datatype options)
-                                 (dtype/get-datatype this))
-                         :int16 (create-missing-reader :int16 missing data n-elems options)
-                         :int32 (create-missing-reader :int32 missing data n-elems options)
-                         :int64 (create-missing-reader :int64 missing data n-elems options)
-                         :float32 (create-missing-reader :float32 missing data n-elems options)
-                         :float64 (create-missing-reader :float64 missing data n-elems options)
-                         :string (create-string-text-missing-reader missing data n-elems options)
-                         :text (create-string-text-missing-reader missing data n-elems options)
-                         (create-object-missing-reader missing data n-elems options)))
+          col-reader
+          (if (or (= :elide missing-policy)
+                  (not any-missing?))
+            (dtype/->reader data options)
+            (case (or (:datatype options)
+                      (dtype/get-datatype this))
+              :int16 (create-missing-reader :int16 missing data n-elems options)
+              :int32 (create-missing-reader :int32 missing data n-elems options)
+              :int64 (create-missing-reader :int64 missing data n-elems options)
+              :float32 (create-missing-reader :float32 missing data n-elems options)
+              :float64 (create-missing-reader :float64 missing data n-elems options)
+              :string (create-string-text-missing-reader missing data n-elems options)
+              :text (create-string-text-missing-reader missing data n-elems options)
+              (create-object-missing-reader missing data n-elems options)))
           new-reader (case missing-policy
                        :elide
                        (let [valid-indexes (->> (range (dtype/ecount data))
@@ -178,15 +177,22 @@
          (dtype-proto/convertible-to-nio-buffer? data)))
   (->buffer-backing-store [item]
     (dtype-proto/->buffer-backing-store data))
+  ;;This also services to make concrete definitions of the data so this must
+  ;;store the result realized.
   dtype-proto/PClone
   (clone [col datatype]
     (when-not (= datatype (dtype/get-datatype col))
       (throw (Exception. "Columns cannot clone to different types")))
-    (Column. (doto (HashSet.)
-               (.addAll missing))
-             (dtype/clone data)
-             n-elems
-             metadata))
+    (let [new-data (if (dtype/writer? data)
+                     (dtype/clone data)
+                     ;;It is important that the result of this operation be writeable.
+                     (dtype/make-container :java-array
+                                           (dtype/get-datatype data) data))]
+      (Column. (doto (HashSet.)
+                 (.addAll missing))
+               new-data
+               n-elems
+               metadata)))
   dtype-proto/PPrototype
   (from-prototype [col datatype shape]
     (let [n-elems (long (apply * shape))]
@@ -196,11 +202,9 @@
                metadata)))
   dtype-proto/PToArray
   (->sub-array [col]
-    (when (dtype-proto/convertible-to-nio-buffer? col)
-      (let [col-buf (dtype-proto/->buffer-backing-store col)]
-        (when (= (dtype/get-datatype col)
-                 (dtype/get-datatype col-buf))
-          (dtype-proto/->sub-array col-buf)))))
+    (when-let [data-ary (when (== 0 (.size missing))
+                          (dtype-proto/->sub-array data))]
+      data-ary))
   (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
   (iterator [col]
@@ -246,8 +250,7 @@
       ;;common case
       (Column. missing (dtype/indexed-reader idx-rdr data) n-elems metadata)
       ;;Uggh.  Construct a new missing set
-      (let [new-list (LongArrayList.)
-            idx-rdr (typecast/datatype->reader :int64 idx-rdr)
+      (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
             n-idx-elems (.lsize idx-rdr)
             result-set (HashSet.)]
         (parallel-for/serial-for
@@ -255,7 +258,8 @@
          n-idx-elems
          (when (.contains missing (.read idx-rdr idx))
            (.add result-set idx)))
-        (Column. result-set (dtype/indexed-reader idx-rdr data) n-idx-elems metadata))))
+        (Column. result-set (dtype/indexed-reader idx-rdr data)
+                 n-idx-elems metadata))))
   (clone [col]
     (Column. (doto (HashSet.)
                (.addAll missing))
@@ -304,7 +308,7 @@
                    missing
                    (if-let [missing-seq (seq missing)]
                      (doto (HashSet.)
-                       (.addAll (seq missing)))
+                       (.addAll missing-seq))
                      (HashSet.)))
          metadata (if (and (not (contains? metadata :categorical?))
                            (#{:string :keyword :symbol} (dtype/get-datatype data)))

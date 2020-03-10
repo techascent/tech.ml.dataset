@@ -2,7 +2,8 @@
   (:require [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.parallel.for :as parallel-for]
-            [tech.v2.datatype :as dtype])
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.casting :as casting])
   (:import [it.unimi.dsi.fastutil.longs LongArrayList]
            [java.util List]))
 
@@ -154,19 +155,42 @@ Implementations should check their metadata before doing calculations."
      :missing sparse-indexes}))
 
 
+(defn scan-object-numeric-data-for-missing
+  [container-dtype ^List obj-data]
+  (let [n-items (dtype/ecount obj-data)
+        ^List dst-data (col-impl/make-container container-dtype n-items)
+        sparse-indexes (LongArrayList.)
+        sparse-val (get @col-impl/dtype->missing-val-map container-dtype)]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (.get obj-data idx)]
+       (if (and (not (nil? obj-data))
+                (or (= container-dtype :boolean)
+                    (not= sparse-val obj-data)))
+         (.set dst-data idx (casting/cast obj-data container-dtype))
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
 (defn ensure-column-reader
   [values-seq]
   (let [values-seq (if (dtype/reader? values-seq)
                      values-seq
-                     (vec values-seq))]
+                     (dtype/make-container :list
+                                           (dtype/get-datatype values-seq)
+                                           values-seq))]
     (if (= :object (dtype/get-datatype values-seq))
       (cond
         (contains? object-primitive-array-types (type values-seq))
         (process-object-primitive-array-data values-seq)
         (boolean? (first values-seq))
-        {:data (dtype/->reader values-seq :boolean)}
+        (scan-object-numeric-data-for-missing :boolean values-seq)
         (number? (first values-seq))
-        {:data (dtype/->reader values-seq :float64)}
+        (scan-object-numeric-data-for-missing :float64 values-seq)
         (string? (first values-seq))
         (scan-object-data-for-missing :string values-seq)
         (keyword? (first values-seq))

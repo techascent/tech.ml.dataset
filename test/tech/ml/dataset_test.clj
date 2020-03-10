@@ -212,7 +212,6 @@
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
 
 
-
 (defn large-join-test
   []
   (let [ds1 (dataset/name-values-seq->dataset
@@ -224,3 +223,13 @@
              :c (flatten (repeat 10000 ["a" "b" "c" "d" "e"
                                         "f" "g" "h" "i" "j"]))})]
     (dataset/join-by-column :a ds1 ds2)))
+
+
+(deftest remove-missing-persistent-vec-data
+  (let [ds (dataset/name-values-seq->dataset {:a [1 nil 2 nil 3]
+                                              :b (list 1 nil 2 nil 3)})
+        rec (ds-pipe/replace-missing ds :all 5)]
+    (is (= [1.0 5.0 2.0 5.0 3.0]
+           (vec (rec :a))))
+    (is (= [1.0 5.0 2.0 5.0 3.0]
+           (vec (rec :b))))))
