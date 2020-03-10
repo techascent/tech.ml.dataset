@@ -178,7 +178,22 @@
          (dtype-proto/convertible-to-nio-buffer? data)))
   (->buffer-backing-store [item]
     (dtype-proto/->buffer-backing-store data))
-
+  dtype-proto/PClone
+  (clone [col datatype]
+    (when-not (= datatype (dtype/get-datatype col))
+      (throw (Exception. "Columns cannot clone to different types")))
+    (Column. (doto (HashSet.)
+               (.addAll missing))
+             (dtype/clone data)
+             n-elems
+             metadata))
+  dtype-proto/PPrototype
+  (from-prototype [col datatype shape]
+    (let [n-elems (long (apply * shape))]
+      (Column. (HashSet.)
+               (make-container datatype n-elems)
+               n-elems
+               metadata)))
   dtype-proto/PToArray
   (->sub-array [col]
     (when (dtype-proto/convertible-to-nio-buffer? col)
