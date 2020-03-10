@@ -191,12 +191,13 @@
 
 
 (defn item-val->string
-  [item-val]
+  [item-val item-dtype item-name]
   (cond
     (string? item-val) item-val
     (keyword? item-val) item-val
     (symbol? item-val) item-val
-    :else (throw (Exception. "Failure to cast item"))))
+    :else
+    (str item-val)))
 
 
 (defn map-seq->dataset
@@ -234,14 +235,18 @@
                            ^List data data
                            ^List missing missing
                            data-dtype (dtype/get-datatype data)
+                           missing-val (get @col-impl/dtype->missing-val-map data-dtype)
                            n-missing (- idx (dtype/ecount data))]
                        (dotimes [miss-idx n-missing]
                          (.add missing (+ miss-idx n-col-data))
                          (.add data (get @col-impl/dtype->missing-val-map data-dtype)))
-                       (if-not (nil? item-val)
-                         (.add data (if (casting/numeric-type? data-dtype)
+                       (if-not (or (nil? item-val)
+                                   (= :boolean data-dtype)
+                                   (= item-val missing-val))
+                         (.add data (if (or (= :boolean data-dtype)
+                                            (casting/numeric-type? data-dtype))
                                       (casting/cast item-val data-dtype)
-                                      (item-val->string item-val)))
+                                      (item-val->string item-val data-dtype item-name)))
                          (do
                            (.add missing n-col-data)
                            (.add data (get @col-impl/dtype->missing-val-map data-dtype))))))))

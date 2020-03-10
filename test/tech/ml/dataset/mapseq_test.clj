@@ -24,7 +24,6 @@
                   (ds-pipe/string->number)
                   (ds-pipe/range-scale)
                   (ds/set-inference-target :fruit-name))
-        _ (println dataset)
 
         origin-ds (mapseq-fruit-dataset)
         src-keys (set (keys (first (mapseq-fruit-dataset))))
@@ -183,7 +182,6 @@
                       (ds-pipe/one-hot :fruit-name
                                        {:main [:apple :mandarin]
                                         :other :rest})
-                      (#(do (println "~~" %) %))
                       (ds-pipe/string->number)
                       (ds/set-inference-target :fruit-name))]
       (is (= {:fruit-name

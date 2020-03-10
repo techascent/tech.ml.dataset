@@ -11,9 +11,9 @@
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
             [tech.parallel.for :as parallel-for]
             [clojure.set :as set])
-  (:import [java.util Set SortedSet HashSet ArrayList]
+  (:import [java.util Set SortedSet HashSet ArrayList Collections]
            [it.unimi.dsi.fastutil.longs LongArrayList]
-           [tech.v2.datatype ObjectReader DoubleReader]))
+           [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -36,7 +36,7 @@
 (defn make-container
   ([dtype n-elems]
    (case dtype
-     :string (make-string-table n-elems)
+     :string (make-string-table n-elems "")
      :text (let [list-data (ArrayList.)]
              (dotimes [iter n-elems]
                (.add list-data "")))
@@ -118,16 +118,7 @@
                          :float64 (create-missing-reader :float64 missing data n-elems options)
                          :string (create-string-text-missing-reader missing data n-elems options)
                          :text (create-string-text-missing-reader missing data n-elems options)
-                         :keyword (create-object-missing-reader missing data n-elems options)
-                         :symbol (create-object-missing-reader missing data n-elems options)
-                         (let [src-obj-rdr (typecast/datatype->reader :object data)]
-                           (reify ObjectReader
-                             (getDatatype [rdr] (.getDatatype src-obj-rdr))
-                             (lsize [rdr] (.lsize src-obj-rdr))
-                             (read [rdr idx]
-                               (if (.contains missing idx)
-                                 nil
-                                 (.read src-obj-rdr idx)))))))
+                         (create-object-missing-reader missing data n-elems options)))
           new-reader (case missing-policy
                        :elide
                        (let [valid-indexes (->> (range (dtype/ecount data))
@@ -145,6 +136,30 @@
                                                  (vec missing))
                                          {}))))]
       (dtype-proto/->reader new-reader options)))
+  dtype-proto/PToWriter
+  (convertible-to-writer? [this] true)
+  (->writer [this options]
+    (let [col-dtype (dtype/get-datatype data)
+          options (update options :datatype
+                          #(or % (dtype/get-datatype data)))
+          data-writer (typecast/datatype->writer :object data)
+          missing-val (get @dtype->missing-val-map col-dtype)]
+      ;;writing to columns like this is inefficient due to the necessity to
+      ;;keep the missing set accurate.
+      (-> (reify ObjectWriter
+            (lsize [this] n-elems)
+            (write [this idx val]
+              (locking this
+                (if (or (nil? val)
+                        (and (not (boolean? val))
+                             (.equals ^Object val missing-val)))
+                  (do
+                    (.add missing idx)
+                    (.write data-writer idx missing-val))
+                  (do
+                    (.remove missing idx)
+                    (.write data-writer idx val))))))
+          (dtype-proto/->writer options))))
   dtype-proto/PBuffer
   (sub-buffer [this offset len]
     (let [offset (long offset)
@@ -171,7 +186,7 @@
         (when (= (dtype/get-datatype col)
                  (dtype/get-datatype col-buf))
           (dtype-proto/->sub-array col-buf)))))
-  (->array-copy [col] (dtype-proto/->array-copy col))
+  (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
   (iterator [col]
     (.iterator ^Iterable (dtype/->reader col)))
@@ -182,16 +197,20 @@
   (column-name [col] (:name metadata))
   (set-name [col name] (Column. missing data n-elems (assoc metadata :name name)))
   (supported-stats [col] dtype-fn/supported-descriptive-stats)
-  (metadata [col] metadata)
+  (metadata [col]
+    (merge metadata
+           {:size (dtype/ecount col)
+            :datatype (dtype/get-datatype col)}))
   (set-metadata [col data-map] (Column. missing data n-elems data-map))
-  (missing [col] missing)
+  (missing [col] (Collections/unmodifiableSet missing))
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
-    (Column. (set (dtype/->reader long-rdr))
+    (Column. (doto (HashSet.)
+               (.addAll (dtype/->reader long-rdr :int64)))
              data
              n-elems
              metadata))
-  (unique [this] (set (dtype-proto/->reader this {:missing-policy :elide})))
+  (unique [this] (set (dtype/->reader this)))
   (stats [col stats-set]
     (when-not (casting/numeric-type? (dtype-proto/get-datatype col))
       (throw (ex-info "Stats aren't available on non-numeric columns"
@@ -223,7 +242,9 @@
            (.add result-set idx)))
         (Column. result-set (dtype/indexed-reader idx-rdr data) n-idx-elems metadata))))
   (clone [col]
-    (Column. (set missing) (dtype/clone data) n-elems metadata))
+    (Column. (doto (HashSet.)
+               (.addAll missing))
+             (dtype/clone data) n-elems metadata))
   (to-double-array [col error-on-missing?]
     (when (and (not= 0 (.size missing))
                error-on-missing?)
@@ -264,9 +285,12 @@
    (when-not (or (nil? metadata)
                  (map? metadata))
      (throw (Exception. "Metadata must be a persistent map")))
-   (let [missing (if (instance? Set missing)
+   (let [missing (if (instance? HashSet missing)
                    missing
-                   (set missing))
+                   (if-let [missing-seq (seq missing)]
+                     (doto (HashSet.)
+                       (.addAll (seq missing)))
+                     (HashSet.)))
          metadata (if (and (not (contains? metadata :categorical?))
                            (#{:string :keyword :symbol} (dtype/get-datatype data)))
                     (assoc metadata :categorical? true)

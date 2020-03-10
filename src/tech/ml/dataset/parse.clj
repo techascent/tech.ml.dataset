@@ -28,8 +28,7 @@
 (defn create-csv-parser
   ^AbstractParser []
   (let [settings (CsvParserSettings.)]
-    (.setDelimiterDetectionEnabled settings true (into-array Character/TYPE
-                                                             [\, \tab]))
+    (.detectFormatAutomatically settings (into-array Character/TYPE [\, \tab]))
     (CsvParser. settings)))
 
 

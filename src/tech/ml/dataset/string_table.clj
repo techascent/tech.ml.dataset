@@ -9,12 +9,24 @@
   (get-str-table [item]))
 
 
+(declare make-string-table)
+
+
 (deftype StringTable
     [^Map int->str
      ^Map str->int
      ^IntList data]
   dtype-proto/PDatatype
   (get-datatype [this] :string)
+  dtype-proto/PClone
+  (clone [this datatype]
+    (StringTable. int->str str->int (dtype/clone data)))
+  dtype-proto/PPrototype
+  (from-prototype [this new-datatype new-shape]
+    (let [n-elems (long (apply * new-shape))]
+      (if-not (= new-datatype :string)
+        (dtype/make-container :list new-datatype n-elems)
+        (make-string-table n-elems (.get int->str 0) int->str str->int))))
   tech.v2.datatype.Countable
   (lsize [this] (long (.size data)))
   PStrTable
@@ -63,13 +75,16 @@
 
 
 (defn make-string-table
-  (^List [n-elems ^HashMap int->str ^HashMap str->int]
-   (let [^IntList data (dtype/make-container :list :int32 (long n-elems))]
-     (.put int->str (int 0) "")
-     (.put str->int "" (int 0))
+  (^List [n-elems missing-val ^HashMap int->str ^HashMap str->int]
+   (let [^IntList data (dtype/make-container :list :int32 (long n-elems))
+         missing-val (str missing-val)]
+     (.put int->str (int 0) missing-val)
+     (.put str->int missing-val (int 0))
      (.size data (int n-elems))
      (StringTable. int->str str->int data)))
+  (^List [n-elems missing-val]
+   (make-string-table n-elems missing-val (HashMap.) (HashMap.)))
   (^List [n-elems]
-   (make-string-table n-elems (HashMap.) (HashMap.)))
+   (make-string-table n-elems "" (HashMap.) (HashMap.)))
   (^List []
-   (make-string-table 0 (HashMap.) (HashMap.))))
+   (make-string-table 0 "" (HashMap.) (HashMap.))))

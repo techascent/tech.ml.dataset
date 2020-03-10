@@ -422,11 +422,7 @@ contain missing values."
   "Perform some math.  This operator sets up context so the 'col' operator works."
   nil
   (let [result (pipe-base/eval-math-fn dataset column-name op-args)]
-    (ds/add-or-update-column
-     dataset (dtype/make-container :tablesaw-column
-                                   pipe-base/*pipeline-datatype*
-                                   result
-                                   {:name column-name}))))
+    (ds/add-or-update-column dataset column-name result)))
 
 
 (def-multiple-column-etl-operator impute-missing

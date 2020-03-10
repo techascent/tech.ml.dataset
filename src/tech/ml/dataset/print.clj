@@ -58,4 +58,5 @@
                               *default-print-length*)))
         print-ds (ds-proto/select dataset column-names index-range)
         column-names (ds-proto/column-names print-ds)]
-    (print-table column-names (mapseq-reader print-ds))))
+    (with-out-str
+      (print-table column-names (mapseq-reader print-ds)))))
