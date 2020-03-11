@@ -65,7 +65,6 @@
 
 (defprotocol PSimpleColumnParser
   (can-parse? [parser str-val])
-  (simple-missing-string? [parser str-val])
   (simple-parse! [parser container str-val])
   (simple-missing! [parser container]))
 
@@ -115,8 +114,6 @@
          true
          (catch Throwable e#
            false)))
-     (simple-missing-string? [parser# str-val#]
-       (.equalsIgnoreCase ^String str-val# "na"))
      (simple-parse! [parser# container# str-val#]
        (let [str-val# (str str-val#)
              parsed-val# (dtype->parse-fn ~datatype str-val#)]
@@ -142,8 +139,6 @@
         true
         (catch Throwable e
           false)))
-    (simple-missing-string? [parser str-val]
-      (.equalsIgnoreCase ^String str-val "na"))
     (simple-parse! [parser container str-val]
        (let [str-val (str str-val)
              parsed-val (dtype->parse-fn :boolean str-val)]
@@ -161,7 +156,6 @@
     (get-datatype [item#] :string)
     PSimpleColumnParser
     (can-parse? [this# item#] (< (count item#) 1024))
-    (simple-missing-string? [parser str-val] nil)
     (simple-parse! [parser# container# str-val#]
       (when (> (count str-val#) 1024)
         (throw (Exception. "Text data not string data")))
@@ -177,7 +171,6 @@
     (get-datatype [item#] :text)
     PSimpleColumnParser
     (can-parse? [this# item#] true)
-    (simple-missing-string? [parser str-val] nil)
     (simple-parse! [parser# container# str-val#]
       (.add ^List container# str-val#))
     (simple-missing! [parser# container#]
@@ -202,10 +195,15 @@
 
 
 (defprotocol PColumnParser
-  (parse! [parser str-val])
-  (missing! [parser])
-  (missing-string? [parser str-val])
-  (column-data [parser]))
+  (parse! [parser str-val]
+    "Side-effecting parse the value and store it.  Exceptions escaping from here
+will stop the parsing system.")
+  (missing! [parser]
+    "Mark a value as missing.")
+  (column-data [parser]
+    "Return a map containing
+{:data - convertible-to-reader column data.
+ :missing - convertible-to-reader array of missing values."))
 
 
 (defn default-column-parser
@@ -216,10 +214,6 @@
         simple-parser* (atom (second initial-parser))
         missing (LongArrayList.)]
     (reify PColumnParser
-      (missing-string? [parser str-val]
-        (.simple-missing-string?
-         ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
-         str-val))
       (parse! [this str-val]
         (let [parsed? (try (.simple-parse!
                             ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
