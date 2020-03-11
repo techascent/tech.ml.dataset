@@ -1,5 +1,23 @@
 (ns tech.ml.dataset.join-test
-  (:require [tech.ml.dataset :as ds]))
+  (:require [tech.ml.dataset :as ds]
+            [tech.ml.dataset.base :as ds-base]
+            [tech.v2.datatype.functional :as dfn]
+            [clojure.test :refer [deftest is]]))
+
+
+(deftest simple-join-test
+  (let [lhs (ds/name-values-seq->dataset {:a (range 10)
+                                          :b (range 10)})
+        rhs (ds/name-values-seq->dataset {:a (->> (range 10)
+                                                  (mapcat (partial repeat 2))
+                                                  (long-array))
+                                          :c (->> (range 10)
+                                                  (mapcat (partial repeat 2))
+                                                  (long-array))})
+        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs)]
+    (is (dfn/equals (join-table :a) (join-table :b)))
+    (is (dfn/equals (join-table :b) (join-table :c)))
+    (is (empty? (seq rhs-missing)))))
 
 (def lhs-fields
   [:size :day :operatorid :notes :more-notes :even-more-notes :how-can-there-be-more])
@@ -69,4 +87,4 @@
         rhs (ds/->dataset "rhs.csv")]
     (System/gc)
     (time
-     (ds/join-by-column "operatorid" lhs rhs))))
+     (ds-base/join-by-column "operatorid" lhs rhs))))

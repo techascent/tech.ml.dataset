@@ -10,6 +10,7 @@
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
+            [tech.parallel.for :as parallel-for]
             [tech.parallel.utils :as par-util])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
@@ -561,32 +562,40 @@ the correct type."
 (defn join-by-column
   "Join by column.  For efficiency, lhs should be smaller than rhs as it is sorted
   in memory."
-  [colname lhs rhs & {:keys [error-on-missing?]}]
-  (let [_ (println "initial group by")
-        idx-groups (time (group-by-column->indexes colname lhs))
+  [colname lhs rhs]
+  (let [idx-groups (group-by-column->indexes colname lhs)
         rhs-col (typecast/datatype->reader :object (rhs colname))
-        lhs-indexes (LongArrayList.)
-        rhs-indexes (LongArrayList.)
-        n-elems (dtype/ecount rhs-col)]
-    ;;This would have to be parallelized and thus have a separate set of indexes
-    ;;that were merged later in order to really be nice.  tech.datatype has no
-    ;;parallized operation that will result in this.
-    _ (println "array list join")
-    (time
-     (loop [idx 0]
-       (when (< idx n-elems)
-         (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
-           (do
-             (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
-             (.addAll lhs-indexes item))
-           (when error-on-missing?
-             (throw (Exception. (format "Failed to find column value %s"
-                                        (.read rhs-col idx))))))
-         (recur (unchecked-inc idx)))))
-    (println "final column select")
-    (time
+        n-elems (dtype/ecount rhs-col)
+        {:keys [lhs-indexes
+                rhs-indexes
+                rhs-missing] :as result}
+        (parallel-for/indexed-pmap
+         (fn [^long outer-idx ^long n-indexes]
+           (let [lhs-indexes (LongArrayList.)
+                 rhs-indexes (LongArrayList.)
+                 rhs-missing (LongArrayList.)]
+             (dotimes [inner-idx n-indexes]
+               (let [idx (+ outer-idx inner-idx)]
+                 (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
+                   (do
+                     (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+                     (.addAll lhs-indexes item))
+                   (.add rhs-missing idx))))
+             {:lhs-indexes lhs-indexes
+              :rhs-indexes rhs-indexes
+              :rhs-missing rhs-missing}))
+         n-elems
+         (partial reduce (fn [accum nextmap]
+                           (->> accum
+                                (map (fn [[k v]]
+                                       (.addAll ^LongArrayList v
+                                                ^LongArrayList (nextmap k))
+                                       [k v]))
+                                (into {})))))]
+    {:join-table
      (let [lhs-cols (->> (columns lhs)
                          (map #(ds-col/select % lhs-indexes)))
            rhs-cols (->> (columns (remove-column rhs colname))
                          (map #(ds-col/select % rhs-indexes)))]
-       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols))))))
+       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols)))
+     :rhs-missing-indexes rhs-missing}))
