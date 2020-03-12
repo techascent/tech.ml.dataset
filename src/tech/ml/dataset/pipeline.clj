@@ -44,7 +44,7 @@
   ([dataset column-filter]
    (string->number dataset column-filter nil))
   ([dataset]
-   (string->number dataset cf/string?)))
+   (string->number dataset cf/string-or-keyword-or-symbol?)))
 
 
 (defn one-hot
@@ -63,7 +63,7 @@
   ([dataset column-filter]
    (one-hot dataset column-filter nil))
   ([dataset]
-   (one-hot dataset cf/string?)))
+   (one-hot dataset cf/string-or-keyword-or-symbol?)))
 
 
 (defn replace-missing

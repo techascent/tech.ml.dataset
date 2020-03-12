@@ -48,7 +48,7 @@
 
     ;; Map back from values to keys for labels.  For tablesaw, column values
     ;; are never keywords.
-    (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
+    (is (= (mapv :fruit-name (mapseq-fruit-dataset))
            (ds/labels dataset)))
 
     (is (= {:fruit-name :classification}
@@ -63,7 +63,7 @@
 
     ;;Does the post-transformation value of fruit-name map to the
     ;;pre-transformation value of fruit-name?
-    (is (= (mapv (comp name :fruit-name) (mapseq-fruit-dataset))
+    (is (= (mapv :fruit-name (mapseq-fruit-dataset))
            (->> (ds/->flyweight dataset :number->string? true)
                 (mapv :fruit-name))))
 
@@ -79,9 +79,9 @@
 
     ;;forward map from input value to encoded value.
     ;;After ETL, column values are all doubles
-    (let [apple-value (-> (get (ds/inference-target-label-map dataset) "apple")
+    (let [apple-value (-> (get (ds/inference-target-label-map dataset) :apple)
                           double)]
-      (is (= #{"apple"}
+      (is (= #{:apple}
              (->> dataset
                   (ds/ds-filter #(= apple-value (:fruit-name %)))
                   ;;Use full version of ->flyweight to do reverse mapping of numeric
@@ -91,14 +91,11 @@
                   set))))
 
     ;;dataset starts with apple apple apple mandarin mandarin
-    (let [apple-v (double (get (ds/inference-target-label-map dataset) "apple"))
-          mand-v (double (get (ds/inference-target-label-map dataset) "mandarin"))]
+    (let [apple-v (double (get (ds/inference-target-label-map dataset) :apple))
+          mand-v (double (get (ds/inference-target-label-map dataset) :mandarin))]
       (is (= [apple-v apple-v apple-v mand-v mand-v]
              ;;Order columns
              (->> (ds/select dataset [:mass :fruit-name :width] :all)
-                  (ds/ds-column-map #(ds-col/set-metadata
-                                      %
-                                      {:name (name (ds-col/column-name %))}))
                   (take 2)
                   (drop 1)
                   (ds/from-prototype dataset "new-table")
@@ -106,7 +103,7 @@
                   ;;Note the backward conversion failed in this case because we
                   ;;change the column names.
                   (#(ds/->flyweight % :number->string? true))
-                  (map #(get % "fruit-name"))
+                  (map #(get % :fruit-name))
                   vec))))
 
 
@@ -121,7 +118,7 @@
                           [(long col-min) (long col-max)]))))))
 
     ;;Concatenation should work
-    (is (= (mapv (comp name :fruit-name)
+    (is (= (mapv :fruit-name
                  (concat (mapseq-fruit-dataset)
                          (mapseq-fruit-dataset)))
            (->> (-> (ds/ds-concat dataset dataset)
@@ -179,19 +176,19 @@
 (deftest one-hot
   (testing "Testing one-hot into multiple column groups"
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
+
           dataset (-> src-ds
                       (ds/remove-columns [:fruit-subtype :fruit-label])
                       (ds-pipe/one-hot :fruit-name
-                                       {:main ["apple" "mandarin"]
+                                       {:main [:apple :mandarin]
                                         :other :rest})
                       (ds-pipe/string->number)
                       (ds/set-inference-target :fruit-name))]
-
       (is (= {:fruit-name
-              {"apple" [:fruit-name-main 1],
-               "mandarin" [:fruit-name-main 2],
-               "orange" [:fruit-name-other 1],
-               "lemon" [:fruit-name-other 2]}}
+              {:apple [:fruit-name-main 1],
+               :mandarin [:fruit-name-main 2],
+               :orange [:fruit-name-other 1],
+               :lemon [:fruit-name-other 2]}}
              (ds/dataset-label-map dataset)))
       (is (= #{:mass :fruit-name-main :fruit-name-other :width :color-score :height}
              (->> (ds/columns dataset)
@@ -199,14 +196,14 @@
                   set)))
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/labels dataset)
                   (take 20)
                   vec)))
       ;;Check that flyweight conversion is correct.
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/->flyweight dataset :number->string? true)
                   (map :fruit-name)
                   (take 20)
@@ -225,10 +222,10 @@
                       (ds-pipe/one-hot :fruit-name)
                       (ds-pipe/string->number))]
       (is (= {:fruit-name
-              {"apple" [:fruit-name-apple 1],
-               "orange" [:fruit-name-orange 1],
-               "lemon" [:fruit-name-lemon 1],
-               "mandarin" [:fruit-name-mandarin 1]}}
+              {:apple [:fruit-name-apple 1],
+               :orange [:fruit-name-orange 1],
+               :lemon [:fruit-name-lemon 1],
+               :mandarin [:fruit-name-mandarin 1]}}
              (ds/dataset-label-map dataset)))
       (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
                :fruit-name-lemon :fruit-name-apple :height}
@@ -237,14 +234,14 @@
                   set)))
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/column-values->categorical dataset :fruit-name)
                   (take 20)
                   vec)))
 
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/->flyweight dataset :number->string? true)
                   (map :fruit-name)
                   (take 20)
@@ -261,14 +258,14 @@
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
           dataset (-> src-ds
                       (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :fruit-name ["apple" "mandarin"
-                                                    "orange" "lemon"])
+                      (ds-pipe/one-hot :fruit-name [:apple :mandarin
+                                                    :orange :lemon])
                       (ds-pipe/string->number))]
       (is (= {:fruit-name
-              {"apple" [:fruit-name-apple 1],
-               "orange" [:fruit-name-orange 1],
-               "lemon" [:fruit-name-lemon 1],
-               "mandarin" [:fruit-name-mandarin 1]}}
+              {:apple [:fruit-name-apple 1],
+               :orange [:fruit-name-orange 1],
+               :lemon [:fruit-name-lemon 1],
+               :mandarin [:fruit-name-mandarin 1]}}
              (ds/dataset-label-map dataset)))
       (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
                :fruit-name-lemon :fruit-name-apple :height}
@@ -277,14 +274,14 @@
                   set)))
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/column-values->categorical dataset :fruit-name)
                   (take 20)
                   vec)))
 
       (is (= (->> (mapseq-fruit-dataset)
                   (take 20)
-                  (mapv (comp name :fruit-name)))
+                  (mapv :fruit-name))
              (->> (ds/->flyweight dataset :number->string? true)
                   (map :fruit-name)
                   (take 20)

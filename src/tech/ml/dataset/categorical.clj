@@ -7,6 +7,7 @@
   (:require [tech.ml.protocols.dataset :as ds]
             [tech.ml.dataset.base :as ds-base]
             [tech.ml.protocols.column :as ds-col]
+            [tech.ml.dataset.impl.column :as col-impl]
             [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
             [tech.ml.utils :as utils]))
@@ -34,13 +35,10 @@
                     [str-table (conj value-list item)]))
                 [{} []]
                 table-value-list)
-        ;;Make everything strings.
-        value-list (map utils/column-safe-name value-list)
         ;;Second, known values map so that true and false map reasonably.
         [str-table value-list]
         (reduce (fn [[str-table value-list] item]
-                  (let [known-value (get known-values
-                                         (.toLowerCase (utils/column-safe-name item)))]
+                  (let [known-value (get known-values item)]
                     (if (and known-value
                              (not (contains? (set (vals str-table)) known-value)))
                       [(assoc str-table item known-value)
@@ -78,7 +76,7 @@
   "Given a categorical map for a given column, produce a new column
   of the desired datatype with the values mapped to the table values."
   [categorical-map new-dtype old-column]
-  (let [existing-values (ds-col/column-values old-column)
+  (let [existing-values (dtype/->reader old-column)
         column-name (ds-col/column-name old-column)
         categorical-map (get categorical-map column-name)
         data-values
@@ -93,10 +91,10 @@
                                        {:item-value item-val
                                         :possible-values (set (keys categorical-map))
                                         :column-name column-name}))))))
-                     {:unchecked? true})]
-    (ds-col/new-column old-column new-dtype data-values
-                       (assoc (ds-col/metadata old-column)
-                              :label-map categorical-map))))
+         {:unchecked? true})]
+    (col-impl/new-column column-name data-values
+                         (assoc (ds-col/metadata old-column)
+                                :label-map categorical-map))))
 
 
 (defn inverse-map-categorical-col-fn
@@ -114,7 +112,7 @@
 (defn inverse-map-categorical-columns
   [dataset src-column column-categorical-map]
   (let [column-values (-> (ds/column dataset src-column)
-                          ds-col/column-values)]
+                          (dtype/->reader))]
     (->> column-values
          (mapv (inverse-map-categorical-col-fn
                 src-column column-categorical-map)))))
@@ -130,7 +128,8 @@
   [dataset column-name-seq & [one-hot-table-args]]
   (->> column-name-seq
        (map (fn [colname]
-              (when-not (= :string (dtype/get-datatype (ds/column dataset colname)))
+              (when-not (#{:string :keyword :symbol}
+                         (dtype/get-datatype (ds/column dataset colname)))
                 (throw (ex-info (format "One hot applied to non string column: %s(%s)"
                                         colname (dtype/get-datatype
                                                  (ds/column dataset colname)))
@@ -191,7 +190,7 @@
   (let [column (ds/column dataset column-name)
         dataset (ds/remove-column dataset column-name)
         context (get one-hot-map column-name)
-        col-values (ds-col/column-values column)
+        col-values (dtype/->reader column)
         new-column-map (->> context
                             (map (fn [[_argval [new-column-name _colval]]]
                                    [new-column-name
@@ -218,10 +217,9 @@
          (reduce (fn [dataset [column-name column-data]]
                    (ds/add-column
                     dataset
-                    (ds-col/new-column column new-dtype column-data
+                    (col-impl/new-column column-name column-data
                                        (assoc
                                         (ds-col/metadata column)
-                                        :name column-name
                                         :label-map context))))
                  dataset))))
 

@@ -22,15 +22,12 @@ columns must have :categorical? true and the inference target
 should have :target? true.")
   (set-metadata [col data-map]
     "Set the metadata on the column returning a new column.")
-
-  (cache [col]
-    "Return the cache map for this column.  Cache maps are
-never duplcated or copied.")
-  (set-cache [col data-map]
-    "Set the cache on the column returning a new column. Cache maps
-are never duplicated or copied.")
   (missing [col]
     "Indexes of missing values")
+  (is-missing? [col idx]
+    "Return true if this index is missing.")
+  (set-missing [col long-rdr]
+    "Set this group of indexes as the missing set")
   (unique [col]
     "Set of all unique values")
   (stats [col stats-set]
@@ -43,21 +40,9 @@ Supported types are:
 :pearson
 :spearman
 :kendall")
-  (column-values [col]
-    "Return a 'thing convertible to a sequence' of values for this column.
-May be a java array or something else.  Likely to error on missing.")
-  (is-missing? [col idx]
-    "Return true if this index is missing.")
-  (get-column-value [col idx]
-    "Get a value fro mthe column.  Error on missing values.")
-  (set-values [col idx-val-seq]
-    "Set values in the column returning a new column with same name and datatype.  Values
-which cannot be simply coerced to the datatype are an error.")
   (select [col idx-seq]
     "Return a new column with the subset of indexes")
-  (empty-column [col datatype elem-count metadata]
-    "Return a new column of this supertype where all values are missing.")
-  (new-column [col datatype elem-count-or-values metadata]
+  (new-column [col datatype elem-count-or-values missing-set metadata]
     "Return a new column of this supertype with these values")
   (clone [col]
     "Return a clone of this column.")

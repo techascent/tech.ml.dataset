@@ -1,5 +1,11 @@
 (ns tech.ml.dataset.column
-  (:require [tech.ml.protocols.column :as col-proto]))
+  (:require [tech.ml.protocols.column :as col-proto]
+            [tech.ml.dataset.impl.column :as col-impl]
+            [tech.parallel.for :as parallel-for]
+            [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.casting :as casting])
+  (:import [it.unimi.dsi.fastutil.longs LongArrayList]
+           [java.util List]))
 
 
 (defn is-column?
@@ -49,33 +55,16 @@
        (set-metadata col)))
 
 
-(defn cache
-  "Return the cache map for this column.  Cache maps are
-never duplcated or copied."
-  [col]
-  (col-proto/cache col))
-
-
-(defn set-cache
-  "Set the cache on the column returning a new column. Cache maps
-are never duplicated or copied."
-  [col cache-map]
-  (col-proto/set-cache col cache-map))
-
-
-(defn merge-cache
-  "Merge the existing cache with new cache map.  Cache maps
-  are never duplicated or copied."
-  [col cache-map]
-  (->> (merge (cache col)
-              cache-map)
-       (set-cache col)))
-
-
 (defn missing
   "Indexes of missing values"
   [col]
   (col-proto/missing col))
+
+
+(defn is-missing?
+  "Return true if this index is missing."
+  [col idx]
+  (col-proto/is-missing? col idx))
 
 
 (defn unique
@@ -104,58 +93,161 @@ Implementations should check their metadata before doing calculations."
   (col-proto/correlation lhs rhs correlation-type))
 
 
-(defn column-values
-  "Return a 'thing convertible to a sequence' of values for this column.
-May be a java array or something else.  Likely to error on missing."
-  [col]
-  (col-proto/column-values col))
-
-
-(defn is-missing?
-  "Return true if this index is missing."
-  [col idx]
-  (col-proto/is-missing? col idx))
-
-
-(defn get-column-value
-  "Get a value fro mthe column.  Error on missing values."
-  [col idx]
-  (col-proto/get-column-value col idx))
-
-
-(defn set-values
-  "Set values in the column returning a new column with same name and datatype.  Values
-which cannot be simply coerced to the datatype are an error."
-  [col idx-val-seq]
-  (if (seq idx-val-seq)
-    (col-proto/set-values col idx-val-seq)
-    col))
-
-
 (defn select
   "Return a new column with the subset of indexes"
   [col idx-seq]
   (col-proto/select col idx-seq))
 
 
-(defn empty-column
-  "Return a new column of this supertype where all values are missing."
-  [col datatype elem-count & [metadata]]
-  (col-proto/empty-column col datatype elem-count
-                          (or metadata (col-proto/metadata col))))
-
-
-(defn new-column
-  "Return a new column of this supertype with these values"
-  [col datatype elem-count-or-values & [metadata]]
-  (col-proto/new-column col datatype elem-count-or-values
-                        (or metadata (col-proto/metadata col))))
-
-
 (defn clone
   "Clone this column not changing anything."
   [col]
   (col-proto/clone col))
+
+
+(def object-primitive-array-types
+  {(Class/forName "[Ljava.lang.Boolean;") :boolean
+   (Class/forName "[Ljava.lang.Byte;") :int8
+   (Class/forName "[Ljava.lang.Short;") :int16
+   (Class/forName "[Ljava.lang.Integer;") :int32
+   (Class/forName "[Ljava.lang.Long;") :int64
+   (Class/forName "[Ljava.lang.Float;") :float32
+   (Class/forName "[Ljava.lang.Double;") :float64})
+
+
+(defn process-object-primitive-array-data
+  [obj-data]
+  (let [dst-container-type (get object-primitive-array-types (type obj-data))
+        ^objects obj-data obj-data
+        n-items (dtype/ecount obj-data)
+        sparse-val (get @col-impl/dtype->missing-val-map dst-container-type)
+        ^List dst-data (dtype/make-container :list dst-container-type n-items)
+        sparse-indexes (LongArrayList.)]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (aget obj-data idx)]
+       (if (not (nil? obj-data))
+         (.set dst-data idx obj-data)
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
+(defn scan-object-data-for-missing
+  [container-dtype ^List obj-data]
+  (let [n-items (dtype/ecount obj-data)
+        ^List dst-data (col-impl/make-container container-dtype n-items)
+        sparse-indexes (LongArrayList.)
+        sparse-val (get @col-impl/dtype->missing-val-map container-dtype)]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (.get obj-data idx)]
+       (if (not (nil? obj-data))
+         (.set dst-data idx obj-data)
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
+(defn scan-object-numeric-data-for-missing
+  [container-dtype ^List obj-data]
+  (let [n-items (dtype/ecount obj-data)
+        ^List dst-data (col-impl/make-container container-dtype n-items)
+        sparse-indexes (LongArrayList.)
+        sparse-val (get @col-impl/dtype->missing-val-map container-dtype)]
+    (parallel-for/parallel-for
+     idx
+     n-items
+     (let [obj-data (.get obj-data idx)]
+       (if (and (not (nil? obj-data))
+                (or (= container-dtype :boolean)
+                    (not= sparse-val obj-data)))
+         (.set dst-data idx (casting/cast obj-data container-dtype))
+         (locking sparse-indexes
+           (.add sparse-indexes idx)
+           (.set dst-data idx sparse-val)))))
+    {:data dst-data
+     :missing sparse-indexes}))
+
+
+(defn ensure-column-reader
+  [values-seq]
+  (let [values-seq (if (dtype/reader? values-seq)
+                     values-seq
+                     (dtype/make-container :list
+                                           (dtype/get-datatype values-seq)
+                                           values-seq))]
+    (if (= :object (dtype/get-datatype values-seq))
+      (cond
+        (contains? object-primitive-array-types (type values-seq))
+        (process-object-primitive-array-data values-seq)
+        (boolean? (first values-seq))
+        (scan-object-numeric-data-for-missing :boolean values-seq)
+        (number? (first values-seq))
+        (scan-object-numeric-data-for-missing :float64 values-seq)
+        (string? (first values-seq))
+        (scan-object-data-for-missing :string values-seq)
+        (keyword? (first values-seq))
+        (scan-object-data-for-missing :keyword values-seq)
+        (symbol? (first values-seq))
+        (scan-object-data-for-missing :symbol values-seq)
+        :else
+        {:data values-seq})
+      {:data values-seq})))
+
+
+(defn new-column
+  ([name data] (new-column name data nil nil))
+  ([name data metadata] (new-column name data metadata nil))
+  ([name data metadata missing]
+   (let [{coldata :data
+          scanned-missing :missing} (ensure-column-reader data)]
+     (col-impl/new-column name coldata metadata (or missing scanned-missing)))))
+
+
+(defn ensure-column
+  "Convert an item to a column if at all possible.  Currently columns either implement
+  the required protocols "
+  [item]
+  (cond
+    (col-proto/is-column? item)
+    item
+    (map? item)
+    (let [{:keys [name data missing metadata]} item]
+      (when-not (and name data)
+        (throw (Exception. "Column data map must have name and data")))
+      (col-impl/new-column name (:data (ensure-column-reader data)) metadata missing))
+    :else
+    (throw (ex-info "item is not convertible to a column without further information"
+                    {:item item}))))
+
+
+(defn ensure-column-seq
+  [item-seq]
+  ;;mapv to force errors here instead of later
+  (mapv (fn [idx item]
+          (cond
+            (col-proto/is-column? item)
+            item
+            (map? item)
+            (ensure-column item)
+            (dtype/reader? item)
+            (let [{:keys [data missing]} (ensure-column-reader item)]
+              (col-impl/new-column idx data {} missing))
+            (instance? Iterable item)
+            (let [{:keys [data missing]} (ensure-column-reader item)]
+              (col-impl/new-column idx data {} missing))
+            :else
+            (throw (ex-info "Item does not appear to be either randomly accessable or iterable"
+                            {:item item}))))
+        (range (count item-seq))
+        item-seq))
 
 
 (defn to-double-array

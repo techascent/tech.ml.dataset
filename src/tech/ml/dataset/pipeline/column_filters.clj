@@ -5,7 +5,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.pipeline.base :as pipe-base]
             [clojure.set :as c-set])
-  (:refer-clojure :exclude [string? not and or boolean?
+  (:refer-clojure :exclude [string? keyword? symbol? not and or boolean?
                             > >= < <=]))
 
 
@@ -31,7 +31,8 @@
         (->> (ds/select-columns dataset (clojure.core/or column-name-seq :all))
              ds/column-names)
         (clojure.core/or (clojure.core/string? column-name-seq)
-                         (keyword? column-name-seq))
+                         (clojure.core/keyword? column-name-seq)
+                         (clojure.core/symbol? column-name-seq))
         [column-name-seq]
         :else
         (throw (ex-info (format "Unrecognized argument to select columns: %s"
@@ -63,6 +64,22 @@
 (defn string?
   [& [dataset]]
   (of-datatype? dataset :string))
+
+
+(defn keyword?
+  [& [dataset]]
+  (of-datatype? dataset :keyword))
+
+
+(defn symbol?
+  [& [dataset]]
+  (of-datatype? dataset :keyword))
+
+
+(defn string-or-keyword-or-symbol?
+  [& [dataset]]
+  (column-filter #(#{:string :keyword :symbol} (dtype/get-datatype %))
+                 dataset))
 
 
 (defn boolean?

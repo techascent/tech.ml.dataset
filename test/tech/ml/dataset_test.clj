@@ -120,7 +120,7 @@
                                       #(->> (dtype/->reader %)
                                             (unary-op/unary-reader
                                              :string
-                                             (.concat ^String x "-fn")))))]
+                                             (.concat ^String (name x) "-fn")))))]
     (is (= ["apple-fn" "apple-fn" "apple-fn" "mandarin-fn" "mandarin-fn"
             "mandarin-fn" "mandarin-fn" "mandarin-fn" "apple-fn" "apple-fn"]
            (->> (ds :fruit-name)
@@ -154,7 +154,7 @@
            (dtype/shape (dataset/unique-by :fruit-name ds))))
     (is (= [7 4]
            (dtype/shape (dataset/unique-by-column :fruit-name ds))))
-    (is (= #{"apple" "orange" "lemon" "mandarin"}
+    (is (= #{:apple :orange :lemon :mandarin}
            (->> (dataset/column (dataset/unique-by-column :fruit-name ds)
                                 :fruit-name)
                 set)))
@@ -208,23 +208,28 @@
 
 (deftest filter-fail-regression
   (let [ds (dataset/->dataset (mapseq-fruit-dataset))]
-    (is (= ["mandarin" "mandarin" "mandarin" "mandarin"]
-           (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))
-    (dtype/copy! ["one" "two" "three" "four"]
-                 (dtype/sub-buffer (ds :fruit-name) 4 4))
-    (is (= ["one" "two" "three" "four"]
+    (is (= [:mandarin :mandarin :mandarin :mandarin]
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
-
 
 
 (defn large-join-test
   []
   (let [ds1 (dataset/name-values-seq->dataset
             {:a (range 100000)
-             :b (flatten (repeat 10000 ["a" "b" "c" "d" "e"
-                                        "f" "g" "h" "i" "j"]))})
+             :b (flatten (repeat 10000 [:a :b :c :d :e
+                                        :f :g :h :i :j]))})
         ds2 (dataset/name-values-seq->dataset
             {:a (range 100000)
              :c (flatten (repeat 10000 ["a" "b" "c" "d" "e"
                                         "f" "g" "h" "i" "j"]))})]
     (dataset/join-by-column :a ds1 ds2)))
+
+
+(deftest remove-missing-persistent-vec-data
+  (let [ds (dataset/name-values-seq->dataset {:a [1 nil 2 nil 3]
+                                              :b (list 1 nil 2 nil 3)})
+        rec (ds-pipe/replace-missing ds :all 5)]
+    (is (= [1.0 5.0 2.0 5.0 3.0]
+           (vec (rec :a))))
+    (is (= [1.0 5.0 2.0 5.0 3.0]
+           (vec (rec :b))))))

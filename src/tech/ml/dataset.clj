@@ -2,15 +2,15 @@
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
   (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional.impl :as fn-impl]
+            [tech.parallel.utils :as par-util]
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
-            [tech.libs.tablesaw]
             [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
@@ -18,7 +18,7 @@
 
 (set! *warn-on-reflection* true)
 
-(fn-impl/export-symbols tech.ml.dataset.base
+(par-util/export-symbols tech.ml.dataset.base
                         dataset-name
                         set-dataset-name
                         ds-row-count
@@ -62,10 +62,14 @@
                         ds-column-map
                         ->dataset
                         ->>dataset
-                        name-values-seq->dataset
                         from-prototype
                         dataset->string
                         join-by-column)
+
+
+(par-util/export-symbols tech.ml.dataset.impl.dataset
+                         new-dataset
+                         name-values-seq->dataset)
 
 
 (defn n-permutations
@@ -99,7 +103,7 @@
                     (partial concat label-columns))))))
 
 
-(fn-impl/export-symbols tech.ml.dataset.modelling
+(par-util/export-symbols tech.ml.dataset.modelling
                         set-inference-target
                         column-label-map
                         inference-target-label-map
@@ -116,7 +120,7 @@
                         ->row-major)
 
 
-(fn-impl/export-symbols tech.ml.dataset.math
+(par-util/export-symbols tech.ml.dataset.math
                         correlation-table
                         k-means
                         g-means
@@ -163,7 +167,6 @@
     ;;there were no numeric or no string columns it still works.
     (select-columns stats-ds (->> stat-names
                                   (filter existing-colname-set)))))
-
 
 
 (defn ->flyweight

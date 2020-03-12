@@ -4,13 +4,14 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.readers.concat :as reader-concat]
-            [tech.v2.datatype.readers.const :as const-rdr]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.io :as io]
-            [tech.parallel.require :as parallel-req])
+            [tech.parallel.require :as parallel-req]
+            [tech.parallel.for :as parallel-for]
+            [tech.parallel.utils :as par-util])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
            [java.util List]
@@ -101,21 +102,11 @@
 
 (defn new-column
   "Create a new column from some values."
-  ([dataset column-name values {:keys [datatype
-                                       container-type]
-                                :or {container-type :tablesaw-column}
-                                :as options}]
-   (let [datatype (or datatype (dtype/get-datatype values))]
-     (->> (if (ds-col/is-column? values)
-            (ds-col/set-name values column-name)
-            (if-let [col (first (columns dataset))]
-              (ds-col/new-column col datatype values {:name column-name})
-              (dtype/make-container container-type datatype values
-                                    (assoc options
-                                           :column-name column-name))))
-          (add-column dataset))))
-  ([dataset column-name values]
-   (new-column dataset column-name values {})))
+  [dataset column-name values]
+  (->> (if (ds-col/is-column? values)
+         (ds-col/set-name values column-name)
+         (ds-col/new-column column-name values))
+       (add-column dataset)))
 
 
 (defn remove-column
@@ -214,25 +205,9 @@ duplicate values."
        (map-indexed vector)))
 
 
-(defn value-reader
-  "Return a reader that produces a vector of column values per index."
-  ^ObjectReader [dataset]
-  (let [n-elems (long (second (dtype/shape dataset)))
-        readers (->> (columns dataset)
-                     (map dtype/->reader))]
-    (reify ObjectReader
-      (lsize [rdr] n-elems)
-      (read [rdr idx] (vec (map #(.get ^List % idx) readers))))))
-
-
-(defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value"
-  [dataset]
-  (let [colnames (column-names dataset)]
-    (->> (value-reader dataset)
-         (unary-op/unary-reader
-          :object
-          (zipmap colnames x)))))
+(par-util/export-symbols tech.ml.dataset.print
+                         value-reader
+                         mapseq-reader)
 
 
 (defn supported-column-stats
@@ -355,8 +330,7 @@ the correct type."
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
                           first-col (first columns)]
-                      (ds-col/new-column first-col
-                                         (dtype/get-datatype first-col)
+                      (ds-col/new-column (ds-col/column-name first-col)
                                          column-values
                                          (ds-col/metadata first-col)))))
              (ds-proto/from-prototype dataset (dataset-name dataset))
@@ -507,24 +481,6 @@ the correct type."
             (map columns)
             (apply map map-fn))))
 
-(defn map-seq->dataset
-  "Given a sequence of maps, construct a dataset.  Defaults to a tablesaw-based
-  dataset.  Options are:
-  :scan-depth - number of maps to scan in order to decifer column type.
-  :column-definintions - sequence of {:name :datatype} maps that decide the columns
-  without using autoscan.
-  :table-name - name of the new table
-  :dataset-constructor - Function to use to transform the sequence of maps into a
-  dataset.  Defaults to a tablesaw-based dataset."
-  [map-seq {:keys [table-name
-                   dataset-constructor]
-            :or {table-name "_unnamed"
-                 dataset-constructor 'tech.libs.tablesaw/map-seq->tablesaw-dataset}
-            :as options}]
-  (-> ((parallel-req/require-resolve dataset-constructor)
-       map-seq options)
-      (set-dataset-name table-name)))
-
 
 (defn ->dataset
   "Create a dataset from either csv/tsv or a sequence of maps.
@@ -557,9 +513,7 @@ the correct type."
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
            (instance? InputStream dataset)
-           (apply
-            (parallel-req/require-resolve 'tech.libs.tablesaw/path->tablesaw-dataset)
-            dataset (apply concat options))
+           (ds-impl/parse-dataset dataset options)
 
            (string? dataset)
            (let [^String dataset dataset
@@ -576,17 +530,14 @@ the correct type."
                            options)
                  open-fn (if json?
                            #(-> (apply io/get-json % (apply concat options))
-                                (map-seq->dataset options))
-                           #(apply
-                             (parallel-req/require-resolve
-                              'tech.libs.tablesaw/path->tablesaw-dataset)
-                             % (apply concat options)))]
+                                (ds-impl/map-seq->dataset options))
+                           ds-impl/parse-dataset)]
              (with-open [istream (if gzipped?
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
                (open-fn istream)))
            :else
-           (map-seq->dataset dataset options))]
+           (ds-impl/map-seq->dataset dataset options))]
      (if table-name
        (ds-proto/set-dataset-name dataset table-name)
        dataset)))
@@ -602,39 +553,6 @@ the correct type."
    (->dataset dataset)))
 
 
-(defn name-values-seq->dataset
-  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
-  of unknown (:object) datatype, the first item is checked. If it is a number,
-  then doubles are used.  If it is a string, then strings are used for the
-  column datatype.
-  All sequences must be the same length.
-  Returns a new dataset"
-  [name-values-seq & {:keys [column-container-type dataset-name]
-                      :or {column-container-type :tablesaw-column
-                           dataset-name "_unnamed"}}]
-  (when (= column-container-type :tablesaw-column)
-    (require '[tech.libs.tablesaw]))
-  (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
-                   distinct)]
-    (when-not (= 1 (count sizes))
-      (throw (ex-info (format "Different sized columns detected: %s" sizes) {})))
-    (->> name-values-seq
-         (map (fn [[colname values-seq]]
-                (let [col-dtype (dtype/get-datatype values-seq)
-                      col-dtype (if (= col-dtype :object)
-                                  (if (number? (first values-seq))
-                                    :float64
-                                    :string)
-                                  col-dtype)]
-                  (dtype/make-container column-container-type
-                                        col-dtype
-                                        values-seq
-                                        {:name colname}))))
-         ((parallel-req/require-resolve
-           'tech.ml.dataset.generic-columnar-dataset/make-dataset)
-          dataset-name))))
-
-
 (defn dataset->string
   ^String [ds]
   (with-out-str
@@ -644,32 +562,40 @@ the correct type."
 (defn join-by-column
   "Join by column.  For efficiency, lhs should be smaller than rhs as it is sorted
   in memory."
-  [colname lhs rhs & {:keys [error-on-missing?]}]
-  (let [_ (println "initial group by")
-        idx-groups (time (group-by-column->indexes colname lhs))
+  [colname lhs rhs]
+  (let [idx-groups (group-by-column->indexes colname lhs)
         rhs-col (typecast/datatype->reader :object (rhs colname))
-        lhs-indexes (LongArrayList.)
-        rhs-indexes (LongArrayList.)
-        n-elems (dtype/ecount rhs-col)]
-    ;;This would have to be parallelized and thus have a separate set of indexes
-    ;;that were merged later in order to really be nice.  tech.datatype has no
-    ;;parallized operation that will result in this.
-    _ (println "array list join")
-    (time
-     (loop [idx 0]
-       (when (< idx n-elems)
-         (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
-           (do
-             (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
-             (.addAll lhs-indexes item))
-           (when error-on-missing?
-             (throw (Exception. (format "Failed to find column value %s"
-                                        (.read rhs-col idx))))))
-         (recur (unchecked-inc idx)))))
-    (println "final column select")
-    (time
+        n-elems (dtype/ecount rhs-col)
+        {:keys [lhs-indexes
+                rhs-indexes
+                rhs-missing] :as result}
+        (parallel-for/indexed-pmap
+         (fn [^long outer-idx ^long n-indexes]
+           (let [lhs-indexes (LongArrayList.)
+                 rhs-indexes (LongArrayList.)
+                 rhs-missing (LongArrayList.)]
+             (dotimes [inner-idx n-indexes]
+               (let [idx (+ outer-idx inner-idx)]
+                 (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
+                   (do
+                     (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+                     (.addAll lhs-indexes item))
+                   (.add rhs-missing idx))))
+             {:lhs-indexes lhs-indexes
+              :rhs-indexes rhs-indexes
+              :rhs-missing rhs-missing}))
+         n-elems
+         (partial reduce (fn [accum nextmap]
+                           (->> accum
+                                (map (fn [[k v]]
+                                       (.addAll ^LongArrayList v
+                                                ^LongArrayList (nextmap k))
+                                       [k v]))
+                                (into {})))))]
+    {:join-table
      (let [lhs-cols (->> (columns lhs)
                          (map #(ds-col/select % lhs-indexes)))
            rhs-cols (->> (columns (remove-column rhs colname))
                          (map #(ds-col/select % rhs-indexes)))]
-       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols))))))
+       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols)))
+     :rhs-missing-indexes rhs-missing}))

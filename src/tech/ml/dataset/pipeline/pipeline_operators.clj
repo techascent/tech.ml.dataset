@@ -269,12 +269,11 @@ strings with a known value."
    (fn [col]
      (let [result-dtype (or (:result-datatype op-args)
                             (dtype/get-datatype col))
-           map-fn (:value-map context)]
+           map-fn (:value-map context)
+           new-col-name (or (:result-name op-args)
+                            (ds-col/column-name col))]
        (as-> (mapv #(get map-fn % %) (dtype/->reader col)) col-values
-         (ds-col/new-column col result-dtype col-values
-                            (assoc (ds-col/metadata col)
-                                   :name (or (:result-name op-args)
-                                             (ds-col/column-name col)))))))))
+         (ds-col/new-column column-name col-values (ds-col/metadata col)))))))
 
 
 (def-single-column-etl-operator update-column
@@ -294,9 +293,9 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
      (fn [col]
        (if-not (= (dtype/get-datatype col) etl-dtype)
          (let [new-col-dtype etl-dtype
-               col-values (ds-col/column-values col)
+               col-values (dtype/->reader col)
                data-values (dtype/make-array-of-type new-col-dtype col-values)]
-           (ds-col/new-column col new-col-dtype data-values))
+           (ds-col/new-column (ds-col/column-name col) data-values))
          col)))))
 
 
@@ -336,7 +335,7 @@ a unified backing store datatype.  Necessary before full-table datatype declarat
                    (ds/update-column
                     dataset (ds-col/column-name col)
                     (fn [incoming-col]
-                      (ds-col/new-column incoming-col etl-dtype
+                      (ds-col/new-column (ds-col/column-name incoming-col)
                                          (tens/select backing-store col-idx :all)
                                          (dissoc (ds-col/metadata incoming-col)
                                                  :categorical?)))))
@@ -423,11 +422,7 @@ contain missing values."
   "Perform some math.  This operator sets up context so the 'col' operator works."
   nil
   (let [result (pipe-base/eval-math-fn dataset column-name op-args)]
-    (ds/add-or-update-column
-     dataset (dtype/make-container :tablesaw-column
-                                   pipe-base/*pipeline-datatype*
-                                   result
-                                   {:name column-name}))))
+    (ds/add-or-update-column dataset column-name result)))
 
 
 (def-multiple-column-etl-operator impute-missing

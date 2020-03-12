@@ -2,6 +2,8 @@
   (:require [tech.ml.dataset.pipeline
              :refer [m= col int-map]
              :as dsp]
+            [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.pipeline.pipeline-operators
              :refer [pipeline-train-context
                      pipeline-inference-context]]
@@ -18,13 +20,11 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
             [clojure.set :as c-set]
-            [tech.libs.tablesaw :as tablesaw]
             [clojure.test :refer :all]))
 
 
 (deftest tablesaw-col-subset-test
-  (let [test-col (dtype/make-container :tablesaw-column :int32
-                                       (range 10))
+  (let [test-col (ds-col/new-column "unnamed" (range 10))
         select-vec [3 5 7 3 2 1]
         new-col (ds-col/select test-col select-vec)]
     (is (= select-vec
@@ -71,8 +71,13 @@
   (with-ds dataset
     (cf/and cf/numeric?
             #(cf/not "SalePrice")
-            (fn [] (cf/> #(dfn/abs (dfn/skewness (col)))
-                         0.5)))))
+            (fn []
+              (cf/> #(let [skewness (dfn/skewness
+                                     (dtype/->reader (col)
+                                                     :float64
+                                                     {:missing-policy :elide}))]
+                       (dfn/abs skewness))
+                    0.5)))))
 
 
 ;;This test fails if col-filters/and (intersection) isn't
@@ -167,11 +172,11 @@
     (is (= 10 (count final-flyweight)))
 
     (let [pre-pipeline (map ds-col/metadata (ds/columns src-ds))
-          exact-columns (tablesaw/map-seq->tablesaw-dataset
+          exact-columns (ds-impl/map-seq->dataset
                          inference-dataset
                          {:column-definitions pre-pipeline})
           ;;Just checking that this works at all..
-          autoscan-columns (tablesaw/map-seq->tablesaw-dataset inference-dataset {})]
+          autoscan-columns (ds-impl/map-seq->dataset inference-dataset {})]
 
       ;;And the definition of exact is...
       (is (= (mapv :datatype (->> pre-pipeline
@@ -314,7 +319,7 @@
                                                          #(dfn/< (col) 4000))
                                          dtype/shape)
              num-over-the-line (->> (ds/column src-dataset "GrLivArea")
-                                    (ds-col/column-values)
+                                    (dtype/->reader)
                                     (filter #(>= (int %) 4000))
                                     count)]
          ;;Ensure our test isn't pointless.
