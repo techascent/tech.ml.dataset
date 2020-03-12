@@ -248,7 +248,7 @@
   (select [col idx-rdr]
     (if (== 0 (.size missing))
       ;;common case
-      (Column. missing (dtype/indexed-reader idx-rdr data) n-elems metadata)
+      (Column. missing (dtype/indexed-reader idx-rdr data) (dtype/ecount idx-rdr) metadata)
       ;;Uggh.  Construct a new missing set
       (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
             n-idx-elems (.lsize idx-rdr)
