@@ -719,3 +719,17 @@ the correct type."
       (when lhs-missing?
         {:lhs-missing lhs-missing
          :lhs-outer-join (select lhs :all lhs-missing)})))))
+
+(defn inner-join [colname lhs rhs]
+  (-> (join-by-column colname lhs rhs)
+      :join-table))
+
+(defn left-join  [colname lhs rhs]
+  (-> (join-by-column colname lhs rhs {:lhs-missing? true})
+      :lhs-outer-join))
+
+(defn right-join [colname lhs rhs]
+  (-> (join-by-column colname lhs rhs {:rhs-missing? true})
+      :rhs-outer-join))
+
+
