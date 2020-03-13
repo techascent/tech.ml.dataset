@@ -13,7 +13,8 @@
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb])
-  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
+  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering])
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
 
 (set! *warn-on-reflection* true)
@@ -22,7 +23,9 @@
                         dataset-name
                         set-dataset-name
                         ds-row-count
+                        row-count
                         ds-column-count
+                        column-count
                         metadata
                         set-metadata
                         maybe-column
@@ -48,8 +51,12 @@
                         ds-group-by-column
                         group-by->indexes
                         group-by-column->indexes
+                        sort-by
+                        sort-by-column
                         ds-sort-by
                         ds-sort-by-column
+                        filter
+                        filter-column
                         ds-filter
                         ds-filter-column
                         unique-by
@@ -57,9 +64,9 @@
                         aggregate-by
                         aggregate-by-column
                         ds-concat
+                        concat
                         ds-take-nth
-                        ds-map-values
-                        ds-column-map
+                        take-nth
                         ->dataset
                         ->>dataset
                         from-prototype
@@ -100,7 +107,7 @@
          ;;assume order doesn't matter
          distinct
          (map (comp (partial select-columns dataset)
-                    (partial concat label-columns))))))
+                    (partial clojure.core/concat label-columns))))))
 
 
 (par-util/export-symbols tech.ml.dataset.modelling
@@ -157,16 +164,16 @@
                                                    :standard-deviation :skew})
                           {:mode (->> col-reader
                                       frequencies
-                                      (sort-by second >)
+                                      (clojure.core/sort-by second >)
                                       ffirst)})))))
-             (sort-by :col-name)
+             (clojure.core/sort-by :col-name)
              ->dataset)
         existing-colname-set (->> (column-names stats-ds)
                                   set)]
     ;;This orders the columns by the ordering of stat-names but if for instance
     ;;there were no numeric or no string columns it still works.
     (select-columns stats-ds (->> stat-names
-                                  (filter existing-colname-set)))))
+                                  (clojure.core/filter existing-colname-set)))))
 
 
 (defn ->flyweight

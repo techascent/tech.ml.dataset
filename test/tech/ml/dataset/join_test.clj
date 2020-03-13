@@ -14,12 +14,56 @@
                                           :c (->> (range 10)
                                                   (mapcat (partial repeat 2))
                                                   (long-array))})
-        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs)]
+        {:keys [join-table rhs-missing]} (ds/join-by-column :a lhs rhs)]
     (is (dfn/equals (join-table :a) (join-table :b)))
     (is (dfn/equals (join-table :b) (join-table :c)))
     (is (empty? (seq rhs-missing)))))
 
 
+;;sample from https://www.w3schools.com/sql/sql_join_left.asp
+(deftest left-join-test
+  (let [lhs (ds/->dataset [{"CustomerID" 1,
+                            "CustomerName" "Alfreds Futterkiste",
+                            "ContactName" "Maria Anders",
+                            "Address" "Obere Str. 57",
+                            "City" "Berlin",
+                            "PostalCode" 12209,
+                            "Country" "Germany"}
+                           {"CustomerID" 2,
+                            "CustomerName" "Ana Trujillo Emparedados y helados",
+                            "ContactName" "Ana Trujillo",
+                            "Address" "Avda. de la Constitución 2222",
+                            "City" "México D.F.",
+                            "PostalCode" 5021,
+                            "Country" "Mexico"}
+                           {"CustomerID" 3,
+                            "CustomerName" "Antonio Moreno Taquería",
+                            "ContactName" "Antonio Moreno",
+                            "Address" "Mataderos 2312",
+                            "City" "México D.F.",
+                            "PostalCode" 5023,
+                            "Country" "Mexico"}])
+
+        rhs (ds/->dataset [{"OrderID" 10308,
+                            "CustomerID" 2,
+                            "EmployeeID" 7,
+                            "OrderDate" "1996-09-18",
+                            "ShipperID" 3}
+                           {"OrderID" 10309,
+                            "CustomerID" 37,
+                            "EmployeeID" 3,
+                            "OrderDate" "1996-09-19",
+                            "ShipperID" 1}
+                           {"OrderID" 10310,
+                            "CustomerID" 77,
+                            "EmployeeID" 8,
+                            "OrderDate" "1996-09-20",
+                            "ShipperID" 2}])
+        joined (:lhs-outer-join
+                (ds/join-by-column "CustomerID" lhs rhs {:lhs-missing? true}))
+        recs   (ds/mapseq-reader joined)]
+    (is (= 2 (count recs)))
+    (is (= #{1 3} (set (map #(get % "CustomerID") recs))))))
 
 
 (comment

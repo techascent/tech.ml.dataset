@@ -2,13 +2,14 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.ml.dataset.base
              :refer [column-names update-columns
-                     ->dataset select ds-map-values
+                     ->dataset select
                      metadata maybe-column]
              :as ds-base]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.column :as ds-col]
             [clojure.set :as c-set]
-            [tech.ml.dataset.categorical :as categorical]))
+            [tech.ml.dataset.categorical :as categorical])
+  (:import [tech.v2.datatype ObjectReader]))
 
 
 (declare dataset-label-map reduce-column-names)
@@ -185,7 +186,7 @@
 
 
 (defn ->row-major
-  "Given a dataset and a map if desired key names to sequences of columns,
+  "Given a dataset and a map of desired key names to sequences of columns,
   produce a sequence of maps where each key name points to contiguous vector
   composed of the column values concatenated.
   If colname-seq-map is not provided then each row defaults to
@@ -193,32 +194,22 @@
    :label [label-columns]}"
   ([dataset key-colname-seq-map {:keys [datatype]
                                  :or {datatype :float64}}]
-   (let [key-val-seq (seq key-colname-seq-map)
-         all-col-names (mapcat second key-val-seq)
-         item-col-count-map (->> key-val-seq
-                                 (map (fn [[item-k item-col-seq]]
-                                        (when (seq item-col-seq)
-                                          [item-k (count item-col-seq)])))
-                                 (remove nil?)
-                                 vec)]
-     (ds-map-values
-      dataset
-      (fn [& column-values]
-        (->> item-col-count-map
-             (reduce (fn [[flyweight column-values] [item-key item-count]]
-                       (let [contiguous-array (dtype/make-array-of-type
-                                               datatype (take item-count
-                                                              column-values))]
-                         (when-not (= (dtype/ecount contiguous-array)
-                                      (long item-count))
-                           (throw
-                            (ex-info "Failed to get correct number of items"
-                                     {:item-key item-key})))
-                         [(assoc flyweight item-key contiguous-array)
-                          (drop item-count column-values)]))
-                     [{} column-values])
-             first))
-      all-col-names)))
+   (let [key-reader-seq
+         (->> (seq key-colname-seq-map)
+              (map (fn [[k v]]
+                     [k (->> v
+                             (mapv #(-> (ds-base/column dataset %)
+                                        (dtype/->reader datatype))))])))
+         n-elems (long (ds-base/row-count dataset))]
+     (reify ObjectReader
+       (lsize [rdr] n-elems)
+       (read [rdr idx]
+         (->> key-reader-seq
+              (map (fn [[k v]]
+                     [k (dtype/make-container
+                         :java-array datatype
+                         (mapv #(% idx) v))]))
+              (into {}))))))
   ([dataset options]
    (->row-major dataset (merge
                          {:features (col-filters/feature? dataset)}

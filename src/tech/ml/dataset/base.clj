@@ -3,7 +3,7 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.typecast :as typecast]
+            [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
@@ -15,7 +15,8 @@
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
            [java.util List HashSet]
-           [it.unimi.dsi.fastutil.longs LongArrayList]))
+           [it.unimi.dsi.fastutil.longs LongArrayList])
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
 
 (set! *warn-on-reflection* true)
@@ -29,13 +30,21 @@
   [dataset ds-name]
   (ds-proto/set-dataset-name dataset ds-name))
 
+(defn row-count
+  ^long [dataset]
+  (second (dtype/shape dataset)))
+
 (defn ds-row-count
   [dataset]
-  (second (dtype/shape dataset)))
+  (row-count dataset))
+
+(defn column-count
+  ^long [dataset]
+  (first (dtype/shape dataset)))
 
 (defn ds-column-count
   [dataset]
-  (first (dtype/shape dataset)))
+  (column-count dataset))
 
 (defn metadata
   [dataset]
@@ -134,9 +143,9 @@
   (let [colname-set (set colname-seq)
         ordered-columns (->> (columns dataset)
                              (map ds-col/column-name)
-                             (filter colname-set))]
-    (concat ordered-columns
-            (remove (set ordered-columns) colname-seq))))
+                             (clojure.core/filter colname-set))]
+    (clojure.core/concat ordered-columns
+                         (remove (set ordered-columns) colname-seq))))
 
 
 (defn update-columns
@@ -225,7 +234,7 @@ the correct type."
   (ds-proto/from-prototype dataset table-name column-seq))
 
 
-(defn ds-filter
+(defn filter
   "dataset->dataset transformation.  Predicate is passed a map of
   colname->column-value."
   [predicate dataset & [column-name-seq]]
@@ -236,9 +245,23 @@ the correct type."
        (select dataset :all)))
 
 
-(defn ds-filter-column
+(defn ds-filter
+  "Legacy method.  Please see filter"
+  [predicate dataset & [column-name-seq]]
+  (filter predicate dataset column-name-seq))
+
+
+(defn filter-column
   "Filter a given column by a predicate.  Predicate is passed column values.
   truthy values are kept.  Returns a dataset."
+  [predicate colname dataset]
+  (->> (column dataset colname)
+       (dfn/argfilter predicate)
+       (select dataset :all)))
+
+
+(defn ds-filter-column
+  "Legacy method.  Please see filter-column"
   [predicate colname dataset]
   (->> (column dataset colname)
        (dfn/argfilter predicate)
@@ -253,7 +276,7 @@ the correct type."
        (dfn/arggroup-by key-fn)))
 
 
-(defn ds-group-by
+(defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
   a map of colname->column-value.  Selecting which columns are used in the key-fn
   using column-name-seq is optional but will greatly improve performance."
@@ -263,6 +286,12 @@ the correct type."
        (into {})))
 
 
+(defn ds-group-by
+  "Legacy method. Please see group-by"
+  [key-fn dataset & [column-name-seq]]
+  (group-by key-fn dataset column-name-seq))
+
+
 (defn group-by-column->indexes
   [colname dataset]
   (->> (column dataset colname)
@@ -270,7 +299,7 @@ the correct type."
        (dfn/arggroup-by identity)))
 
 
-(defn ds-group-by-column
+(defn group-by-column
   "Return a map of column-value->dataset."
   [colname dataset]
   (->> (group-by-column->indexes colname dataset)
@@ -279,32 +308,64 @@ the correct type."
                      (set-dataset-name k))]))
        (into {})))
 
+(defn ds-group-by-column
+  "Legacy method.  Please see group-by-column"
+  [colname dataset]
+  (group-by-column colname dataset))
+
+
+(defn sort-by
+  "Sort a dataset by a key-fn and compare-fn.  Uses clojure's sort-by under the
+  covers."
+  ([key-fn compare-fn dataset column-name-seq]
+   (let [^List data (->> (or column-name-seq (column-names dataset))
+                         (select-columns dataset)
+                         (mapseq-reader))
+         n-elems (.size data)]
+     (->> (range n-elems)
+          (clojure.core/sort-by #(key-fn (.get data %)) compare-fn)
+          (select dataset :all))))
+  ([key-fn compare-fn dataset]
+   (sort-by key-fn compare-fn dataset :all))
+  ([key-fn dataset]
+   (sort-by key-fn compare dataset :all)))
+
 
 (defn ds-sort-by
+  "Legacy method.  Please see sort-by"
   ([key-fn compare-fn dataset column-name-seq]
-   (->> (or column-name-seq (column-names dataset))
-        (select-columns dataset)
-        (mapseq-reader)
-        (map-indexed vector)
-        (sort-by (comp key-fn second) compare-fn)
-        (map first)
-        (select dataset :all)))
+   (sort-by key-fn compare-fn dataset column-name-seq))
   ([key-fn compare-fn dataset]
-   (ds-sort-by key-fn compare-fn dataset :all))
+   (sort-by key-fn compare-fn dataset :all))
   ([key-fn dataset]
-   (ds-sort-by key-fn compare dataset :all)))
+   (sort-by key-fn compare dataset :all)))
+
+
+(defn sort-by-column
+  "Sort a dataset by a given column using the given compare fn."
+  ([colname compare-fn dataset]
+   (let [^List data (dtype/->reader (dataset colname))
+         n-elems (.size data)]
+     (->> (range n-elems)
+          (clojure.core/sort-by #(.get data %) compare-fn)
+          (select dataset :all))))
+  ([colname dataset]
+   (sort-by-column colname compare dataset)))
 
 
 (defn ds-sort-by-column
+  "Legacy method.  Please see sort by column."
   ([colname compare-fn dataset]
-   (ds-sort-by #(get % colname) compare-fn dataset [colname]))
+   (sort-by-column colname compare-fn dataset))
   ([colname dataset]
-   (ds-sort-by-column colname < dataset)))
+   (sort-by-column colname dataset)))
 
 
-(defn ds-concat
+(defn concat
+  "Concatenate datasets.  Respects missing values.  Datasets must all have the same
+  columns."
   [dataset & other-datasets]
-  (let [datasets (->> (concat [dataset] (remove nil? other-datasets))
+  (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
                       (remove nil?)
                       seq)]
     (when-let [dataset (first datasets)]
@@ -317,7 +378,7 @@ the correct type."
                                                :column
                                                col
                                                :table-name (dataset-name dataset)))))))
-                 (group-by :name))
+                 (clojure.core/group-by :name))
             label-map (->> datasets
                            (map (comp :label-map metadata))
                            (apply merge))]
@@ -347,6 +408,12 @@ the correct type."
                                          missing))))
              (ds-proto/from-prototype dataset (dataset-name dataset))
              (#(set-metadata % {:label-map label-map})))))))
+
+
+(defn ds-concat
+  "Legacy method.  Please see concat"
+  [dataset & other-datasets]
+  (apply concat dataset other-datasets))
 
 (defn default-unique-by-keep-fn
   [argkey idx-seq]
@@ -468,30 +535,16 @@ the correct type."
                        count-column-name))
 
 
-(defn ds-take-nth
+(defn take-nth
   [n-val dataset]
   (select dataset :all (->> (range (second (dtype/shape dataset)))
-                            (take-nth n-val))))
+                            (clojure.core/take-nth n-val))))
 
 
-(defn ds-map-values
-  "Note this returns a sequence, not a dataset."
-  [dataset map-fn & [column-name-seq]]
-  (->> (index-value-seq (select dataset (or (seq column-name-seq) :all) :all))
-       (map (fn [[_idx col-values]]
-              (apply map-fn col-values)))))
-
-
-(defn ds-column-map
-  "Map a function columnwise across datasets and produce a new dataset.
-  column sequence.  Note this does not produce a new dataset as that would
-  preclude remove,filter on nil values."
-  [map-fn first-ds & ds-seq]
-  (let [all-datasets (concat [first-ds] ds-seq)]
-       ;;first order the columns
-       (->> all-datasets
-            (map columns)
-            (apply map map-fn))))
+(defn ds-take-nth
+  "Legacy method.  Please see take-nth"
+  [n-val dataset]
+  (take-nth n-val dataset))
 
 
 (defn ->dataset
@@ -541,7 +594,8 @@ the correct type."
                            (assoc options :key-fn keyword)
                            options)
                  open-fn (if json?
-                           #(-> (apply io/get-json % (apply concat options))
+                           #(-> (apply io/get-json % (apply clojure.core/concat
+                                                            options))
                                 (ds-impl/map-seq->dataset options))
                            ds-impl/parse-dataset)]
              (with-open [istream (if gzipped?
@@ -572,42 +626,96 @@ the correct type."
 
 
 (defn join-by-column
-  "Join by column.  For efficiency, lhs should be smaller than rhs as it is sorted
-  in memory."
-  [colname lhs rhs]
-  (let [idx-groups (group-by-column->indexes colname lhs)
-        rhs-col (typecast/datatype->reader :object (rhs colname))
-        n-elems (dtype/ecount rhs-col)
-        {:keys [lhs-indexes
-                rhs-indexes
-                rhs-missing] :as result}
-        (parallel-for/indexed-pmap
-         (fn [^long outer-idx ^long n-indexes]
-           (let [lhs-indexes (LongArrayList.)
-                 rhs-indexes (LongArrayList.)
-                 rhs-missing (LongArrayList.)]
-             (dotimes [inner-idx n-indexes]
-               (let [idx (+ outer-idx inner-idx)]
-                 (if-let [^LongArrayList item (get idx-groups (.read rhs-col idx))]
-                   (do
-                     (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
-                     (.addAll lhs-indexes item))
-                   (.add rhs-missing idx))))
-             {:lhs-indexes lhs-indexes
-              :rhs-indexes rhs-indexes
-              :rhs-missing rhs-missing}))
-         n-elems
-         (partial reduce (fn [accum nextmap]
-                           (->> accum
-                                (map (fn [[k v]]
-                                       (.addAll ^LongArrayList v
-                                                ^LongArrayList (nextmap k))
-                                       [k v]))
-                                (into {})))))]
-    {:join-table
-     (let [lhs-cols (->> (columns lhs)
-                         (map #(ds-col/select % lhs-indexes)))
-           rhs-cols (->> (columns (remove-column rhs colname))
-                         (map #(ds-col/select % rhs-indexes)))]
-       (from-prototype lhs "join-table" (concat lhs-cols rhs-cols)))
-     :rhs-missing-indexes rhs-missing}))
+  "Join by column.  For efficiency, lhs should be smaller than rhs.
+  An options map can be passed in with optional arguments:
+  :lhs-missing? Calculate the missing lhs indexes and left outer join table.
+  :rhs-missing? Calculate the missing rhs indexes and right outer join table.
+  Returns
+  {:join-table - joined-table
+   :lhs-indexes - matched lhs indexes
+   :rhs-indexes - matched rhs indexes
+   ;; -- when rhs-missing? is true --
+   :rhs-missing - missing indexes of rhs.
+   :rhs-outer-join - rhs outer join table.
+   ;; -- when lhs-missing? is true --
+   :lhs-missing - missing indexes of lhs.
+   :lhs-outer-join - lhs outer join table.
+  }"
+  ([colname lhs rhs] (join-by-column colname lhs rhs {}))
+  ([colname lhs rhs {:keys [lhs-missing?
+                            rhs-missing?]}]
+   (let [lhs-col (lhs colname)
+         rhs-col (rhs colname)
+         lhs-dtype (dtype/get-datatype lhs-col)
+         rhs-dtype (dtype/get-datatype rhs-col)
+         op-dtype (cond
+                    (= lhs-dtype rhs-dtype)
+                    rhs-dtype
+                    (and (casting/numeric-type? lhs-dtype)
+                         (casting/numeric-type? rhs-dtype))
+                    (builtin-op-providers/widest-datatype lhs-dtype rhs-dtype)
+                    :else
+                    :object)
+         idx-groups (dfn/arggroup-by identity (dtype/->reader lhs-col op-dtype))
+         ^List rhs-col (dtype/->reader rhs-col op-dtype)
+         n-elems (dtype/ecount rhs-col)
+         {:keys [lhs-indexes
+                 rhs-indexes
+                 rhs-missing
+                 lhs-found]}
+         (parallel-for/indexed-pmap
+          (fn [^long outer-idx ^long n-indexes]
+            (let [lhs-indexes (LongArrayList.)
+                  rhs-indexes (LongArrayList.)
+                  rhs-missing (LongArrayList.)
+                  lhs-found (HashSet.)]
+              (dotimes [inner-idx n-indexes]
+                (let [idx (+ outer-idx inner-idx)
+                      rhs-val (.get rhs-col idx)]
+                  (if-let [^LongArrayList item (get idx-groups rhs-val)]
+                    (do
+                      (when lhs-missing?
+                        (.add lhs-found rhs-val))
+                      (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+                      (.addAll lhs-indexes item))
+                    (when rhs-missing?
+                      (.add rhs-missing idx)))))
+              {:lhs-indexes lhs-indexes
+               :rhs-indexes rhs-indexes
+               :rhs-missing rhs-missing
+               :lhs-found lhs-found}))
+          n-elems
+          (partial reduce (fn [accum nextmap]
+                            (->> accum
+                                 (map (fn [[k v]]
+                                        (if (= k :lhs-found)
+                                          (.addAll ^HashSet v
+                                                   ^HashSet (nextmap k))
+                                          (.addAll ^LongArrayList v
+                                                   ^LongArrayList (nextmap k)))
+                                        [k v]))
+                                 (into {})))))
+         lhs-missing (when lhs-missing?
+                       (reduce (fn [lhs-missing lhs-missing-key]
+                                 (.addAll ^LongArrayList lhs-missing
+                                          ^LongArrayList (get idx-groups
+                                                              lhs-missing-key))
+                                 lhs-missing)
+                               (LongArrayList.)
+                               (->> (keys idx-groups)
+                                    (remove #(.contains ^HashSet lhs-found %)))))]
+     (merge
+      {:join-table
+       (let [lhs-cols (->> (columns lhs)
+                           (map #(ds-col/select % lhs-indexes)))
+             rhs-cols (->> (columns (remove-column rhs colname))
+                           (map #(ds-col/select % rhs-indexes)))]
+         (from-prototype lhs "join-table" (clojure.core/concat lhs-cols rhs-cols)))
+       :lhs-indexes lhs-indexes
+       :rhs-indexes rhs-indexes}
+      (when rhs-missing?
+        {:rhs-missing rhs-missing
+         :rhs-outer-join (select rhs :all rhs-missing)})
+      (when lhs-missing?
+        {:lhs-missing lhs-missing
+         :lhs-outer-join (select lhs :all lhs-missing)})))))
