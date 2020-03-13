@@ -14,7 +14,7 @@
             [tech.parallel.utils :as par-util])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
-           [java.util List]
+           [java.util List HashSet]
            [it.unimi.dsi.fastutil.longs LongArrayList]))
 
 
@@ -326,13 +326,25 @@ the correct type."
                                    distinct)))
           (throw (ex-info "Dataset is missing a column" {})))
         (->> column-list
-             (map (fn [[_colname columns]]
+             (map (fn [[colname columns]]
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
+                          missing (->> (reduce
+                                        (fn [[missing offset] col]
+                                          (let [offset (long offset)]
+                                            (.addAll ^HashSet missing
+                                                     ^Collection
+                                                     (map #(+ (long %) offset)
+                                                          (ds-col/missing col)))
+                                            [missing (+ offset (dtype/ecount col))]))
+                                        [(HashSet.) 0]
+                                        columns)
+                                       (first))
                           first-col (first columns)]
-                      (ds-col/new-column (ds-col/column-name first-col)
+                      (ds-col/new-column colname
                                          column-values
-                                         (ds-col/metadata first-col)))))
+                                         (ds-col/metadata first-col)
+                                         missing))))
              (ds-proto/from-prototype dataset (dataset-name dataset))
              (#(set-metadata % {:label-map label-map})))))))
 

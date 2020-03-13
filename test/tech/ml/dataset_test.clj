@@ -186,6 +186,19 @@
     (is (nil? nothing))))
 
 
+(deftest ds-concat-missing
+  (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
+               (dataset/select [:fruit-name] (range 10))
+               (dataset/update-column :fruit-name #(ds-col/set-missing % [3 6])))
+        d1 (dataset/ds-concat ds ds)]
+    (is (= (set [3 6 13 16]) (set (ds-col/missing (d1 :fruit-name)))))
+    (is (= [:apple :apple :apple nil :mandarin
+            :mandarin nil :mandarin :apple :apple
+            :apple :apple :apple nil :mandarin
+            :mandarin nil :mandarin :apple :apple ]
+           (vec (d1 :fruit-name))))))
+
+
 (deftest update-column-datatype-detect
   (let [ds (-> (dataset/->dataset (mapseq-fruit-dataset))
                (dataset/select :all (range 10)))

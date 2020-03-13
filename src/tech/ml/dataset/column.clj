@@ -67,6 +67,13 @@
   (col-proto/is-missing? col idx))
 
 
+(defn set-missing
+  "Set the missing indexes for a column.  This doesn't change any values in the
+  underlying data store."
+  [col idx-seq]
+  (col-proto/set-missing col idx-seq))
+
+
 (defn unique
   "Set of all unique values"
   [col]
