@@ -233,3 +233,11 @@
            (vec (rec :a))))
     (is (= [1.0 5.0 2.0 5.0 3.0]
            (vec (rec :b))))))
+
+
+(deftest simple-select-test
+  (let [ds (dataset/->dataset (mapseq-fruit-dataset))
+        sel-col (ds-col/select (ds :fruit-name) (range 5 10))]
+    (is (= [:mandarin :mandarin :mandarin :apple :apple]
+           (vec sel-col)))
+    (is (= 5 (dtype/ecount sel-col)))))

@@ -37,7 +37,8 @@
      :string (make-string-table n-elems "")
      :text (let [list-data (ArrayList.)]
              (dotimes [iter n-elems]
-               (.add list-data "")))
+               (.add list-data ""))
+             list-data)
      (dtype/make-container :list dtype n-elems)))
   ([dtype]
    (make-container dtype 0)))
@@ -47,8 +48,9 @@
   [datatype missing data n-elems options]
   `(let [rdr# (typecast/datatype->reader ~datatype ~data (:unchecked ~options))
          missing# ~missing
-         missing-val# (casting/datatype->cast-fn :unknown ~datatype
-                                                 (get @dtype->missing-val-map ~datatype))
+         missing-val# (casting/datatype->cast-fn
+                       :unknown ~datatype
+                       (get @dtype->missing-val-map ~datatype))
          n-elems# (long ~n-elems)]
      (reify ~(typecast/datatype->reader-type datatype)
        (getDatatype [this#] (.getDatatype rdr#))
@@ -90,7 +92,6 @@
 (deftype Column
     [^Set missing
      data
-     ^long n-elems
      metadata]
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-proto/get-datatype data))
@@ -104,6 +105,7 @@
           missing-policy (if-not any-missing?
                             :include
                             missing-policy)
+          n-elems (dtype/ecount data)
           col-reader
           (if (or (= :elide missing-policy)
                   (not any-missing?))
@@ -136,15 +138,17 @@
                                          {}))))]
       (dtype-proto/->reader new-reader options)))
   dtype-proto/PToWriter
-  (convertible-to-writer? [this] true)
+  (convertible-to-writer? [this] (dtype-proto/convertible-to-writer? data))
   (->writer [this options]
     (let [col-dtype (dtype/get-datatype data)
           options (update options :datatype
                           #(or % (dtype/get-datatype data)))
           data-writer (typecast/datatype->writer :object data)
-          missing-val (get @dtype->missing-val-map col-dtype)]
+          missing-val (get @dtype->missing-val-map col-dtype)
+          n-elems (dtype/ecount data)]
       ;;writing to columns like this is inefficient due to the necessity to
-      ;;keep the missing set accurate.
+      ;;keep the missing set accurate.  In most cases you are better off
+      ;;simply creating a new column of some sort.
       (-> (reify ObjectWriter
             (lsize [this] n-elems)
             (write [this idx val]
@@ -170,7 +174,7 @@
                              (map #(+ (long %) offset))
                              (into #{}))
             new-data (dtype-proto/sub-buffer data offset len)]
-        (Column. new-missing new-data len metadata))))
+        (Column. new-missing new-data metadata))))
   dtype-proto/PToNioBuffer
   (convertible-to-nio-buffer? [item]
     (and (== 0 (.size missing))
@@ -191,14 +195,12 @@
       (Column. (doto (HashSet.)
                  (.addAll missing))
                new-data
-               n-elems
                metadata)))
   dtype-proto/PPrototype
   (from-prototype [col datatype shape]
     (let [n-elems (long (apply * shape))]
       (Column. (HashSet.)
                (make-container datatype n-elems)
-               n-elems
                metadata)))
   dtype-proto/PToArray
   (->sub-array [col]
@@ -214,20 +216,19 @@
   (is-column? [this] true)
   ds-col-proto/PColumn
   (column-name [col] (:name metadata))
-  (set-name [col name] (Column. missing data n-elems (assoc metadata :name name)))
+  (set-name [col name] (Column. missing data (assoc metadata :name name)))
   (supported-stats [col] dtype-fn/supported-descriptive-stats)
   (metadata [col]
     (merge metadata
            {:size (dtype/ecount col)
             :datatype (dtype/get-datatype col)}))
-  (set-metadata [col data-map] (Column. missing data n-elems data-map))
+  (set-metadata [col data-map] (Column. missing data data-map))
   (missing [col] (Collections/unmodifiableSet missing))
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
     (Column. (doto (HashSet.)
                (.addAll (dtype/->reader long-rdr :int64)))
              data
-             n-elems
              metadata))
   (unique [this] (set (dtype/->reader this)))
   (stats [col stats-set]
@@ -248,7 +249,7 @@
   (select [col idx-rdr]
     (if (== 0 (.size missing))
       ;;common case
-      (Column. missing (dtype/indexed-reader idx-rdr data) n-elems metadata)
+      (Column. missing (dtype/indexed-reader idx-rdr data) metadata)
       ;;Uggh.  Construct a new missing set
       (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
             n-idx-elems (.lsize idx-rdr)
@@ -259,11 +260,11 @@
          (when (.contains missing (.read idx-rdr idx))
            (.add result-set idx)))
         (Column. result-set (dtype/indexed-reader idx-rdr data)
-                 n-idx-elems metadata))))
+                 metadata))))
   (clone [col]
     (Column. (doto (HashSet.)
                (.addAll missing))
-             (dtype/clone data) n-elems metadata))
+             (dtype/clone data) metadata))
   (to-double-array [col error-on-missing?]
     (when (and (not= 0 (.size missing))
                error-on-missing?)
@@ -277,7 +278,8 @@
                               (dtype/->reader col :float64)))))
   Object
   (toString [item]
-    (let [format-str (if (> n-elems 20)
+    (let [n-elems (dtype/ecount data)
+          format-str (if (> n-elems 20)
                        "#tech.ml.dataset.column<%s>%s\n%s\n[%s...]"
                        "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")]
       (format format-str
@@ -314,7 +316,7 @@
                            (#{:string :keyword :symbol} (dtype/get-datatype data)))
                     (assoc metadata :categorical? true)
                     metadata)]
-     (Column. missing data (dtype/ecount data) (assoc metadata :name name))))
+     (Column. missing data (assoc metadata :name name))))
   ([name data metadata]
    (new-column name data metadata #{}))
   ([name data]
