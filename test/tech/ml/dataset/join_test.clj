@@ -77,7 +77,9 @@
   (let [joined   (ds/left-join  "CustomerID" customers orders)
         recs     (ds/mapseq-reader joined)]
     (is (= 2 (count recs)))
-    (is (= #{1 3} (set (map #(get % "CustomerID") recs))))))
+    (is (= #{1 3} (set (map #(get % "CustomerID") recs))))
+    (is (= (set (ds/column-names joined))
+           all-fields))))
 
 (deftest right-join-test
   (let [joined  (ds/right-join "CustomerID" customers orders)
