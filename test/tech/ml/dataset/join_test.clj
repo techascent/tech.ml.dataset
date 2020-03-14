@@ -155,4 +155,7 @@
     [op-space]
     (ds-base/join-by-column "operatorid" lhs rhs {:operation-space op-space})
     :ok)
+
+  (run-join-test :int32)
+  (run-join-test :int64)
   )
