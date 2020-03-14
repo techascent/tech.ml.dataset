@@ -9,15 +9,35 @@
   (let [lhs (ds/name-values-seq->dataset {:a (range 10)
                                           :b (range 10)})
         rhs (ds/name-values-seq->dataset {:a (->> (range 10)
-                                                  (mapcat (partial repeat 2))
-                                                  (long-array))
+                                                  (mapcat (partial repeat 2)))
                                           :c (->> (range 10)
-                                                  (mapcat (partial repeat 2))
-                                                  (long-array))})
-        {:keys [join-table rhs-missing]} (ds/join-by-column :a lhs rhs)]
+                                                  (mapcat (partial repeat 2)))})
+        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs)]
     (is (dfn/equals (join-table :a) (join-table :b)))
     (is (dfn/equals (join-table :b) (join-table :c)))
-    (is (empty? (seq rhs-missing)))))
+    (is (empty? (seq rhs-missing))))
+  (let [lhs (ds/name-values-seq->dataset {:a (range 10)
+                                          :b (range 10)})
+        rhs (ds/name-values-seq->dataset {:a (->> (range 15)
+                                                  (mapcat (partial repeat 2)))
+                                          :c (->> (range 15)
+                                                  (mapcat (partial repeat 2)))})
+        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs
+                                                                 {:rhs-missing? true})]
+    (is (dfn/equals (join-table :a) (join-table :b)))
+    (is (dfn/equals (join-table :b) (join-table :c)))
+    (is (= [20 21 22 23 24 25 26 27 28 29] (vec rhs-missing))))
+  (let [lhs (ds/name-values-seq->dataset {:a (range 15)
+                                          :b (range 15)})
+        rhs (ds/name-values-seq->dataset {:a (->> (range 10)
+                                                  (mapcat (partial repeat 2)))
+                                          :c (->> (range 10)
+                                                  (mapcat (partial repeat 2)))})
+        {:keys [join-table lhs-missing]} (ds-base/join-by-column :a lhs rhs
+                                                                 {:lhs-missing? true})]
+    (is (dfn/equals (join-table :a) (join-table :b)))
+    (is (dfn/equals (join-table :b) (join-table :c)))
+    (is (= [10 11 12 13 14] (vec lhs-missing)))))
 
 
 ;;sample from https://www.w3schools.com/sql/sql_join_left.asp
