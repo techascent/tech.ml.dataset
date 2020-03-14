@@ -59,8 +59,8 @@
                             "EmployeeID" 8,
                             "OrderDate" "1996-09-20",
                             "ShipperID" 2}])
-        joined (:lhs-outer-join
-                (ds/join-by-column "CustomerID" lhs rhs {:lhs-missing? true}))
+        join-data (ds-base/join-by-column "CustomerID" lhs rhs {:lhs-missing? true})
+        joined (:lhs-outer-join join-data)
         recs   (ds/mapseq-reader joined)]
     (is (= 2 (count recs)))
     (is (= #{1 3} (set (map #(get % "CustomerID") recs))))))
@@ -128,12 +128,11 @@
                 (apply juxt rhs-fields)) (random-rhs)))
 
 
+  (def lhs (ds/->dataset "lhs.csv"))
+  (def rhs (ds/->dataset "rhs.csv"))
 
   (defn run-join-test
-    []
-    (let [lhs (ds/->dataset "lhs.csv")
-          rhs (ds/->dataset "rhs.csv")]
-      (System/gc)
-      (time
-       (ds-base/join-by-column "operatorid" lhs rhs))))
+    [op-space]
+    (ds-base/join-by-column "operatorid" lhs rhs {:operation-space op-space})
+    :ok)
   )

@@ -1,8 +1,9 @@
 {:paths ["src"]
  :deps {org.clojure/clojure              {:mvn/version "1.10.1"}
         camel-snake-kebab                {:mvn/version "0.4.0"}
-        techascent/tech.datatype         {:mvn/version "4.83"}
+        techascent/tech.datatype         {:mvn/version "4.84"}
         techascent/tech.io               {:mvn/version "3.14"}
         com.univocity/univocity-parsers  {:mvn/version "2.7.5"}
         com.github.haifengl/smile-core   {:mvn/version "1.5.3"}
-        com.github.haifengl/smile-netlib {:mvn/version "1.5.3"}}}
+        com.github.haifengl/smile-netlib {:mvn/version "1.5.3"}}
+  :aliases {:test {:extra-deps {criterium {:mvn/version "0.4.5"}}}}}

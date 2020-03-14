@@ -3,6 +3,7 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.ml.dataset.column :as ds-col]
@@ -625,11 +626,121 @@ the correct type."
     ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
 
 
+(defmacro datatype->group-by
+  [datatype]
+  (case datatype
+    :int32 `dfn/arggroup-by-int
+    :int64 `dfn/arggroup-by))
+
+
+(defmacro join-by-column-impl
+  [datatype colname lhs rhs options]
+  `(let [colname# ~colname
+         lhs# ~lhs
+         rhs# ~rhs
+         options# ~options
+         lhs-col# (lhs# colname#)
+         rhs-col# (rhs# colname#)
+         lhs-missing?# (:lhs-missing? options#)
+         rhs-missing?# (:rhs-missing? options#)
+         lhs-dtype# (dtype/get-datatype lhs-col#)
+         rhs-dtype# (dtype/get-datatype rhs-col#)
+         op-dtype# (cond
+                     (= lhs-dtype# rhs-dtype#)
+                     rhs-dtype#
+                     (and (casting/numeric-type? lhs-dtype#)
+                          (casting/numeric-type? rhs-dtype#))
+                     (builtin-op-providers/widest-datatype lhs-dtype# rhs-dtype#)
+                     :else
+                     :object)
+         idx-groups# ((datatype->group-by ~datatype)
+                      identity (dtype/->reader lhs-col# op-dtype#))
+         ^List rhs-col# (dtype/->reader rhs-col# op-dtype#)
+         n-elems# (dtype/ecount rhs-col#)
+         {lhs-indexes# :lhs-indexes
+          rhs-indexes# :rhs-indexes
+          rhs-missing# :rhs-missing
+          lhs-found# :lhs-found}
+         (parallel-for/indexed-map-reduce
+          n-elems#
+          (fn [^long outer-idx# ^long n-indexes#]
+            (let [lhs-indexes# (builtin-op-providers/dtype->list-constructor ~datatype)
+                  rhs-indexes# (builtin-op-providers/dtype->list-constructor ~datatype)
+                  rhs-missing# (builtin-op-providers/dtype->list-constructor ~datatype)
+                  lhs-found# (HashSet.)]
+              (dotimes [inner-idx# n-indexes#]
+                (let [idx# (+ outer-idx# inner-idx#)
+                      rhs-val# (.get rhs-col# idx#)]
+                  (if-let [item# (typecast/datatype->list-cast-fn
+                                  ~datatype
+                                  (get idx-groups# rhs-val#))]
+                    (do
+                      (when lhs-missing?# (.add lhs-found# rhs-val#))
+
+                      (dotimes [n-iters# (.size item#)] (.add rhs-indexes# idx#))
+                      (.addAll lhs-indexes# item#))
+                    (when rhs-missing?# (.add rhs-missing# idx#)))))
+              {:lhs-indexes lhs-indexes#
+               :rhs-indexes rhs-indexes#
+               :rhs-missing rhs-missing#
+               :lhs-found lhs-found#}))
+          (partial reduce (fn [accum# nextmap#]
+                            (->> accum#
+                                 (map (fn [[k# v#]]
+                                        (if (= k# :lhs-found)
+                                          (.addAll ^HashSet v#
+                                                   ^HashSet (nextmap# k#))
+                                          (.addAll
+                                           (typecast/datatype->list-cast-fn
+                                            ~datatype v#)
+                                           (typecast/datatype->list-cast-fn
+                                            ~datatype (nextmap# k#))))
+                                        [k# v#]))
+                                 (into {})))))
+         lhs-missing# (when lhs-missing?#
+                        (reduce (fn [lhs-missing# lhs-missing-key#]
+                                  (.addAll (typecast/datatype->list-cast-fn
+                                            ~datatype lhs-missing#)
+                                           (typecast/datatype->list-cast-fn
+                                            ~datatype (get idx-groups#
+                                                           lhs-missing-key#)))
+                                 lhs-missing#)
+                               (builtin-op-providers/dtype->list-constructor ~datatype)
+                               (->> (keys idx-groups#)
+                                    (remove #(.contains ^HashSet lhs-found# %)))))]
+     (merge
+      {:join-table
+       (let [lhs-cols# (->> (columns lhs#)
+                           (map #(ds-col/select % lhs-indexes#)))
+             rhs-cols# (->> (columns (remove-column rhs# colname#))
+                           (map #(ds-col/select % rhs-indexes#)))]
+         (from-prototype lhs# "join-table" (clojure.core/concat lhs-cols# rhs-cols#)))
+       :lhs-indexes lhs-indexes#
+       :rhs-indexes rhs-indexes#}
+      (when rhs-missing?#
+        {:rhs-missing rhs-missing#
+         :rhs-outer-join (select rhs# :all rhs-missing#)})
+      (when lhs-missing?#
+        {:lhs-missing lhs-missing#
+         :lhs-outer-join (select lhs# :all lhs-missing#)}))))
+
+
+(defn join-by-column-int32
+  [colname lhs rhs options]
+  (join-by-column-impl :int32 colname lhs rhs options))
+
+
+(defn join-by-column-int64
+  [colname lhs rhs options]
+  (join-by-column-impl :int64 colname lhs rhs options))
+
+
 (defn join-by-column
   "Join by column.  For efficiency, lhs should be smaller than rhs.
   An options map can be passed in with optional arguments:
   :lhs-missing? Calculate the missing lhs indexes and left outer join table.
   :rhs-missing? Calculate the missing rhs indexes and right outer join table.
+  :operation-space - either :int32 or :int64.  Defaults to :int32.
   Returns
   {:join-table - joined-table
    :lhs-indexes - matched lhs indexes
@@ -641,81 +752,11 @@ the correct type."
    :lhs-missing - missing indexes of lhs.
    :lhs-outer-join - lhs outer join table.
   }"
-  ([colname lhs rhs] (join-by-column colname lhs rhs {}))
-  ([colname lhs rhs {:keys [lhs-missing?
-                            rhs-missing?]}]
-   (let [lhs-col (lhs colname)
-         rhs-col (rhs colname)
-         lhs-dtype (dtype/get-datatype lhs-col)
-         rhs-dtype (dtype/get-datatype rhs-col)
-         op-dtype (cond
-                    (= lhs-dtype rhs-dtype)
-                    rhs-dtype
-                    (and (casting/numeric-type? lhs-dtype)
-                         (casting/numeric-type? rhs-dtype))
-                    (builtin-op-providers/widest-datatype lhs-dtype rhs-dtype)
-                    :else
-                    :object)
-         idx-groups (dfn/arggroup-by identity (dtype/->reader lhs-col op-dtype))
-         ^List rhs-col (dtype/->reader rhs-col op-dtype)
-         n-elems (dtype/ecount rhs-col)
-         {:keys [lhs-indexes
-                 rhs-indexes
-                 rhs-missing
-                 lhs-found]}
-         (parallel-for/indexed-pmap
-          (fn [^long outer-idx ^long n-indexes]
-            (let [lhs-indexes (LongArrayList.)
-                  rhs-indexes (LongArrayList.)
-                  rhs-missing (LongArrayList.)
-                  lhs-found (HashSet.)]
-              (dotimes [inner-idx n-indexes]
-                (let [idx (+ outer-idx inner-idx)
-                      rhs-val (.get rhs-col idx)]
-                  (if-let [^LongArrayList item (get idx-groups rhs-val)]
-                    (do
-                      (when lhs-missing?
-                        (.add lhs-found rhs-val))
-                      (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
-                      (.addAll lhs-indexes item))
-                    (when rhs-missing?
-                      (.add rhs-missing idx)))))
-              {:lhs-indexes lhs-indexes
-               :rhs-indexes rhs-indexes
-               :rhs-missing rhs-missing
-               :lhs-found lhs-found}))
-          n-elems
-          (partial reduce (fn [accum nextmap]
-                            (->> accum
-                                 (map (fn [[k v]]
-                                        (if (= k :lhs-found)
-                                          (.addAll ^HashSet v
-                                                   ^HashSet (nextmap k))
-                                          (.addAll ^LongArrayList v
-                                                   ^LongArrayList (nextmap k)))
-                                        [k v]))
-                                 (into {})))))
-         lhs-missing (when lhs-missing?
-                       (reduce (fn [lhs-missing lhs-missing-key]
-                                 (.addAll ^LongArrayList lhs-missing
-                                          ^LongArrayList (get idx-groups
-                                                              lhs-missing-key))
-                                 lhs-missing)
-                               (LongArrayList.)
-                               (->> (keys idx-groups)
-                                    (remove #(.contains ^HashSet lhs-found %)))))]
-     (merge
-      {:join-table
-       (let [lhs-cols (->> (columns lhs)
-                           (map #(ds-col/select % lhs-indexes)))
-             rhs-cols (->> (columns (remove-column rhs colname))
-                           (map #(ds-col/select % rhs-indexes)))]
-         (from-prototype lhs "join-table" (clojure.core/concat lhs-cols rhs-cols)))
-       :lhs-indexes lhs-indexes
-       :rhs-indexes rhs-indexes}
-      (when rhs-missing?
-        {:rhs-missing rhs-missing
-         :rhs-outer-join (select rhs :all rhs-missing)})
-      (when lhs-missing?
-        {:lhs-missing lhs-missing
-         :lhs-outer-join (select lhs :all lhs-missing)})))))
+  ([colname lhs rhs]
+   (join-by-column colname lhs rhs {}))
+  ([colname lhs rhs {:keys [operation-space]
+                     :or {operation-space :int32}
+                     :as options}]
+   (case operation-space
+     :int32 (join-by-column-int32 colname lhs rhs options)
+     :int64 (join-by-column-int64 colname lhs rhs options))))
