@@ -1,6 +1,6 @@
 (ns tech.ml.dataset.join-test
   (:require [tech.ml.dataset :as ds]
-            [tech.ml.dataset.base :as ds-base]
+            [tech.ml.dataset.join :as ds-join]
             [tech.v2.datatype.functional :as dfn]
             [clojure.test :refer [deftest is]]))
 
@@ -12,9 +12,9 @@
                                                   (mapcat (partial repeat 2)))
                                           :c (->> (range 10)
                                                   (mapcat (partial repeat 2)))})
-        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs)]
-    (is (dfn/equals (join-table :a) (join-table :b)))
-    (is (dfn/equals (join-table :b) (join-table :c)))
+        {:keys [inner rhs-missing]} (ds-join/hash-join :a lhs rhs)]
+    (is (dfn/equals (inner :a) (inner :b)))
+    (is (dfn/equals (inner :b) (inner :c)))
     (is (empty? (seq rhs-missing))))
   (let [lhs (ds/name-values-seq->dataset {:a (range 10)
                                           :b (range 10)})
@@ -22,10 +22,10 @@
                                                   (mapcat (partial repeat 2)))
                                           :c (->> (range 15)
                                                   (mapcat (partial repeat 2)))})
-        {:keys [join-table rhs-missing]} (ds-base/join-by-column :a lhs rhs
+        {:keys [inner rhs-missing]} (ds-join/hash-join :a lhs rhs
                                                                  {:rhs-missing? true})]
-    (is (dfn/equals (join-table :a) (join-table :b)))
-    (is (dfn/equals (join-table :b) (join-table :c)))
+    (is (dfn/equals (inner :a) (inner :b)))
+    (is (dfn/equals (inner :b) (inner :c)))
     (is (= [20 21 22 23 24 25 26 27 28 29] (vec rhs-missing))))
   (let [lhs (ds/name-values-seq->dataset {:a (range 15)
                                           :b (range 15)})
@@ -33,10 +33,10 @@
                                                   (mapcat (partial repeat 2)))
                                           :c (->> (range 10)
                                                   (mapcat (partial repeat 2)))})
-        {:keys [join-table lhs-missing]} (ds-base/join-by-column :a lhs rhs
-                                                                 {:lhs-missing? true})]
-    (is (dfn/equals (join-table :a) (join-table :b)))
-    (is (dfn/equals (join-table :b) (join-table :c)))
+        {:keys [inner lhs-missing]} (ds-join/hash-join :a lhs rhs
+                                                       {:lhs-missing? true})]
+    (is (dfn/equals (inner :a) (inner :b)))
+    (is (dfn/equals (inner :b) (inner :c)))
     (is (= [10 11 12 13 14] (vec lhs-missing)))))
 
 
@@ -79,11 +79,21 @@
                             "EmployeeID" 8,
                             "OrderDate" "1996-09-20",
                             "ShipperID" 2}])
-        join-data (ds-base/join-by-column "CustomerID" lhs rhs {:lhs-missing? true})
-        joined (:lhs-outer-join join-data)
-        recs   (ds/mapseq-reader joined)]
-    (is (= 2 (count recs)))
-    (is (= #{1 3} (set (map #(get % "CustomerID") recs))))))
+        join-data (ds-join/hash-join "CustomerID" lhs rhs {:lhs-missing? true})
+        joined (:left-outer join-data)
+        recs (ds/mapseq-reader joined)
+        empty-int?    #{-32768}
+        empty-string? #{""}
+        empty-val?    #(or (empty-int? %) (empty-string? %))
+        realized       (some #(when (= (get % "CustomerID") 2) %) recs)
+        unrealized     (filter #(not= % realized) recs)]
+    (is (every? (complement empty-val?) (vals realized))
+        "Ana's record should be fully realized.")
+    (is (every? identity
+                (for [{:strs [OrderID OrderDate ShipperID]}
+                      unrealized]
+                  (every? empty-val? [OrderID OrderDate ShipperID])))
+        "Everyone else should have missing entries from RHS.")))
 
 
 (comment
@@ -153,7 +163,7 @@
 
   (defn run-join-test
     [op-space]
-    (ds-base/join-by-column "operatorid" lhs rhs {:operation-space op-space})
+    (ds-join/hash-join "operatorid" lhs rhs {:operation-space op-space})
     :ok)
 
   (run-join-test :int32)

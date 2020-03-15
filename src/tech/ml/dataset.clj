@@ -70,8 +70,12 @@
                         ->dataset
                         ->>dataset
                         from-prototype
-                        dataset->string
-                        join-by-column)
+                        dataset->string)
+
+
+(par-util/export-symbols tech.ml.dataset.join
+                         hash-join
+                         inner-join)
 
 
 (par-util/export-symbols tech.ml.dataset.impl.dataset

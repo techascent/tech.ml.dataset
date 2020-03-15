@@ -3,9 +3,13 @@
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.parallel.for :as parallel-for]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.casting :as casting])
+            [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.readers.concat :as concat-rdr]
+            [tech.v2.datatype.readers.const :as const-rdr])
   (:import [it.unimi.dsi.fastutil.longs LongArrayList]
-           [java.util List]))
+           [java.util List]
+           [tech.ml.dataset.impl.column Column]
+           [org.roaringbitmap RoaringBitmap]))
 
 
 (defn is-column?
@@ -263,3 +267,24 @@ Implementations should check their metadata before doing calculations."
   Finally, any missing values should be indicated by a NaN of the expected type."
   ^doubles [col & [error-on-missing?]]
   (col-proto/to-double-array col error-on-missing?))
+
+
+(defn extend-column-with-empty
+  [column n-empty]
+  (if (== 1 (long n-empty))
+    column
+    (let [^Column column column
+          col-dtype (dtype/get-datatype column)
+          n-elems (dtype/ecount column)]
+      (new-column
+       (column-name column)
+       (concat-rdr/concat-readers
+        [(.data column)
+         (const-rdr/make-const-reader
+          (get @col-impl/dtype->missing-val-map col-dtype)
+          col-dtype
+          n-empty)])
+       (.metadata column)
+       (.add ^RoaringBitmap (dtype/clone (.missing column))
+             (unchecked-int n-elems)
+             (unchecked-int (+ n-elems n-empty)))))))
