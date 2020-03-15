@@ -225,19 +225,6 @@
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
 
 
-(defn large-join-test
-  []
-  (let [ds1 (dataset/name-values-seq->dataset
-            {:a (range 100000)
-             :b (flatten (repeat 10000 [:a :b :c :d :e
-                                        :f :g :h :i :j]))})
-        ds2 (dataset/name-values-seq->dataset
-            {:a (range 100000)
-             :c (flatten (repeat 10000 ["a" "b" "c" "d" "e"
-                                        "f" "g" "h" "i" "j"]))})]
-    (dataset/join-by-column :a ds1 ds2)))
-
-
 (deftest remove-missing-persistent-vec-data
   (let [ds (dataset/name-values-seq->dataset {:a [1 nil 2 nil 3]
                                               :b (list 1 nil 2 nil 3)})
