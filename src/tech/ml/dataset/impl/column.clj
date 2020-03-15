@@ -8,9 +8,11 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
+            [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.parallel.for :as parallel-for])
-  (:import [java.util Set SortedSet HashSet ArrayList Collections]
+  (:import [java.util ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
+           [org.roaringbitmap RoaringBitmap]
            [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
 
 (set! *warn-on-reflection* true)
@@ -56,13 +58,13 @@
        (getDatatype [this#] (.getDatatype rdr#))
        (lsize [this#] n-elems#)
        (read [this# idx#]
-         (if (contains? missing# idx#)
+         (if (.contains missing# idx#)
            missing-val#
            (.read rdr# idx#))))))
 
 
 (defn create-string-text-missing-reader
-  [missing data n-elems options]
+  [^RoaringBitmap missing data n-elems options]
   (let [rdr (typecast/datatype->reader :object data)
          missing-val ""
          n-elems (long n-elems)]
@@ -70,13 +72,13 @@
       (getDatatype [this] (.getDatatype rdr))
       (lsize [this] n-elems)
       (read [this idx]
-        (if (contains? missing idx)
+        (if (.contains missing idx)
           missing-val
           (.read rdr idx))))))
 
 
 (defn create-object-missing-reader
-  [missing data n-elems options]
+  [^RoaringBitmap missing data n-elems options]
   (let [rdr (typecast/datatype->reader :object data)
         missing-val nil
         n-elems (long n-elems)]
@@ -84,13 +86,13 @@
       (getDatatype [this] (.getDatatype rdr))
       (lsize [this] n-elems)
       (read [this idx]
-        (if (contains? missing idx)
+        (if (.contains missing idx)
           missing-val
           (.read rdr idx))))))
 
 
 (deftype Column
-    [^Set missing
+    [^RoaringBitmap missing
      data
      metadata]
   dtype-proto/PDatatype
@@ -101,7 +103,8 @@
   (convertible-to-reader? [this] true)
   (->reader [this options]
     (let [missing-policy (get options :missing-policy :include)
-          any-missing? (not= 0 (.size missing))
+          n-missing (dtype/ecount missing)
+          any-missing? (not= 0 n-missing)
           missing-policy (if-not any-missing?
                             :include
                             missing-policy)
@@ -131,7 +134,7 @@
                        :include
                        col-reader
                        :error
-                       (if (== 0 (.size missing))
+                       (if (not any-missing?)
                          col-reader
                          (throw (ex-info (format "Column has missing indexes: %s"
                                                  (vec missing))
@@ -172,12 +175,12 @@
                                         (or (< arg offset)
                                             (>= (- arg offset) len))))
                              (map #(+ (long %) offset))
-                             (into #{}))
+                             (->bitmap))
             new-data (dtype-proto/sub-buffer data offset len)]
         (Column. new-missing new-data metadata))))
   dtype-proto/PToNioBuffer
   (convertible-to-nio-buffer? [item]
-    (and (== 0 (.size missing))
+    (and (== 0 (dtype/ecount missing))
          (dtype-proto/convertible-to-nio-buffer? data)))
   (->buffer-backing-store [item]
     (dtype-proto/->buffer-backing-store data))
@@ -192,19 +195,18 @@
                      ;;It is important that the result of this operation be writeable.
                      (dtype/make-container :java-array
                                            (dtype/get-datatype data) data))]
-      (Column. (doto (HashSet.)
-                 (.addAll missing))
+      (Column. (dtype/clone missing)
                new-data
                metadata)))
   dtype-proto/PPrototype
   (from-prototype [col datatype shape]
     (let [n-elems (long (apply * shape))]
-      (Column. (HashSet.)
+      (Column. (->bitmap)
                (make-container datatype n-elems)
                metadata)))
   dtype-proto/PToArray
   (->sub-array [col]
-    (when-let [data-ary (when (== 0 (.size missing))
+    (when-let [data-ary (when (== 0 (dtype/ecount missing))
                           (dtype-proto/->sub-array data))]
       data-ary))
   (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
@@ -223,11 +225,10 @@
            {:size (dtype/ecount col)
             :datatype (dtype/get-datatype col)}))
   (set-metadata [col data-map] (Column. missing data data-map))
-  (missing [col] (Collections/unmodifiableSet missing))
+  (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
-    (Column. (doto (HashSet.)
-               (.addAll (dtype/->reader long-rdr :int64)))
+    (Column. (->bitmap long-rdr)
              data
              metadata))
   (unique [this] (set (dtype/->reader this)))
@@ -247,35 +248,37 @@
       :spearman (dtype-fn/spearmans-correlation col other-column)
       :kendall (dtype-fn/kendalls-correlation col other-column)))
   (select [col idx-rdr]
-    (if (== 0 (.size missing))
+    (if (== 0 (dtype/ecount missing))
       ;;common case
-      (Column. missing (dtype/indexed-reader idx-rdr data) metadata)
+      (Column. (->bitmap) (dtype/indexed-reader idx-rdr data) metadata)
       ;;Uggh.  Construct a new missing set
       (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
             n-idx-elems (.lsize idx-rdr)
-            result-set (HashSet.)]
+            ^RoaringBitmap result-set (->bitmap)]
         (parallel-for/serial-for
          idx
          n-idx-elems
          (when (.contains missing (.read idx-rdr idx))
            (.add result-set idx)))
-        (Column. result-set (dtype/indexed-reader idx-rdr data)
+        (Column. result-set
+                 (dtype/indexed-reader idx-rdr data)
                  metadata))))
   (clone [col]
-    (Column. (doto (HashSet.)
-               (.addAll missing))
-             (dtype/clone data) metadata))
+    (Column. (dtype/clone missing)
+             (dtype/clone data)
+             metadata))
   (to-double-array [col error-on-missing?]
-    (when (and (not= 0 (.size missing))
-               error-on-missing?)
-      (throw (Exception. "Missing values detected and error-on-missing set")))
-    (when-not (casting/numeric-type? (dtype/get-datatype col))
-      (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-    (if (== 0 (.size missing))
-      (dtype/make-container :java-array :float64 col)
-      (let [d-reader (typecast/datatype->reader :float64 data)]
-        (dtype/make-container :java-array :float64
-                              (dtype/->reader col :float64)))))
+    (let [n-missing (dtype/ecount missing)
+          any-missing? (not= 0 n-missing)]
+      (when (and any-missing? error-on-missing?)
+        (throw (Exception. "Missing values detected and error-on-missing set")))
+      (when-not (casting/numeric-type? (dtype/get-datatype col))
+        (throw (Exception. "Non-numeric columns do not convert to doubles.")))
+      (if (not any-missing?)
+        (dtype/make-container :java-array :float64 col)
+        (let [d-reader (typecast/datatype->reader :float64 data)]
+          (dtype/make-container :java-array :float64
+                                (dtype/->reader col :float64))))))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)
@@ -306,18 +309,13 @@
    (when-not (or (nil? metadata)
                  (map? metadata))
      (throw (Exception. "Metadata must be a persistent map")))
-   (let [missing (if (instance? HashSet missing)
-                   missing
-                   (if-let [missing-seq (seq missing)]
-                     (doto (HashSet.)
-                       (.addAll missing-seq))
-                     (HashSet.)))
+   (let [missing (->bitmap missing)
          metadata (if (and (not (contains? metadata :categorical?))
                            (#{:string :keyword :symbol} (dtype/get-datatype data)))
                     (assoc metadata :categorical? true)
                     metadata)]
      (Column. missing data (assoc metadata :name name))))
   ([name data metadata]
-   (new-column name data metadata #{}))
+   (new-column name data metadata (->bitmap)))
   ([name data]
-   (new-column name data {} #{})))
+   (new-column name data {} (->bitmap))))

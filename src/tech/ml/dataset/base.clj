@@ -6,6 +6,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
+            [tech.v2.datatype.bitmap :refer [->bitmap]]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
@@ -16,6 +17,7 @@
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
            [java.util List HashSet]
+           [org.roaringbitmap RoaringBitmap]
            [it.unimi.dsi.fastutil.longs LongArrayList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
@@ -96,7 +98,7 @@
   [dataset]
   (->> (columns dataset)
        (map (fn [col]
-              (let [missing-count (count (ds-col/missing col))]
+              (let [missing-count (dtype/ecount (ds-col/missing col))]
                 (when-not (= 0 missing-count)
                   {:column-name (ds-col/column-name col)
                    :missing-count missing-count}))))
@@ -391,17 +393,16 @@ the correct type."
              (map (fn [[colname columns]]
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
-                          missing (->> (reduce
-                                        (fn [[missing offset] col]
-                                          (let [offset (long offset)]
-                                            (.addAll ^HashSet missing
-                                                     ^Collection
-                                                     (map #(+ (long %) offset)
-                                                          (ds-col/missing col)))
-                                            [missing (+ offset (dtype/ecount col))]))
-                                        [(HashSet.) 0]
-                                        columns)
-                                       (first))
+                          missing
+                          (->> (reduce
+                                (fn [[missing offset] col]
+                                  [(dtype/set-or missing
+                                                 (dtype/set-offset (ds-col/missing col)
+                                                                   offset))
+                                   (+ offset (dtype/ecount col))])
+                                [(->bitmap) 0]
+                                columns)
+                               (first))
                           first-col (first columns)]
                       (ds-col/new-column colname
                                          column-values
@@ -626,11 +627,12 @@ the correct type."
     ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
 
 
-(defmacro datatype->group-by
+(defmacro dtype->group-by
   [datatype]
   (case datatype
     :int32 `dfn/arggroup-by-int
     :int64 `dfn/arggroup-by))
+
 
 
 (defmacro join-by-column-impl
@@ -653,21 +655,22 @@ the correct type."
                      (builtin-op-providers/widest-datatype lhs-dtype# rhs-dtype#)
                      :else
                      :object)
-         idx-groups# ((datatype->group-by ~datatype)
+
+         idx-groups# ((dtype->group-by ~datatype)
                       identity (dtype/->reader lhs-col# op-dtype#))
          ^List rhs-col# (dtype/->reader rhs-col# op-dtype#)
          n-elems# (dtype/ecount rhs-col#)
          {lhs-indexes# :lhs-indexes
           rhs-indexes# :rhs-indexes
           rhs-missing# :rhs-missing
-          lhs-found# :lhs-found}
+          lhs-found-vals# :lhs-found-vals}
          (parallel-for/indexed-map-reduce
           n-elems#
           (fn [^long outer-idx# ^long n-indexes#]
-            (let [lhs-indexes# (builtin-op-providers/dtype->list-constructor ~datatype)
-                  rhs-indexes# (builtin-op-providers/dtype->list-constructor ~datatype)
-                  rhs-missing# (builtin-op-providers/dtype->list-constructor ~datatype)
-                  lhs-found# (HashSet.)]
+            (let [lhs-indexes# (builtin-op-providers/dtype->storage-constructor ~datatype)
+                  rhs-indexes# (builtin-op-providers/dtype->storage-constructor ~datatype)
+                  rhs-missing# (->bitmap)
+                  lhs-found-vals# (HashSet.)]
               (dotimes [inner-idx# n-indexes#]
                 (let [idx# (+ outer-idx# inner-idx#)
                       rhs-val# (.get rhs-col# idx#)]
@@ -675,39 +678,45 @@ the correct type."
                                   ~datatype
                                   (get idx-groups# rhs-val#))]
                     (do
-                      (when lhs-missing?# (.add lhs-found# rhs-val#))
-
+                      (when lhs-missing?# (.add lhs-found-vals# rhs-val#))
                       (dotimes [n-iters# (.size item#)] (.add rhs-indexes# idx#))
                       (.addAll lhs-indexes# item#))
                     (when rhs-missing?# (.add rhs-missing# idx#)))))
               {:lhs-indexes lhs-indexes#
                :rhs-indexes rhs-indexes#
                :rhs-missing rhs-missing#
-               :lhs-found lhs-found#}))
+               :lhs-found-vals lhs-found-vals#}))
           (partial reduce (fn [accum# nextmap#]
                             (->> accum#
                                  (map (fn [[k# v#]]
-                                        (if (= k# :lhs-found)
-                                          (.addAll ^HashSet v#
-                                                   ^HashSet (nextmap# k#))
-                                          (.addAll
-                                           (typecast/datatype->list-cast-fn
-                                            ~datatype v#)
-                                           (typecast/datatype->list-cast-fn
-                                            ~datatype (nextmap# k#))))
-                                        [k# v#]))
+                                        (let [next-v# (nextmap# k#)]
+                                          [k#
+                                           (case k#
+                                             :lhs-found-vals
+                                             (do
+                                               (.addAll ^HashSet v# ^HashSet next-v#)
+                                               v#)
+                                             :rhs-missing
+                                             (do
+                                               (dtype/set-add-block! v# next-v#)
+                                               v#)
+                                             (do
+                                               (.addAll
+                                                (typecast/datatype->list-cast-fn
+                                                 ~datatype v#)
+                                                (typecast/datatype->list-cast-fn
+                                                 ~datatype (nextmap# k#)))
+                                               v#))])))
                                  (into {})))))
          lhs-missing# (when lhs-missing?#
                         (reduce (fn [lhs-missing# lhs-missing-key#]
-                                  (.addAll (typecast/datatype->list-cast-fn
-                                            ~datatype lhs-missing#)
-                                           (typecast/datatype->list-cast-fn
-                                            ~datatype (get idx-groups#
-                                                           lhs-missing-key#)))
+                                  (dtype/set-add-block! lhs-missing#
+                                                        (get idx-groups#
+                                                             lhs-missing-key#))
                                  lhs-missing#)
-                               (builtin-op-providers/dtype->list-constructor ~datatype)
+                               (->bitmap)
                                (->> (keys idx-groups#)
-                                    (remove #(.contains ^HashSet lhs-found# %)))))]
+                                    (remove #(.contains ^HashSet lhs-found-vals# %)))))]
      (merge
       {:join-table
        (let [lhs-cols# (->> (columns lhs#)

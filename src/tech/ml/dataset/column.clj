@@ -56,7 +56,7 @@
 
 
 (defn missing
-  "Indexes of missing values"
+  "Indexes of missing values.  Both iterable and reader."
   [col]
   (col-proto/missing col))
 

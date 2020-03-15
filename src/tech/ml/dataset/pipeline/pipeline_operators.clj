@@ -226,10 +226,10 @@ of running a math expression.  e.g.:
    dataset column-name
    (fn [col]
      (let [missing-indexes (ds-col/missing col)]
-       (if (> (count missing-indexes) 0)
+       (if (> (dtype/ecount missing-indexes) 0)
          (dtype/write-indexes! (ds-col/clone col)
                                (vec missing-indexes)
-                               (vec (repeat (count missing-indexes)
+                               (vec (repeat (dtype/ecount missing-indexes)
                                             (:missing-value context))))
          col)))))
 

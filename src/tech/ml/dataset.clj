@@ -145,7 +145,7 @@
         stats-ds
         (->> (->dataset dataset)
              (pmap (fn [ds-col]
-                     (let [n-missing (count (ds-col/missing ds-col))
+                     (let [n-missing (dtype/ecount (ds-col/missing ds-col))
                            n-valid (- (dtype/ecount ds-col)
                                       n-missing)
                            col-dtype (dtype/get-datatype ds-col)
@@ -205,7 +205,7 @@
                          retval)
                        (let [current-column (column dataset colname)]
                          (when (and error-on-missing-values?
-                                    (not= 0 (count (ds-col/missing current-column))))
+                                    (not= 0 (dtype/ecount (ds-col/missing current-column))))
                            (throw (ex-info (format "Column %s has missing values"
                                                    (ds-col/column-name current-column))
                                            {})))
