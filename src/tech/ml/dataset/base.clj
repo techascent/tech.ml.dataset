@@ -563,9 +563,13 @@ the correct type."
   :column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
   :n-records - Number of rows to read
   :header-row? - Defaults to true, indicates the first row is a header.
-  :parser-fn - function taking colname and sequence of column values to decide
-        parsing strategy.  Defaults to nil in which case the default parser is used.
-        Return value must implement tech.ml.dataset.parse.PColumnParser.
+  parser-fn -
+   - keyword - all columns parsed to this datatype
+   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
+          - Return value must be implement PColumnParser in which case that is used
+            or can return nil in which case the default column parser is used.
+   - map - the header-name-or-idx is used to lookup value.  If not nil, then
+           can be either of the two above.  Else the default column parser is used.
   :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
   :column-definitions - If a sequence of maps is used, this overrides the column
   datatype detection mechanism.  See map-seq->dataset for explanation.

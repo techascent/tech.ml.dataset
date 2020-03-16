@@ -171,3 +171,34 @@
       (is (= 11 (ds-base/column-count result)))
       ;;Header row accounts for one.
       (is (= 99 (ds-base/row-count result)))))
+
+
+(deftest specify-column-types
+  ;;parse everything as float32
+  (let [result (ds-base/->dataset test-file
+                                  {:n-records 100
+                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                                   :parser-fn :float32})]
+    (is (= #{:float32}
+           (set (map dtype/get-datatype result))))
+    (is (= 3 (ds-base/column-count result))))
+
+  ;;Next up is a map of colname->datatype
+  (let [result (ds-base/->dataset test-file
+                                  {:n-records 100
+                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                                   :parser-fn {"1stFlrSF" :float32
+                                               "2ndFlrSF" :int32}})]
+    (is (= #{:float32 :int32 :int16}
+           (set (map dtype/get-datatype result)))))
+
+  ;;Or you can implement a function from colname,first-n-strings->parser
+  (let [parser-fn (fn [_colname _coldata-n-strings]
+                    ;;Shortcut to create a full parser from a stateless simple parser
+                    (ds-parse/simple-parser->parser :float32))
+        result (ds-base/->dataset test-file
+                                  {:n-records 100
+                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                                   :parser-fn parser-fn})]
+    (is (= #{:float32}
+           (set (map dtype/get-datatype result))))))

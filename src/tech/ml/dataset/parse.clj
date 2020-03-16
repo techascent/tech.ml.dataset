@@ -5,10 +5,12 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
+            [tech.v2.datatype.bitmap :as bitmap]
             [clojure.set :as set])
   (:import [com.univocity.parsers.common AbstractParser]
            [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
            [java.io Reader InputStream Closeable]
+           [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
@@ -22,10 +24,6 @@
 
 
 (set! *warn-on-reflection* true)
-
-
-;;TODO - Load a subset of columns from a file.
-;;TODO - simple way to specific datatypes to use for columns
 
 (defn- sequence-type
   [item-seq]
@@ -114,6 +112,7 @@
 
 
 (defprotocol PSimpleColumnParser
+  (make-parser-container [parser])
   (can-parse? [parser str-val])
   (simple-parse! [parser container str-val])
   (simple-missing! [parser container]))
@@ -158,6 +157,7 @@
      dtype-proto/PDatatype
      (get-datatype [parser#] ~datatype)
      PSimpleColumnParser
+     (make-parser-container [this] (make-container ~datatype))
      (can-parse? [parser# str-val#]
        (try
          (dtype->parse-fn ~datatype str-val#)
@@ -183,6 +183,7 @@
     dtype-proto/PDatatype
     (get-datatype [this] :boolean)
     PSimpleColumnParser
+    (make-parser-container [this] (make-container :boolean))
     (can-parse? [parser str-val]
       (try
         (dtype->parse-fn :boolean str-val)
@@ -205,6 +206,7 @@
     dtype-proto/PDatatype
     (get-datatype [item#] :string)
     PSimpleColumnParser
+    (make-parser-container [this] (make-container :string))
     (can-parse? [this# item#] (< (count item#) 1024))
     (simple-parse! [parser# container# str-val#]
       (when (> (count str-val#) 1024)
@@ -220,6 +222,7 @@
     dtype-proto/PDatatype
     (get-datatype [item#] :text)
     PSimpleColumnParser
+    (make-parser-container [this] (make-container :text))
     (can-parse? [this# item#] true)
     (simple-parse! [parser# container# str-val#]
       (.add ^List container# str-val#))
@@ -262,7 +265,7 @@ will stop the parsing system.")
         item-seq* (atom (rest default-parser-seq))
         container* (atom (make-container (first initial-parser)))
         simple-parser* (atom (second initial-parser))
-        missing (LongArrayList.)]
+        ^RoaringBitmap missing (bitmap/->bitmap)]
     (reify PColumnParser
       (parse! [this str-val]
         (let [parsed? (try (.simple-parse!
@@ -292,12 +295,49 @@ will stop the parsing system.")
                    ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
                    @container* str-val)))))))
       (missing! [parser]
-        (.add missing (dtype/ecount @container*))
+        (.add missing (unchecked-int (dtype/ecount @container*)))
         (.simple-missing! ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
                           @container*))
       (column-data [parser]
         {:missing missing
          :data @container*}))))
+
+
+(defn simple-parser->parser
+  [parser-kwd-or-simple-parser]
+  (let [simple-parser (if (keyword? parser-kwd-or-simple-parser)
+                        (get all-parsers parser-kwd-or-simple-parser)
+                        parser-kwd-or-simple-parser)
+        parser-dtype (dtype/get-datatype simple-parser)
+        container (make-parser-container simple-parser)
+        ^RoaringBitmap missing (bitmap/->bitmap)]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] parser-dtype)
+      PColumnParser
+      (parse! [this str-val]
+        (simple-parse! simple-parser container str-val))
+      (missing! [parser]
+        (.add missing (unchecked-int (dtype/ecount container)))
+        (simple-missing! simple-parser container))
+      (column-data [parser]
+        {:missing missing
+         :data container}))))
+
+
+(defn- make-parser
+  [parser-fn header-row-name scan-rows]
+  (cond
+    (fn? parser-fn)
+    (if-let [parser (parser-fn header-row-name scan-rows)]
+      parser
+      (default-column-parser))
+    (keyword? parser-fn)
+    (simple-parser->parser parser-fn)
+    (map? parser-fn)
+    (if-let [entry (get parser-fn header-row-name)]
+      (make-parser entry header-row-name scan-rows)
+      (default-column-parser))))
 
 
 (defn rows->columns
@@ -319,9 +359,11 @@ will stop the parsing system.")
                   row-seq)
         ^List column-parsers (vec (if parser-fn
                                     (let [scan-rows (take parser-scan-len row-seq)
+                                          n-rows (count scan-rows)
                                           scan-cols (->> (apply interleave scan-rows)
-                                                         (partition parser-scan-len))]
-                                      (map parser-fn (or header-row (range n-cols))
+                                                         (partition n-rows))]
+                                      (map (partial make-parser parser-fn)
+                                           (or header-row (range n-cols))
                                            scan-cols))
                                     (repeatedly n-cols default-column-parser)))]
     (doseq [^"[Ljava.lang.String;" row row-seq]
@@ -356,9 +398,13 @@ will stop the parsing system.")
   column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
   n-records - Number of rows to read
   header-row? - Defaults to true, indicates the first row is a header.
-  parser-fn - function taking colname and sequence of column values to decide
-        parsing strategy.  Defaults to nil in which case the default parser is used.
-        Return value must implement PColumnParser.
+  parser-fn -
+   - keyword - all columns parsed to this datatype
+   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
+          - Return value must be implement PColumnParser in which case that is used
+            or can return nil in which case the default column parser is used.
+   - map - the header-name-or-idx is used to lookup value.  If not nil, then
+           can be either of the two above.  Else the default column parser is used.
   parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
 
   If the parser-fn is confusing, just pass in println and the output should be clear"
