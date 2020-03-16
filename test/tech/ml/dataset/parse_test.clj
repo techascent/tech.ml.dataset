@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is]]
             [tech.v2.datatype :as dtype]
             [tech.ml.dataset.parse :as ds-parse]
+            [tech.ml.dataset.base :as ds-base]
             [clojure.set :as set]))
 
 
@@ -143,4 +144,30 @@
                                    (remove #(= 0 (second %)))
                                    (sort-by first))]
       (is (= (set (map first missing-data))
-             (set (map first result-missing-data)))))))
+             (set (map first result-missing-data))))))
+
+  (let [result (ds-parse/csv->columns test-file {:n-records 100
+                                                 :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
+    (is (= 3 (count result)))
+    ;;Header row accounts for one.
+    (is (= 99 (dtype/ecount (:data (first result))))))
+  (let [result (ds-parse/csv->columns test-file {:n-records 100
+                                                 :column-blacklist (range 70)})]
+    (is (= 11 (count result)))
+    (is (= 99 (dtype/ecount (:data (first result)))))))
+
+
+(deftest base-ames-load-test
+  ;;Here we just test that the options correctly pass through ->dataset
+    (let [result (ds-base/->dataset test-file {:n-records 100
+                                               :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
+      (is (= 3 (ds-base/column-count result)))
+      ;;Header row accounts for one.
+      (is (= 99 (ds-base/row-count result))))
+
+
+  (let [result (ds-base/->dataset test-file {:n-records 100
+                                             :column-blacklist (range 70)})]
+      (is (= 11 (ds-base/column-count result)))
+      ;;Header row accounts for one.
+      (is (= 99 (ds-base/row-count result)))))

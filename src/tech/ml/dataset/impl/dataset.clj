@@ -291,7 +291,7 @@
 
 (defn parse-dataset
   ([input options]
-   (->> (apply ds-parse/csv->columns input (apply concat options))
+   (->> (ds-parse/csv->columns input options)
         (new-dataset (:table-name options) {})))
   ([input]
    (parse-dataset input {})))

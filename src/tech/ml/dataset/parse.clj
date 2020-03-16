@@ -4,11 +4,13 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.casting :as casting]
-            [tech.ml.dataset.impl.column :refer [make-container] :as col-impl])
+            [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
+            [clojure.set :as set])
   (:import [com.univocity.parsers.common AbstractParser]
            [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
            [java.io Reader InputStream Closeable]
            [java.lang AutoCloseable]
+           [java.lang.reflect Method]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [java.util.function Function]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
@@ -25,10 +27,54 @@
 ;;TODO - Load a subset of columns from a file.
 ;;TODO - simple way to specific datatypes to use for columns
 
+(defn- sequence-type
+  [item-seq]
+  (cond
+    (every? string? item-seq)
+    :string
+    (every? number? item-seq)
+    :number
+    :else
+    (throw (Exception. "Item seq must of either strings or numbers"))))
+
+
 (defn create-csv-parser
-  ^AbstractParser []
+  ^AbstractParser [{:keys [header-row?
+                           n-records
+                           column-whitelist
+                           column-blacklist]
+                    :or {headers? true}}]
   (let [settings (CsvParserSettings.)]
     (.detectFormatAutomatically settings (into-array Character/TYPE [\, \tab]))
+    (when header-row?
+      (.setHeaderExtractionEnabled settings true))
+    (when n-records
+      (.setNumberOfRecordsToRead settings (int n-records)))
+    (when (or (seq column-whitelist)
+              (seq column-blacklist))
+      (when (and (seq column-whitelist)
+                 (seq column-blacklist))
+        (throw (Exception. "Either whitelist or blacklist can be provided but not both")))
+      (let [[string-fn! number-fn!] (if (seq column-whitelist)
+                                      [#(.selectFields
+                                         settings
+                                         ^"[Ljava.lang.String;" (into-array String %))
+                                       #(.selectIndexes
+                                         settings
+                                         ^"[Ljava.lang.Integer;" (into-array Integer (map int %)))]
+                                      [#(.excludeFields
+                                         settings
+                                         ^"[Ljava.lang.String;" (into-array String %))
+                                       #(.excludeIndexes
+                                         settings
+                                         ^"[Ljava.lang.Integer;"(into-array Integer (map int %)))])
+            column-data (if (seq column-whitelist)
+                          column-whitelist
+                          column-blacklist)
+            column-type (sequence-type column-data)]
+        (case column-type
+          :string (string-fn! column-data)
+          :number (number-fn! column-data))))
     (CsvParser. settings)))
 
 
@@ -36,7 +82,11 @@
 
 
 (defn raw-row-iterable
-  "Returns an iterable that produces string[] rows"
+  "Returns an iterable that produces
+  map of
+  {:header-row - string[]
+   :rows - iterable producing string[] rows
+  }"
   (^Iterable [input ^AbstractParser parser]
    (reify Iterable
      (iterator [this]
@@ -60,7 +110,7 @@
                    (.close ^AutoCloseable reader)))
                retval)))))))
   (^Iterable [input]
-   (raw-row-iterable input (create-csv-parser))))
+   (raw-row-iterable input (create-csv-parser {}))))
 
 
 (defprotocol PSimpleColumnParser
@@ -250,40 +300,31 @@ will stop the parsing system.")
          :data @container*}))))
 
 
-(defn csv->columns
-  "Non-lazily and serially parse the columns.  Returns a vector of maps of
-  {
-   :name column-name
-   :missing long-reader of in-order missing indexes
-   :data typed reader/writer of data.
-  }
-  options:
-  header-row? - Defaults to true, indicates the first row is a header.
-  parser-fn - function taking colname and sequence of column values to decide
-        parsing strategy.  Defaults to nil in which case the default parser is used.
-        Return value must implement PColumnParser.
-  parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
-
-  If the parser-fn is confusing, just pass in println and that may help and let it error out."
-  [input & {:keys [header-row?
+(defn rows->columns
+  "Given a sequence of string[] rows, parse into columnar data.
+  See csv->columns.
+  This method is useful if you have another way of generating sequences of
+  string[] row data."
+  [row-seq {:keys [header-row?
                    parser-fn
                    parser-scan-len]
             :or {header-row? true
-                 parser-scan-len 100}}]
-  (let [rows (raw-row-iterable input)
-        data (iterator-seq (.iterator rows))
-        initial-row (first data)
-        data (if header-row?
-               (rest data)
-               data)
+                 parser-scan-len 100}
+            :as options}]
+  (let [initial-row (first row-seq)
         n-cols (count initial-row)
+        header-row (when header-row? initial-row)
+        row-seq (if header-row?
+                  (rest row-seq)
+                  row-seq)
         ^List column-parsers (vec (if parser-fn
-                                    (let [scan-rows (take parser-scan-len data)
+                                    (let [scan-rows (take parser-scan-len row-seq)
                                           scan-cols (->> (apply interleave scan-rows)
                                                          (partition parser-scan-len))]
-                                      (map parser-fn initial-row scan-cols))
+                                      (map parser-fn (or header-row (range n-cols))
+                                           scan-cols))
                                     (repeatedly n-cols default-column-parser)))]
-    (doseq [^"[Ljava.lang.String;" row data]
+    (doseq [^"[Ljava.lang.String;" row row-seq]
       (loop [col-idx 0]
         (when (< col-idx n-cols)
           (let [^String row-data (aget row col-idx)
@@ -301,3 +342,37 @@ will stop the parsing system.")
             initial-row
             (range n-cols))
           column-parsers)))
+
+
+(defn csv->columns
+  "Non-lazily and serially parse the columns.  Returns a vector of maps of
+  {
+   :name column-name
+   :missing long-reader of in-order missing indexes
+   :data typed reader/writer of data.
+  }
+  options:
+  column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
+  column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
+  n-records - Number of rows to read
+  header-row? - Defaults to true, indicates the first row is a header.
+  parser-fn - function taking colname and sequence of column values to decide
+        parsing strategy.  Defaults to nil in which case the default parser is used.
+        Return value must implement PColumnParser.
+  parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
+
+  If the parser-fn is confusing, just pass in println and the output should be clear"
+  ([input {:keys [header-row?
+                  parser-fn
+                  column-whitelist
+                  column-blacklist
+                  n-records
+                  parser-scan-len]
+           :or {header-row? true
+                parser-scan-len 100}
+           :as options}]
+   (let [^Iterable rows (raw-row-iterable input (create-csv-parser options))
+         data (iterator-seq (.iterator ^Iterable rows))]
+     (rows->columns data options)))
+  ([input]
+   (csv->columns input {})))

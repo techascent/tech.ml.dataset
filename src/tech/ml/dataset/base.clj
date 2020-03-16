@@ -558,16 +558,15 @@ the correct type."
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
   Options:
-  :table-name - set the name of the dataset
-  :columns-types - sequence of tech.datatype datatype keywords that matches column
-     order.  This overrides the tablesaw autodetect mechanism.
-  :column-type-fn - Function that gets passed the first N rows of the csv or tsv and
-     returns a sequence of datatype keywords that match column order.  The column names
-     -if available- are passed as the first row of the csv/tsv.  This overrides the
-     tablesaw autodetect mechanism.
-  :header? - True of the first row of the csv/tsv contains the column names.  Defaults
-     to true.
-  :separator - The separator to use.  If not specified an autodetect mechanism is used.
+  :table-name - set the name of the dataset.
+  :column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
+  :column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
+  :n-records - Number of rows to read
+  :header-row? - Defaults to true, indicates the first row is a header.
+  :parser-fn - function taking colname and sequence of column values to decide
+        parsing strategy.  Defaults to nil in which case the default parser is used.
+        Return value must implement tech.ml.dataset.parse.PColumnParser.
+  :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
   :column-definitions - If a sequence of maps is used, this overrides the column
   datatype detection mechanism.  See map-seq->dataset for explanation.
 
@@ -598,8 +597,12 @@ the correct type."
                  open-fn (if json?
                            #(-> (apply io/get-json % (apply clojure.core/concat
                                                             options))
-                                (ds-impl/map-seq->dataset options))
-                           ds-impl/parse-dataset)]
+                                (ds-impl/map-seq->dataset
+                                 (merge {:table-name dataset}
+                                        options)))
+                           #(ds-impl/parse-dataset %
+                                                   (merge {:table-name dataset}
+                                                          options)))]
              (with-open [istream (if gzipped?
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
