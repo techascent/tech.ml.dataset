@@ -176,19 +176,23 @@
                          [(ds-col/new-column :left-indexes lhs-indexes)
                           (ds-col/new-column :right-indexes rhs-indexes)]
                          (ds-base/dataset-name lhs)
-                         (ds-base/columns lhs)
+                         (ds-base/columns (ds-base/remove-column lhs colname))
                          (ds-base/dataset-name rhs)
                          (ds-base/columns (ds-base/remove-column rhs colname)))
+
         index-columns (take 2 renamed-columns)
+        n-new-lhs-cols (dec (ds-base/column-count lhs))
         lhs-columns (->> (drop 2 renamed-columns)
-                         (take (ds-base/column-count lhs)))
-        rhs-columns (drop (+ 2 (ds-base/column-count lhs)) renamed-columns)]
+                         (take n-new-lhs-cols))
+        rhs-columns (drop (+ 2 n-new-lhs-cols) renamed-columns)
+        lhs-join-column (lhs colname)
+        rhs-join-column (rhs colname)]
     (merge
      {:inner
        (let [lhs-columns (map #(ds-col/select % lhs-indexes) lhs-columns)
              rhs-columns (map #(ds-col/select % rhs-indexes) rhs-columns)]
          (ds-base/from-prototype lhs "inner-join"
-                                 (concat index-columns
+                                 (concat [(ds-col/select lhs-join-column lhs-indexes)]
                                          lhs-columns
                                          rhs-columns)))
        :lhs-indexes lhs-indexes
@@ -206,7 +210,9 @@
                             (ds-col/select old-col lhs-indexes)
                             n-empty))))]
            (ds-base/from-prototype lhs "right-outer-join"
-                                   (concat lhs-columns rhs-columns)))})
+                                   (concat [(ds-col/select rhs-join-column rhs-indexes)]
+                                           lhs-columns
+                                           rhs-columns)))})
       (when lhs-missing
         {:lhs-missing lhs-missing
          :left-outer
@@ -220,7 +226,9 @@
                             (ds-col/select old-col rhs-indexes)
                             n-empty))))]
            (ds-base/from-prototype lhs "left-outer-join"
-                                   (concat lhs-columns rhs-columns)))}))))
+                                   (concat [(ds-col/select lhs-join-column lhs-indexes)]
+                                           lhs-columns
+                                           rhs-columns)))}))))
 
 
 (defn hash-join-int32
@@ -260,18 +268,38 @@
      :int32 (hash-join-int32 colname lhs rhs options)
      :int64 (hash-join-int64 colname lhs rhs options))))
 
+
 (defn inner-join
   "Inner join by column.  For efficiency, lhs should be smaller than rhs.
   An options map can be passed in with optional arguments:
   :operation-space - either :int32 or :int64.  Defaults to :int32.
   Returns the joined table"
   ([colname lhs rhs]
-   (hash-join colname lhs rhs {}))
+   (inner-join colname lhs rhs {}))
   ([colname lhs rhs options]
    (-> (hash-join colname lhs rhs options)
-       :join-table)))
+       :inner)))
+
 
 (defn right-join
-  [colname lhs rhs]
+  "Right join by column.  For efficiency, lhs should be smaller than rhs.
+  An options map can be passed in with optional arguments:
+  :operation-space - either :int32 or :int64.  Defaults to :int32.
+  Returns the joined table"
+  ([colname lhs rhs]
+   (right-join colname lhs rhs {}))
+  ([colname lhs rhs options]
+   (-> (hash-join colname lhs rhs (assoc options :rhs-missing? options))
+       :right-outer)))
 
-  )
+
+(defn left-join
+  "Left join by column.  For efficiency, lhs should be smaller than rhs.
+  An options map can be passed in with optional arguments:
+  :operation-space - either :int32 or :int64.  Defaults to :int32.
+  Returns the joined table"
+  ([colname lhs rhs]
+   (left-join colname lhs rhs {}))
+  ([colname lhs rhs options]
+   (-> (hash-join colname lhs rhs (assoc options :lhs-missing? options))
+       :left-outer)))

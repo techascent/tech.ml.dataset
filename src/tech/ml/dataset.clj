@@ -75,7 +75,9 @@
 
 (par-util/export-symbols tech.ml.dataset.join
                          hash-join
-                         inner-join)
+                         inner-join
+                         right-join
+                         left-join)
 
 
 (par-util/export-symbols tech.ml.dataset.impl.dataset

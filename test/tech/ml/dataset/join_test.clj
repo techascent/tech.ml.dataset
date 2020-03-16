@@ -79,9 +79,8 @@
                             "EmployeeID" 8,
                             "OrderDate" "1996-09-20",
                             "ShipperID" 2}])
-        join-data (ds-join/hash-join "CustomerID" lhs rhs {:lhs-missing? true})
-        joined (:left-outer join-data)
-        recs (ds/mapseq-reader joined)
+        join-data (ds-join/left-join "CustomerID" lhs rhs)
+        recs (ds/mapseq-reader join-data)
         empty-int?    #{-32768}
         empty-string? #{""}
         empty-val?    #(or (empty-int? %) (empty-string? %))

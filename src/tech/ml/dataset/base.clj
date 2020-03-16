@@ -571,8 +571,6 @@ the correct type."
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
   :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
-  :column-definitions - If a sequence of maps is used, this overrides the column
-  datatype detection mechanism.  See map-seq->dataset for explanation.
 
   Returns a new dataset"
   ([dataset
