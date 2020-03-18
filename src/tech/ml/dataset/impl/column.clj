@@ -13,6 +13,7 @@
   (:import [java.util ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
+           [clojure.lang IPersistentMap IMeta]
            [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
 
 (set! *warn-on-reflection* true)
@@ -91,10 +92,17 @@
           (.read rdr idx))))))
 
 
+(defn ->persistent-map
+  ^IPersistentMap [item]
+  (if (instance? IPersistentMap item)
+    item
+    (into {} item)))
+
+
 (deftype Column
     [^RoaringBitmap missing
      data
-     metadata]
+     ^IPersistentMap metadata]
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-proto/get-datatype data))
   dtype-proto/PCountable
@@ -203,7 +211,7 @@
     (let [n-elems (long (apply * shape))]
       (Column. (->bitmap)
                (make-container datatype n-elems)
-               metadata)))
+               {})))
   dtype-proto/PToArray
   (->sub-array [col]
     (when-let [data-ary (when (== 0 (dtype/ecount missing))
@@ -224,7 +232,7 @@
     (merge metadata
            {:size (dtype/ecount col)
             :datatype (dtype/get-datatype col)}))
-  (set-metadata [col data-map] (Column. missing data data-map))
+  (set-metadata [col data-map] (Column. missing data (->persistent-map data-map)))
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
@@ -279,6 +287,8 @@
         (let [d-reader (typecast/datatype->reader :float64 data)]
           (dtype/make-container :java-array :float64
                                 (dtype/->reader col :float64))))))
+  IMeta
+  (meta [this] metadata)
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)

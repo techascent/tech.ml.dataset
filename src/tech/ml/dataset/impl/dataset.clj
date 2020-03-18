@@ -10,7 +10,7 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [clojure.set :as c-set])
   (:import [java.io Writer]
-           [clojure.lang IFn]
+           [clojure.lang IPersistentMap IMeta IFn]
            [java.util Map List]))
 
 
@@ -30,9 +30,9 @@
 
 
 (deftype Dataset [table-name
-                                 column-names
-                                 colmap
-                                 metadata]
+                  column-names
+                  colmap
+                  ^IPersistentMap metadata]
   ds-proto/PColumnarDataset
   (dataset-name [dataset] table-name)
   (set-dataset-name [dataset new-name]
@@ -47,7 +47,7 @@
   (metadata [dataset] metadata)
   (set-metadata [dataset meta-map]
     (Dataset. table-name column-names colmap
-                             meta-map))
+              (col-impl/->persistent-map meta-map)))
 
   (columns [dataset] (mapv (partial get colmap) column-names))
 
@@ -152,6 +152,9 @@
       1 (.invoke this (first arg-seq))
       2 (.invoke this (first arg-seq) (second arg-seq))))
 
+  IMeta
+  (meta [this] metadata)
+
   Iterable
   (iterator [item]
     (->> (ds-proto/columns item)
@@ -178,7 +181,7 @@
                               (->> column-seq
                                    (map (juxt ds-col/column-name identity))
                                    (into {}))
-                              ds-metadata)))
+                              (col-impl/->persistent-map ds-metadata))))
   ([table-name column-seq]
    (new-dataset table-name {} column-seq))
   ([column-seq]
@@ -235,7 +238,8 @@
                            ^List data data
                            ^List missing missing
                            data-dtype (dtype/get-datatype data)
-                           missing-val (get @col-impl/dtype->missing-val-map data-dtype)
+                           missing-val (get @col-impl/dtype->missing-val-map
+                                            data-dtype)
                            n-missing (- idx (dtype/ecount data))]
                        (dotimes [miss-idx n-missing]
                          (.add missing (+ miss-idx n-col-data))
@@ -246,10 +250,12 @@
                          (.add data (if (or (= :boolean data-dtype)
                                             (casting/numeric-type? data-dtype))
                                       (casting/cast item-val data-dtype)
-                                      (item-val->string item-val data-dtype item-name)))
+                                      (item-val->string item-val data-dtype
+                                                        item-name)))
                          (do
                            (.add missing n-col-data)
-                           (.add data (get @col-impl/dtype->missing-val-map data-dtype))))))))
+                           (.add data (get @col-impl/dtype->missing-val-map
+                                           data-dtype))))))))
                 (dorun))
          column-seq (vals column-map)
          max-ecount (long (if (seq column-seq)
