@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.join-test
   (:require [tech.ml.dataset :as ds]
             [tech.ml.dataset.join :as ds-join]
+            [tech.ml.dataset.column :as ds-col]
             [tech.v2.datatype.functional :as dfn]
             [clojure.test :refer [deftest is]]))
 
@@ -22,10 +23,10 @@
                                                   (mapcat (partial repeat 2)))
                                           :c (->> (range 15)
                                                   (mapcat (partial repeat 2)))})
-        {:keys [inner rhs-missing]} (ds-join/hash-join :a lhs rhs
-                                                                 {:rhs-missing? true})]
+        {:keys [inner rhs-missing]} (ds-join/hash-join [:b :c] lhs rhs
+                                                       {:rhs-missing? true})]
     (is (dfn/equals (inner :a) (inner :b)))
-    (is (dfn/equals (inner :b) (inner :c)))
+    (is (dfn/equals (inner :b) (inner :right.a)))
     (is (= [20 21 22 23 24 25 26 27 28 29] (vec rhs-missing))))
   (let [lhs (ds/name-values-seq->dataset {:a (range 15)
                                           :b (range 15)})
@@ -39,46 +40,53 @@
     (is (dfn/equals (inner :b) (inner :c)))
     (is (= [10 11 12 13 14] (vec lhs-missing)))))
 
+(defn lhs-customer-db
+  []
+  (ds/->dataset [{"CustomerID" 1,
+                  "CustomerName" "Alfreds Futterkiste",
+                  "ContactName" "Maria Anders",
+                  "Address" "Obere Str. 57",
+                  "City" "Berlin",
+                  "PostalCode" 12209,
+                  "Country" "Germany"}
+                 {"CustomerID" 2,
+                  "CustomerName" "Ana Trujillo Emparedados y helados",
+                  "ContactName" "Ana Trujillo",
+                  "Address" "Avda. de la Constitución 2222",
+                  "City" "México D.F.",
+                  "PostalCode" 5021,
+                  "Country" "Mexico"}
+                 {"CustomerID" 3,
+                  "CustomerName" "Antonio Moreno Taquería",
+                  "ContactName" "Antonio Moreno",
+                  "Address" "Mataderos 2312",
+                  "City" "México D.F.",
+                  "PostalCode" 5023,
+                  "Country" "Mexico"}]))
+
+(defn rhs-customer-db
+  []
+  (ds/->dataset [{"OrderID" 10308,
+                  "CustomerID" 2,
+                  "EmployeeID" 7,
+                  "OrderDate" "1996-09-18",
+                  "ShipperID" 3}
+                 {"OrderID" 10309,
+                  "CustomerID" 37,
+                  "EmployeeID" 3,
+                  "OrderDate" "1996-09-19",
+                  "ShipperID" 1}
+                 {"OrderID" 10310,
+                  "CustomerID" 77,
+                  "EmployeeID" 8,
+                  "OrderDate" "1996-09-20",
+                  "ShipperID" 2}]))
+
 
 ;;sample from https://www.w3schools.com/sql/sql_join_left.asp
 (deftest left-join-test
-  (let [lhs (ds/->dataset [{"CustomerID" 1,
-                            "CustomerName" "Alfreds Futterkiste",
-                            "ContactName" "Maria Anders",
-                            "Address" "Obere Str. 57",
-                            "City" "Berlin",
-                            "PostalCode" 12209,
-                            "Country" "Germany"}
-                           {"CustomerID" 2,
-                            "CustomerName" "Ana Trujillo Emparedados y helados",
-                            "ContactName" "Ana Trujillo",
-                            "Address" "Avda. de la Constitución 2222",
-                            "City" "México D.F.",
-                            "PostalCode" 5021,
-                            "Country" "Mexico"}
-                           {"CustomerID" 3,
-                            "CustomerName" "Antonio Moreno Taquería",
-                            "ContactName" "Antonio Moreno",
-                            "Address" "Mataderos 2312",
-                            "City" "México D.F.",
-                            "PostalCode" 5023,
-                            "Country" "Mexico"}])
-
-        rhs (ds/->dataset [{"OrderID" 10308,
-                            "CustomerID" 2,
-                            "EmployeeID" 7,
-                            "OrderDate" "1996-09-18",
-                            "ShipperID" 3}
-                           {"OrderID" 10309,
-                            "CustomerID" 37,
-                            "EmployeeID" 3,
-                            "OrderDate" "1996-09-19",
-                            "ShipperID" 1}
-                           {"OrderID" 10310,
-                            "CustomerID" 77,
-                            "EmployeeID" 8,
-                            "OrderDate" "1996-09-20",
-                            "ShipperID" 2}])
+  (let [lhs (lhs-customer-db)
+        rhs (rhs-customer-db)
         join-data (ds-join/left-join "CustomerID" lhs rhs)
         recs (ds/mapseq-reader join-data)
         empty-int?    #{-32768}
@@ -93,6 +101,18 @@
                       unrealized]
                   (every? empty-val? [OrderID OrderDate ShipperID])))
         "Everyone else should have missing entries from RHS.")))
+
+
+(deftest right-join-test
+  (let [lhs (lhs-customer-db)
+        rhs (rhs-customer-db)
+        join-data (ds-join/right-join "CustomerID" lhs rhs)]
+    (is (= #{2 37 77} (set (join-data "CustomerID"))))
+    (is (= #{"Ana Trujillo" ""} (set (join-data "ContactName"))))
+    (is (= #{5021 -32768} (set (map int (join-data "PostalCode")))))
+    (is (= #{1 2} (set (ds-col/missing (join-data "ContactName")))))
+    (is (= #{1 2} (set (ds-col/missing (join-data "PostalCode")))))))
+
 
 
 (comment

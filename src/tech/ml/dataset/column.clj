@@ -271,7 +271,7 @@ Implementations should check their metadata before doing calculations."
 
 (defn extend-column-with-empty
   [column n-empty]
-  (if (== 1 (long n-empty))
+  (if (== 0 (long n-empty))
     column
     (let [^Column column column
           col-dtype (dtype/get-datatype column)
@@ -285,6 +285,6 @@ Implementations should check their metadata before doing calculations."
           col-dtype
           n-empty)])
        (.metadata column)
-       (.add ^RoaringBitmap (dtype/clone (.missing column))
+       (dtype/set-add-range! (dtype/clone (.missing column))
              (unchecked-int n-elems)
              (unchecked-int (+ n-elems n-empty)))))))
