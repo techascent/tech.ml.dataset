@@ -78,7 +78,7 @@ _unnamed [2 3]:
 
 #### CSV/TSV Parsing Options
 It is important to note that there are several options for parsing files.
-A few important ones are column whitelist/blacklists, max-row-out,
+A few important ones are column whitelist/blacklists, num records,
 and ways to specify exactly how to parse the string data:
 
 ```clojure
@@ -148,6 +148,10 @@ data/ames-house-prices/train.csv [4 3]:
 |    223500 |      920 |      866 |
 |    140000 |      961 |      756 |
 ```
+
+A reference to what is possible is in 
+[parse-test](../test/tech/ml/dataset/parse_test.clj).
+
 
 #### name-value-seq->dataset
 
