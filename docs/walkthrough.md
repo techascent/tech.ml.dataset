@@ -76,6 +76,79 @@ _unnamed [2 3]:
 |  2 | -32768 |      3 |
 ```
 
+#### CSV/TSV Parsing Options
+It is important to note that there are several options for parsing files.
+A few important ones are column whitelist/blacklists, max-row-out,
+and ways to specify exactly how to parse the string data:
+
+```clojure
+
+user> (doc ds/->dataset)
+-------------------------
+tech.ml.dataset/->dataset
+([dataset {:keys [table-name], :as options}] [dataset])
+  Create a dataset from either csv/tsv or a sequence of maps.
+   *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
+   ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
+   is csv or tsv and then `tablesaw` has column datatype detection mechanisms which
+   can be overridden.
+   *  A sequence of maps may be passed in in which case the first N maps are scanned in
+   order to derive the column datatypes before the actual columns are created.
+  Options:
+  :table-name - set the name of the dataset.
+  :column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
+  :column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
+  :n-records - Number of rows to read
+  :header-row? - Defaults to true, indicates the first row is a header.
+  parser-fn -
+   - keyword - all columns parsed to this datatype
+   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
+          - Return value must be implement PColumnParser in which case that is used
+            or can return nil in which case the default column parser is used.
+   - map - the header-name-or-idx is used to lookup value.  If not nil, then
+           can be either of the two above.  Else the default column parser is used.
+  :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
+
+  Returns a new dataset
+
+
+user> (ds/->dataset "data/ames-house-prices/train.csv"
+                    {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                     :n-records 5})
+data/ames-house-prices/train.csv [4 3]:
+
+| SalePrice | 1stFlrSF | 2ndFlrSF |
+|-----------+----------+----------|
+|    208500 |      856 |      854 |
+|    181500 |     1262 |        0 |
+|    223500 |      920 |      866 |
+|    140000 |      961 |      756 |
+user> (ds/->dataset "data/ames-house-prices/train.csv"
+                    {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                     :n-records 5
+                     :parser-fn :float32})
+data/ames-house-prices/train.csv [4 3]:
+
+|  SalePrice | 1stFlrSF | 2ndFlrSF |
+|------------+----------+----------|
+| 208500.000 |  856.000 |  854.000 |
+| 181500.000 | 1262.000 |    0.000 |
+| 223500.000 |  920.000 |  866.000 |
+| 140000.000 |  961.000 |  756.000 |
+user> (ds/->dataset "data/ames-house-prices/train.csv"
+                    {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                     :n-records 5
+                     :parser-fn {:SalePrice :float32}})
+data/ames-house-prices/train.csv [4 3]:
+
+| SalePrice | 1stFlrSF | 2ndFlrSF |
+|-----------+----------+----------|
+|    208500 |      856 |      854 |
+|    181500 |     1262 |        0 |
+|    223500 |      920 |      866 |
+|    140000 |      961 |      756 |
+```
+
 #### name-value-seq->dataset
 
 Given a map of name->column data produce a new dataset.  If column data is untyped
@@ -488,6 +561,69 @@ user> (->> (sorted-named-baths "NamedBaths")
  "somewhat doable"
  "somewhat doable"
  "somewhat doable")
+```
+
+## Joins
+
+We now have experimental support for joins.  This is a left-hash-join algorithm so
+the current algorithm is -
+1.  `(tech.ml.dataset.functional/arggroup-by-int (lhs lhs-colname))` - this returns
+	a map of column-value->index-int32-array-list.
+2.  Run through `(rhs rhs-colname)` finding values in the group-by hash map and
+    building out left and right hand side final indexes.
+3.  Using appropriate final indexes, select columns from left and right hand sides.
+
+```clojure
+user> (def test-ds
+        (ds/->dataset "data/ames-house-prices/train.csv"
+                    {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                     :n-records 5
+                     :parser-fn {:SalePrice :float32}}))
+#'user/test-ds
+user> test-ds
+data/ames-house-prices/train.csv [4 3]:
+
+| SalePrice | 1stFlrSF | 2ndFlrSF |
+|-----------+----------+----------|
+|    208500 |      856 |      854 |
+|    181500 |     1262 |        0 |
+|    223500 |      920 |      866 |
+|    140000 |      961 |      756 |
+
+user> (ds/inner-join "1stFlrSF"
+                     (ds/set-dataset-name test-ds "left")
+                     (ds/set-dataset-name test-ds "right"))
+inner-join [4 5]:
+
+| 1stFlrSF | SalePrice | 2ndFlrSF | right.SalePrice | right.2ndFlrSF |
+|----------+-----------+----------+-----------------+----------------|
+|      856 |    208500 |      854 |          208500 |            854 |
+|     1262 |    181500 |        0 |          181500 |              0 |
+|      920 |    223500 |      866 |          223500 |            866 |
+|      961 |    140000 |      756 |          140000 |            756 |
+(ds-join/right-join ["1stFlrSF" "2ndFlrSF"]
+                         (ds/set-dataset-name test-ds "left")
+                         (ds/set-dataset-name test-ds "right"))
+right-outer-join [4 5]:
+
+| 2ndFlrSF | SalePrice | 1stFlrSF | left.SalePrice | left.2ndFlrSF |
+|----------+-----------+----------+----------------+---------------|
+|      854 |    208500 |      856 |    -2147483648 |        -32768 |
+|        0 |    181500 |     1262 |    -2147483648 |        -32768 |
+|      866 |    223500 |      920 |    -2147483648 |        -32768 |
+|      756 |    140000 |      961 |    -2147483648 |        -32768 |
+
+user> (ds-join/left-join ["1stFlrSF" "2ndFlrSF"]
+(ds/set-dataset-name test-ds "left")
+(ds/set-dataset-name test-ds "right"))
+left-outer-join [4 6]:
+
+| 1stFlrSF | SalePrice | 2ndFlrSF | right.2ndFlrSF | right.SalePrice | right.1stFlrSF |
+|----------+-----------+----------+----------------+-----------------+----------------|
+|      961 |    140000 |      756 |         -32768 |     -2147483648 |         -32768 |
+|      920 |    223500 |      866 |         -32768 |     -2147483648 |         -32768 |
+|      856 |    208500 |      854 |         -32768 |     -2147483648 |         -32768 |
+|     1262 |    181500 |        0 |         -32768 |     -2147483648 |         -32768 |
 ```
 
 ## Writing A Dataset Out

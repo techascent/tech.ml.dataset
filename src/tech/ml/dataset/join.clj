@@ -136,70 +136,64 @@
                     (typecast/datatype->list-cast-fn :int64 new-data)))
   target)
 
+(defn- default-table-name
+  [ds-table default-val]
+  (if (= (ds-base/dataset-name ds-table) "_unnamed")
+    default-val
+    (ds-base/dataset-name ds-table)))
+
 
 (defn- nice-column-names
-  [index-columns
-   lhs-table-name lhs-columns
-   rhs-table-name rhs-columns]
-  (let [lhs-table-name (if (= lhs-table-name "_unnamed")
-                         nil
-                         lhs-table-name)
-        rhs-table-name (if (= rhs-table-name "_unnamed")
-                         nil
-                         rhs-table-name)
-        lhs-table-name (or lhs-table-name "left")
-        rhs-table-name (or rhs-table-name "right")]
-    (concat index-columns
-            (->> (concat (map vector lhs-columns (repeat lhs-table-name))
-                         (map vector rhs-columns (repeat rhs-table-name)))
-                 (reduce
-                  (fn [[final-columns name-set] [column prefix]]
-                    (let [original-colname (ds-col/column-name column)
-                          colname
-                          (loop [found? (contains? name-set
-                                                   original-colname)
-                                 new-col-name original-colname
-                                 idx 0]
-                            (if found?
-                              (let [new-col-name
-                                    (if (== 0 idx)
-                                      (str prefix "."
-                                           (colname->str original-colname))
-                                      (str prefix "." original-colname "-" idx))]
-                                (recur (contains? name-set new-col-name)
-                                       new-col-name
-                                       (unchecked-inc idx)))
-                              (similar-colname-type original-colname
-                                                    new-col-name)))]
-                      [(conj final-columns (ds-col/set-name column colname))
-                       (conj name-set colname)]))
-                  [[] (set (map ds-col/column-name index-columns))])
-                 (first)))))
+  [& table-name-column-seq-pairs]
+  (->>
+   table-name-column-seq-pairs
+   (mapcat (fn [[table-name column-seq]]
+             (map vector
+                  column-seq
+                  (repeat table-name))))
+   (reduce
+    (fn [[final-columns name-set] [column prefix]]
+      (let [original-colname (ds-col/column-name column)
+            colname
+            (loop [found? (contains? name-set
+                                     original-colname)
+                   new-col-name original-colname
+                   idx 0]
+              (if found?
+                (let [new-col-name
+                      (if (== 0 idx)
+                        (str prefix "."
+                             (colname->str original-colname))
+                        (str prefix "." original-colname "-" idx))]
+                  (recur (contains? name-set new-col-name)
+                         new-col-name
+                         (unchecked-inc idx)))
+                (similar-colname-type original-colname
+                                      new-col-name)))]
+        [(conj final-columns (ds-col/set-name column colname))
+         (conj name-set colname)]))
+    [[] #{}])
+   (first)))
 
 
 (defn- finalize-join-result
   [lhs-colname rhs-colname lhs rhs lhs-indexes rhs-indexes lhs-missing rhs-missing]
-  (let [renamed-columns (nice-column-names
-                         [(ds-col/new-column :left-indexes lhs-indexes)
-                          (ds-col/new-column :right-indexes rhs-indexes)]
-                         (ds-base/dataset-name lhs)
-                         (ds-base/columns (ds-base/remove-column lhs lhs-colname))
-                         (ds-base/dataset-name rhs)
-                         (ds-base/columns (ds-base/remove-column rhs rhs-colname)))
-        n-new-lhs-cols (dec (ds-base/column-count lhs))
-        lhs-columns (->> (drop 2 renamed-columns)
-                         (take n-new-lhs-cols))
-        rhs-columns (drop (+ 2 n-new-lhs-cols) renamed-columns)
+  (let [lhs-columns (ds-base/columns (ds-base/remove-column lhs lhs-colname))
+        rhs-columns (ds-base/columns (ds-base/remove-column rhs rhs-colname))
+        lhs-table-name (default-table-name lhs "left")
+        rhs-table-name (default-table-name rhs "right")
         lhs-join-column (lhs lhs-colname)
         rhs-join-column (rhs rhs-colname)]
     (merge
      {:inner
        (let [lhs-columns (map #(ds-col/select % lhs-indexes) lhs-columns)
              rhs-columns (map #(ds-col/select % rhs-indexes) rhs-columns)]
-         (ds-base/from-prototype lhs "inner-join"
-                                 (concat [(ds-col/select lhs-join-column lhs-indexes)]
-                                         lhs-columns
-                                         rhs-columns)))
+         (ds-base/from-prototype
+          lhs "inner-join"
+          (nice-column-names
+           [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
+                                   lhs-columns)]
+           [rhs-table-name rhs-columns])))
        :lhs-indexes lhs-indexes
        :rhs-indexes rhs-indexes}
       (when rhs-missing
@@ -209,16 +203,17 @@
                rhs-indexes (typed-add-all! (dtype/clone rhs-indexes) rhs-missing)
                rhs-columns (map #(ds-col/select % rhs-indexes) rhs-columns)
                lhs-columns
-               (->> lhs-columns
+               (->> (concat [lhs-join-column] lhs-columns)
                     (map (fn [old-col]
                            (ds-col/extend-column-with-empty
                             (ds-col/select old-col lhs-indexes)
                             n-empty))))]
            (ds-base/from-prototype
             lhs "right-outer-join"
-            (concat [(ds-col/select rhs-join-column rhs-indexes)]
-                    lhs-columns
-                    rhs-columns)))})
+            (nice-column-names
+             [lhs-table-name lhs-columns]
+             [rhs-table-name (concat [(ds-col/select rhs-join-column rhs-indexes)]
+                                     rhs-columns)])))})
       (when lhs-missing
         {:lhs-missing lhs-missing
          :left-outer
@@ -226,16 +221,17 @@
                lhs-indexes (typed-add-all! (dtype/clone lhs-indexes) lhs-missing)
                lhs-columns (map #(ds-col/select % lhs-indexes) lhs-columns)
                rhs-columns
-               (->> rhs-columns
+               (->> (concat [rhs-join-column] rhs-columns)
                     (map (fn [old-col]
                            (ds-col/extend-column-with-empty
                             (ds-col/select old-col rhs-indexes)
                             n-empty))))]
            (ds-base/from-prototype
             lhs "left-outer-join"
-            (concat [(ds-col/select lhs-join-column lhs-indexes)]
-                    lhs-columns
-                    rhs-columns)))}))))
+            (nice-column-names
+             [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
+                                     lhs-columns)]
+             [rhs-table-name rhs-columns])))}))))
 
 
 (defn hash-join-int32
