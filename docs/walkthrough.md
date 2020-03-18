@@ -138,18 +138,18 @@ data/ames-house-prices/train.csv [4 3]:
 user> (ds/->dataset "data/ames-house-prices/train.csv"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5
-                     :parser-fn {:SalePrice :float32}})
+                     :parser-fn {"SalePrice" :float32}})
 data/ames-house-prices/train.csv [4 3]:
 
-| SalePrice | 1stFlrSF | 2ndFlrSF |
-|-----------+----------+----------|
-|    208500 |      856 |      854 |
-|    181500 |     1262 |        0 |
-|    223500 |      920 |      866 |
-|    140000 |      961 |      756 |
+|  SalePrice | 1stFlrSF | 2ndFlrSF |
+|------------+----------+----------|
+| 208500.000 |      856 |      854 |
+| 181500.000 |     1262 |        0 |
+| 223500.000 |      920 |      866 |
+| 140000.000 |      961 |      756 |
 ```
 
-A reference to what is possible is in 
+A reference to what is possible is in
 [parse-test](../test/tech/ml/dataset/parse_test.clj).
 
 
@@ -158,6 +158,10 @@ A reference to what is possible is in
 Given a map of name->column data produce a new dataset.  If column data is untyped
 (like a persistent vector) then the column datatype is either string or double,
 dependent upon the first entry of the column data sequence.
+
+Of the column data is one of the object numeric primitive types, so
+`Float` as opposed to `float`, then missing elements will be marked as
+missing and the default empty-value will be used in the primitive storage.
 
 ```clojure
 
