@@ -107,7 +107,7 @@
   (let [lhs (lhs-customer-db)
         rhs (rhs-customer-db)
         join-data (ds-join/right-join "CustomerID" lhs rhs)]
-    (is (= #{2 37 77} (set (join-data "CustomerID"))))
+    (is (= #{2 37 77} (set (join-data "right.CustomerID"))))
     (is (= #{"Ana Trujillo" ""} (set (join-data "ContactName"))))
     (is (= #{5021 -32768} (set (map int (join-data "PostalCode")))))
     (is (= #{1 2} (set (ds-col/missing (join-data "ContactName")))))
