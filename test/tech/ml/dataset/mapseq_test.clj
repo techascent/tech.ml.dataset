@@ -72,7 +72,7 @@
              (ds/->flyweight dataset)
              (group-by :fruit-name dataset))
            (->> (ds/select dataset :all (range 10))
-                (ds/ds-group-by :fruit-name)
+                (ds/group-by :fruit-name)
                 (map (fn [[k group-ds]]
                        [k (vec (ds/->flyweight group-ds))]))
                 (into {}))))
@@ -83,7 +83,7 @@
                           double)]
       (is (= #{:apple}
              (->> dataset
-                  (ds/ds-filter #(= apple-value (:fruit-name %)))
+                  (ds/filter #(= apple-value (:fruit-name %)))
                   ;;Use full version of ->flyweight to do reverse mapping of numeric
                   ;;fruit name back to input label.
                   (#(ds/->flyweight % :number->string? true))
@@ -121,7 +121,7 @@
     (is (= (mapv :fruit-name
                  (concat (mapseq-fruit-dataset)
                          (mapseq-fruit-dataset)))
-           (->> (-> (ds/ds-concat dataset dataset)
+           (->> (-> (ds/concat dataset dataset)
                     (ds/->flyweight :number->string? true))
                 (mapv :fruit-name))))
 
@@ -144,7 +144,7 @@
               {:mass 9.0, :mass-avg 9.0}]
              (-> (ds/select new-ds [:mass :mass-avg] (range 10))
                  ds/->flyweight)))
-      (let [sorted-ds (ds/ds-sort-by :mass-avg > new-ds)]
+      (let [sorted-ds (ds/sort-by :mass-avg > new-ds)]
         (is (= [{:mass 19.0, :mass-avg 18.4}
                 {:mass 18.0, :mass-avg 17.8}
                 {:mass 17.0, :mass-avg 17.0}
@@ -157,7 +157,7 @@
                 {:mass 10.0, :mass-avg 10.0}]
                (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
                    ds/->flyweight)))))
-    (let [nth-db (ds/ds-take-nth 5 src-ds)]
+    (let [nth-db (ds/take-nth 5 src-ds)]
       (is (= [7 12] (dtype/shape nth-db)))
       (is (= [{:mass 192.0, :width 8}
               {:mass 80.0, :width 5}

@@ -37,7 +37,7 @@ to most Clojure programmers:
 1.  Access to the values in a column including eliding or erroring on missing values.
 1.  Select subrect of dataset defined by a sequence of columns and some sequence of
     indexes.
-1.  `ds-sort-by`, `ds-filter`, `ds-group-by` are modified operations that operate on a
+1.  `sort-by`, `filter`, `group-by` are modified operations that operate on a
     logical sequence of maps and an arbitrary function but return a new dataset.
 1.  Efficient elementwise operations such as linear combinations of columns.
 1.  Statistical and ml-based analysis of some subset of columns either on their own
@@ -297,7 +297,7 @@ dataset container rows that had that column value.
 
 ```clojure
 
-user> (-> (ds/ds-filter #(< 30000 (get % "SalePrice")) ames-ds)
+user> (-> (ds/filter #(< 30000 (get % "SalePrice")) ames-ds)
           (ds/select ["SalePrice" "KitchenQual"] (range 5)))
  [5 2]:
 
@@ -308,7 +308,7 @@ user> (-> (ds/ds-filter #(< 30000 (get % "SalePrice")) ames-ds)
 |    223500 |          Gd |
 |    140000 |          Gd |
 |    250000 |          Gd |
-user> (-> (ds/ds-sort-by #(get % "SalePrice") ames-ds)
+user> (-> (ds/sort-by #(get % "SalePrice") ames-ds)
           (ds/select ["SalePrice" "KitchenQual"] (range 5)))
  [5 2]:
 
@@ -320,7 +320,7 @@ user> (-> (ds/ds-sort-by #(get % "SalePrice") ames-ds)
 |     39300 |          Fa |
 |     40000 |          TA |
 user> (def group-map (->> (ds/select ames-ds ["SalePrice" "KitchenQual"] (range 20))
-                          (ds/ds-group-by #(get % "KitchenQual"))))
+                          (ds/group-by #(get % "KitchenQual"))))
 #'user/group-map
 user> (keys group-map)
 ("Gd" "TA" "Ex")
@@ -338,7 +338,7 @@ user> (first group-map)
 |    159000 |          Gd |
 ]
 user> (def group-map (->> (ds/select ames-ds ["SalePrice" "KitchenQual"] (range 20))
-                          (ds/ds-group-by-column "KitchenQual")))
+                          (ds/group-by-column "KitchenQual")))
 
 #'user/group-map
 user> (keys group-map)
@@ -358,13 +358,13 @@ user> (first group-map)
 ]
 ```
 
-Combining a `ds-group-by` variant with `descriptive-stats` can quickly help break down
+Combining a `group-by` variant with `descriptive-stats` can quickly help break down
 a dataset as it relates to a categorical value:
 
 ```clojure
 
 user> (->> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "GarageArea"])
-           (ds/ds-group-by-column "KitchenQual")
+           (ds/group-by-column "KitchenQual")
            (map (fn [[k v-ds]]
                   (-> (ds/descriptive-stats v-ds)
                       (ds/set-dataset-name k)))))

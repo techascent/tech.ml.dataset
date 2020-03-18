@@ -51,6 +51,8 @@
                         ds-group-by-column
                         group-by->indexes
                         group-by-column->indexes
+                        group-by
+                        group-by-column
                         sort-by
                         sort-by-column
                         ds-sort-by
