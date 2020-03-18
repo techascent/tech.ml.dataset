@@ -114,6 +114,23 @@
     (is (= #{1 2} (set (ds-col/missing (join-data "PostalCode")))))))
 
 
+(deftest duplicate-column-test
+  (let [test-ds (ds/->dataset "data/ames-house-prices/train.csv"
+                              {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                               :n-records 5
+                               :parser-fn {:SalePrice :float32}})
+        jt (ds-join/inner-join "1stFlrSF" test-ds test-ds)]
+    (is (= (ds/column-count jt)
+           (count (distinct (ds/column-names jt))))))
+  (let [test-ds (ds/->dataset "data/ames-house-prices/train.csv"
+                              {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
+                               :n-records 5
+                               :parser-fn {:SalePrice :float32}})
+        jt (ds-join/inner-join ["1stFlrSF" "2ndFlrSF"] test-ds test-ds)]
+    (is (= (ds/column-count jt)
+           (count (distinct (ds/column-names jt)))))))
+
+
 
 (comment
 

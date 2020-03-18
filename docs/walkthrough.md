@@ -573,12 +573,15 @@ the current algorithm is -
     building out left and right hand side final indexes.
 3.  Using appropriate final indexes, select columns from left and right hand sides.
 
+Colname can be value in which case both datasets must contain that column or it
+may be a tuple in which case it will be destructured like:
+`(let [[lhs-colname rhs-colname] colname] ...)`
+
 ```clojure
 user> (def test-ds
         (ds/->dataset "data/ames-house-prices/train.csv"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
-                     :n-records 5
-                     :parser-fn {:SalePrice :float32}}))
+                     :n-records 5}))
 #'user/test-ds
 user> test-ds
 data/ames-house-prices/train.csv [4 3]:
