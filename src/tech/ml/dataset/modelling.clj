@@ -197,9 +197,12 @@
    (let [key-reader-seq
          (->> (seq key-colname-seq-map)
               (map (fn [[k v]]
-                     [k (->> v
-                             (mapv #(-> (ds-base/column dataset %)
-                                        (dtype/->reader datatype))))])))
+                     (when (seq v)
+                       [k (->> v
+                               (mapv #(-> (ds-base/column dataset %)
+                                          (dtype/->reader datatype))))])))
+              (remove nil?)
+              vec)
          n-elems (long (ds-base/row-count dataset))]
      (reify ObjectReader
        (lsize [rdr] n-elems)
