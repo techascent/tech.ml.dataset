@@ -96,9 +96,11 @@ tech.ml.dataset/->dataset
    order to derive the column datatypes before the actual columns are created.
   Options:
   :table-name - set the name of the dataset.
-  :column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
-  :column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
-  :n-records - Number of rows to read
+  :column-whitelist - either sequence of string column names or sequence of column
+     indices of columns to whitelist.
+  :column-blacklist - either sequence of string column names or sequence of column
+     indices of columns to blacklist.
+  :num-rows - Number of rows to read
   :header-row? - Defaults to true, indicates the first row is a header.
   parser-fn -
    - keyword - all columns parsed to this datatype
@@ -107,7 +109,8 @@ tech.ml.dataset/->dataset
             or can return nil in which case the default column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
-  :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
+  :parser-scan-len - Length of initial column data used for parser-fn.
+                     Defaults to 100.
 
   Returns a new dataset
 

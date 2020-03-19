@@ -1,4 +1,6 @@
 (ns tech.ml.dataset.parse
+  "This file really should be named univocity.clj.  But it is for parsing and writing
+  csv and tsv data."
   (:require [tech.io :as io]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
@@ -6,9 +8,10 @@
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.v2.datatype.bitmap :as bitmap]
-            [clojure.set :as set])
+            [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser]
            [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
+           [com.univocity.parsers.common.processor.core Processor]
            [java.io Reader InputStream Closeable]
            [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
@@ -36,48 +39,63 @@
     (throw (Exception. "Item seq must of either strings or numbers"))))
 
 
+
 (defn create-csv-parser
   ^AbstractParser [{:keys [header-row?
                            num-rows
                            column-whitelist
-                           column-blacklist]
-                    :or {headers? true}
+                           column-blacklist
+                           separator
+                           n-initial-skip-rows]
+                    :or {header-row? true}
                     :as options}]
-  (let [settings (CsvParserSettings.)
-        num-rows (or num-rows (:n-records options))]
-    (.detectFormatAutomatically settings (into-array Character/TYPE [\, \tab]))
-    (when header-row?
-      (.setHeaderExtractionEnabled settings true))
-    (when num-row
-      (.setNumberOfRecordsToRead settings (if header-row?
-                                            (inc (int num-rows))
-                                            (int num-rows))))
-    (when (or (seq column-whitelist)
-              (seq column-blacklist))
-      (when (and (seq column-whitelist)
-                 (seq column-blacklist))
-        (throw (Exception. "Either whitelist or blacklist can be provided but not both")))
-      (let [[string-fn! number-fn!] (if (seq column-whitelist)
-                                      [#(.selectFields
-                                         settings
-                                         ^"[Ljava.lang.String;" (into-array String %))
-                                       #(.selectIndexes
-                                         settings
-                                         ^"[Ljava.lang.Integer;" (into-array Integer (map int %)))]
-                                      [#(.excludeFields
-                                         settings
-                                         ^"[Ljava.lang.String;" (into-array String %))
-                                       #(.excludeIndexes
-                                         settings
-                                         ^"[Ljava.lang.Integer;"(into-array Integer (map int %)))])
-            column-data (if (seq column-whitelist)
-                          column-whitelist
-                          column-blacklist)
-            column-type (sequence-type column-data)]
-        (case column-type
-          :string (string-fn! column-data)
-          :number (number-fn! column-data))))
-    (CsvParser. settings)))
+  (if-let [csv-parser (:csv-parser options)]
+    csv-parser
+    (let [settings (CsvParserSettings.)
+          num-rows (or num-rows (:n-records options))
+          separator-seq (concat [\, \tab]
+                                (when separator
+                                  [separator]))]
+
+      (.detectFormatAutomatically settings (into-array Character/TYPE separator-seq))
+      (when num-rows
+        (.setNumberOfRecordsToRead settings (if header-row?
+                                              (inc (int num-rows))
+                                              (int num-rows))))
+      (doto settings
+        (.setSkipEmptyLines true)
+        (.setIgnoreLeadingWhitespaces true)
+        (.setIgnoreTrailingWhitespaces true))
+      (when n-initial-skip-rows
+        (.setNumberOfRowsToSkip settings (int n-initial-skip-rows)))
+      (when (or (seq column-whitelist)
+                (seq column-blacklist))
+        (when (and (seq column-whitelist)
+                   (seq column-blacklist))
+          (throw (Exception.
+                  "Either whitelist or blacklist can be provided but not both")))
+        (let [[string-fn! number-fn!]
+              (if (seq column-whitelist)
+                [#(.selectFields
+                   settings
+                   ^"[Ljava.lang.String;" (into-array String %))
+                 #(.selectIndexes
+                   settings
+                   ^"[Ljava.lang.Integer;" (into-array Integer (map int %)))]
+                [#(.excludeFields
+                   settings
+                   ^"[Ljava.lang.String;" (into-array String %))
+                 #(.excludeIndexes
+                   settings
+                   ^"[Ljava.lang.Integer;"(into-array Integer (map int %)))])
+              column-data (if (seq column-whitelist)
+                            column-whitelist
+                            column-blacklist)
+              column-type (sequence-type column-data)]
+          (case column-type
+            :string (string-fn! column-data)
+            :number (number-fn! column-data))))
+      (CsvParser. settings))))
 
 
 (def test-file "data/ames-house-prices/train.csv")
@@ -351,7 +369,8 @@ will stop the parsing system.")
   string[] row data."
   [row-seq {:keys [header-row?
                    parser-fn
-                   parser-scan-len]
+                   parser-scan-len
+                   skip-bad-rows?]
             :or {header-row? true
                  parser-scan-len 100}
             :as options}]
@@ -371,16 +390,22 @@ will stop the parsing system.")
                                            scan-cols))
                                     (repeatedly n-cols default-column-parser)))]
     (doseq [^"[Ljava.lang.String;" row row-seq]
-      (loop [col-idx 0]
-        (when (< col-idx n-cols)
-          (let [^String row-data (aget row col-idx)
-                parser (.get column-parsers col-idx)]
-            (if (and row-data
-                     (> (.length row-data) 0)
-                     (not (.equalsIgnoreCase "na" row-data)))
-              (parse! parser row-data)
-              (missing! parser))
-            (recur (unchecked-inc col-idx))))))
+      (if-not (= n-cols (alength row))
+        (if-not skip-bad-rows?
+          (throw (Exception.
+                  (format "Row has invalid length: %d\n%s"
+                          (count row) (vec row))))
+          (log/warnf "Skipping row (invalid length): %d" (count row)))
+        (loop [col-idx 0]
+          (when (< col-idx n-cols)
+            (let [^String row-data (aget row col-idx)
+                  parser (.get column-parsers col-idx)]
+              (if (and row-data
+                       (> (.length row-data) 0)
+                       (not (.equalsIgnoreCase "na" row-data)))
+                (parse! parser row-data)
+                (missing! parser))
+              (recur (unchecked-inc col-idx)))))))
     (mapv (fn [init-row-data parser]
             (assoc (column-data parser)
                    :name init-row-data))
@@ -400,8 +425,11 @@ will stop the parsing system.")
   options:
   column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
   column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
+  n-initial-skip-rows - Number of rows to skip initially.  This might include your
+       header row, so only use this if you know you need it.
   num-rows - Number of rows to read
   header-row? - Defaults to true, indicates the first row is a header.
+  separator - Add a character separator to the list of separators to auto-detect.
   parser-fn -
    - keyword - all columns parsed to this datatype
    - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
@@ -416,7 +444,7 @@ will stop the parsing system.")
                   parser-fn
                   column-whitelist
                   column-blacklist
-                  n-records
+                  num-rows
                   parser-scan-len]
            :or {header-row? true
                 parser-scan-len 100}

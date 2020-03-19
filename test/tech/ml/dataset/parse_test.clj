@@ -2,8 +2,8 @@
   (:require [clojure.test :refer [deftest is]]
             [tech.v2.datatype :as dtype]
             [tech.ml.dataset.parse :as ds-parse]
-            [tech.ml.dataset.base :as ds-base]
-            [clojure.set :as set]))
+            [tech.ml.dataset.base :as ds-base])
+  (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]))
 
 
 (def test-file "data/ames-house-prices/train.csv")
@@ -146,49 +146,54 @@
       (is (= (set (map first missing-data))
              (set (map first result-missing-data))))))
 
-  (let [result (ds-parse/csv->columns test-file {:n-records 100
-                                                 :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
+  (let [result (ds-parse/csv->columns
+                test-file
+                {:n-records 100
+                 :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
     (is (= 3 (count result)))
     ;;Header row accounts for one.
-    (is (= 99 (dtype/ecount (:data (first result))))))
+    (is (= 100 (dtype/ecount (:data (first result))))))
   (let [result (ds-parse/csv->columns test-file {:n-records 100
                                                  :column-blacklist (range 70)})]
     (is (= 11 (count result)))
-    (is (= 99 (dtype/ecount (:data (first result)))))))
+    (is (= 100 (dtype/ecount (:data (first result)))))))
 
 
 (deftest base-ames-load-test
   ;;Here we just test that the options correctly pass through ->dataset
-    (let [result (ds-base/->dataset test-file {:n-records 100
-                                               :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
+  (let [result (ds-base/->dataset test-file
+                                  {:n-records 100
+                                   :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
       (is (= 3 (ds-base/column-count result)))
       ;;Header row accounts for one.
-      (is (= 99 (ds-base/row-count result))))
+      (is (= 100 (ds-base/row-count result))))
 
 
   (let [result (ds-base/->dataset test-file {:n-records 100
                                              :column-blacklist (range 70)})]
       (is (= 11 (ds-base/column-count result)))
       ;;Header row accounts for one.
-      (is (= 99 (ds-base/row-count result)))))
+      (is (= 100 (ds-base/row-count result)))))
 
 
 (deftest specify-column-types
   ;;parse everything as float32
-  (let [result (ds-base/->dataset test-file
-                                  {:n-records 100
-                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
-                                   :parser-fn :float32})]
+  (let [result (ds-base/->dataset
+                test-file
+                {:n-records 100
+                 :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                 :parser-fn :float32})]
     (is (= #{:float32}
            (set (map dtype/get-datatype result))))
     (is (= 3 (ds-base/column-count result))))
 
   ;;Next up is a map of colname->datatype
-  (let [result (ds-base/->dataset test-file
-                                  {:n-records 100
-                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
-                                   :parser-fn {"1stFlrSF" :float32
-                                               "2ndFlrSF" :int32}})]
+  (let [result (ds-base/->dataset
+                test-file
+                {:n-records 100
+                 :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                 :parser-fn {"1stFlrSF" :float32
+                             "2ndFlrSF" :int32}})]
     (is (= #{:float32 :int32 :int16}
            (set (map dtype/get-datatype result)))))
 
@@ -196,9 +201,40 @@
   (let [parser-fn (fn [_colname _coldata-n-strings]
                     ;;Shortcut to create a full parser from a stateless simple parser
                     (ds-parse/simple-parser->parser :float32))
-        result (ds-base/->dataset test-file
-                                  {:n-records 100
-                                   :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
-                                   :parser-fn parser-fn})]
+        result (ds-base/->dataset
+                test-file
+                {:n-records 100
+                 :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
+                 :parser-fn parser-fn})]
     (is (= #{:float32}
            (set (map dtype/get-datatype result))))))
+
+
+(deftest semi-colon-delimited-file
+  (let [result (ds-base/->dataset "test/data/sample01.csv"
+                                  {:separator \;})]
+    (is (= 3 (ds-base/column-count result)))))
+
+
+(deftest tough-file
+  (let [result (ds-base/->dataset "test/data/essential.csv"
+                                  {:n-initial-skip-rows 1
+                                   :skip-bad-rows? true})]
+    (is (= 5 (ds-base/column-count result)))))
+
+
+(defn- make-essential-csv-parser
+  []
+  (-> (doto (CsvParserSettings.)
+        (.. getFormat (setLineSeparator "\n"))
+        (.setHeaderExtractionEnabled true)
+        (.setIgnoreLeadingWhitespaces true)
+        (.setIgnoreTrailingWhitespaces true))
+      (CsvParser.)))
+
+
+(deftest custom-csv-parser
+  (let [result (ds-base/->dataset "test/data/essential.csv"
+                                  {:csv-parser (make-essential-csv-parser)
+                                   :skip-bad-rows? true})]
+    (is (= 5 (ds-base/column-count result)))))

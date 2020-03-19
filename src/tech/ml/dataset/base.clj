@@ -559,18 +559,28 @@ the correct type."
    order to derive the column datatypes before the actual columns are created.
   Options:
   :table-name - set the name of the dataset.
-  :column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
-  :column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
-  :n-records - Number of rows to read
+  :column-whitelist - either sequence of string column names or sequence of column
+       indices of columns to whitelist.
+  :column-blacklist - either sequence of string column names or sequence of column
+       indices of columns to blacklist.
+  :num-rows - Number of rows to read
   :header-row? - Defaults to true, indicates the first row is a header.
-  parser-fn -
+  :separator - Add a character separator to the list of separators to auto-detect.
+  :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
+       a default permissive parser is used.  This way you parse anything that univocity
+       supports (so flat files and such).
+  :skip-bad-rows? - For really bad files, some rows will not have the right column
+      counts for all rows.  This skips rows that fail this test.
+  :parser-fn -
    - keyword - all columns parsed to this datatype
    - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
-          - Return value must be implement PColumnParser in which case that is used
-            or can return nil in which case the default column parser is used.
+          - Return value must be implement tech.ml.dataset.parser.PColumnParser in
+            which case that is used or can return nil in which case the default
+            column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
-  :parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
+  :parser-scan-len - Length of initial column data used for parser-fn's datatype
+       detection routine. Defaults to 100.
 
   Returns a new dataset"
   ([dataset
