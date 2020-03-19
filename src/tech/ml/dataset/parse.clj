@@ -38,16 +38,20 @@
 
 (defn create-csv-parser
   ^AbstractParser [{:keys [header-row?
-                           n-records
+                           num-rows
                            column-whitelist
                            column-blacklist]
-                    :or {headers? true}}]
-  (let [settings (CsvParserSettings.)]
+                    :or {headers? true}
+                    :as options}]
+  (let [settings (CsvParserSettings.)
+        num-rows (or num-rows (:n-records options))]
     (.detectFormatAutomatically settings (into-array Character/TYPE [\, \tab]))
     (when header-row?
       (.setHeaderExtractionEnabled settings true))
-    (when n-records
-      (.setNumberOfRecordsToRead settings (int n-records)))
+    (when num-row
+      (.setNumberOfRecordsToRead settings (if header-row?
+                                            (inc (int num-rows))
+                                            (int num-rows))))
     (when (or (seq column-whitelist)
               (seq column-blacklist))
       (when (and (seq column-whitelist)
@@ -396,7 +400,7 @@ will stop the parsing system.")
   options:
   column-whitelist - either sequence of string column names or sequence of column indices of columns to whitelist.
   column-blacklist - either sequence of string column names or sequence of column indices of columns to blacklist.
-  n-records - Number of rows to read
+  num-rows - Number of rows to read
   header-row? - Defaults to true, indicates the first row is a header.
   parser-fn -
    - keyword - all columns parsed to this datatype
