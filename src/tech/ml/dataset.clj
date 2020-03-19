@@ -72,7 +72,8 @@
                         ->dataset
                         ->>dataset
                         from-prototype
-                        dataset->string)
+                        dataset->string
+                        write-csv!)
 
 
 (par-util/export-symbols tech.ml.dataset.join
@@ -213,7 +214,8 @@
                          retval)
                        (let [current-column (column dataset colname)]
                          (when (and error-on-missing-values?
-                                    (not= 0 (dtype/ecount (ds-col/missing current-column))))
+                                    (not= 0 (dtype/ecount
+                                             (ds-col/missing current-column))))
                            (throw (ex-info (format "Column %s has missing values"
                                                    (ds-col/column-name current-column))
                                            {})))

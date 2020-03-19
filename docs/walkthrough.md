@@ -642,6 +642,17 @@ left-outer-join [4 6]:
 
 ## Writing A Dataset Out
 
+These forms are supported for writing out a dataset:
+```clojure
+(ds/write-csv! test-ds "test.csv")
+(ds/write-csv! test-ds "test.tsv")
+(ds/write-csv! test-ds "test.tsv.gz")
+(ds/write-csv! test-ds out-stream)
+```
+
+If you want to use your own serialization system, then converting the dataset to
+a sequence of maps presents a slow but effective way forward:
+
 - pure csv
 ```clojure
 (tech.io/mapseq->csv! "file://test.csv" (dataset/mapseq-reader test-ds ))

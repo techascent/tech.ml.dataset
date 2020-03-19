@@ -10,6 +10,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
+            [tech.ml.dataset.parse :as ds-parse]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.for :as parallel-for]
@@ -549,6 +550,18 @@ the correct type."
   (take-nth n-val dataset))
 
 
+(defn- get-file-info
+  [^String file-str]
+  (let [gzipped? (.endsWith file-str ".gz")
+        json? (or (.endsWith file-str ".json")
+                  (.endsWith file-str ".json.gz"))
+        tsv? (or (.endsWith file-str ".tsv")
+                 (.endsWith file-str ".tsv.gz"))]
+    {:gzipped? gzipped?
+     :json? json?
+     :tsv? tsv?}))
+
+
 (defn ->dataset
   "Create a dataset from either csv/tsv or a sequence of maps.
    *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
@@ -595,11 +608,8 @@ the correct type."
 
            (string? dataset)
            (let [^String dataset dataset
-                 gzipped? (.endsWith dataset ".gz")
-                 json? (or (.endsWith dataset ".json")
-                           (.endsWith dataset ".json.gz"))
-                 tsv? (or (.endsWith dataset ".tsv")
-                          (.endsWith dataset ".tsv.gz"))
+                 {:keys [gzipped? json? tsv?]}
+                 (get-file-info dataset)
                  options (if (and tsv? (not (contains? options :separator)))
                            (assoc options :separator \tab)
                            options)
@@ -640,3 +650,76 @@ the correct type."
   ^String [ds]
   (with-out-str
     ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
+
+(defn- data->string
+  ^String [data-item]
+  (if data-item
+    (cond
+      (string? data-item) data-item
+      (keyword? data-item) (name data-item)
+      (symbol? data-item) (name data-item)
+      :else (.toString ^Object data-item))))
+
+
+(defmacro datatype->string-reader
+  [datatype column]
+  `(let [reader# (typecast/datatype->reader ~datatype ~column)
+         ^RoaringBitmap missing# (ds-col/missing ~column)
+         n-elems# (.lsize reader#)]
+     (reify ObjectReader
+       (lsize [this#] n-elems#)
+       (read [this# idx#]
+         (when-not (.contains missing# idx#)
+           (data->string (.read reader# idx#)))))))
+
+
+(defn write-csv!
+  "Write a dataset to a tsv or csv output stream.  Closes output if a stream
+  is passed in.  File output format will be inferred if output is a string -
+    - .csv, .tsv - switches between tsv, csv.  Tsv is the default.
+    - *.gz - write to a gzipped stream.
+  At this time writing to json is not supported.
+  options -
+  :separator - in case output isn't a string, you can use either \\, or \\tab to switch
+    between csv or tsv output respectively."
+  ([ds output options]
+   (let [{:keys [gzipped? tsv?]}
+         (when (string? output)
+           (get-file-info output))
+         headers (into-array String (map data->string
+                                         (column-names ds)))
+         ^List str-readers
+         (->> (columns ds)
+              (mapv (fn [coldata]
+                      (case (dtype/get-datatype coldata)
+                        :int16 (datatype->string-reader :int16 coldata)
+                        :int32 (datatype->string-reader :int32 coldata)
+                        :int64 (datatype->string-reader :int64 coldata)
+                        :float32 (datatype->string-reader :float32 coldata)
+                        :float64 (datatype->string-reader :float64 coldata)
+                        (datatype->string-reader :object coldata)))))
+         tsv? (or tsv? (= \tab (:separator options)))
+         n-cols (column-count ds)
+         n-rows (row-count ds)
+         str-rdr (reify ObjectReader
+                   (lsize [rdr] n-rows)
+                   (read [rdr row-idx]
+                     (let [^"[Ljava.lang.String;" str-array (make-array
+                                                             String n-cols)]
+                       (dotimes [col-idx n-cols]
+                         (aset str-array col-idx ^String
+                               (.read ^ObjectReader
+                                      (.get str-readers col-idx)
+                                      row-idx)))
+                       str-array)))
+         output (if gzipped?
+                  (io/gzip-output-stream! output)
+                  output)
+         output-options (if tsv?
+                          (merge options
+                                 {:separator \tab})
+                          (merge options
+                                 {:separator \,}))]
+     (ds-parse/write! output headers str-rdr output-options)))
+  ([ds output]
+   (write-csv! ds output {})))

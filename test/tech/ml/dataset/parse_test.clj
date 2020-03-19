@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.parse-test
   (:require [clojure.test :refer [deftest is]]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.base :as ds-base])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]))
@@ -238,3 +239,16 @@
                                   {:csv-parser (make-essential-csv-parser)
                                    :skip-bad-rows? true})]
     (is (= 5 (ds-base/column-count result)))))
+
+
+(deftest simple-write-test
+  (let [initial-ds (ds-base/->dataset
+                    test-file
+                    {:n-records 20
+                     :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]})
+        _ (ds-base/write-csv! initial-ds "test.tsv")
+        new-ds (ds-base/->dataset "test.tsv")]
+    (is (dfn/equals (initial-ds "1stFlrSF")
+                    (new-ds "1stFlrSF")))
+    (is (dfn/equals (initial-ds "2ndFlrSF")
+                    (new-ds "2ndFlrSF")))))

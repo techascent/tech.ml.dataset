@@ -9,10 +9,14 @@
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.v2.datatype.bitmap :as bitmap]
             [clojure.tools.logging :as log])
-  (:import [com.univocity.parsers.common AbstractParser]
-           [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
+  (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
+           [com.univocity.parsers.csv
+            CsvFormat CsvParserSettings CsvParser
+            CsvWriterSettings CsvWriter]
+           [com.univocity.parsers.tsv
+            TsvWriterSettings TsvWriter]
            [com.univocity.parsers.common.processor.core Processor]
-           [java.io Reader InputStream Closeable]
+           [java.io Reader InputStream Closeable Writer]
            [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
@@ -454,3 +458,28 @@ will stop the parsing system.")
      (rows->columns data options)))
   ([input]
    (csv->columns input {})))
+
+
+(defn write!
+  ([output header-string-array row-string-array-seq]
+   (write! output header-string-array row-string-array-seq {}))
+  ([output header-string-array row-string-array-seq
+    {:keys [separator]
+     :or {separator \tab}
+     :as options}]
+   (let [^Writer writer (io/writer output)
+         ^AbstractWriter csvWriter
+         (if (:csv-writer options)
+           (:csv-writer options)
+           (case separator
+             \,
+             (CsvWriter. writer (CsvWriterSettings.))
+             \tab
+             (TsvWriter. writer (TsvWriterSettings.))))]
+     (when header-string-array
+       (.writeHeaders csvWriter ^"[Ljava.lang.String;" header-string-array))
+     (try
+       (doseq [^"[Ljava.lang.String;" row row-string-array-seq]
+         (.writeRow csvWriter row))
+       (finally
+         (.close csvWriter))))))
