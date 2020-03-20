@@ -16,6 +16,8 @@
   (:import [java.lang AutoCloseable]
            [org.apache.poi.ss.usermodel Workbook Sheet Cell
             CellType Row]
+           [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
+            Spreadsheet$Row Spreadsheet$Cell]
            [org.apache.poi.xssf.usermodel XSSFWorkbook]
            [org.apache.poi.hssf.usermodel HSSFWorkbook]
            [org.roaringbitmap RoaringBitmap]
@@ -40,55 +42,19 @@
   (column-data [this]))
 
 
-(defn get-cell-value
-  [^Cell cell]
-  (condp = (.getCellType cell)
-    CellType/BLANK nil
-    CellType/BOOLEAN (.getBooleanCellValue cell)
-    CellType/STRING (.getStringCellValue cell)
-    CellType/FORMULA (.getNumericCellValue cell)
-    (.getNumericCellValue cell)))
-
-
-(defn cell-missing-type?
-  [cell-type]
-  (or (= cell-type CellType/BLANK)
-      (= cell-type CellType/_NONE)))
-
-
-(defn- cell-type->datatype
-  [cell-type]
-    (condp = cell-type
-      CellType/NUMERIC :float64
-      CellType/BOOLEAN :boolean
-      CellType/STRING :string
-      CellType/FORMULA :float64
-      CellType/ERROR :string))
-
-
-(extend-type Cell
-  dtype-proto/PDatatype
-  (get-datatype [this ^Cell cell]
-    (let [cell-type (.getCellType cell)]
-      (if (= cell-type CellType/FORMULA)
-        (cell-type->datatype (.getCachedFormulaResultType cell))
-        (cell-type->datatype cell-type)))))
-
-
 (defn unify-container-type-cell-type
-  [container* cell-type]
-  (let [cell-dtype (cell-type->datatype cell-type)]
-    (if (nil? @container*)
-      (do
-        (reset! container* (col-impl/make-container cell-dtype))
-        @container*)
-      (let [container-dtype (dtype/get-datatype @container*)]
-        (if (= container-dtype cell-dtype)
-          @container*
-          (let [obj-container (ArrayList.)]
-            (.addAll obj-container ^List @container*)
-            (reset! container* obj-container)
-            obj-container))))))
+  [container* cell-dtype]
+  (if (nil? @container*)
+    (do
+      (reset! container* (col-impl/make-container cell-dtype))
+      @container*)
+    (let [container-dtype (dtype/get-datatype @container*)]
+      (if (= container-dtype cell-dtype)
+        @container*
+        (let [obj-container (ArrayList.)]
+          (.addAll obj-container ^List @container*)
+          (reset! container* obj-container)
+          obj-container)))))
 
 
 (defn- add-missing-by-row-idx!
@@ -111,9 +77,9 @@
     (reify
       PCellColumnParser
       (add-cell-value! [this cell row-idx]
-        (let [^Cell cell cell
+        (let [^Spreadsheet$Cell cell cell
               row-idx (long row-idx)]
-          (if (cell-missing-type? cell)
+          (if (.missing cell)
             (let [container (if (nil? @container*)
                               (do
                                 (reset! container* (DoubleArrayList.))
@@ -127,15 +93,15 @@
               (.add ^List container missing-value))
             (let [container (unify-container-type-cell-type
                              container*
-                             (.getCellType cell))]
+                             (dtype/get-datatype cell))]
               (add-missing-by-row-idx! container missing row-idx)
               (case (dtype/get-datatype container)
                 :boolean (.add ^BooleanArrayList container
-                               (.getBooleanCellValue cell))
-                :string (.add ^List container (.getStringCellValue cell))
+                               (.boolValue cell))
+                :string (.add ^List container (.value cell))
                 :float64 (.add ^DoubleArrayList container
-                               (.getNumericCellValue cell))
-                :object (.add ^List container (get-cell-value cell)))))))
+                               (.doubleValue cell))
+                :object (.add ^List container (.value cell)))))))
         (column-data [this]
                      {:data @container*
                       :missing missing}))))
@@ -150,20 +116,19 @@
 
 
 (defn sheet->dataset
-  ([^Sheet worksheet]
+  ([^Spreadsheet$Sheet worksheet]
    (sheet->dataset worksheet {}))
-  ([^Sheet worksheet {:keys [header-row?]
-                      :or {header-row? true}
-                      :as options}]
+  ([^Spreadsheet$Sheet worksheet {:keys [header-row?]
+                                  :or {header-row? true}
+                                  :as options}]
    (let [rows (iterator-seq (.iterator worksheet))
          [header-row rows]
          (if header-row?
            ;;Always have to keep in mind that columns are sparse.
            [(->> (first rows)
-                 (map (fn [^Cell cell]
-                        (let [column-number
-                              (.. cell getAddress getColumn)]
-                          [column-number (get-cell-value cell)])))
+                 (map (fn [^Spreadsheet$Cell cell]
+                        (let [column-number (.getColumnNum cell)]
+                          [column-number (.value cell)])))
                  (into {}))
             (rest rows)]
            [nil rows])
@@ -173,15 +138,15 @@
                           Function
                           (apply [this k]
                             (default-column-parser)))]
-     (doseq [^Row row rows]
+     (doseq [^Spreadsheet$Row row rows]
        (let [row-num (.getRowNum row)
              row-num (long (if header-row?
                              (dec row-num)
                              row-num))]
          (parallel-for/doiter
           cell row
-          (let [^Cell cell cell
-                column-number (.. cell getAddress getColumn)
+          (let [^Spreadsheet$Cell cell cell
+                column-number (.getColumnNum cell)
                 parser (.computeIfAbsent columns column-number
                                          col-parser-gen)]
             (add-cell-value! parser cell row-num)))))
@@ -213,7 +178,64 @@
                  (assoc coldata
                         :name colname
                         :force-datatype? true))))
-            (ds-impl/new-dataset (.getSheetName worksheet)))))))
+            (ds-impl/new-dataset (.name worksheet)))))))
+
+
+(defn- cell-type->keyword
+  [^CellType cell-type]
+  (condp = cell-type
+    CellType/BLANK :none
+    CellType/_NONE :none
+    CellType/NUMERIC :float64
+    CellType/BOOLEAN :boolean
+    CellType/STRING :string))
+
+
+(defn- wrap-cell
+  [^Cell cell]
+  (reify
+    dtype-proto/PDatatype
+    (get-datatype [this]
+      (let [cell-type (.getCellType cell)]
+        (if (or (= cell-type CellType/FORMULA)
+                (= cell-type CellType/ERROR))
+          (cell-type->keyword (.getCachedFormulaResultType cell))
+          (cell-type->keyword (.getCellType cell)))))
+    Spreadsheet$Cell
+    (getColumnNum [this] (.. cell getAddress getColumn))
+    (missing [this] (= :none (dtype/get-datatype this)))
+    (value [this]
+      (case (dtype-proto/get-datatype this)
+        :none nil
+        :string (.getStringCellValue cell)
+        :boolean (.getBooleanCellValue cell)
+        (.getNumericCellValue cell)))
+    (doubleValue [this] (.getNumericCellValue cell))
+    (boolValue [this] (.getBooleanCellValue cell))))
+
+
+(defn- wrap-row
+  ^Spreadsheet$Row [^Row row]
+  (reify
+    Spreadsheet$Row
+    (getRowNum [this] (.getRowNum row))
+    (iterator [this]
+      (let [iter (.iterator row)]
+        (reify java.util.Iterator
+          (hasNext [this] (.hasNext iter))
+          (next [this] (wrap-cell (.next iter))))))))
+
+
+(defn- wrap-sheet
+  ^Spreadsheet$Sheet [^Sheet sheet]
+  (reify
+    Spreadsheet$Sheet
+    (name [this] (.getSheetName sheet))
+    (iterator [this]
+      (let [iter (.iterator sheet)]
+        (reify java.util.Iterator
+          (hasNext [this] (.hasNext iter))
+          (next [this] (wrap-row (.next iter))))))))
 
 
 (defn- fname->file-type
@@ -223,18 +245,29 @@
     :xlsx))
 
 
+
 (defn input->workbook
-  (^Workbook [input options]
-   (if (instance? Workbook input)
+  (^Spreadsheet$Workbook [input options]
+   (if (instance? Spreadsheet$Workbook input)
      input
      (let [file-type (or (:poi-file-type options)
                          (when (string? input)
                            (fname->file-type input))
-                         :xlsx)]
-       (case file-type
-         :xlsx (XSSFWorkbook. (io/input-stream input))
-         :xls (HSSFWorkbook. (io/input-stream input))))))
-  (^Workbook [input]
+                         :xlsx)
+           ^Workbook workbook
+           (case file-type
+             :xlsx (XSSFWorkbook. (io/input-stream input))
+             :xls (HSSFWorkbook. (io/input-stream input)))]
+       (reify
+         Spreadsheet$Workbook
+         (iterator [this]
+           (let [iter (.iterator workbook)]
+             (reify java.util.Iterator
+               (hasNext [this] (.hasNext iter))
+               (next [this]
+                 (wrap-sheet (.next iter))))))
+         (close [this] (.close workbook))))))
+  (^Spreadsheet$Workbook [input]
    (input->workbook input {})))
 
 
