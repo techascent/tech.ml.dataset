@@ -1,4 +1,4 @@
-(ns tech.libs.poi
+(ns tech.libs.poi.parse
   "xls, xlsx formats."
   (:require [tech.io :as io]
             [tech.v2.datatype :as dtype]
@@ -145,7 +145,7 @@
   [coldata ^long n-rows]
   (when coldata
     (let [{:keys [data missing]} coldata]
-      (add-missing-by-row-idx! data missing (dec n-rows))
+      (add-missing-by-row-idx! data missing n-rows)
       coldata)))
 
 
@@ -203,10 +203,16 @@
             (mapv
              (fn [col-idx]
                (let [colname (get header-row col-idx col-idx)
-                     coldata (or (ensure-n-rows (get column-data col-idx) n-rows)
-                                 {:data (const-rdr/make-const-reader missing-value :float64 n-rows)
-                                  :missing (bitmap/->bitmap (range n-rows))})]
-                 (assoc coldata :name colname))))
+                     coldata (get column-data (long col-idx))
+                     coldata (if coldata
+                               (ensure-n-rows (get column-data col-idx) n-rows)
+                               {:data (const-rdr/make-const-reader missing-value :float64 n-rows)
+                                :missing (bitmap/->bitmap (range n-rows))})]
+                 ;;We have heterogeneous data so if it isn't a specific datatype don't scan
+                 ;;the data to make something else.
+                 (assoc coldata
+                        :name colname
+                        :force-datatype? true))))
             (ds-impl/new-dataset (.getSheetName worksheet)))))))
 
 

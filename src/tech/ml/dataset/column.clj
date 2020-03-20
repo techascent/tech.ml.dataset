@@ -230,10 +230,15 @@ Implementations should check their metadata before doing calculations."
     (col-proto/is-column? item)
     item
     (map? item)
-    (let [{:keys [name data missing metadata]} item]
+    (let [{:keys [name data missing metadata force-datatype?]} item]
       (when-not (and name data)
         (throw (Exception. "Column data map must have name and data")))
-      (col-impl/new-column name (:data (ensure-column-reader data)) metadata missing))
+      (col-impl/new-column
+       name
+       (if-not force-datatype?
+         (:data (ensure-column-reader data))
+         data)
+       metadata missing))
     :else
     (throw (ex-info "item is not convertible to a column without further information"
                     {:item item}))))
