@@ -648,6 +648,45 @@ left-outer-join [4 6]:
 |     1262 |    181500 |        0 |         -32768 |     -2147483648 |         -32768 |
 ```
 
+
+## XLS, XLSX files
+
+We use apache poi [directly](../src/tech/libs/poi/parse.clj) to generate datasets
+from xls and xlsx files.  This feature is, like joins, very new.
+
+```clojure
+user> (first (poi-parse/workbook->datasets "test/data/file_example_XLS_1000.xls"))
+Sheet1 [1000 8]:
+
+|      0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
+|--------+------------+-----------+--------+---------------+--------+------------+----------|
+|  1.000 |      Dulce |     Abril | Female | United States | 32.000 | 15/10/2017 | 1562.000 |
+|  2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 16/08/2016 | 1582.000 |
+|  3.000 |     Philip |      Gent |   Male |        France | 36.000 | 21/05/2015 | 2587.000 |
+|  4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 15/10/2017 | 3549.000 |
+|  5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 16/08/2016 | 2468.000 |
+|  6.000 |     Gaston |     Brumm |   Male | United States | 24.000 | 21/05/2015 | 2554.000 |
+|  7.000 |       Etta |      Hurn | Female | Great Britain | 56.000 | 15/10/2017 | 3598.000 |
+|  8.000 |    Earlean |    Melgar | Female | United States | 27.000 | 16/08/2016 | 2456.000 |
+|  9.000 |   Vincenza |   Weiland | Female | United States | 40.000 | 21/05/2015 | 6548.000 |
+| 10.000 |     Fallon |   Winward | Female | Great Britain | 28.000 | 16/08/2016 | 5486.000 |
+| 11.000 |    Arcelia |    Bouska | Female | Great Britain | 39.000 | 21/05/2015 | 1258.000 |
+| 12.000 |   Franklyn |    Unknow |   Male |        France | 38.000 | 15/10/2017 | 2579.000 |
+| 13.000 |    Sherron |  Ascencio | Female | Great Britain | 32.000 | 16/08/2016 | 3256.000 |
+| 14.000 |     Marcel | Zabriskie |   Male | Great Britain | 26.000 | 21/05/2015 | 2587.000 |
+| 15.000 |       Kina |  Hazelton | Female | Great Britain | 31.000 | 16/08/2016 | 3259.000 |
+| 16.000 |   Shavonne |       Pia | Female |        France | 24.000 | 21/05/2015 | 1546.000 |
+| 17.000 |     Shavon |    Benito | Female |        France | 39.000 | 15/10/2017 | 3579.000 |
+| 18.000 |   Lauralee |   Perrine | Female | Great Britain | 28.000 | 16/08/2016 | 6597.000 |
+| 19.000 |     Loreta |    Curren | Female |        France | 26.000 | 21/05/2015 | 9654.000 |
+| 20.000 |     Teresa |    Strawn | Female |        France | 46.000 | 21/05/2015 | 3569.000 |
+| 21.000 |    Belinda |   Partain | Female | United States | 37.000 | 15/10/2017 | 2564.000 |
+| 22.000 |      Holly |      Eudy | Female | United States | 52.000 | 16/08/2016 | 8561.000 |
+| 23.000 |       Many |    Cuccia | Female | Great Britain | 46.000 | 21/05/2015 | 5489.000 |
+| 24.000 |     Libbie |     Dalby | Female |        France | 42.000 | 21/05/2015 | 5489.000 |
+| 25.000 |     Lester |   Prothro |   Male |        France | 21.000 | 15/10/2017 | 6574.000 |
+```
+
 ## Writing A Dataset Out
 
 These forms are supported for writing out a dataset:
