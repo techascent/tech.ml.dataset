@@ -19,7 +19,7 @@
   dtype-proto/PDatatype
   (get-datatype [this] :string)
   dtype-proto/PClone
-  (clone [this datatype]
+  (clone [this]
     (StringTable. int->str str->int (dtype/clone data)))
   dtype-proto/PPrototype
   (from-prototype [this new-datatype new-shape]

@@ -113,7 +113,7 @@ Implementations should check their metadata before doing calculations."
 (defn clone
   "Clone this column not changing anything."
   [col]
-  (col-proto/clone col))
+  (dtype/clone col))
 
 
 (def object-primitive-array-types

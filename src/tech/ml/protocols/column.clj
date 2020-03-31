@@ -44,8 +44,6 @@ Supported types are:
     "Return a new column with the subset of indexes")
   (new-column [col datatype elem-count-or-values missing-set metadata]
     "Return a new column of this supertype with these values")
-  (clone [col]
-    "Return a clone of this column.")
   (to-double-array [col error-on-missing?]
     "Convert to a java primitive array of a given datatype.  For strings,
 an implicit string->double mapping is expected.  For booleans, true=1 false=0.

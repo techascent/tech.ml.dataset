@@ -195,9 +195,7 @@
   ;;This also services to make concrete definitions of the data so this must
   ;;store the result realized.
   dtype-proto/PClone
-  (clone [col datatype]
-    (when-not (= datatype (dtype/get-datatype col))
-      (throw (Exception. "Columns cannot clone to different types")))
+  (clone [col]
     (let [new-data (if (dtype/writer? data)
                      (dtype/clone data)
                      ;;It is important that the result of this operation be writeable.
@@ -271,10 +269,6 @@
         (Column. result-set
                  (dtype/indexed-reader idx-rdr data)
                  metadata))))
-  (clone [col]
-    (Column. (dtype/clone missing)
-             (dtype/clone data)
-             metadata))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)]
