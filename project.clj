@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "2.0-beta-4-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "2.0-beta-5-SNAPSHOT"
   :description "Dataset and ETL pipeline for machine learning"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -7,4 +7,5 @@
   :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
   :lein-tools-deps/config {:config-files [:install :user :project]}
   :profiles {:dev {:lein-tools-deps/config {:resolve-aliases [:test]}}
-             :uberjar {:aot :all}})
+             :uberjar {:aot :all}}
+  :java-source-paths ["java"])

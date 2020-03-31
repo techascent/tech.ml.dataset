@@ -3,7 +3,8 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.parse :as ds-parse]
-            [tech.ml.dataset.base :as ds-base])
+            [tech.ml.dataset.base :as ds-base]
+            [tech.ml.dataset.column :as ds-col])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]))
 
 
@@ -251,4 +252,17 @@
     (is (dfn/equals (initial-ds "1stFlrSF")
                     (new-ds "1stFlrSF")))
     (is (dfn/equals (initial-ds "2ndFlrSF")
-                    (new-ds "2ndFlrSF")))))
+                    (new-ds "2ndFlrSF"))))
+  (let [missing-ds (-> (ds-base/->dataset
+                        test-file
+                        {:n-records 20
+                         :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]})
+                       (ds-base/update-column
+                        "1stFlrSF"
+                        #(ds-col/set-missing % [2 4 7 9])))
+        _ (ds-base/write-csv! missing-ds "test.tsv")
+        new-ds (ds-base/->dataset "test.tsv")]
+    (is (dfn/equals (missing-ds "1stFlrSF")
+                    (new-ds "1stFlrSF")))
+    (is (= #{2 4 7 9}
+           (set (ds-col/missing (new-ds "1stFlrSF")))))))

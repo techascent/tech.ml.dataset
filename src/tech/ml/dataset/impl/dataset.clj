@@ -177,11 +177,11 @@
   ([table-name ds-metadata column-seq]
    (let [column-seq (ds-col/ensure-column-seq column-seq)]
      (Dataset. table-name
-                              (mapv ds-col/column-name column-seq)
-                              (->> column-seq
-                                   (map (juxt ds-col/column-name identity))
-                                   (into {}))
-                              (col-impl/->persistent-map ds-metadata))))
+               (mapv ds-col/column-name column-seq)
+               (->> column-seq
+                    (map (juxt ds-col/column-name identity))
+                    (into {}))
+               (col-impl/->persistent-map ds-metadata))))
   ([table-name column-seq]
    (new-dataset table-name {} column-seq))
   ([column-seq]

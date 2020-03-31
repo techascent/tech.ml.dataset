@@ -21,7 +21,6 @@
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
-           [java.util.function Function]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]
