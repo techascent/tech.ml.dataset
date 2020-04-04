@@ -9,6 +9,7 @@
             [tech.ml.dataset.impl.column
              :refer [make-container]
              :as col-impl]
+            [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.parallel.for :as parallel-for]

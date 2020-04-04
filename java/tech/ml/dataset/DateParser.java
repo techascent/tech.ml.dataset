@@ -1,4 +1,4 @@
-package tech.ml.datatset;
+package tech.ml.dataset;
 //Originally from the tablesaw project:
 //https://github.com/jtablesaw/tablesaw
 
@@ -10,7 +10,7 @@ import java.time.format.DateTimeParseException;
 
 public class DateParser
 {
-  
+
   // Formats that we accept in parsing dates from strings
   public static final DateTimeFormatter dtf1 = DateTimeFormatter.ofPattern("yyyyMMdd");
   public static final DateTimeFormatter dtf2 = DateTimeFormatter.ofPattern("MM/dd/yyyy");

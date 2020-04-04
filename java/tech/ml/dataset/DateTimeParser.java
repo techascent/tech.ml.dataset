@@ -1,4 +1,4 @@
-package tech.ml.datatset;
+package tech.ml.dataset;
 //Originally from the tablesaw project:
 //https://github.com/jtablesaw/tablesaw
 

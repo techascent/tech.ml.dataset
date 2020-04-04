@@ -9,6 +9,7 @@
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [tech.parallel.for :as parallel-for])
   (:import [java.util ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
@@ -28,10 +29,25 @@
     :int64 Long/MIN_VALUE
     :float32 Float/NaN
     :float64 Double/NaN
+    :packed-instant (dtype-dt/pack (dtype-dt/milliseconds-since-epoch->instant 0))
+    :packed-local-date-time (dtype-dt/pack
+                             (dtype-dt/milliseconds-since-epoch->local-date-time 0))
+    :packed-local-date (dtype-dt/pack
+                        (dtype-dt/milliseconds-since-epoch->local-date 0))
+    :packed-local-time (dtype-dt/pack
+                        (dtype-dt/milliseconds->local-time 0))
     :string ""
     :text ""
     :keyword nil
     :symbol nil}))
+
+
+(defn datatype->missing-value
+  [dtype]
+  (get @dtype->missing-val-map
+       (if (dtype-dt/packed-datatype? dtype)
+         dtype
+         (casting/un-alias-datatype dtype))))
 
 
 (defn make-container

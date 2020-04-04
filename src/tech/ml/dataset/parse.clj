@@ -8,6 +8,7 @@
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.v2.datatype.bitmap :as bitmap]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
@@ -20,6 +21,9 @@
            [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
+           [java.time LocalDate LocalTime LocalDateTime]
+           [tech.v2.datatype.typed_buffer TypedBuffer]
+           [tech.ml.dataset DateParser TimeParser DateTimeParser]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
@@ -255,16 +259,59 @@
       (.add ^List container# ""))))
 
 
-(def default-parser-seq (->> [:boolean (simple-boolean-parser)
-                              :int16 (simple-col-parser :int16)
-                              :int32 (simple-col-parser :int32)
-                              :float32 (simple-col-parser :float32)
-                              :int64 (simple-col-parser :int64)
-                              :float64 (simple-col-parser :float64)
-                              :string (simple-string-parser)
-                              :text (simple-text-parser)]
-                             (partition 2)
-                             (mapv vec)))
+(defmacro datetime-parse-str
+  [datatype str-val]
+  (case datatype
+    :local-date
+    `(LocalDate/parse ~str-val DateParser/DEFAULT_FORMATTER)
+    :local-date-time
+    `(LocalDateTime/parse ~str-val DateTimeParser/DEFAULT_FORMATTER)
+    :local-time
+    `(LocalTime/parse ~str-val TimeParser/DEFAULT_FORMATTER)))
+
+
+(defmacro datetime-can-parse?
+  [datatype str-val]
+  `(try
+     (datetime-parse-str ~datatype ~str-val)
+     true
+     (catch Throwable e#
+       false)))
+
+
+(defmacro make-datetime-simple-parser
+  [datatype]
+  (let [packed-datatype (dtype-dt/unpacked-type->packed-type datatype)]
+    `(reify
+       dtype-proto/PDatatype
+       (get-datatype [item#] ~datatype)
+       PSimpleColumnParser
+       (make-parser-container [this] (make-container ~packed-datatype))
+       (can-parse? [this# item#] (datetime-can-parse? ~datatype item#))
+       (simple-parse! [parser# container# str-val#]
+         (.add ^List (.backing-store ^TypedBuffer container#)
+               (dtype-dt/compile-time-pack
+                (datetime-parse-str ~datatype str-val#)
+                ~datatype)))
+       (simple-missing! [parser# container#]
+         (.add ^List (.backing-store ^TypedBuffer container#) 0)))))
+
+
+
+(def default-parser-seq
+  (->> [:boolean (simple-boolean-parser)
+        :int16 (simple-col-parser :int16)
+        :int32 (simple-col-parser :int32)
+        :int64 (simple-col-parser :int64)
+        :float32 (simple-col-parser :float32)
+        :float64 (simple-col-parser :float64)
+        :local-time (make-datetime-simple-parser :local-time)
+        :local-date (make-datetime-simple-parser :local-date)
+        :local-date-time (make-datetime-simple-parser :local-date-time)
+        :string (simple-string-parser)
+        :text (simple-text-parser)]
+       (partition 2)
+       (mapv vec)))
 
 (def all-parsers
   (assoc (into {} default-parser-seq)
