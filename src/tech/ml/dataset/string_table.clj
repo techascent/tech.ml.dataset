@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.string-table
   (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto])
+            [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.ml.dataset.dynamic-int-list :as int-list])
   (:import [java.util List HashMap Map RandomAccess Iterator]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]))
 
@@ -61,8 +62,9 @@
                             (let [idx-val (.size str->int)]
                               (.put str->int str-val idx-val)
                               (.put int->str idx-val str-val)
-                              idx-val)))]
-        (.set data idx item-idx))))
+                              idx-val)))
+            old-value (int (.set data idx item-idx))]
+        (.get int->str old-value))))
   (subList [this start-offset end-offset]
     (StringTable. int->str str->int (.subList data start-offset end-offset)))
   RandomAccess
@@ -76,7 +78,7 @@
 
 (defn make-string-table
   (^List [n-elems missing-val ^HashMap int->str ^HashMap str->int]
-   (let [^IntList data (dtype/make-container :list :int32 (long n-elems))
+   (let [^IntList data (int-list/dynamic-int-list (long n-elems))
          missing-val (str missing-val)]
      (.put int->str (int 0) missing-val)
      (.put str->int missing-val (int 0))
