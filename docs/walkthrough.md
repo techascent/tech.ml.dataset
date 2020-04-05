@@ -582,6 +582,84 @@ user> (->> (sorted-named-baths "NamedBaths")
  "somewhat doable")
 ```
 
+## DateTime Types
+
+Brand new.  Experimental.  all that stuff.
+
+Support for reading datetime types and manpulating them.  Please checkout the
+`tech.datatype` [datetime documentation](https://github.com/techascent/tech.datatype/blob/master/docs/datetime.md) for using this feature.
+
+
+```clojure
+user> (def stock-ds (ds/->dataset "test/data/stocks.csv"))
+#'user/stock-ds
+user> stock-ds
+test/data/stocks.csv [560 3]:
+
+| symbol |       date |  price |
+|--------+------------+--------|
+|   MSFT | 2000-01-01 | 39.810 |
+|   MSFT | 2000-02-01 | 36.350 |
+|   MSFT | 2000-03-01 | 43.220 |
+|   MSFT | 2000-04-01 | 28.370 |
+|   MSFT | 2000-05-01 | 25.450 |
+|   MSFT | 2000-06-01 | 32.540 |
+|   MSFT | 2000-07-01 | 28.400 |
+|   MSFT | 2000-08-01 | 28.400 |
+|   MSFT | 2000-09-01 | 24.530 |
+|   MSFT | 2000-10-01 | 28.020 |
+|   MSFT | 2000-11-01 | 23.340 |
+|   MSFT | 2000-12-01 | 17.650 |
+|   MSFT | 2001-01-01 | 24.840 |
+|   MSFT | 2001-02-01 | 24.000 |
+|   MSFT | 2001-03-01 | 22.250 |
+|   MSFT | 2001-04-01 | 27.560 |
+|   MSFT | 2001-05-01 | 28.140 |
+|   MSFT | 2001-06-01 | 29.700 |
+|   MSFT | 2001-07-01 | 26.930 |
+|   MSFT | 2001-08-01 | 23.210 |
+|   MSFT | 2001-09-01 | 20.820 |
+|   MSFT | 2001-10-01 | 23.650 |
+|   MSFT | 2001-11-01 | 26.120 |
+|   MSFT | 2001-12-01 | 26.950 |
+|   MSFT | 2002-01-01 | 25.920 |
+user> (dtype/get-datatype (stock-ds "date"))
+:packed-local-date
+
+user> (require '[tech.v2.datatype.datetime.operations :as dtype-dt-ops])
+nil
+user> (ds/update-column stock-ds "date" dtype-dt-ops/get-epoch-milliseconds)
+test/data/stocks.csv [560 3]:
+
+| symbol |                 date |  price |
+|--------+----------------------+--------|
+|   MSFT | 2000-01-01T06:00:00Z | 39.810 |
+|   MSFT | 2000-02-01T06:00:00Z | 36.350 |
+|   MSFT | 2000-03-01T06:00:00Z | 43.220 |
+|   MSFT | 2000-04-01T06:00:00Z | 28.370 |
+|   MSFT | 2000-05-01T06:00:00Z | 25.450 |
+|   MSFT | 2000-06-01T06:00:00Z | 32.540 |
+|   MSFT | 2000-07-01T06:00:00Z | 28.400 |
+|   MSFT | 2000-08-01T06:00:00Z | 28.400 |
+|   MSFT | 2000-09-01T06:00:00Z | 24.530 |
+|   MSFT | 2000-10-01T06:00:00Z | 28.020 |
+|   MSFT | 2000-11-01T06:00:00Z | 23.340 |
+|   MSFT | 2000-12-01T06:00:00Z | 17.650 |
+|   MSFT | 2001-01-01T06:00:00Z | 24.840 |
+|   MSFT | 2001-02-01T06:00:00Z | 24.000 |
+|   MSFT | 2001-03-01T06:00:00Z | 22.250 |
+|   MSFT | 2001-04-01T06:00:00Z | 27.560 |
+|   MSFT | 2001-05-01T06:00:00Z | 28.140 |
+|   MSFT | 2001-06-01T06:00:00Z | 29.700 |
+|   MSFT | 2001-07-01T06:00:00Z | 26.930 |
+|   MSFT | 2001-08-01T06:00:00Z | 23.210 |
+|   MSFT | 2001-09-01T06:00:00Z | 20.820 |
+|   MSFT | 2001-10-01T06:00:00Z | 23.650 |
+|   MSFT | 2001-11-01T06:00:00Z | 26.120 |
+|   MSFT | 2001-12-01T06:00:00Z | 26.950 |
+|   MSFT | 2002-01-01T06:00:00Z | 25.920 |
+```
+
 ## Joins
 
 We now have experimental support for joins.  This is a left-hash-join algorithm so

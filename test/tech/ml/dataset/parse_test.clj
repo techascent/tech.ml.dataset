@@ -266,3 +266,21 @@
                     (new-ds "1stFlrSF")))
     (is (= #{2 4 7 9}
            (set (ds-col/missing (new-ds "1stFlrSF")))))))
+
+(def test-date-time-data
+  ["03/25/2020 01:30:11"])
+
+(def offset-date-data
+  ["2010-01-01T01:00:00-08:00"])
+
+(def test-date-data
+  ["Jan 1 2000"
+   "20200202"
+   "12/20/79"
+   "12/20/1979"
+   "02.02.2002"
+   ])
+
+(deftest date-time-format-test-1
+  (let [])
+  )

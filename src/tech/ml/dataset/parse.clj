@@ -10,6 +10,7 @@
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.pprint :as dtype-pp]
+            [tech.ml.dataset.parse.datetime :as parse-dt]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
@@ -26,7 +27,6 @@
             Instant ZonedDateTime OffsetDateTime]
            [tech.v2.datatype.typed_buffer TypedBuffer]
            [tech.v2.datatype ObjectReader]
-           [tech.ml.dataset DateParser TimeParser DateTimeParser]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
@@ -266,11 +266,11 @@
   [datatype str-val]
   (case datatype
     :local-date
-    `(LocalDate/parse ~str-val DateParser/DEFAULT_FORMATTER)
+    `(parse-dt/parse-local-date ~str-val)
     :local-date-time
-    `(LocalDateTime/parse ~str-val DateTimeParser/DEFAULT_FORMATTER)
+    `(parse-dt/parse-local-date-time ~str-val)
     :local-time
-    `(LocalTime/parse ~str-val TimeParser/DEFAULT_FORMATTER)
+    `(parse-dt/parse-local-time ~str-val)
     :instant
     `(Instant/parse ~str-val)
     :zoned-date-time
@@ -288,7 +288,7 @@
        false)))
 
 
-(defmacro make-datetime-simple-parser
+(defmacro make-packed-datetime-simple-parser
   [datatype]
   (let [packed-datatype (dtype-dt/unpacked-type->packed-type datatype)]
     `(reify
@@ -328,9 +328,9 @@
         :int64 (simple-col-parser :int64)
         :float32 (simple-col-parser :float32)
         :float64 (simple-col-parser :float64)
-        :packed-local-time (make-datetime-simple-parser :local-time)
-        :packed-local-date (make-datetime-simple-parser :local-date)
-        :packed-local-date-time (make-datetime-simple-parser :local-date-time)
+        :packed-local-time (make-packed-datetime-simple-parser :local-time)
+        :packed-local-date (make-packed-datetime-simple-parser :local-date)
+        :packed-local-date-time (make-packed-datetime-simple-parser :local-date-time)
         :zoned-date-time (make-object-datetime-parser :zoned-date-time)
         :string (simple-string-parser)
         :text (simple-text-parser)]
