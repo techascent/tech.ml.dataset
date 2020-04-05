@@ -14,7 +14,7 @@
   (:import [java.util ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap IMeta]
+           [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
            [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
 
 (set! *warn-on-reflection* true)
@@ -297,8 +297,22 @@
         (let [d-reader (typecast/datatype->reader :float64 data)]
           (dtype/make-container :java-array :float64
                                 (dtype/->reader col :float64))))))
-  IMeta
-  (meta [this] metadata)
+  IObj
+  (meta [this] (ds-col-proto/metadata this))
+  (withMeta [this new-meta] (Column. missing data new-meta))
+  Counted
+  (count [this] (int (dtype/ecount data)))
+  Indexed
+  (nth [this idx]
+    (.read (typecast/datatype->reader :object this) (long idx)))
+  (nth [this idx def-val]
+    (if (< (long idx) (dtype/ecount this))
+      (.read (typecast/datatype->reader :object this) (long idx))
+      def-val))
+  ;;Not efficient but it will work.
+  IFn
+  (invoke [this idx]
+    (.read (typecast/datatype->reader :object this) idx))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)

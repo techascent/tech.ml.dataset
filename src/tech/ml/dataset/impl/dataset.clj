@@ -10,43 +10,29 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [clojure.set :as c-set])
   (:import [java.io Writer]
-           [clojure.lang IPersistentMap IMeta IFn]
+           [clojure.lang IPersistentMap IObj IFn Counted Indexed]
            [java.util Map List]))
 
 
 (declare new-dataset)
 
 
-(defn- new-column-datatype
-  [coldata]
-  (if (= :object (dtype/get-datatype coldata))
-    (let [first-item (first coldata)]
-      (cond
-        (integer? first-item) :int64
-        (number? first-item) :float64
-        :else
-        :string))
-    (dtype/get-datatype coldata)))
-
-
-(deftype Dataset [table-name
-                  column-names
+(deftype Dataset [column-names
                   colmap
                   ^IPersistentMap metadata]
   ds-proto/PColumnarDataset
-  (dataset-name [dataset] table-name)
+  (dataset-name [dataset] (:name metadata))
   (set-dataset-name [dataset new-name]
     (Dataset.
-     new-name
      column-names
      colmap
-     metadata))
+     (assoc metadata :name new-name)))
   (maybe-column [dataset column-name]
     (get colmap column-name))
 
   (metadata [dataset] metadata)
   (set-metadata [dataset meta-map]
-    (Dataset. table-name column-names colmap
+    (Dataset. column-names colmap
               (col-impl/->persistent-map meta-map)))
 
   (columns [dataset] (mapv (partial get colmap) column-names))
@@ -61,7 +47,7 @@
                          :column-name new-col-name})))
 
       (new-dataset
-       table-name
+       (ds-proto/dataset-name dataset)
        metadata
        (concat (ds-proto/columns dataset) [col]))))
 
@@ -69,7 +55,7 @@
     (->> (ds-proto/columns dataset)
          (remove #(= (ds-col/column-name %)
                      col-name))
-         (new-dataset table-name metadata)))
+         (new-dataset (ds-proto/dataset-name dataset) metadata)))
 
   (update-column [dataset col-name col-fn]
     (when-not (contains? colmap col-name)
@@ -79,7 +65,6 @@
     (let [col (get colmap col-name)
           new-col-data (col-fn col)]
       (Dataset.
-       table-name
        column-names
        (assoc colmap col-name
               (if (ds-col/is-column? new-col-data)
@@ -119,7 +104,7 @@
                     (if indexes
                       (ds-col/select col indexes)
                       col))))
-           (new-dataset table-name metadata))))
+           (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
 
   (supported-column-stats [dataset]
@@ -141,6 +126,8 @@
   (copy-raw->item! [raw-data ary-target target-offset options]
     (dtype-proto/copy-raw->item! (ds-proto/columns raw-data) ary-target
                                  target-offset options))
+  Counted
+  (count [this] (count column-names))
 
   IFn
   (invoke [item col-name]
@@ -152,8 +139,9 @@
       1 (.invoke this (first arg-seq))
       2 (.invoke this (first arg-seq) (second arg-seq))))
 
-  IMeta
+  IObj
   (meta [this] metadata)
+  (withMeta [this metadata] (Dataset. column-names colmap metadata))
 
   Iterable
   (iterator [item]
@@ -176,12 +164,13 @@
   The return value fulfills the dataset protocols."
   ([table-name ds-metadata column-seq]
    (let [column-seq (ds-col/ensure-column-seq column-seq)]
-     (Dataset. table-name
-               (mapv ds-col/column-name column-seq)
+     (Dataset. (mapv ds-col/column-name column-seq)
                (->> column-seq
                     (map (juxt ds-col/column-name identity))
                     (into {}))
-               (col-impl/->persistent-map ds-metadata))))
+               (assoc (col-impl/->persistent-map ds-metadata)
+                      :name
+                      table-name))))
   ([table-name column-seq]
    (new-dataset table-name {} column-seq))
   ([column-seq]
