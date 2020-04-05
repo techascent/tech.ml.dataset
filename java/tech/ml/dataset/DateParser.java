@@ -31,28 +31,30 @@ public class DateParser
   public static final DateTimeFormatter dtf17 = DateTimeFormatter.ofPattern("MMM-dd-yy");
   public static final DateTimeFormatter dtf18 = DateTimeFormatter.ofPattern("MMM dd, yyyy");
   public static final DateTimeFormatter dtf19 = DateTimeFormatter.ofPattern("MMM d, yyyy");
+  public static final DateTimeFormatter dtf20 = DateTimeFormatter.ofPattern("MMM d yyyy");
 
   // A formatter that handles all the date formats defined above
   public static final DateTimeFormatter DEFAULT_FORMATTER =
-      new DateTimeFormatterBuilder()
-          .appendOptional(dtf1)
-          .appendOptional(dtf2)
-          .appendOptional(dtf3)
-          .appendOptional(dtf4)
-          .appendOptional(dtf5)
-          .appendOptional(dtf6)
-          .appendOptional(dtf7)
-          .appendOptional(dtf8)
-          .appendOptional(dtf9)
-          .appendOptional(dtf10)
-          .appendOptional(dtf11)
-          .appendOptional(dtf12)
-          .appendOptional(dtf13)
-          .appendOptional(dtf14)
-          .appendOptional(dtf15)
-          .appendOptional(dtf16)
-          .appendOptional(dtf17)
-          .appendOptional(dtf18)
-          .appendOptional(dtf19)
-          .toFormatter();
+    new DateTimeFormatterBuilder()
+    .appendOptional(dtf1)
+    .appendOptional(dtf2)
+    .appendOptional(dtf3)
+    .appendOptional(dtf4)
+    .appendOptional(dtf5)
+    .appendOptional(dtf6)
+    .appendOptional(dtf7)
+    .appendOptional(dtf8)
+    .appendOptional(dtf9)
+    .appendOptional(dtf10)
+    .appendOptional(dtf11)
+    .appendOptional(dtf12)
+    .appendOptional(dtf13)
+    .appendOptional(dtf14)
+    .appendOptional(dtf15)
+    .appendOptional(dtf16)
+    .appendOptional(dtf17)
+    .appendOptional(dtf18)
+    .appendOptional(dtf19)
+    .appendOptional(dtf20)
+    .toFormatter();
 }

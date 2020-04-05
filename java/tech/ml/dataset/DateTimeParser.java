@@ -25,6 +25,8 @@ public class DateTimeParser
       DateTimeFormatter.ofPattern("M/d/yy H:mm");
   public static final DateTimeFormatter dtTimef8 =
       DateTimeFormatter.ofPattern("M/d/yyyy h:mm:ss a"); //  7/9/2014 9:04:55 PM
+  public static final DateTimeFormatter dtTimef9 =
+      DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"); //  03/25/2020 01:30:11
 
   static {
     dtTimef6 =
@@ -38,13 +40,14 @@ public class DateTimeParser
 
   // A formatter that handles date time formats defined above
   public static final DateTimeFormatter DEFAULT_FORMATTER =
-      new DateTimeFormatterBuilder()
-          .appendOptional(dtTimef7)
-          .appendOptional(dtTimef8)
-          .appendOptional(dtTimef2)
-          .appendOptional(dtTimef4)
-          .appendOptional(dtTimef0)
-          .appendOptional(dtTimef5)
-          .appendOptional(dtTimef6)
-          .toFormatter();
+    new DateTimeFormatterBuilder()
+    .appendOptional(dtTimef7)
+    .appendOptional(dtTimef8)
+    .appendOptional(dtTimef2)
+    .appendOptional(dtTimef4)
+    .appendOptional(dtTimef0)
+    .appendOptional(dtTimef5)
+    .appendOptional(dtTimef6)
+    .appendOptional(dtTimef9)
+    .toFormatter();
 }

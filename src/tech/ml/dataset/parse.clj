@@ -9,6 +9,7 @@
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.pprint :as dtype-pp]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
@@ -21,8 +22,10 @@
            [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
-           [java.time LocalDate LocalTime LocalDateTime]
+           [java.time LocalDate LocalTime LocalDateTime
+            Instant ZonedDateTime OffsetDateTime]
            [tech.v2.datatype.typed_buffer TypedBuffer]
+           [tech.v2.datatype ObjectReader]
            [tech.ml.dataset DateParser TimeParser DateTimeParser]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
@@ -267,7 +270,13 @@
     :local-date-time
     `(LocalDateTime/parse ~str-val DateTimeParser/DEFAULT_FORMATTER)
     :local-time
-    `(LocalTime/parse ~str-val TimeParser/DEFAULT_FORMATTER)))
+    `(LocalTime/parse ~str-val TimeParser/DEFAULT_FORMATTER)
+    :instant
+    `(Instant/parse ~str-val)
+    :zoned-date-time
+    `(ZonedDateTime/parse ~str-val)
+    :offset-date-time
+    `(OffsetDateTime/parse ~str-val)))
 
 
 (defmacro datetime-can-parse?
@@ -284,7 +293,7 @@
   (let [packed-datatype (dtype-dt/unpacked-type->packed-type datatype)]
     `(reify
        dtype-proto/PDatatype
-       (get-datatype [item#] ~datatype)
+       (get-datatype [item#] ~packed-datatype)
        PSimpleColumnParser
        (make-parser-container [this] (make-container ~packed-datatype))
        (can-parse? [this# item#] (datetime-can-parse? ~datatype item#))
@@ -297,6 +306,20 @@
          (.add ^List (.backing-store ^TypedBuffer container#) 0)))))
 
 
+(defmacro make-object-datetime-parser
+  [datatype]
+  `(reify
+     dtype-proto/PDatatype
+     (get-datatype [item#] ~datatype)
+     PSimpleColumnParser
+     (make-parser-container [this] (make-container ~datatype))
+     (can-parse? [this# item#] (datetime-can-parse? ~datatype item#))
+     (simple-parse! [parser# container# str-val#]
+         (.add ^List container#
+               (datetime-parse-str ~datatype str-val#)))
+     (simple-missing! [parser# container#]
+       (.add ^List container# nil))))
+
 
 (def default-parser-seq
   (->> [:boolean (simple-boolean-parser)
@@ -305,9 +328,10 @@
         :int64 (simple-col-parser :int64)
         :float32 (simple-col-parser :float32)
         :float64 (simple-col-parser :float64)
-        :local-time (make-datetime-simple-parser :local-time)
-        :local-date (make-datetime-simple-parser :local-date)
-        :local-date-time (make-datetime-simple-parser :local-date-time)
+        :packed-local-time (make-datetime-simple-parser :local-time)
+        :packed-local-date (make-datetime-simple-parser :local-date)
+        :packed-local-date-time (make-datetime-simple-parser :local-date-time)
+        :zoned-date-time (make-object-datetime-parser :zoned-date-time)
         :string (simple-string-parser)
         :text (simple-text-parser)]
        (partition 2)
@@ -329,6 +353,21 @@ will stop the parsing system.")
     "Return a map containing
 {:data - convertible-to-reader column data.
  :missing - convertible-to-reader array of missing values."))
+
+(defn- convert-reader-to-strings
+  "This function has to take into account bad data and just return
+  missing values in the case where a reader conversion fails."
+  [input-rdr]
+  (let [converted-reader (->> (dtype-pp/reader-converter input-rdr)
+                              (typecast/datatype->reader :object))]
+    (reify ObjectReader
+      (getDatatype [rdr] :string)
+      (lsize [rdr] (.lsize converted-reader))
+      (read [rdr idx]
+        (try
+          (.toString ^Object (.read converted-reader idx))
+          (catch Exception e
+            ""))))))
 
 
 (defn default-column-parser
@@ -355,10 +394,10 @@ will stop the parsing system.")
                 (do
                   (reset! simple-parser* (second next-parser))
                   (let [next-dtype (first next-parser)
-                        converted-container (if (#{:string :text} (first next-parser))
-                                              (dtype/reader-map #(.toString ^Object %)
-                                                                @container*)
-                                              @container*)
+                        converted-container
+                        (if (#{:string :text} (first next-parser))
+                          (convert-reader-to-strings @container*)
+                          @container*)
                         n-elems (dtype/ecount converted-container)
                         new-container (make-container next-dtype n-elems)]
                     (reset! container* (dtype/copy! converted-container
