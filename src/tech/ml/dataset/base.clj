@@ -172,12 +172,13 @@
 (defn rename-columns
   "Rename a map of columns."
   [dataset colname-map]
-  (reduce-kv (fn [dataset col-name new-col-name]
-               (-> dataset
-                   (add-or-update-column new-col-name (dataset col-name))
-                   (remove-column col-name)))
-             dataset
-             colname-map))
+  (->> (columns dataset)
+       (map (fn [col]
+              (if-let [new-name (get colname-map (ds-col/column-name col))]
+                (ds-col/set-name col new-name)
+                col)))
+       (ds-impl/new-dataset (dataset-name dataset)
+                            (metadata dataset))))
 
 
 (defn select
@@ -394,6 +395,13 @@ the correct type."
              (map (fn [[colname columns]]
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
+                          col-dtypes (set (map dtype/get-datatype columns))
+                          _ (when-not (== 1 (count col-dtypes))
+                              (throw (Exception.
+                                      (format
+                                       "Column %s has mismatched datatypes: %s"
+                                       colname
+                                       col-dtypes))))
                           missing
                           (->> (reduce
                                 (fn [[missing offset] col]

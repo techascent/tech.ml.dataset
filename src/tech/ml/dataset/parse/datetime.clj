@@ -75,9 +75,15 @@
 (defn parse-local-date-time
   ^LocalDateTime [^String str-data]
   (let [split-data (s/split str-data #"[ T]+")]
-    (if (== 2 (count split-data))
+    (cond
+      (== 2 (count split-data))
       (let [local-date (parse-local-date (first split-data))
             local-time (parse-local-time (second split-data))]
         (LocalDateTime/of local-date local-time))
+      (== 3 (count split-data))
+      (let [local-date (parse-local-date (first split-data))
+            local-time (parse-local-time (str (split-data 1) " " (split-data 2)))]
+        (LocalDateTime/of local-date local-time))
+      :else
       (throw (Exception. (format "Failed to parse \"%s\" as a LocalDateTime"
                                  str-data))))))

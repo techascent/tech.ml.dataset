@@ -126,6 +126,11 @@
   (copy-raw->item! [raw-data ary-target target-offset options]
     (dtype-proto/copy-raw->item! (ds-proto/columns raw-data) ary-target
                                  target-offset options))
+  dtype-proto/PClone
+  (clone [item]
+    (new-dataset (ds-proto/dataset-name item)
+                 metadata
+                 (mapv dtype/clone (ds-proto/columns item))))
   Counted
   (count [this] (count column-names))
 
