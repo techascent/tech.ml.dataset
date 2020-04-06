@@ -359,15 +359,18 @@ will stop the parsing system.")
   missing values in the case where a reader conversion fails."
   [input-rdr]
   (let [converted-reader (->> (dtype-pp/reader-converter input-rdr)
-                              (typecast/datatype->reader :object))]
+                              (typecast/datatype->reader :object))
+        input-rdr (typecast/datatype->reader :object input-rdr)]
     (reify ObjectReader
       (getDatatype [rdr] :string)
       (lsize [rdr] (.lsize converted-reader))
       (read [rdr idx]
         (try
           (.toString ^Object (.read converted-reader idx))
-          (catch Exception e
-            ""))))))
+          (catch Throwable e
+            (try (.toString ^Object (.read input-rdr idx))
+                 (catch Throwable e
+                   ""))))))))
 
 
 (defn default-column-parser
@@ -400,8 +403,8 @@ will stop the parsing system.")
                           @container*)
                         n-elems (dtype/ecount converted-container)
                         new-container (make-container next-dtype n-elems)]
-                    (reset! container* (dtype/copy! converted-container
-                                                    new-container)))
+                    (dtype/copy! converted-container new-container)
+                    (reset! container* new-container))
                   (.simple-parse!
                    ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
                    @container* str-val)))))))

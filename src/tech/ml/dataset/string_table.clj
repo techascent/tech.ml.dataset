@@ -67,6 +67,8 @@
         (.get int->str old-value))))
   (subList [this start-offset end-offset]
     (StringTable. int->str str->int (.subList data start-offset end-offset)))
+  (toArray [this]
+    (object-array this))
   RandomAccess
   Iterable
   (iterator [this]

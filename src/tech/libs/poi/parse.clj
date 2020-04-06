@@ -5,11 +5,12 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.readers.const :as const-rdr]
             [tech.ml.dataset.impl.column
              :refer [make-container]
              :as col-impl]
-            [tech.ml.dataset.parse :as ds-parse]
+            [tech.ml.dataset.parse.datetime :as parse-dt]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.parallel.for :as parallel-for]
@@ -19,6 +20,7 @@
             CellType Row]
            [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
             Spreadsheet$Row Spreadsheet$Cell]
+           [tech.v2.datatype.typed_buffer TypedBuffer]
            [org.apache.poi.xssf.usermodel XSSFWorkbook]
            [org.apache.poi.hssf.usermodel HSSFWorkbook]
            [org.roaringbitmap RoaringBitmap]
@@ -27,7 +29,7 @@
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]
-           [it.unimi.dsi.fastutil.longs LongArrayList]
+           [it.unimi.dsi.fastutil.longs LongArrayList LongList]
            [it.unimi.dsi.fastutil.floats FloatArrayList]
            [it.unimi.dsi.fastutil.doubles DoubleArrayList]))
 
@@ -43,25 +45,39 @@
   (column-data [this]))
 
 
-(defn unify-container-type-cell-type
-  [container* cell-dtype]
-  (if (nil? @container*)
-    (do
-      (reset! container* (col-impl/make-container cell-dtype))
-      @container*)
-    (let [container-dtype (dtype/get-datatype @container*)]
-      (if (= container-dtype cell-dtype)
-        @container*
-        (let [obj-container (ArrayList.)]
-          (.addAll obj-container ^List @container*)
-          (reset! container* obj-container)
-          obj-container)))))
+(def packable-datatype-set (set dtype-dt/packable-datatypes))
+(def packed-datatype-set (->> packable-datatype-set
+                              (map dtype-dt/unpacked-type->packed-type)
+                              (set)))
+
+
+(defn- unify-container-type-cell-type
+  [container* container-dtype cell-dtype]
+  (let [packed-cell-dtype (if (packable-datatype-set cell-dtype)
+                            (dtype-dt/unpacked-type->packed-type cell-dtype)
+                            cell-dtype)]
+    (if (nil? container-dtype)
+      (do
+        (reset! container* (col-impl/make-container packed-cell-dtype
+                                                    (if @container*
+                                                      (dtype/ecount @container*)
+                                                      0)))
+        @container*)
+      (let [container-dtype (dtype/get-datatype @container*)]
+        (if (= container-dtype packed-cell-dtype)
+          @container*
+          (let [obj-container (ArrayList.)]
+            (.addAll obj-container ^List (if (packed-datatype-set container-dtype)
+                                           (dtype-dt/unpack @container*)
+                                           @container*))
+            (reset! container* obj-container)
+            obj-container))))))
 
 
 (defn- add-missing-by-row-idx!
   [container ^RoaringBitmap missing ^long row-idx]
   (let [n-elems (dtype/ecount container)]
-    (when (< n-elems)
+    (when (< n-elems row-idx)
       (let [n-missing (- row-idx n-elems)
             missing-value (get @col-impl/dtype->missing-val-map
                                (dtype/get-datatype container))
@@ -69,6 +85,20 @@
         (dotimes [idx n-missing]
           (.add container missing-value)
           (.add missing (+ n-elems idx)))))))
+
+
+(defn- try-parse-datetimes
+  [str-value]
+  (if-let [date-val (try (parse-dt/parse-local-date str-value)
+                         (catch Exception e nil))]
+    [:local-date date-val]
+    (if-let [time-val (try (parse-dt/parse-local-date-time str-value)
+                           (catch Exception e nil))]
+      [:local-time time-val]
+      (if-let [date-time-val (try (parse-dt/parse-local-date-time str-value)
+                                  (catch Exception e nil))]
+        [:local-date-time date-time-val]
+        [:string str-value]))))
 
 
 (defn default-column-parser
@@ -92,17 +122,40 @@
               (add-missing-by-row-idx! container missing row-idx)
               (.add missing (dtype/ecount container))
               (.add ^List container missing-value))
-            (let [container (unify-container-type-cell-type
+            (let [container-dtype (when-not (= (dtype/ecount missing)
+                                               (dtype/ecount @container*))
+                                    (dtype/get-datatype @container*))
+                  original-cell-dtype (dtype/get-datatype cell)
+                  [cell-dtype cell-value]
+                  (if (= :string original-cell-dtype)
+                    (try-parse-datetimes (.value cell))
+                    [original-cell-dtype (case original-cell-dtype
+                                           :boolean (.boolValue cell)
+                                           :float64 (.doubleValue cell))])
+                  container (unify-container-type-cell-type
                              container*
-                             (dtype/get-datatype cell))]
+                             container-dtype
+                             cell-dtype)]
               (add-missing-by-row-idx! container missing row-idx)
               (case (dtype/get-datatype container)
                 :boolean (.add ^BooleanArrayList container
-                               (.boolValue cell))
+                               (boolean cell-value))
+                :packed-local-date
+                (.add ^IntList
+                      (.backing_store ^TypedBuffer container)
+                      (int (dtype-dt/pack-local-date cell-value)))
+                :packed-local-time
+                (.add ^IntList
+                      (.backing_store ^TypedBuffer container)
+                      (int (dtype-dt/pack-local-time cell-value)))
+                :packed-local-date-time
+                (.add ^LongList
+                      (.backing_store ^TypedBuffer container)
+                      (long (dtype-dt/pack-local-date-time cell-value)))
                 :string (.add ^List container (.value cell))
                 :float64 (.add ^DoubleArrayList container
-                               (.doubleValue cell))
-                :object (.add ^List container (.value cell)))))))
+                               (double cell-value))
+                :object (.add ^List container cell-value))))))
         (column-data [this]
                      {:data @container*
                       :missing missing}))))

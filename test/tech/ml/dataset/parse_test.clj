@@ -4,7 +4,8 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.base :as ds-base]
-            [tech.ml.dataset.column :as ds-col])
+            [tech.ml.dataset.column :as ds-col]
+            [clojure.set :as set])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]))
 
 
@@ -267,20 +268,18 @@
     (is (= #{2 4 7 9}
            (set (ds-col/missing (new-ds "1stFlrSF")))))))
 
-(def test-date-time-data
-  ["03/25/2020 01:30:11"])
-
-(def offset-date-data
-  ["2010-01-01T01:00:00-08:00"])
-
-(def test-date-data
-  ["Jan 1 2000"
-   "20200202"
-   "12/20/79"
-   "12/20/1979"
-   "02.02.2002"
-   ])
 
 (deftest date-time-format-test-1
-  (let [])
-  )
+  (let [stock-ds (ds-base/->dataset "test/data/stocks.csv")]
+    (is (= :packed-local-date (dtype/get-datatype (stock-ds "date")))))
+  (let [temp-ds (ds-base/->dataset "test/data/seattle-temps.csv")]
+    (is (= :zoned-date-time (dtype/get-datatype (temp-ds "date"))))))
+
+
+(deftest bad-csv-1
+  (let [ds (ds-base/->dataset "test/data/stocks-bad-date.csv")]
+    (is (= :string (dtype/get-datatype (ds "date"))))
+    ;;Make sure unparsed data came through intact
+    (is (= #{"hello" "1212"}
+           (set/intersection #{"hello" "1212"}
+                             (set (ds-col/unique (ds "date"))))))))
