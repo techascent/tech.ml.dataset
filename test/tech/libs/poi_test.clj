@@ -47,3 +47,11 @@
 (deftest datetime-test
   (let [ds (first (xlsx-parse/workbook->datasets stocks-file))]
     (is (= :packed-local-date (dtype/get-datatype (ds "date"))))))
+
+
+(deftest custom-parser-test
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   xls-file
+                   {:parser-fn {"Date" [:local-date
+                                        "dd/MM/yyyy"]}}))]
+    (is (= :local-date (dtype/get-datatype (ds "Date"))))))

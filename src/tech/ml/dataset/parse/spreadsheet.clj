@@ -6,17 +6,21 @@
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.readers.const :as const-rdr]
+            [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.protocols :as dtype-proto]
             [tech.ml.dataset.impl.column
              :refer [make-container]
              :as col-impl]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.parse.datetime :as parse-dt]
+            [tech.ml.dataset.parse :as parse]
             [tech.parallel.for :as parallel-for])
   (:import [java.util List ArrayList HashMap]
            [java.util.function Function]
            [org.roaringbitmap RoaringBitmap]
            [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
             Spreadsheet$Row Spreadsheet$Cell]
+           [java.time.format DateTimeFormatter]
            [tech.v2.datatype.typed_buffer TypedBuffer]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.longs LongList]
@@ -72,20 +76,6 @@
           (.add missing (+ n-elems idx)))))))
 
 
-(defn- try-parse-datetimes
-  [str-value]
-  (if-let [date-val (try (parse-dt/parse-local-date str-value)
-                         (catch Exception e nil))]
-    [:local-date date-val]
-    (if-let [time-val (try (parse-dt/parse-local-date-time str-value)
-                           (catch Exception e nil))]
-      [:local-time time-val]
-      (if-let [date-time-val (try (parse-dt/parse-local-date-time str-value)
-                                  (catch Exception e nil))]
-        [:local-date-time date-time-val]
-        [:string str-value]))))
-
-
 (defn default-column-parser
   []
   (let [container* (atom nil)
@@ -113,7 +103,7 @@
                   original-cell-dtype (dtype/get-datatype cell)
                   [cell-dtype cell-value]
                   (if (= :string original-cell-dtype)
-                    (try-parse-datetimes (.value cell))
+                    (parse-dt/try-parse-datetimes (.value cell))
                     [original-cell-dtype (case original-cell-dtype
                                            :boolean (.boolValue cell)
                                            :float64 (.doubleValue cell))])
@@ -154,11 +144,122 @@
       coldata)))
 
 
+(defn datetime-formatter-parser
+  [datatype format-string-or-formatter]
+  (let [parse-fn
+        (cond
+          (instance? DateTimeFormatter format-string-or-formatter)
+          (parse-dt/datetime-parse-str-fn datatype format-string-or-formatter)
+          (string? format-string-or-formatter)
+          (parse-dt/datetime-parse-str-fn
+           datatype
+           (DateTimeFormatter/ofPattern format-string-or-formatter))
+          (fn? format-string-or-formatter)
+          format-string-or-formatter
+          :else
+          (throw (Exception. (format "Unrecognized datetime parser type: %s"
+                                     format-string-or-formatter))))
+        container (make-container datatype)
+        missing-val (col-impl/datatype->missing-value datatype)
+        missing (bitmap/->bitmap)]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] datatype)
+      PCellColumnParser
+      (add-cell-value! [this cell row-idx]
+        (let [cell ^Spreadsheet$Cell cell]
+          (add-missing-by-row-idx! container missing row-idx)
+          (if (.missing cell)
+            (do
+              (.add ^List container missing-val)
+              (.add missing row-idx))
+            (parse-dt/add-to-container! datatype container
+                                        (parse-fn (str (.value cell)))))))
+      (column-data [this]
+        {:missing missing
+         :data container}))))
+
+
+(defn general-parser
+  [datatype parse-fn]
+  (when-not (fn? parse-fn)
+    (throw (Exception. (format "parse-fn doesn't appear to be a function: %s"
+                               parse-fn))))
+  (let [container (make-container datatype)
+        missing-val (col-impl/datatype->missing-value datatype)
+        missing (bitmap/->bitmap)
+        add-fn (if (casting/numeric-type? datatype)
+                 #(.add ^List %1 (casting/cast (parse-fn %2) datatype))
+                 #(.add ^List %1 (parse-fn %2)))]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] datatype)
+      PCellColumnParser
+      (add-cell-value! [this cell row-idx]
+        (let [cell ^Spreadsheet$Cell cell]
+          (add-missing-by-row-idx! container missing row-idx)
+          (if (.missing cell)
+            (do
+              (.add ^List container missing-val)
+              (.add missing row-idx))
+            (add-fn (str (.value cell))))))
+      (column-data [this]
+        {:missing missing
+         :data container}))))
+
+
+(defn simple-parser->parser
+  [datatype]
+  (let [simple-parser (parse/simple-parser->parser datatype)
+        missing-val (col-impl/datatype->missing-value datatype)
+        {container :data
+         missing :missing} (parse/column-data simple-parser)
+        ^RoaringBitmap missing missing]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] datatype)
+      PCellColumnParser
+      (add-cell-value! [this cell row-idx]
+        (let [cell ^Spreadsheet$Cell cell]
+          (add-missing-by-row-idx! container missing row-idx)
+          (if (.missing cell)
+            (do
+              (.add ^List container missing-val)
+              (.add missing row-idx))
+            (parse/simple-parse! simple-parser container (str (.value cell))))))
+      (column-data [this]
+        {:missing missing
+         :data container}))))
+
+
+(defn- make-parser
+  [parser-fn header-row-name scan-rows]
+  (cond
+    (fn? parser-fn)
+    (if-let [parser (parser-fn header-row-name scan-rows)]
+      parser
+      (default-column-parser))
+    (keyword? parser-fn)
+    (simple-parser->parser parser-fn)
+    (vector? parser-fn)
+    (let [[datatype parser-info] parser-fn]
+      (if (parse-dt/datetime-datatype? datatype)
+        (datetime-formatter-parser datatype parser-info)
+        (general-parser datatype parser-info)))
+    (map? parser-fn)
+    (if-let [entry (get parser-fn header-row-name)]
+      (make-parser entry header-row-name scan-rows)
+      (default-column-parser))))
+
+
 (defn sheet->dataset
   ([^Spreadsheet$Sheet worksheet]
    (sheet->dataset worksheet {}))
-  ([^Spreadsheet$Sheet worksheet {:keys [header-row?]
-                                  :or {header-row? true}
+  ([^Spreadsheet$Sheet worksheet {:keys [header-row?
+                                         parser-fn
+                                         parser-scan-len]
+                                  :or {header-row? true
+                                       parser-scan-len 100}
                                   :as options}]
    (let [rows (iterator-seq (.iterator worksheet))
          [header-row rows]
@@ -173,10 +274,25 @@
            [nil rows])
          last-row-num (atom nil)
          columns (HashMap.)
+         scan-rows (when parser-fn
+                     (->> (take parser-scan-len rows)
+                          ;;Expand rows into cells
+                          (mapcat seq)
+                          ;;Group by column
+                          (group-by #(.getColumnNum ^Spreadsheet$Cell %))
+                          ;;Convert lists of cells to lists of strings.  This allows us to share more code
+                          ;;with the CSV parsing system.
+                          (map (fn [[k v]]
+                                 [k (map (comp str #(.value ^Spreadsheet$Cell %))
+                                         v)]))
+                          (into {})))
          col-parser-gen (reify
                           Function
-                          (apply [this k]
-                            (default-column-parser)))]
+                          (apply [this column-number]
+                            (if parser-fn
+                              (let [colname (get header-row column-number column-number)]
+                                (make-parser parser-fn colname (scan-rows column-number)))
+                              (default-column-parser))))]
      (doseq [^Spreadsheet$Row row rows]
        (let [row-num (.getRowNum row)
              row-num (long (if header-row?

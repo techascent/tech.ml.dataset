@@ -273,7 +273,11 @@
   (let [stock-ds (ds-base/->dataset "test/data/stocks.csv")]
     (is (= :packed-local-date (dtype/get-datatype (stock-ds "date")))))
   (let [temp-ds (ds-base/->dataset "test/data/seattle-temps.csv")]
-    (is (= :zoned-date-time (dtype/get-datatype (temp-ds "date"))))))
+    (is (= :zoned-date-time (dtype/get-datatype (temp-ds "date")))))
+  (let [stock-ds (ds-base/->dataset "test/data/stocks.csv"
+                                    {:parser-fn
+                                     {"date" :local-date}})]
+    (is (= :local-date (dtype/get-datatype (stock-ds "date"))))))
 
 
 (deftest bad-csv-1
