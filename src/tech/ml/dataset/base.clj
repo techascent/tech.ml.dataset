@@ -608,6 +608,11 @@ the correct type."
             column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
+             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
+             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
+             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
+             DateTimeFormatter.
   :parser-scan-len - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 

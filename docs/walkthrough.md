@@ -117,6 +117,11 @@ tech.ml.dataset/->dataset
             column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
+             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
+             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
+             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
+             DateTimeFormatter.
   :parser-scan-len - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 
@@ -158,6 +163,51 @@ data/ames-house-prices/train.csv [4 3]:
 | 181500.000 |     1262 |        0 |
 | 223500.000 |      920 |      866 |
 | 140000.000 |      961 |      756 |
+```
+
+You can also supply a tuple of `[datatype parse-fn]` if you have a specific
+datatype and parse function you want to use.  For datetime types `parse-fn`
+can additionally be a DateTimeFormat format string or a DateTimeFormat object:
+
+```clojure
+nil
+user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx")
+                           :all (range 5)))
+
+#'user/data
+user> data
+Sheet1 [5 8]:
+
+|     0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
+|-------+------------+-----------+--------+---------------+--------+------------+----------|
+| 1.000 |      Dulce |     Abril | Female | United States | 32.000 | 15/10/2017 | 1562.000 |
+| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 16/08/2016 | 1582.000 |
+| 3.000 |     Philip |      Gent |   Male |        France | 36.000 | 21/05/2015 | 2587.000 |
+| 4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 15/10/2017 | 3549.000 |
+| 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 16/08/2016 | 2468.000 |
+user> ;; Note the Date actually didn't parse out because it is dd/MM/yyyy format:
+user> (dtype/get-datatype (ds "Date"))
+Syntax error compiling at (*cider-repl tech.all/tech.ml.dataset:localhost:44135(clj)*:120:27).
+Unable to resolve symbol: ds in this context
+user> (dtype/get-datatype (data "Date"))
+:string
+user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx"
+                                         {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}})
+                           :all (range 5)))
+
+#'user/data
+user> data
+Sheet1 [5 8]:
+
+|     0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
+|-------+------------+-----------+--------+---------------+--------+------------+----------|
+| 1.000 |      Dulce |     Abril | Female | United States | 32.000 | 2017-10-15 | 1562.000 |
+| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 2016-08-16 | 1582.000 |
+| 3.000 |     Philip |      Gent |   Male |        France | 36.000 | 2015-05-21 | 2587.000 |
+| 4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 2017-10-15 | 3549.000 |
+| 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 2016-08-16 | 2468.000 |
+user> (dtype/get-datatype (data "Date"))
+:local-date
 ```
 
 A reference to what is possible is in
