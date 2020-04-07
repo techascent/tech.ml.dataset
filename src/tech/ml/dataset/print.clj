@@ -2,7 +2,8 @@
   (:require [clojure.pprint :as pp]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.unary-op :as unary-op])
+            [tech.v2.datatype.unary-op :as unary-op]
+            [tech.v2.datatype.pprint :as dtype-pp])
   (:import [tech.v2.datatype ObjectReader]
            [java.util List]))
 
@@ -32,7 +33,7 @@
   ^ObjectReader [dataset]
   (let [n-elems (long (second (dtype/shape dataset)))
         readers (->> (ds-proto/columns dataset)
-                     (map dtype/->reader))]
+                     (map (comp dtype-pp/reader-converter dtype/->reader)))]
     (reify ObjectReader
       (lsize [rdr] n-elems)
       (read [rdr idx] (vec (map #(.get ^List % idx) readers))))))

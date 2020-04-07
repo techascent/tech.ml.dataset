@@ -9,6 +9,8 @@
 (def xls-file "test/data/file_example_XLS_1000.xls")
 (def xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 (def sparse-file "test/data/sparsefile.xlsx")
+(def stocks-file "test/data/stocks.xlsx")
+(def stocks-bad-date-file "test/data/stocks-bad-date.xlsx")
 
 
 
@@ -16,6 +18,8 @@
   (let [ds (first (xlsx-parse/workbook->datasets xlsx-file))]
     (is (= #{0 "Age" "Country" "First Name" "Gender" "Date" "Last Name" "Id"}
            (set (ds/column-names ds))))
+    (is (= #{:float64 :string}
+           (set (map dtype/get-datatype (ds/columns ds)))))
     (is (= 1000 (ds/row-count ds)))
     (is (= 8 (ds/column-count ds)))))
 
@@ -31,3 +35,17 @@
            (->> (ds/columns ds)
                 (mapcat #(dtype/->reader % :object {:missing-policy :elide}))
                 vec)))))
+
+(deftest datetime-test
+  (let [ds (first (xlsx-parse/workbook->datasets stocks-file))]
+    (is (= :packed-local-date (dtype/get-datatype (ds "date"))))))
+
+
+(deftest bad-datetime-test
+  (let [ds (first (xlsx-parse/workbook->datasets stocks-bad-date-file))]
+    (is (= :object (dtype/get-datatype (ds "date"))))
+    (is (= {java.lang.String 2
+            java.time.LocalDate 27}
+           (->> (ds "date")
+                (map type)
+                frequencies)))))

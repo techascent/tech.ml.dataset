@@ -6,8 +6,13 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.casting :as casting]
-            [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.v2.datatype.bitmap :as bitmap]
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.pprint :as dtype-pp]
+            [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
+            [tech.ml.dataset.parse.datetime
+             :refer [datetime-can-parse?]
+             :as parse-dt]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
@@ -20,6 +25,11 @@
            [org.roaringbitmap RoaringBitmap]
            [java.lang AutoCloseable]
            [java.lang.reflect Method]
+           [java.time LocalDate LocalTime LocalDateTime
+            Instant ZonedDateTime OffsetDateTime]
+           [java.time.format DateTimeFormatter]
+           [tech.v2.datatype.typed_buffer TypedBuffer]
+           [tech.v2.datatype ObjectReader]
            [java.util Iterator HashMap ArrayList List Map RandomAccess]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
@@ -173,7 +183,7 @@
   [datatype]
   `(casting/datatype->cast-fn :unknown
                               ~datatype
-                              (get @col-impl/dtype->missing-val-map ~datatype)))
+                              (col-impl/datatype->missing-value ~datatype)))
 
 
 (defmacro simple-col-parser
@@ -255,21 +265,54 @@
       (.add ^List container# ""))))
 
 
-(def default-parser-seq (->> [:boolean (simple-boolean-parser)
-                              :int16 (simple-col-parser :int16)
-                              :int32 (simple-col-parser :int32)
-                              :float32 (simple-col-parser :float32)
-                              :int64 (simple-col-parser :int64)
-                              :float64 (simple-col-parser :float64)
-                              :string (simple-string-parser)
-                              :text (simple-text-parser)]
-                             (partition 2)
-                             (mapv vec)))
+
+(defmacro make-datetime-simple-parser
+  [datatype]
+  `(let [missing-val# (col-impl/datatype->missing-value ~datatype)]
+     (reify
+       dtype-proto/PDatatype
+       (get-datatype [item#] ~datatype)
+       PSimpleColumnParser
+       (make-parser-container [this] (make-container ~datatype))
+       (can-parse? [this# item#] (datetime-can-parse? ~datatype item#))
+       (simple-parse! [parser# container# str-val#]
+         (parse-dt/compile-time-add-to-container!
+          ~datatype
+          container#
+          (parse-dt/compile-time-datetime-parse-str ~datatype str-val#)))
+       (simple-missing! [parser# container#]
+         (parse-dt/compile-time-add-to-container!
+          ~datatype
+          container#
+          missing-val#)))))
+
+
+(def default-parser-seq
+  (->> [:boolean (simple-boolean-parser)
+        :int16 (simple-col-parser :int16)
+        :int32 (simple-col-parser :int32)
+        :int64 (simple-col-parser :int64)
+        :float32 (simple-col-parser :float32)
+        :float64 (simple-col-parser :float64)
+        :packed-local-time (make-datetime-simple-parser :packed-local-time)
+        :packed-local-date (make-datetime-simple-parser :packed-local-date)
+        :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)
+        :zoned-date-time (make-datetime-simple-parser :zoned-date-time)
+        :string (simple-string-parser)
+        :text (simple-text-parser)]
+       (partition 2)
+       (mapv vec)))
+
 
 (def all-parsers
   (assoc (into {} default-parser-seq)
          :keyword (simple-col-parser :keyword)
-         :symbol (simple-col-parser :symbol)))
+         :symbol (simple-col-parser :symbol)
+         :instant (make-datetime-simple-parser :instant)
+         :offset-date-time (make-datetime-simple-parser :offset-date-time)
+         :local-time (make-datetime-simple-parser :local-time)
+         :local-date (make-datetime-simple-parser :local-date)
+         :local-date-time (make-datetime-simple-parser :local-date-time)))
 
 
 (defprotocol PColumnParser
@@ -282,6 +325,24 @@ will stop the parsing system.")
     "Return a map containing
 {:data - convertible-to-reader column data.
  :missing - convertible-to-reader array of missing values."))
+
+(defn- convert-reader-to-strings
+  "This function has to take into account bad data and just return
+  missing values in the case where a reader conversion fails."
+  [input-rdr]
+  (let [converted-reader (->> (dtype-pp/reader-converter input-rdr)
+                              (typecast/datatype->reader :object))
+        input-rdr (typecast/datatype->reader :object input-rdr)]
+    (reify ObjectReader
+      (getDatatype [rdr] :string)
+      (lsize [rdr] (.lsize converted-reader))
+      (read [rdr idx]
+        (try
+          (.toString ^Object (.read converted-reader idx))
+          (catch Throwable e
+            (try (.toString ^Object (.read input-rdr idx))
+                 (catch Throwable e
+                   ""))))))))
 
 
 (defn default-column-parser
@@ -308,14 +369,14 @@ will stop the parsing system.")
                 (do
                   (reset! simple-parser* (second next-parser))
                   (let [next-dtype (first next-parser)
-                        converted-container (if (#{:string :text} (first next-parser))
-                                              (dtype/reader-map #(.toString ^Object %)
-                                                                @container*)
-                                              @container*)
+                        converted-container
+                        (if (#{:string :text} (first next-parser))
+                          (convert-reader-to-strings @container*)
+                          @container*)
                         n-elems (dtype/ecount converted-container)
                         new-container (make-container next-dtype n-elems)]
-                    (reset! container* (dtype/copy! converted-container
-                                                    new-container)))
+                    (dtype/copy! converted-container new-container)
+                    (reset! container* new-container))
                   (.simple-parse!
                    ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
                    @container* str-val)))))))
@@ -350,6 +411,63 @@ will stop the parsing system.")
          :data container}))))
 
 
+(defn datetime-formatter-parser
+  [datatype format-string-or-formatter]
+  (let [parse-fn
+        (cond
+          (instance? DateTimeFormatter format-string-or-formatter)
+          (parse-dt/datetime-parse-str-fn datatype format-string-or-formatter)
+          (string? format-string-or-formatter)
+          (parse-dt/datetime-parse-str-fn
+           datatype
+           (DateTimeFormatter/ofPattern format-string-or-formatter))
+          (fn? format-string-or-formatter)
+          format-string-or-formatter
+          :else
+          (throw (Exception. (format "Unrecognized datetime parser type: %s"
+                                     format-string-or-formatter))))
+        container (make-container datatype)
+        missing-val (col-impl/datatype->missing-value datatype)
+        missing (bitmap/->bitmap)]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] datatype)
+      PColumnParser
+      (parse! [this str-val]
+        (parse-dt/add-to-container! datatype container (parse-fn str-val)))
+      (missing! [parser]
+        (.add missing (dtype/ecount container))
+        (parse-dt/add-to-container! datatype container missing-val))
+      (column-data [parser]
+        {:missing missing
+         :data container}))))
+
+
+(defn general-parser
+  [datatype parse-fn]
+  (when-not (fn? parse-fn)
+    (throw (Exception. (format "parse-fn doesn't appear to be a function: %s"
+                               parse-fn))))
+  (let [container (make-container datatype)
+        missing-val (col-impl/datatype->missing-value datatype)
+        missing (bitmap/->bitmap)
+        add-fn (if (casting/numeric-type? datatype)
+                 #(.add ^List %1 (casting/cast (parse-fn %2) datatype))
+                 #(.add ^List %1 (parse-fn %2)))]
+    (reify
+      dtype-proto/PDatatype
+      (get-datatype [this] datatype)
+      PColumnParser
+      (parse! [this str-val]
+        (add-fn container str-val))
+      (missing! [parser]
+        (.add missing (dtype/ecount container))
+        (.add ^List container missing-val))
+      (column-data [parser]
+        {:missing missing
+         :data container}))))
+
+
 (defn- make-parser
   [parser-fn header-row-name scan-rows]
   (cond
@@ -359,6 +477,11 @@ will stop the parsing system.")
       (default-column-parser))
     (keyword? parser-fn)
     (simple-parser->parser parser-fn)
+    (vector? parser-fn)
+    (let [[datatype parser-info] parser-fn]
+      (if (parse-dt/datetime-datatype? datatype)
+        (datetime-formatter-parser datatype parser-info)
+        (general-parser datatype parser-info)))
     (map? parser-fn)
     (if-let [entry (get parser-fn header-row-name)]
       (make-parser entry header-row-name scan-rows)
@@ -440,6 +563,11 @@ will stop the parsing system.")
             or can return nil in which case the default column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
+             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
+             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
+             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
+             DateTimeFormatter.
   parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100.
 
   If the parser-fn is confusing, just pass in println and the output should be clear"

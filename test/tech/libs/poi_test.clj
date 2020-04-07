@@ -1,5 +1,5 @@
 (ns tech.libs.poi-test
-  (:require [tech.libs.poi.parse :as xlsx-parse]
+  (:require [tech.libs.poi :as xlsx-parse]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.v2.datatype.functional :as dfn]
@@ -10,6 +10,7 @@
 (def xls-file "test/data/file_example_XLS_1000.xls")
 (def xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 (def sparse-file "test/data/sparsefile.xlsx")
+(def stocks-file "test/data/stocks.xlsx")
 
 
 
@@ -20,6 +21,8 @@
            (set (ds/column-names ds))))
     (is (= #{0 "Age" "Country" "First Name" "Gender" "Date" "Last Name" "Id"}
            (set (ds/column-names ds2))))
+    (is (= #{:float64 :string}
+           (set (map dtype/get-datatype (ds/columns ds)))))
     (is (= 1000 (ds/row-count ds)))
     (is (= 1000 (ds/row-count ds2)))
     (is (= 8 (ds/column-count ds)))
@@ -39,3 +42,16 @@
            (->> (ds/columns ds)
                 (mapcat #(dtype/->reader % :object {:missing-policy :elide}))
                 vec)))))
+
+
+(deftest datetime-test
+  (let [ds (first (xlsx-parse/workbook->datasets stocks-file))]
+    (is (= :packed-local-date (dtype/get-datatype (ds "date"))))))
+
+
+(deftest custom-parser-test
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   xls-file
+                   {:parser-fn {"Date" [:local-date
+                                        "dd/MM/yyyy"]}}))]
+    (is (= :local-date (dtype/get-datatype (ds "Date"))))))

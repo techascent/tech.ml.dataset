@@ -9,11 +9,12 @@
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.readers.indexed :as indexed-rdr]
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [tech.parallel.for :as parallel-for])
   (:import [java.util ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap IMeta]
+           [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
            [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
 
 (set! *warn-on-reflection* true)
@@ -28,10 +29,34 @@
     :int64 Long/MIN_VALUE
     :float32 Float/NaN
     :float64 Double/NaN
+    :packed-instant (dtype-dt/pack (dtype-dt/milliseconds-since-epoch->instant 0))
+    :packed-local-date-time (dtype-dt/pack
+                             (dtype-dt/milliseconds-since-epoch->local-date-time 0))
+    :packed-local-date (dtype-dt/pack
+                        (dtype-dt/milliseconds-since-epoch->local-date 0))
+    :packed-local-time (dtype-dt/pack
+                        (dtype-dt/milliseconds->local-time 0))
+    :instant (dtype-dt/milliseconds-since-epoch->instant 0)
+    :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
+    :offset-date-time (dtype-dt/milliseconds-since-epoch->offset-date-time 0)
+    :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
+    :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
+    :local-time (dtype-dt/milliseconds->local-time 0)
     :string ""
     :text ""
     :keyword nil
     :symbol nil}))
+
+
+
+(defn datatype->missing-value
+  [dtype]
+  (let [dtype (if (dtype-dt/packed-datatype? dtype)
+                dtype
+                (casting/un-alias-datatype dtype))]
+    (if (contains? @dtype->missing-val-map dtype)
+      (get @dtype->missing-val-map dtype)
+      nil)))
 
 
 (defn make-container
@@ -281,8 +306,22 @@
         (let [d-reader (typecast/datatype->reader :float64 data)]
           (dtype/make-container :java-array :float64
                                 (dtype/->reader col :float64))))))
-  IMeta
-  (meta [this] metadata)
+  IObj
+  (meta [this] (ds-col-proto/metadata this))
+  (withMeta [this new-meta] (Column. missing data new-meta))
+  Counted
+  (count [this] (int (dtype/ecount data)))
+  Indexed
+  (nth [this idx]
+    (.read (typecast/datatype->reader :object this) (long idx)))
+  (nth [this idx def-val]
+    (if (< (long idx) (dtype/ecount this))
+      (.read (typecast/datatype->reader :object this) (long idx))
+      def-val))
+  ;;Not efficient but it will work.
+  IFn
+  (invoke [this idx]
+    (.read (typecast/datatype->reader :object this) idx))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)

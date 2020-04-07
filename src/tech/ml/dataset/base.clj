@@ -14,7 +14,9 @@
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.for :as parallel-for]
-            [tech.parallel.utils :as par-util])
+            [tech.parallel.require :as parallel-require]
+            [tech.parallel.utils :as par-util]
+            [clojure.tools.logging :as log])
   (:import [java.io InputStream]
            [tech.v2.datatype ObjectReader]
            [java.util List HashSet]
@@ -172,12 +174,13 @@
 (defn rename-columns
   "Rename a map of columns."
   [dataset colname-map]
-  (reduce-kv (fn [dataset col-name new-col-name]
-               (-> dataset
-                   (add-or-update-column new-col-name (dataset col-name))
-                   (remove-column col-name)))
-             dataset
-             colname-map))
+  (->> (columns dataset)
+       (map (fn [col]
+              (if-let [new-name (get colname-map (ds-col/column-name col))]
+                (ds-col/set-name col new-name)
+                col)))
+       (ds-impl/new-dataset (dataset-name dataset)
+                            (metadata dataset))))
 
 
 (defn select
@@ -394,6 +397,13 @@ the correct type."
              (map (fn [[colname columns]]
                     (let [columns (map :column columns)
                           column-values (reader-concat/concat-readers columns)
+                          col-dtypes (set (map dtype/get-datatype columns))
+                          _ (when-not (== 1 (count col-dtypes))
+                              (throw (Exception.
+                                      (format
+                                       "Column %s has mismatched datatypes: %s"
+                                       colname
+                                       col-dtypes))))
                           missing
                           (->> (reduce
                                 (fn [[missing offset] col]
@@ -556,10 +566,16 @@ the correct type."
         json? (or (.endsWith file-str ".json")
                   (.endsWith file-str ".json.gz"))
         tsv? (or (.endsWith file-str ".tsv")
-                 (.endsWith file-str ".tsv.gz"))]
+                 (.endsWith file-str ".tsv.gz"))
+        xlsx? (or (.endsWith file-str ".xlsx")
+                  (.endsWith file-str ".xlsx.gz"))
+        xls? (or (.endsWith file-str ".xls")
+                 (.endsWith file-str ".xls.gz"))]
     {:gzipped? gzipped?
      :json? json?
-     :tsv? tsv?}))
+     :tsv? tsv?
+     :xls? xls?
+     :xlsx? xlsx?}))
 
 
 (defn ->dataset
@@ -592,6 +608,11 @@ the correct type."
             column parser is used.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
            can be either of the two above.  Else the default column parser is used.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
+             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
+             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
+             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
+             DateTimeFormatter.
   :parser-scan-len - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 
@@ -608,7 +629,7 @@ the correct type."
 
            (string? dataset)
            (let [^String dataset dataset
-                 {:keys [gzipped? json? tsv?]}
+                 {:keys [gzipped? json? tsv? xls? xlsx?]}
                  (get-file-info dataset)
                  options (if (and tsv? (not (contains? options :separator)))
                            (assoc options :separator \tab)
@@ -616,12 +637,27 @@ the correct type."
                  options (if (and json? (not (contains? options :key-fn)))
                            (assoc options :key-fn keyword)
                            options)
-                 open-fn (if json?
+                 open-fn (cond
+                           json?
                            #(-> (apply io/get-json % (apply clojure.core/concat
                                                             options))
                                 (ds-impl/map-seq->dataset
                                  (merge {:table-name dataset}
                                         options)))
+                           (or xls? xlsx?)
+                           (let [parse-fn (parallel-require/require-resolve
+                                           'tech.libs.poi/workbook->datasets)
+                                 options (if xls?
+                                           (assoc options :poi-file-type :xls)
+                                           (assoc options :poi-file-type :xlsx))]
+                             (fn [istream]
+                               (let [datasets (parse-fn istream options)]
+                                 (when-not (== 1 (count datasets))
+                                   (log/warnf "Found multiple (%d) worksheets when parsing %s"
+                                              (count datasets)
+                                              dataset))
+                                 (first datasets))))
+                           :else
                            #(ds-impl/parse-dataset %
                                                    (merge {:table-name dataset}
                                                           options)))]
