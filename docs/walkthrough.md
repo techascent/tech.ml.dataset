@@ -208,6 +208,24 @@ Sheet1 [5 8]:
 | 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 2016-08-16 | 2468.000 |
 user> (dtype/get-datatype (data "Date"))
 :local-date
+
+user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx"
+                                         {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]
+                                                      "Id" :int32
+                                                      0 :int32
+                                                      "Age" :int16}})
+                           :all (range 5)))
+#'user/data
+user> data
+Sheet1 [5 8]:
+
+| 0 | First Name | Last Name | Gender |       Country | Age |       Date |   Id |
+|---+------------+-----------+--------+---------------+-----+------------+------|
+| 1 |      Dulce |     Abril | Female | United States |  32 | 2017-10-15 | 1562 |
+| 2 |       Mara | Hashimoto | Female | Great Britain |  25 | 2016-08-16 | 1582 |
+| 3 |     Philip |      Gent |   Male |        France |  36 | 2015-05-21 | 2587 |
+| 4 |   Kathleen |    Hanner | Female | United States |  25 | 2017-10-15 | 3549 |
+| 5 |    Nereida |   Magwood | Female | United States |  58 | 2016-08-16 | 2468 |
 ```
 
 A reference to what is possible is in
