@@ -1,5 +1,5 @@
 (ns tech.libs.poi-test
-  (:require [tech.libs.poi.parse :as xlsx-parse]
+  (:require [tech.libs.poi :as xlsx-parse]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [tech.v2.datatype.functional :as dfn]

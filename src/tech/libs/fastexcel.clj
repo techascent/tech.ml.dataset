@@ -1,8 +1,8 @@
 (ns tech.libs.fastexcel
   (:require [tech.io :as io]
-            [tech.libs.poi.parse :as poi-parse]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype :as dtype])
+            [tech.v2.datatype :as dtype]
+            [tech.ml.dataset.parse.spreadsheet :as parse-spreadsheet])
   (:import [org.dhatim.fastexcel.reader ReadableWorkbook
             Sheet Row Cell CellType]
            [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
@@ -104,7 +104,7 @@
   ([input options]
    (let [workbook (input->workbook input options)]
      (try
-       (mapv #(poi-parse/sheet->dataset % options) workbook)
+       (mapv #(parse-spreadsheet/sheet->dataset % options) workbook)
        (finally
          (when-not (identical? input workbook)
            (.close workbook))))))
