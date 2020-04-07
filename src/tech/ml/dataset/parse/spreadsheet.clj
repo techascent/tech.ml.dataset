@@ -8,6 +8,7 @@
             [tech.v2.datatype.readers.const :as const-rdr]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.v2.datatype.double-ops :as double-ops]
             [tech.ml.dataset.impl.column
              :refer [make-container]
              :as col-impl]
@@ -208,13 +209,29 @@
          :data container}))))
 
 
+(defn cell-str-value
+  ^String [^Spreadsheet$Cell cell]
+
+  (case (dtype/get-datatype cell)
+    :float64 (let [dval (.doubleValue cell)]
+               (if (double-ops/is-mathematical-integer? dval)
+                 (.toString ^Object (Long. (unchecked-long dval)))
+                 (.toString dval)))
+    :none ""
+    (.toString ^Object (.value cell))))
+
+
 (defn simple-parser->parser
   [datatype]
-  (let [simple-parser (parse/simple-parser->parser datatype)
+  (let [simple-parser
+        (if (keyword? datatype)
+          (get parse/all-parsers datatype)
+          datatype)
+        _ (when-not (satisfies? parse/PSimpleColumnParser simple-parser)
+            (throw (Exception. "Parse does not satisfy the PSimpleColumnParser protocol")))
         missing-val (col-impl/datatype->missing-value datatype)
-        {container :data
-         missing :missing} (parse/column-data simple-parser)
-        ^RoaringBitmap missing missing]
+        container (parse/make-parser-container simple-parser)
+        missing (bitmap/->bitmap)]
     (reify
       dtype-proto/PDatatype
       (get-datatype [this] datatype)
@@ -226,7 +243,7 @@
             (do
               (.add ^List container missing-val)
               (.add missing row-idx))
-            (parse/simple-parse! simple-parser container (str (.value cell))))))
+            (parse/simple-parse! simple-parser container (cell-str-value cell)))))
       (column-data [this]
         {:missing missing
          :data container}))))
@@ -283,8 +300,7 @@
                           ;;Convert lists of cells to lists of strings.  This allows us to share more code
                           ;;with the CSV parsing system.
                           (map (fn [[k v]]
-                                 [k (map (comp str #(.value ^Spreadsheet$Cell %))
-                                         v)]))
+                                 [k (map cell-str-value v)]))
                           (into {})))
          col-parser-gen (reify
                           Function

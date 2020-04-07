@@ -55,3 +55,10 @@
                    {:parser-fn {"Date" [:local-date
                                         "dd/MM/yyyy"]}}))]
     (is (= :local-date (dtype/get-datatype (ds "Date"))))))
+
+
+(deftest integer-field-test
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   xls-file
+                   {:parser-fn {"Id" :int64}}))]
+    (is (= :int64 (dtype/get-datatype (ds "Id"))))))
