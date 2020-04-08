@@ -16,7 +16,7 @@ millions of rows and tens of columns.
 Logically, a dataset is a map of column name to column data.  Column data is typed
 so for instance you may have a column of 16 bit integers or 64 bit floating point
 numbers.  Column names may be any java object and column values may be of the
-tech.datatype primitive, datetime, or objects.  This stored contiguously in jvm
+tech.datatype primitive, datetime, or objects.  Data is stored contiguously in jvm
 arrays while missing values are indicated with bitsets.
 
 
