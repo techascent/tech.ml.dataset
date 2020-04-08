@@ -7,7 +7,8 @@
 Dataset and ETL pipeline for machine learning.  Datasets are currently in-memory
 columnwise databases and we support parsing from file or input-stream which means
 we support gzipped csv/tsv files.  The backing store behind tech.ml.dataset is
-[tablesaw](https://github.com/jtablesaw/tablesaw).
+[tech.datatype](https://github.com/techascent/tech.datatype).  We now have support
+for datetime types and joins!
 
 
 For a quick code-oriented intro, please see the [walkthrough](docs/walkthrough.md).
@@ -25,10 +26,6 @@ operating on that data in a mainly columnwise fashion.
 [tech.v2.datatype](https://github.com/techascent/tech.datatype) subsystem which is
 described on our [blog](http://techascent.com/blog/datatype-library.html).
 [Here is a cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md).
-
-The tablesaw column-level bindings are [here](src/tech/libs/tablesaw.clj).  They use the
-generic table support and as such they do not use the actual tablesaw 'table' datatype.
-
 ## Walkthrough
 
 ```clojure

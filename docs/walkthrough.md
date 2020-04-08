@@ -10,12 +10,6 @@ performance when processing datasets of realistic sizes which in our case means
 millions of rows and tens of columns.
 
 
-The current backing store of the `tech.ml.dataset` abstraction is a java project
-named `tablesaw`.  We tested out quite a few different storage mechanisms and
-`tablesaw` came out ahead in memory usage, performance, and features such as
-support for strings, dates, and missing values.
-
-
 ## High Level Design
 
 
@@ -57,8 +51,8 @@ and `->>dataset`.  These functions several arguments:
 
 *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
    ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
-   is csv or tsv and then `tablesaw` has column datatype detection mechanisms which
-   can be overridden.
+   is csv or tsv and then has some extensive engineering put into column datatype
+   detection mechanisms which can be overridden.
 *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
 
@@ -91,8 +85,8 @@ tech.ml.dataset/->dataset
   Create a dataset from either csv/tsv or a sequence of maps.
    *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
    ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
-   is csv or tsv and then `tablesaw` has column datatype detection mechanisms which
-   can be overridden.
+   is csv or tsv and has some engineering put into autodetecting column types all of
+   which can be overridden.
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
   Options:
@@ -266,11 +260,11 @@ treated like sequences.
 user> (def new-ds (ds/->dataset [{:a 1 :b 2} {:a 2 :c 3}]))
 #'user/new-ds
 user> (first new-ds)
-#tablesaw-column<int16>[2]
+#tech.ml.dataset.column<int16>[2]
 :a
 [1, 2, ]
 user> (new-ds :c)
-#tablesaw-column<int16>[2]
+#tech.ml.dataset.column<int16>[2]
 :c
 [-32768, 3, ]
 []
@@ -279,7 +273,7 @@ user> (ds-col/missing (new-ds :b))
 user> (ds-col/missing (new-ds :c))
 [0]
 user> (first new-ds)
-#tablesaw-column<int16>[2]
+#tech.ml.dataset.column<int16>[2]
 :a
 [1, 2, ]
 ```
@@ -359,11 +353,11 @@ user> (ds/column-names ames-ds)
  "LotFrontage"
  ...)
 user> (ames-ds "KitchenQual")
-#tablesaw-column<string>[1460]
+#tech.ml.dataset.column<string>[1460]
 KitchenQual
 [Gd, TA, Gd, Gd, Gd, TA, Gd, TA, TA, TA, TA, Ex, TA, Gd, TA, TA, TA, TA, Gd, TA, ...]
 user> (ames-ds "SalePrice")
-#tablesaw-column<int32>[1460]
+#tech.ml.dataset.column<int32>[1460]
 SalePrice
 [208500, 181500, 223500, 140000, 250000, 143000, 307000, 200000, 129900, 118000, 129500, 345000, 144000, 279500, 157000, 132000, 149000, 90000, 159000, 139000, ...]
 
@@ -396,13 +390,6 @@ user> (ds/select-columns ames-ds ["KitchenQual" "SalePrice"])
 ```
 
 ## Add, Remove, Update
-
-Adding or updating columns requires either a fully constructed column
-`(dtype/make-container :tablesaw-column :float32 elem-seq)` or a reader
-that has a type compatible with tablesaw's column system.  For this
-reason you may be errors if you pass a persistent vector in to the
-add-or-update method without first given it a datatype via
-`(dtype/->reader [1 2 3 4] :float32)`.
 
 ```clojure
 user> (require '[tech.v2.datatype.functional :as dfn])
@@ -583,7 +570,7 @@ user> (def updated-ames
 
 #'user/updated-ames
 user> (updated-ames "TotalBath")
-#tablesaw-column<float64>[1460]
+#tech.ml.dataset.column<float64>[1460]
 TotalBath
 [3.500, 2.500, 3.500, 2.000, 3.500, 2.500, 3.000, 3.500, 2.000, 2.000, 2.000, 4.000, 2.000, 2.000, 2.500, 1.000, 2.000, 2.000, 2.500, 1.000, ...]
 ```
@@ -603,8 +590,8 @@ user> (def named-baths
          (let [total-baths (typecast/datatype->reader
                             :float64 (updated-ames "TotalBath"))]
            (reify ObjectReader
-		     ;;Since this is an object reader, we have to specify string as the datatype.
-			 ;;Tablesaw doesn't support object columns at this point.
+		     ;;Since this is an object reader, we have to specify
+			 ;;string as the datatype.
              (getDatatype [rdr] :string)
              (lsize [rdr] (.lsize total-baths))
              (read [rdr idx]
@@ -622,7 +609,7 @@ user> (def named-baths
 
 #'user/named-baths
 user> (named-baths "NamedBaths")
-#tablesaw-column<string>[1460]
+#tech.ml.dataset.column<string>[1460]
 NamedBaths
 [living in style, getting somewhere, living in style, getting somewhere, living in style, getting somewhere, living in style, living in style, getting somewhere, getting somewhere, getting somewhere, living in style, getting somewhere, getting somewhere, getting somewhere, somewhat doable, getting somewhere, getting somewhere, getting somewhere, somewhat doable, ...]
 
@@ -631,7 +618,7 @@ NamedBaths
 user> (def sorted-named-baths (ds/ds-sort-by-column "SalePrice" >  named-baths))
 #'user/sorted-named-baths
 user> (sorted-named-baths "NamedBaths")
-#tablesaw-column<string>[1460]
+#tech.ml.dataset.column<string>[1460]
 NamedBaths
 [living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, getting somewhere, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, ...]
 
