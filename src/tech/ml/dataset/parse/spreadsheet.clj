@@ -107,7 +107,8 @@
                     (parse-dt/try-parse-datetimes (.value cell))
                     [original-cell-dtype (case original-cell-dtype
                                            :boolean (.boolValue cell)
-                                           :float64 (.doubleValue cell))])
+                                           :float64 (.doubleValue cell)
+                                           (.value cell))])
                   container (unify-container-type-cell-type
                              container*
                              container-dtype
@@ -131,7 +132,7 @@
                 :string (.add ^List container (.value cell))
                 :float64 (.add ^DoubleArrayList container
                                (double cell-value))
-                :object (.add ^List container cell-value))))))
+                (.add ^List container cell-value))))))
         (column-data [this]
                      {:data @container*
                       :missing missing}))))
@@ -211,7 +212,6 @@
 
 (defn cell-str-value
   ^String [^Spreadsheet$Cell cell]
-
   (case (dtype/get-datatype cell)
     :float64 (let [dval (.doubleValue cell)]
                (if (double-ops/is-mathematical-integer? dval)
@@ -249,7 +249,7 @@
          :data container}))))
 
 
-(defn- make-parser
+(defn make-parser
   [parser-fn header-row-name scan-rows]
   (cond
     (fn? parser-fn)
@@ -267,6 +267,68 @@
     (if-let [entry (get parser-fn header-row-name)]
       (make-parser entry header-row-name scan-rows)
       (default-column-parser))))
+
+
+(defn process-spreadsheet-rows
+  [rows header-row?
+   col-parser-gen
+   column-idx->column-name
+   dataset-name]
+  (let [columns (HashMap.)]
+    (doseq [^Spreadsheet$Row row rows]
+      (let [row-num (.getRowNum row)
+            row-num (long (if header-row?
+                            (dec row-num)
+                            row-num))]
+        (parallel-for/doiter
+         cell row
+         (let [^Spreadsheet$Cell cell cell
+               column-number (.getColumnNum cell)
+               parser (.computeIfAbsent columns column-number
+                                        col-parser-gen)]
+           (add-cell-value! parser cell row-num)))))
+    ;;This will order the columns
+    (let [column-set (bitmap/->bitmap (keys columns))
+          n-columns (inc (.last column-set))
+          column-data (->> columns
+                           (map (fn [[k v]]
+                                  [(long k) (column-data v)]))
+                           (into {}))
+          n-rows (->> (vals column-data)
+                      (map (comp dtype/ecount :data))
+                      (apply max 0)
+                      (long))
+          missing-value (get @col-impl/dtype->missing-val-map
+                             :float64)]
+      (->> (range n-columns)
+           (mapv
+            (fn [col-idx]
+              (let [colname (column-idx->column-name col-idx)
+                    coldata (get column-data (long col-idx))
+                    coldata (if coldata
+                              (ensure-n-rows (get column-data col-idx) n-rows)
+                              {:data (const-rdr/make-const-reader missing-value :float64 n-rows)
+                               :missing (bitmap/->bitmap (range n-rows))})]
+                ;;We have heterogeneous data so if it isn't a specific datatype don't scan
+                ;;the data to make something else.
+                (assoc coldata
+                       :name colname
+                       :force-datatype? true))))
+           (ds-impl/new-dataset dataset-name)))))
+
+
+(defn scan-initial-rows
+  [rows parser-scan-len]
+  (->> (take parser-scan-len rows)
+       ;;Expand rows into cells
+       (mapcat seq)
+       ;;Group by column
+       (group-by #(.getColumnNum ^Spreadsheet$Cell %))
+       ;;Convert lists of cells to lists of strings.  This allows us to share more code
+       ;;with the CSV parsing system.
+       (map (fn [[k v]]
+              [k (map cell-str-value v)]))
+       (into {})))
 
 
 (defn sheet->dataset
@@ -290,18 +352,8 @@
             (rest rows)]
            [nil rows])
          last-row-num (atom nil)
-         columns (HashMap.)
          scan-rows (when parser-fn
-                     (->> (take parser-scan-len rows)
-                          ;;Expand rows into cells
-                          (mapcat seq)
-                          ;;Group by column
-                          (group-by #(.getColumnNum ^Spreadsheet$Cell %))
-                          ;;Convert lists of cells to lists of strings.  This allows us to share more code
-                          ;;with the CSV parsing system.
-                          (map (fn [[k v]]
-                                 [k (map cell-str-value v)]))
-                          (into {})))
+                     (scan-initial-rows rows parser-scan-len))
          col-parser-gen (reify
                           Function
                           (apply [this column-number]
@@ -309,44 +361,5 @@
                               (let [colname (get header-row column-number column-number)]
                                 (make-parser parser-fn colname (scan-rows column-number)))
                               (default-column-parser))))]
-     (doseq [^Spreadsheet$Row row rows]
-       (let [row-num (.getRowNum row)
-             row-num (long (if header-row?
-                             (dec row-num)
-                             row-num))]
-         (parallel-for/doiter
-          cell row
-          (let [^Spreadsheet$Cell cell cell
-                column-number (.getColumnNum cell)
-                parser (.computeIfAbsent columns column-number
-                                         col-parser-gen)]
-            (add-cell-value! parser cell row-num)))))
-     ;;This will order the columns
-     (let [column-set (bitmap/->bitmap (concat (keys columns)
-                                               (keys header-row)))
-           n-columns (inc (.last column-set))
-           column-data (->> columns
-                            (map (fn [[k v]]
-                                   [(long k) (column-data v)]))
-                            (into {}))
-           n-rows (->> (vals column-data)
-                       (map (comp dtype/ecount :data))
-                       (apply max 0)
-                       (long))
-           missing-value (get @col-impl/dtype->missing-val-map
-                              :float64)]
-       (->> (range n-columns)
-            (mapv
-             (fn [col-idx]
-               (let [colname (get header-row col-idx col-idx)
-                     coldata (get column-data (long col-idx))
-                     coldata (if coldata
-                               (ensure-n-rows (get column-data col-idx) n-rows)
-                               {:data (const-rdr/make-const-reader missing-value :float64 n-rows)
-                                :missing (bitmap/->bitmap (range n-rows))})]
-                 ;;We have heterogeneous data so if it isn't a specific datatype don't scan
-                 ;;the data to make something else.
-                 (assoc coldata
-                        :name colname
-                        :force-datatype? true))))
-            (ds-impl/new-dataset (.name worksheet)))))))
+     (process-spreadsheet-rows rows header-row? col-parser-gen
+                               #(get header-row % %) (.name worksheet)))))

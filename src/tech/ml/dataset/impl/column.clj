@@ -78,7 +78,8 @@
          missing# ~missing
          missing-val# (casting/datatype->cast-fn
                        :unknown ~datatype
-                       (get @dtype->missing-val-map ~datatype))
+                       (datatype->missing-value
+                        (dtype/get-datatype ~data)))
          n-elems# (long ~n-elems)]
      (reify ~(typecast/datatype->reader-type datatype)
        (getDatatype [this#] (.getDatatype rdr#))
@@ -146,8 +147,9 @@
           (if (or (= :elide missing-policy)
                   (not any-missing?))
             (dtype/->reader data options)
-            (case (or (:datatype options)
-                      (dtype/get-datatype this))
+            (case (casting/un-alias-datatype
+                   (or (:datatype options)
+                       (dtype/get-datatype this)))
               :int16 (create-missing-reader :int16 missing data n-elems options)
               :int32 (create-missing-reader :int32 missing data n-elems options)
               :int64 (create-missing-reader :int64 missing data n-elems options)

@@ -229,6 +229,8 @@
   (let [ds (dataset/name-values-seq->dataset {:a [1 nil 2 nil 3]
                                               :b (list 1 nil 2 nil 3)})
         rec (ds-pipe/replace-missing ds :all 5)]
+    (is (= #{:float64}
+           (set (map dtype/get-datatype ds))))
     (is (= [1.0 5.0 2.0 5.0 3.0]
            (vec (rec :a))))
     (is (= [1.0 5.0 2.0 5.0 3.0]
