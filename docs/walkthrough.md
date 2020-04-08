@@ -637,7 +637,7 @@ user> (->> (sorted-named-baths "NamedBaths")
 
 Brand new.  Experimental.  all that stuff.
 
-Support for reading datetime types and manpulating them.  Please checkout the
+Support for reading datetime types and manipulating them.  Please checkout the
 `tech.datatype` [datetime documentation](https://github.com/techascent/tech.datatype/blob/master/docs/datetime.md) for using this feature.
 
 
