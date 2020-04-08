@@ -169,7 +169,7 @@
                      (.equalsIgnoreCase "false" ~val))
                  false
                  :else
-                 (throw (Exception. "Parse failure"))))
+                 (throw (Exception. (format "Boolean parse failure: %s" ~val) ))))
     :int16 `(Short/parseShort ~val)
     :int32 `(Integer/parseInt ~val)
     :int64 `(Long/parseLong ~val)
@@ -202,10 +202,8 @@
      (simple-parse! [parser# container# str-val#]
        (let [str-val# (str str-val#)
              parsed-val# (dtype->parse-fn ~datatype str-val#)]
-         (if-not (== parsed-val# (dtype->missing-val ~datatype))
-           (.add (typecast/datatype->list-cast-fn ~datatype container#)
-                 parsed-val#)
-           (throw (Exception. "Parse failure")))))
+         (.add (typecast/datatype->list-cast-fn ~datatype container#)
+               parsed-val#)))
      (simple-missing! [parser# container#]
        (.add (typecast/datatype->list-cast-fn ~datatype container#)
              (dtype->missing-val ~datatype)))))

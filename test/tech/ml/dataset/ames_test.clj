@@ -88,39 +88,43 @@
 
 (defn string-and-math
   [dataset]
-  (-> dataset
-      (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-      (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-      (dsp/string->number ["ExterQual"
-                               "ExterCond"
-                               "BsmtQual"
-                               "BsmtCond"
-                               "HeatingQC"
-                               "KitchenQual"
-                               "FireplaceQu"
-                               "GarageQual"
-                               "GarageCond"
-                               "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-      (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
-                              :categorical? true)
-      (dsp/string->number "MasVnrType" {"BrkCmn" 1
-                                            "BrkFace" 1
-                                            "CBlock" 1
-                                            "Stone" 1
-                                            "None" 0
-                                            "NA" -1})
-      (dsp/string->number "SaleCondition" {"Abnorml" 0
-                                               "Alloca" 0
-                                               "AdjLand" 0
-                                               "Family" 0
-                                               "Normal" 0
-                                               "Partial" 1
-                                               "NA" -1})
-      ;; ;;Auto convert the rest that are still string columns
-      (dsp/string->number)
-      (dsp/new-column "SalePriceDup" #(ds/column % "SalePrice"))
-      (dsp/update-column "SalePrice" dfn/log1p)
-      (ds/set-inference-target "SalePrice")))
+  (let [initial-ds
+        (-> dataset
+            (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+            (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
+            (dsp/string->number ["ExterQual"
+                                 "ExterCond"
+                                 "BsmtQual"
+                                 "BsmtCond"
+                                 "HeatingQC"
+                                 "KitchenQual"
+                                 "FireplaceQu"
+                                 "GarageQual"
+                                 "GarageCond"
+                                 "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
+            (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+                                :categorical? true)
+            (dsp/string->number "MasVnrType" {"BrkCmn" 1
+                                              "BrkFace" 1
+                                              "CBlock" 1
+                                              "Stone" 1
+                                              "None" 0
+                                              "NA" -1})
+            (dsp/string->number "SaleCondition" {"Abnorml" 0
+                                                 "Alloca" 0
+                                                 "AdjLand" 0
+                                                 "Family" 0
+                                                 "Normal" 0
+                                                 "Partial" 1
+                                                 "NA" -1})
+            ;; ;;Auto convert the rest that are still string columns
+            (dsp/string->number))]
+    (if (ds/has-column? initial-ds "SalePrice")
+      (-> initial-ds
+          (dsp/new-column "SalePriceDup" #(ds/column % "SalePrice"))
+          (dsp/update-column "SalePrice" dfn/log1p)
+          (ds/set-inference-target "SalePrice"))
+      initial-ds)))
 
 
 (deftest base-etl-test
@@ -171,20 +175,23 @@
     (is (= 10 (count inference-dataset)))
     (is (= 10 (count final-flyweight)))
 
+
     (let [pre-pipeline (map ds-col/metadata (ds/columns src-ds))
-          exact-columns (ds-impl/map-seq->dataset
+          col-dtype-map (->> pre-pipeline
+                             (map (fn [{:keys [name datatype]}]
+                                    [name datatype]))
+                             (into {}))
+          exact-columns (ds/->dataset
                          inference-dataset
-                         {:column-definitions pre-pipeline})
+                         {:parser-fn col-dtype-map})
           ;;Just checking that this works at all..
-          autoscan-columns (ds-impl/map-seq->dataset inference-dataset {})]
+          autoscan-columns (ds/->dataset inference-dataset {})]
 
       ;;And the definition of exact is...
-      (is (= (mapv :datatype (->> pre-pipeline
-                                  (sort-by :name)))
-             (->> (ds/columns exact-columns)
-                  (map ds-col/metadata)
-                  (sort-by :name)
-                  (mapv :datatype))))
+      (is (every? #(= (dtype/get-datatype %)
+                      (get col-dtype-map
+                           (ds-col/column-name %)))
+                  (ds/columns exact-columns)))
       (let [inference-ds (-> exact-columns
                              missing-pipeline
                              string-and-math)]

@@ -2,7 +2,6 @@
   (:require [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.seq-of-maps :as ds-seq-of-maps]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.print :as ds-print]
             [tech.v2.datatype :as dtype]
@@ -195,77 +194,6 @@
     (symbol? item-val) item-val
     :else
     (str item-val)))
-
-
-(defn map-seq->dataset
-  "Given a sequence of maps, construct a dataset.  Defaults to a tablesaw-based
-  dataset.  Options are:
-  :scan-depth - number of maps to scan in order to decifer column type.
-  :column-definintions - sequence of {:name :datatype} maps that decide the columns
-  without using autoscan.
-  :table-name - name of the new table
-  :dataset-constructor - Function to use to transform the sequence of maps into a
-  dataset.  Defaults to a tablesaw-based dataset."
-  ([map-seq-dataset {:keys [column-definitions
-                            table-name]
-                     :or {table-name "_unnamed"}
-                     :as options}]
-   (let [column-definitions
-         (if column-definitions
-           column-definitions
-           (ds-seq-of-maps/autoscan-map-seq map-seq-dataset options))
-         ;;force the dataset here as knowing the count helps
-         column-map (->> column-definitions
-                         (map (fn [{colname :name
-                                    datatype :datatype}]
-                                [colname
-                                 {:name colname
-                                  :data (col-impl/make-container datatype)
-                                  :missing (dtype/make-container :list :int64 0)}]))
-                         (into {}))
-         _ (->> map-seq-dataset
-                (map-indexed
-                 (fn [idx item-row]
-                   (doseq [[item-name item-val] item-row]
-                     (let [{:keys [name data missing]} (get column-map item-name)
-                           n-col-data (dtype/ecount data)
-                           ^List data data
-                           ^List missing missing
-                           data-dtype (dtype/get-datatype data)
-                           missing-val (get @col-impl/dtype->missing-val-map
-                                            data-dtype)
-                           n-missing (- idx (dtype/ecount data))]
-                       (dotimes [miss-idx n-missing]
-                         (.add missing (+ miss-idx n-col-data))
-                         (.add data (get @col-impl/dtype->missing-val-map data-dtype)))
-                       (if-not (or (nil? item-val)
-                                   (= :boolean data-dtype)
-                                   (= item-val missing-val))
-                         (.add data (if (or (= :boolean data-dtype)
-                                            (casting/numeric-type? data-dtype))
-                                      (casting/cast item-val data-dtype)
-                                      (item-val->string item-val data-dtype
-                                                        item-name)))
-                         (do
-                           (.add missing n-col-data)
-                           (.add data (get @col-impl/dtype->missing-val-map
-                                           data-dtype))))))))
-                (dorun))
-         column-seq (vals column-map)
-         max-ecount (long (if (seq column-seq)
-                            (apply max (map (comp dtype/ecount :data) column-seq))
-                            0))]
-     ;;Ensure all columns are same length
-     (doseq [{:keys [name data missing]} column-seq]
-       (let [n-col-data (dtype/ecount data)
-             missing-count (- max-ecount n-col-data)
-             data-dtype (dtype/get-datatype data)]
-         (dotimes [idx missing-count]
-           (.add missing (+ idx n-col-data))
-           (.add data (get @col-impl/dtype->missing-val-map data-dtype)))))
-     (new-dataset table-name column-seq)))
-  ([map-seq-dataset]
-   (map-seq->dataset map-seq-dataset {})))
 
 
 (defn name-values-seq->dataset

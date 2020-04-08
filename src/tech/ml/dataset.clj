@@ -33,6 +33,7 @@
                         columns
                         column-map
                         column-names
+                        has-column?
                         columns-with-missing-seq
                         add-column
                         new-column
@@ -219,7 +220,7 @@
                            (throw (ex-info (format "Column %s has missing values"
                                                    (ds-col/column-name current-column))
                                            {})))
-                         (dtype/->reader current-column)))})))]
+                         (dtype/->reader current-column :object)))})))]
     ;;Transpose the sequence of columns into a sequence of rows
     (->> target-columns-and-vals
          (map :column-values)

@@ -62,7 +62,8 @@
                   "Address" "Mataderos 2312",
                   "City" "México D.F.",
                   "PostalCode" 5023,
-                  "Country" "Mexico"}]))
+                  "Country" "Mexico"}]
+                {:parser-fn {"PostalCode" :int16}}))
 
 (defn rhs-customer-db
   []
@@ -80,7 +81,11 @@
                   "CustomerID" 77,
                   "EmployeeID" 8,
                   "OrderDate" "1996-09-20",
-                  "ShipperID" 2}]))
+                  "ShipperID" 2}]
+                {:parser-fn {"OrderID" :int16
+                             "CustomerID" :int16
+                             "EmployeeID" :int16
+                             "ShipperID" :int16}}))
 
 
 ;;sample from https://www.w3schools.com/sql/sql_join_left.asp
@@ -99,7 +104,8 @@
     (is (every? identity
                 (for [{:strs [OrderID OrderDate ShipperID]}
                       unrealized]
-                  (every? empty-val? [OrderID OrderDate ShipperID])))
+                  ;;We can't do order date because they are dates
+                  (every? empty-val? [OrderID ShipperID])))
         "Everyone else should have missing entries from RHS.")))
 
 

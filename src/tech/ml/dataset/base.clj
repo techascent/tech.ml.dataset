@@ -11,6 +11,7 @@
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.parse :as ds-parse]
+            [tech.ml.dataset.parse.mapseq :as ds-parse-mapseq]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.for :as parallel-for]
@@ -90,6 +91,14 @@
   [dataset]
   (->> (ds-proto/columns dataset)
        (map ds-col/column-name)))
+
+
+(defn has-column?
+  [dataset column-name]
+  (try
+    (boolean (ds-proto/column dataset column-name))
+    (catch Throwable e
+      false)))
 
 
 (defn columns-with-missing-seq
@@ -641,7 +650,7 @@ the correct type."
                            json?
                            #(-> (apply io/get-json % (apply clojure.core/concat
                                                             options))
-                                (ds-impl/map-seq->dataset
+                                (ds-parse-mapseq/mapseq->dataset
                                  (merge {:table-name dataset}
                                         options)))
                            (or xls? xlsx?)
@@ -666,7 +675,7 @@ the correct type."
                                    (io/input-stream dataset))]
                (open-fn istream)))
            :else
-           (ds-impl/map-seq->dataset dataset options))]
+           (ds-parse-mapseq/mapseq->dataset dataset options))]
      (if table-name
        (ds-proto/set-dataset-name dataset table-name)
        dataset)))
