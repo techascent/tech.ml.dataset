@@ -15,10 +15,9 @@ millions of rows and tens of columns.
 
 Logically, a dataset is a map of column name to column data.  Column data is typed
 so for instance you may have a column of 16 bit integers or 64 bit floating point
-numbers.  Column names may be keywords or strings but the column values must be
-strings or some subset of the java primitives due to the current underlying
-implementations.  Data is stored contiguously in jvm arrays while missing values are
-indicated with bitsets.  Unlike Pandas, there is currently no Object column type.
+numbers.  Column names may be any java object and column values may be of the
+tech.datatype primitive, datetime, or objects.  This stored contiguously in jvm
+arrays while missing values are indicated with bitsets.
 
 
 Given this definition, the intention is to allow more or less normal flows familiar
@@ -180,9 +179,6 @@ Sheet1 [5 8]:
 | 4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 15/10/2017 | 3549.000 |
 | 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 16/08/2016 | 2468.000 |
 user> ;; Note the Date actually didn't parse out because it is dd/MM/yyyy format:
-user> (dtype/get-datatype (ds "Date"))
-Syntax error compiling at (*cider-repl tech.all/tech.ml.dataset:localhost:44135(clj)*:120:27).
-Unable to resolve symbol: ds in this context
 user> (dtype/get-datatype (data "Date"))
 :string
 user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx"
