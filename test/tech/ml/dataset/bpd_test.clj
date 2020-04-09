@@ -4,13 +4,25 @@
   of using the dataset library on a real world messy problem."
   (:require [tech.ml.dataset :as ds]
             [tech.ml.dataset.parse.datetime :as parse-dt]
+            ;;Need appropriate missing value indicators
+            [tech.ml.dataset.impl.column :as col-impl]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.functional :as dfn]
+            [tech.libs.nettoolkit :as nettoolkit]
+            [clojure.tools.logging :as log]
             [clojure.test :refer [deftest is]])
   (:import [java.time LocalDateTime]
-           [tech.v2.datatype LongReader ObjectReader]))
+           [tech.v2.datatype LongReader ObjectReader]
+           [java.util.concurrent ConcurrentHashMap]
+           [java.util.function Function]
+           [java.util Map List]
+           [it.unimi.dsi.fastutil.doubles DoubleArrayList]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (def test-file "test/data/BPD_Call_Log.csv")
@@ -83,3 +95,71 @@
      (ds/sort-by-column "ResponseDate" final-ds)))
   ([]
    (preprocess-bpd-dataset test-file)))
+
+
+(defonce cached-geocode-results
+  (ConcurrentHashMap.))
+
+
+(defn geocode-bpd-dataset
+  "Geocode every 100-block of addresses.
+  Return new dataset of HundredBlock,Latitude,Longitude"
+  [bpd-ds]
+  (let [addresses (set (->> (bpd-ds "HundredBlock")
+                            (filter #(not= "" %))))
+        _ (log/infof "Geocoding %d addresses" (count addresses))
+        compute-fn (reify Function
+                     (apply [this addr]
+                       (try
+                         (let [{:keys [latitude longitude] :as result}
+                               (-> (nettoolkit/geocode-address
+                                    (str addr ",Boulder,CO"))
+                                   (nettoolkit/geocode-address-result->lat-lng))]
+                           (if (and latitude longitude)
+                             result
+                             (do
+                               (log/warnf "Failure to unpack geocode result %s: %s"
+                                          addr (with-out-str
+                                                 (clojure.pprint/pprint result)))
+                               nil)))
+                         (catch Throwable e
+                           (log/warnf "Failure to geocode address %s: %s"
+                                      addr e)
+                           nil))))
+        double-missing-val (col-impl/datatype->missing-value :float64)
+        lat-list (DoubleArrayList.)
+        lng-list (DoubleArrayList.)
+        ^List string-data (col-impl/make-container :string)
+        missing (bitmap/->bitmap)]
+    ;;Geocode all the things.  Result is our geocode map has the information.
+    (->> (map-indexed vector (sort addresses))
+         (pmap (fn [[idx addr]]
+                 (when (= 0 (rem idx 100))
+                   (log/infof "Geocoding address %d" idx))
+                 [idx addr
+                  (.computeIfAbsent ^Map cached-geocode-results addr compute-fn)]))
+         (map (fn [[idx addr latlon]]
+                (try
+                  (.add string-data addr)
+                  (if latlon
+                    (do
+                      (.add lat-list (double (:latitude latlon)))
+                      (.add lng-list (double (:longitude latlon))))
+                    (do
+                      (.add missing (int idx))
+                      (.add lat-list (double double-missing-val))
+                      (.add lng-list (double double-missing-val))))
+                  (catch Throwable e
+                    (println "Error duing ds build step: " addr latlon)
+                    (throw e)))))
+         (dorun))
+    ;;build small dataset out of just geocoded information.
+    (ds-impl/new-dataset
+     "Addresses" {}
+     [(col-impl/new-column "HundredBlock" string-data
+                           {})
+      (col-impl/new-column "Latitude" lat-list {} missing)
+      (col-impl/new-column "Longitude" lng-list {} missing)])))
+
+
+(def geocoded-dataset (delay (ds/->dataset "geocoded-addresses.tsv.gz")))
