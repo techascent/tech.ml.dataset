@@ -334,8 +334,7 @@
               (name (dtype/get-datatype item))
               [n-elems]
               (ds-col-proto/column-name item)
-              (-> (dtype/->reader item)
-                  (dtype-proto/sub-buffer 0 (min 20 n-elems))
+              (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
                   (dtype-pp/print-reader-data))))))
 
 
