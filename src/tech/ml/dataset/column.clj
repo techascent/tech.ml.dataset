@@ -2,15 +2,21 @@
   (:require [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.string-table :as str-table]
+            [tech.ml.dataset.parse :as ds-parse]
             [tech.parallel.for :as parallel-for]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.readers.concat :as concat-rdr]
             [tech.v2.datatype.readers.const :as const-rdr])
   (:import [it.unimi.dsi.fastutil.longs LongArrayList]
            [java.util List]
            [tech.ml.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
+
+
+(declare new-column)
 
 
 (defn is-column?
@@ -132,6 +138,37 @@ Implementations should check their metadata before doing calculations."
            (set))
       (catch Throwable e
         nil))))
+
+
+(defn parse-column
+  "parse a text or a str column, returning a new column with the same name but with
+  a different datatype.  This method is single-threaded.
+
+  parser-fn-or-kwd is nil by default and can the keyword :relaxed?  or a function that
+  must return one of parsed-value, :tech.ml.dataset.parse/missing in which case a
+  missing value will be added or :tech.ml.dataset.parse/parse-failure in which case the
+  a missing index will be added and the string value will be recorded in the metadata's
+  :unparsed-data, :unparsed-indexes entries."
+  ([datatype options col]
+   (let [colname (column-name col)
+         parse-fn (:parse-fn options datatype)
+         parser-scan-len (:parser-scan-len options 100)
+         col-reader (typecast/datatype->reader
+                     :object
+                     (-> (dtype/->reader col)
+                         (ds-parse/convert-reader-to-strings)))
+         col-parser (ds-parse/make-parser parse-fn (column-name col)
+                                          (take parser-scan-len col-reader))
+         ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap (missing col))
+         n-elems (dtype/ecount col-reader)]
+     (dotimes [iter n-elems]
+       (if (.contains missing iter)
+         (ds-parse/missing! col-parser)
+         (ds-parse/parse! col-parser (.read col-reader iter))))
+     (let [{:keys [data missing metadata]} (ds-parse/column-data col-parser)]
+       (new-column colname data metadata missing))))
+  ([datatype col]
+   (parse-column datatype {} col)))
 
 
 (def object-primitive-array-types

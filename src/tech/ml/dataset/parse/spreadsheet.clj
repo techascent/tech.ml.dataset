@@ -15,6 +15,7 @@
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.parse.datetime :as parse-dt]
             [tech.ml.dataset.parse :as parse]
+            [tech.ml.dataset.string-table :as str-table]
             [tech.parallel.for :as parallel-for])
   (:import [java.util List ArrayList HashMap]
            [java.util.function Function]
@@ -146,69 +147,6 @@
       coldata)))
 
 
-(defn datetime-formatter-parser
-  [datatype format-string-or-formatter]
-  (let [parse-fn
-        (cond
-          (instance? DateTimeFormatter format-string-or-formatter)
-          (parse-dt/datetime-parse-str-fn datatype format-string-or-formatter)
-          (string? format-string-or-formatter)
-          (parse-dt/datetime-parse-str-fn
-           datatype
-           (DateTimeFormatter/ofPattern format-string-or-formatter))
-          (fn? format-string-or-formatter)
-          format-string-or-formatter
-          :else
-          (throw (Exception. (format "Unrecognized datetime parser type: %s"
-                                     format-string-or-formatter))))
-        container (make-container datatype)
-        missing-val (col-impl/datatype->missing-value datatype)
-        missing (bitmap/->bitmap)]
-    (reify
-      dtype-proto/PDatatype
-      (get-datatype [this] datatype)
-      PCellColumnParser
-      (add-cell-value! [this cell row-idx]
-        (let [cell ^Spreadsheet$Cell cell]
-          (add-missing-by-row-idx! container missing row-idx)
-          (if (.missing cell)
-            (do
-              (.add ^List container missing-val)
-              (.add missing row-idx))
-            (parse-dt/add-to-container! datatype container
-                                        (parse-fn (str (.value cell)))))))
-      (column-data [this]
-        {:missing missing
-         :data container}))))
-
-
-(defn general-parser
-  [datatype parse-fn]
-  (when-not (fn? parse-fn)
-    (throw (Exception. (format "parse-fn doesn't appear to be a function: %s"
-                               parse-fn))))
-  (let [container (make-container datatype)
-        missing-val (col-impl/datatype->missing-value datatype)
-        missing (bitmap/->bitmap)
-        add-fn (if (casting/numeric-type? datatype)
-                 #(.add ^List %1 (casting/cast (parse-fn %2) datatype))
-                 #(.add ^List %1 (parse-fn %2)))]
-    (reify
-      dtype-proto/PDatatype
-      (get-datatype [this] datatype)
-      PCellColumnParser
-      (add-cell-value! [this cell row-idx]
-        (let [cell ^Spreadsheet$Cell cell]
-          (add-missing-by-row-idx! container missing row-idx)
-          (if (.missing cell)
-            (do
-              (.add ^List container missing-val)
-              (.add missing row-idx))
-            (add-fn (str (.value cell))))))
-      (column-data [this]
-        {:missing missing
-         :data container}))))
-
 
 (defn cell-str-value
   ^String [^Spreadsheet$Cell cell]
@@ -222,16 +160,55 @@
 
 
 (defn simple-parser->parser
-  [datatype]
-  (let [simple-parser
-        (if (keyword? datatype)
-          (get parse/all-parsers datatype)
-          datatype)
-        _ (when-not (satisfies? parse/PSimpleColumnParser simple-parser)
-            (throw (Exception. "Parse does not satisfy the PSimpleColumnParser protocol")))
+  ([datatype relaxed?]
+   (let [simple-parser
+         (if (keyword? datatype)
+           (get parse/all-parsers datatype)
+           datatype)
+         _ (when-not (satisfies? parse/PSimpleColumnParser simple-parser)
+             (throw (Exception. "Parse does not satisfy the PSimpleColumnParser protocol")))
+         missing-val (col-impl/datatype->missing-value datatype)
+         container (parse/make-parser-container simple-parser)
+         missing (bitmap/->bitmap)
+         unparsed-data (str-table/make-string-table)
+         unparsed-indexes (bitmap/->bitmap)
+         add-missing-fn #(do
+                           (.add missing (unchecked-int (dtype/ecount container)))
+                           (.add ^List container missing-val))]
+     (reify
+       dtype-proto/PDatatype
+       (get-datatype [this] datatype)
+       PCellColumnParser
+       (add-cell-value! [this cell row-idx]
+         (let [cell ^Spreadsheet$Cell cell]
+           (add-missing-by-row-idx! container missing row-idx)
+           (if (.missing cell)
+             (add-missing-fn)
+             (parse/attempt-simple-parse! parse/simple-parse! simple-parser container add-missing-fn
+                                          unparsed-data unparsed-indexes relaxed?
+                                          (cell-str-value cell)))))
+       (column-data [this]
+         (parse/return-parse-data container missing unparsed-data unparsed-indexes)))))
+  ([datatype]
+   (simple-parser->parser datatype false)))
+
+
+(defn general-parser
+  [datatype parse-fn]
+  (when-not (fn? parse-fn)
+    (throw (Exception. (format "parse-fn doesn't appear to be a function: %s"
+                               parse-fn))))
+  (let [container (make-container datatype)
         missing-val (col-impl/datatype->missing-value datatype)
-        container (parse/make-parser-container simple-parser)
-        missing (bitmap/->bitmap)]
+        missing (bitmap/->bitmap)
+        add-fn (if (casting/numeric-type? datatype)
+                 #(.add ^List container (casting/cast % datatype))
+                 #(.add ^List container %))
+        unparsed-data (str-table/make-string-table)
+        unparsed-indexes (bitmap/->bitmap)
+        add-missing-fn #(do
+                          (.add missing (dtype/ecount container))
+                          (.add ^List container missing-val))]
     (reify
       dtype-proto/PDatatype
       (get-datatype [this] datatype)
@@ -240,33 +217,29 @@
         (let [cell ^Spreadsheet$Cell cell]
           (add-missing-by-row-idx! container missing row-idx)
           (if (.missing cell)
-            (do
-              (.add ^List container missing-val)
-              (.add missing row-idx))
-            (parse/simple-parse! simple-parser container (cell-str-value cell)))))
+            (add-missing-fn)
+            (let [str-val (cell-str-value cell)]
+              (parse/attempt-general-parse! add-fn parse-fn container add-missing-fn
+                                            unparsed-data unparsed-indexes
+                                            str-val)))))
       (column-data [this]
-        {:missing missing
-         :data container}))))
+        (parse/return-parse-data container missing unparsed-data unparsed-indexes)))))
+
+
+(defn datetime-formatter-parser
+  [datatype format-string-or-formatter]
+  (let [parse-fn (parse-dt/datetime-formatter-or-str->parser-fn
+                  datatype format-string-or-formatter)]
+    (general-parser datatype parse-fn)))
 
 
 (defn make-parser
   [parser-fn header-row-name scan-rows]
-  (cond
-    (fn? parser-fn)
-    (if-let [parser (parser-fn header-row-name scan-rows)]
-      parser
-      (default-column-parser))
-    (keyword? parser-fn)
-    (simple-parser->parser parser-fn)
-    (vector? parser-fn)
-    (let [[datatype parser-info] parser-fn]
-      (if (parse-dt/datetime-datatype? datatype)
-        (datetime-formatter-parser datatype parser-info)
-        (general-parser datatype parser-info)))
-    (map? parser-fn)
-    (if-let [entry (get parser-fn header-row-name)]
-      (make-parser entry header-row-name scan-rows)
-      (default-column-parser))))
+  (parse/make-parser parser-fn header-row-name scan-rows
+                     default-column-parser
+                     simple-parser->parser
+                     datetime-formatter-parser
+                     general-parser))
 
 
 (defn process-spreadsheet-rows

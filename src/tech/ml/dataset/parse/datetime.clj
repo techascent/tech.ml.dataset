@@ -239,3 +239,22 @@
 (defn datetime-datatype?
   [dtype]
   (boolean (all-datetime-datatypes dtype)))
+
+
+(defn datetime-formatter-or-str->parser-fn
+  "Given a datatype and one of [fn? string? DateTimeFormatter],
+  return a function that takes strings and returns datetime objects
+  of type datatype."
+  [datatype format-string-or-formatter]
+  (cond
+    (instance? DateTimeFormatter format-string-or-formatter)
+    (datetime-parse-str-fn datatype format-string-or-formatter)
+    (string? format-string-or-formatter)
+    (datetime-parse-str-fn
+     datatype
+     (DateTimeFormatter/ofPattern format-string-or-formatter))
+    (fn? format-string-or-formatter)
+    format-string-or-formatter
+    :else
+    (throw (Exception. (format "Unrecognized datetime parser type: %s"
+                               format-string-or-formatter)))))
