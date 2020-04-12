@@ -69,7 +69,7 @@ _unnamed [2 3]:
 |  2 | -32768 |      3 |
 ```
 
-#### CSV/TSV Parsing Options
+#### CSV/TSV/MAPSEQ/XLS/XLSX Parsing Options
 It is important to note that there are several options for parsing files.
 A few important ones are column whitelist/blacklists, num records,
 and ways to specify exactly how to parse the string data:
@@ -81,11 +81,11 @@ user> (doc ds/->dataset)
 -------------------------
 tech.ml.dataset/->dataset
 ([dataset {:keys [table-name], :as options}] [dataset])
-  Create a dataset from either csv/tsv or a sequence of maps.
+  Create a dataset from either csv/tsv/xls/xlsx or a sequence of maps.
    *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
    ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
-   is csv or tsv and has some engineering put into autodetecting column types all of
-   which can be overridden.
+   is csv or tsv and then engineering around detecting datatypes all of which can
+   be overridden.
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
   Options:
@@ -108,13 +108,17 @@ tech.ml.dataset/->dataset
           - Return value must be implement tech.ml.dataset.parser.PColumnParser in
             which case that is used or can return nil in which case the default
             column parser is used.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created.
+           parse-fn can be one of:
+        :relaxed? - data will be parsed such that parse failures of the standard parse functions do not stop
+             the parsing process.  :unparsed-values and :unparsed-indexes are available in the metadata of the
+             column that tell you the values that failed to parse and their respective indexes.
+        fn? - function from str-> one of #{:missing :parse-failure value}.  Exceptions here always kill the parse
+             process.
+        string? - for datetime types, this will turned into a DateTimeFormatter via DateTimeFormatter/ofPattern.
+        DateTimeFormatter - use with the appropriate temporal parse static function to parse the value.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
-           can be either of the two above.  Else the default column parser is used.
-   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
-             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
-             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
-             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
-             DateTimeFormatter.
+           value can be any of the above options.  Else the default column parser is used.
   :parser-scan-len - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 

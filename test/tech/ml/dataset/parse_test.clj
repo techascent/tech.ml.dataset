@@ -280,10 +280,33 @@
     (is (= :local-date (dtype/get-datatype (stock-ds "date"))))))
 
 
-(deftest bad-csv-1
+(defn verify-relaxed-parse
+  [ds]
+  (let [date-col (ds "date")
+        col-meta (meta date-col)
+        ^List unparsed-data (:unparsed-data col-meta)
+        ^RoaringBitmap unparsed-indexes (:unparsed-indexes col-meta)]
+    (is (= :packed-local-date (dtype/get-datatype date-col)))
+    ;;Make sure unparsed data came through intact
+    (is (= #{"hello" "1212"}
+           (set unparsed-data)))))
+
+
+(deftest bad-csv-relaxed-1
   (let [ds (ds-base/->dataset "test/data/stocks-bad-date.csv")]
     (is (= :string (dtype/get-datatype (ds "date"))))
     ;;Make sure unparsed data came through intact
     (is (= #{"hello" "1212"}
            (set/intersection #{"hello" "1212"}
-                             (set (ds-col/unique (ds "date"))))))))
+                             (set (ds-col/unique (ds "date"))))))
+    (let [updated-ds (ds-base/update-column
+                      ds "date" (partial ds-col/parse-column
+                                         [:packed-local-date :relaxed?]))]
+      (verify-relaxed-parse updated-ds))))
+
+
+(deftest bad-csv-relaxed-2
+  (let [ds (ds-base/->dataset "test/data/stocks-bad-date.csv"
+                              {:parser-fn
+                               {"date" [:packed-local-date :relaxed?]}})]
+    (verify-relaxed-parse ds)))

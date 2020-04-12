@@ -123,21 +123,10 @@
 
 (defn workbook->datasets
   "Returns a sequence of dataset named after the sheets.  This supports a subset of the arguments
-  for tech.ml.dataset.parse/csv->columns.  Specifically:
-  header-row? - Defaults to true, indicates the first row is a header.
-  parser-fn -
-   - keyword - all columns parsed to this datatype
-   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
-          - Return value must be implement PColumnParser in which case that is used
-            or can return nil in which case the default column parser is used.
-   - map - the header-name-or-idx is used to lookup value.  If not nil, then
-           can be either of the two above.  Else the default column parser is used.
-   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created
-             and parse-fn will be called for every non-entry empty and is passed a string.  The return value
-             is inserted in the container.  For datetime types, the parse-fn can in addition be a string in
-             which case (DateTimeFormatter/ofPattern parse-fn) will be called or parse-fn can be a
-             DateTimeFormatter.
-  parser-scan-len - Length of initial column data used for parser-fn.  Defaults to 100."
+  for tech.ml.dataset/->dataset.  Specifically:
+  :header-row?
+  :parser-fn
+  :parser-scan-len"
   ([input options]
    (let [workbook (input->workbook input options)]
      (try
