@@ -344,6 +344,18 @@ will stop the parsing system.")
                    ""))))))))
 
 
+(defn- attempt-container-promotion
+  [old-container next-dtype]
+  (let [converted-container
+        (if (#{:string :text} next-dtype)
+          (convert-reader-to-strings old-container)
+          old-container)
+        n-elems (dtype/ecount converted-container)
+        new-container (make-container next-dtype n-elems)]
+    (dtype/copy! converted-container new-container)
+    new-container))
+
+
 (defn default-column-parser
   []
   (let [initial-parser (first default-parser-seq)
@@ -368,13 +380,20 @@ will stop the parsing system.")
                 (do
                   (reset! simple-parser* (second next-parser))
                   (let [next-dtype (first next-parser)
-                        converted-container
-                        (if (#{:string :text} (first next-parser))
-                          (convert-reader-to-strings @container*)
-                          @container*)
-                        n-elems (dtype/ecount converted-container)
-                        new-container (make-container next-dtype n-elems)]
-                    (dtype/copy! converted-container new-container)
+                        new-container
+                        (try
+                          (attempt-container-promotion @container*
+                                                       next-dtype)
+                          (catch Throwable e
+                            (log/warnf  "Error promoting container %s->%s\n
+falling back to :string"
+                                        (dtype/get-datatype @container*)
+                                        next-dtype)
+                            (reset! item-seq* (drop-while #(not= :string
+                                                                 (first %))
+                                                          @item-seq*))
+                            (reset! simple-parser* (second (first @item-seq*)))
+                            (attempt-container-promotion @container* :string)))]
                     (reset! container* new-container))
                   (.simple-parse!
                    ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*
