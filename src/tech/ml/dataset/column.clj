@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.column
   (:require [tech.ml.protocols.column :as col-proto]
             [tech.ml.dataset.impl.column :as col-impl]
+            [tech.ml.dataset.string-table :as str-table]
             [tech.parallel.for :as parallel-for]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
@@ -114,6 +115,23 @@ Implementations should check their metadata before doing calculations."
   "Clone this column not changing anything."
   [col]
   (dtype/clone col))
+
+
+(defn string-table-keyset
+  "Get the string table for this column.  Returns nil if this isn't a string column.
+  This doesn't necessarily tell you the unique set of the column unless you have just
+  parsed a file.  It is, when non-nil, a strict superset of the strings in the
+  columns."
+  [col]
+  (when (and (= :string (dtype/get-datatype col))
+             (instance? Column col))
+    (try
+      (->> (str-table/get-str-table (.data ^Column col))
+           :str->int
+           (keys)
+           (set))
+      (catch Throwable e
+        nil))))
 
 
 (def object-primitive-array-types
