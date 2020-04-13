@@ -15,6 +15,9 @@
            [org.roaringbitmap RoaringBitmap]))
 
 
+(declare new-column)
+
+
 (defn is-column?
   "Return true if this item is a column."
   [item]
