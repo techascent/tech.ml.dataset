@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.0-beta-14
+* Descriptive stats now works with datetime types.
+
 ## 2.0-beta-12
 * Support for parsing and working with durations.  Strings that look like times -
    "00:00:12" will be parsed into hh:mm:ss durations.  The value can have a negative

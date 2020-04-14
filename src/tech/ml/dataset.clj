@@ -4,6 +4,8 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.parallel.utils :as par-util]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
@@ -167,11 +169,15 @@
                          :datatype col-dtype
                          :n-valid n-valid
                          :n-missing n-missing}
-                        (if (and (not (:categorical? (ds-col/metadata ds-col)))
-                                 (casting/numeric-type? col-dtype))
+                        (cond
+                          (dtype-dt/datetime-datatype? col-dtype)
+                          (dtype-dt-ops/millisecond-descriptive-stats col-reader)
+                          (and (not (:categorical? (ds-col/metadata ds-col)))
+                               (casting/numeric-type? col-dtype))
                           (dfn/descriptive-stats col-reader
                                                  #{:min :mean :max
                                                    :standard-deviation :skew})
+                          :else
                           {:mode (->> col-reader
                                       frequencies
                                       (clojure.core/sort-by second >)
@@ -182,8 +188,10 @@
                                   set)]
     ;;This orders the columns by the ordering of stat-names but if for instance
     ;;there were no numeric or no string columns it still works.
-    (select-columns stats-ds (->> stat-names
-                                  (clojure.core/filter existing-colname-set)))))
+    (-> stats-ds
+        (select-columns (->> stat-names
+                             (clojure.core/filter existing-colname-set)))
+        (set-dataset-name (str (dataset-name dataset) ": descriptive-stats")))))
 
 
 (defn ->flyweight

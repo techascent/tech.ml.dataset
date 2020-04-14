@@ -550,6 +550,63 @@ user> (->> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "G
 )
 ```
 
+#### Descriptive Stats And GroupBy And DateTime Types
+
+This is best illustrated by an example:
+
+```clojure
+user> (def stocks (ds/->dataset "test/data/stocks.csv"))
+#'user/stocks
+user> (ds/select stocks :all (range 5))
+test/data/stocks.csv [5 3]:
+
+| symbol |       date |  price |
+|--------+------------+--------|
+|   MSFT | 2000-01-01 | 39.810 |
+|   MSFT | 2000-02-01 | 36.350 |
+|   MSFT | 2000-03-01 | 43.220 |
+|   MSFT | 2000-04-01 | 28.370 |
+|   MSFT | 2000-05-01 | 25.450 |
+user> (->> (ds/group-by-column "symbol" stocks)
+           (map (fn [[k v]] (ds/descriptive-stats v))))
+(MSFT: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
+|      date | :packed-local-date |      123 |          0 | 2005-01-30 |       | 1999-12-31 | 2010-02-28 |                 NaN |   NaN |
+|     price |           :float32 |      123 |          0 |     24.737 |       |     15.810 |     43.220 |               4.304 | 1.166 |
+|    symbol |            :string |      123 |          0 |            |  MSFT |            |            |                 NaN |   NaN |
+ GOOG: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation |  :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+--------|
+|      date | :packed-local-date |       68 |          0 | 2007-05-17 |       | 2004-08-01 | 2010-02-28 |                 NaN |    NaN |
+|     price |           :float32 |       68 |          0 |    415.870 |       |    102.370 |    707.000 |             135.070 | -0.228 |
+|    symbol |            :string |       68 |          0 |            |  GOOG |            |            |                 NaN |    NaN |
+ AAPL: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
+|      date | :packed-local-date |      123 |          0 | 2005-01-30 |       | 1999-12-31 | 2010-02-28 |                 NaN |   NaN |
+|     price |           :float32 |      123 |          0 |     64.730 |       |      7.070 |    223.020 |              63.124 | 0.932 |
+|    symbol |            :string |      123 |          0 |            |  AAPL |            |            |                 NaN |   NaN |
+ IBM: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
+|      date | :packed-local-date |      123 |          0 | 2005-01-30 |       | 1999-12-31 | 2010-02-28 |                 NaN |   NaN |
+|     price |           :float32 |      123 |          0 |     91.261 |       |     53.010 |    130.320 |              16.513 | 0.444 |
+|    symbol |            :string |      123 |          0 |            |   IBM |            |            |                 NaN |   NaN |
+ AMZN: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
+|      date | :packed-local-date |      123 |          0 | 2005-01-30 |       | 1999-12-31 | 2010-02-28 |                 NaN |   NaN |
+|     price |           :float32 |      123 |          0 |     47.987 |       |      5.970 |    135.910 |              28.891 | 0.982 |
+|    symbol |            :string |      123 |          0 |            |  AMZN |            |            |                 NaN |   NaN |
+)
+```
+
 ## Elementwise Operations
 
 Anything convertible to a reader such as persisent vectors or anything deriving from
