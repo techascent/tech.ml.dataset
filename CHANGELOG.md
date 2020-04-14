@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2.0-beta-14
+* Descriptive stats now works with instants.
+
+## 2.0-beta-14
 * Descriptive stats now works with datetime types.
 
 ## 2.0-beta-12
