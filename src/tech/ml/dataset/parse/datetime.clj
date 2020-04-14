@@ -223,6 +223,9 @@
     `(.add (as-list ~container) ~parsed-val)
     :instant
     `(.add (as-list ~container) ~parsed-val)
+    :packed-instant
+    `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
+           (pmath/long ~parsed-val))
     :packed-local-date
     `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
            (pmath/int ~parsed-val))
@@ -242,6 +245,8 @@
   (case datatype
     :instant
     (compile-time-add-to-container! :instant container parsed-val)
+    :packed-instant
+    (compile-time-add-to-container! :packed-instant container parsed-val)
     :zoned-date-time
     (compile-time-add-to-container! :zoned-date-time container parsed-val)
     :offset-date-time

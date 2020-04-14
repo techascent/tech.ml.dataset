@@ -35,3 +35,21 @@
     (is (every? dtype-dt/datetime-datatype?
                 (map dtype/get-datatype
                      (vals (select-keys date-only [:min :mean :max])))))))
+
+
+(deftest stocks-descriptive-stats-2
+  (let [stocks (-> (ds/->dataset "test/data/stocks.csv")
+                   (ds/update-column "date" #(dtype/object-reader
+                                              (dtype/ecount %)
+                                              (fn [idx]
+                                                (-> (% idx)
+                                                    (dtype-dt/unpack-local-date)
+                                                    (dtype-dt/local-date->instant)))
+                                              :instant)))
+        desc-stats (ds/descriptive-stats stocks)
+        date-only (-> (ds/filter-column #(= "date" %) :col-name desc-stats)
+                      (ds/mapseq-reader)
+                      (first))]
+    (is (every? dtype-dt/datetime-datatype?
+                (map dtype/get-datatype
+                     (vals (select-keys date-only [:min :mean :max])))))))

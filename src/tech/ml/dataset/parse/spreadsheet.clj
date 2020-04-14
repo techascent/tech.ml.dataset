@@ -74,7 +74,10 @@
                                (dtype/get-datatype container))
             ^List container container]
         (dotimes [idx n-missing]
-          (.add container missing-value)
+          (if (dtype-dt/datetime-datatype? (dtype/get-datatype container))
+            (parse-dt/add-to-container! (dtype/get-datatype container) container
+                                        missing-value)
+            (.add container missing-value))
           (.add missing (+ n-elems idx)))))))
 
 
