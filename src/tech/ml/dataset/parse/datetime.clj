@@ -71,7 +71,7 @@
 
 (defn local-time-preparse
   ^String [^String data]
-  (.replaceAll data "[.]" ":"))
+  (.replaceAll data "[._]" ":"))
 
 
 (defn parse-local-time

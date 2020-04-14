@@ -18,7 +18,7 @@
             [tech.parallel.require :as parallel-require]
             [tech.parallel.utils :as par-util]
             [clojure.tools.logging :as log])
-  (:import [java.io InputStream]
+  (:import [java.io InputStream File]
            [tech.v2.datatype ObjectReader]
            [java.util List HashSet]
            [org.roaringbitmap RoaringBitmap]
@@ -633,7 +633,10 @@ the correct type."
   ([dataset
     {:keys [table-name]
      :as options}]
-   (let [dataset
+   (let [dataset (if (instance? File dataset)
+                   (.toString ^File dataset)
+                   dataset)
+         dataset
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
