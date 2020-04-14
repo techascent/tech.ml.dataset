@@ -15,3 +15,6 @@ example/results.nippy
 .cpcache
 data
 .cache
+*.csv
+*.tsv
+*.tsv.gz
