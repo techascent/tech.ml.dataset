@@ -8,14 +8,11 @@
              :as ds-test]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dtype-fn]
+            [tech.v2.tensor :as dtt]
             [clojure.set :as c-set]
             [clojure.test :refer :all]))
 
 
-;;A sequence of maps is actually hard because keywords aren't represented
-;;in tablesaw so we have to do a lot of work.  Classification also imposes
-;;the necessity of mapping back from the label column to a sequence of
-;;keyword labels.
 (deftest mapseq-classification-test
   (let [src-ds (ds/->dataset (mapseq-fruit-dataset) {})
 
@@ -300,4 +297,13 @@
   (let [ds (ds/->dataset [{:a 1 :b {:a 1 :b 2}}
                           {:a 2}])]
     (is (= #{:int64 :object}
+           (set (map dtype/get-datatype ds))))))
+
+
+(deftest tensors-in-mapseq
+  (let [ds (ds/->dataset [{:a (dtt/->tensor (partition 3 (range 9)))
+                           :b "hello"}
+                          {:a (dtt/->tensor (partition 3 (range 9)))
+                           :b "goodbye"}])]
+    (is (= #{:object :string}
            (set (map dtype/get-datatype ds))))))

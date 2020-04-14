@@ -3,7 +3,7 @@
             [tech.v2.datatype.datetime :as dtype-dt]
             [primitive-math :as pmath])
   (:import [java.time LocalDate LocalDateTime LocalTime
-            ZonedDateTime OffsetDateTime Instant]
+            ZonedDateTime OffsetDateTime Instant Duration]
            [tech.v2.datatype.typed_buffer TypedBuffer]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util List]
@@ -97,6 +97,36 @@
                                  str-data))))))
 
 
+(defn parse-duration
+  ^Duration [^String str-data]
+  (try
+    (Duration/parse str-data)
+    (catch Throwable e
+      (let [str-data (.trim str-data)
+            duration-str (local-time-preparse str-data)
+            [duration-str mult] (if (.startsWith duration-str "-")
+                                  [(.substring duration-str 1) -1]
+                                  [duration-str 1])
+            dur-data (s/split duration-str #":")
+            _ (when-not (> (count dur-data) 1)
+                (throw (Exception. "Not a valid duration: %s")))
+            nanos (reduce (fn [nanos [idx next-data]]
+                            (+ (long nanos)
+                               (long
+                                (case (long idx)
+                                  0 (* (Integer/parseInt next-data)
+                                       (dtype-dt/nanoseconds-in-hour))
+                                  1 (* (Integer/parseInt next-data)
+                                       (dtype-dt/nanoseconds-in-minute))
+                                  2 (* (Integer/parseInt next-data)
+                                       (dtype-dt/nanoseconds-in-second))
+                                  3 (* (Integer/parseInt next-data)
+                                       (dtype-dt/nanoseconds-in-millisecond))))))
+                          0
+                          (map-indexed vector dur-data))]
+        (Duration/ofNanos (* (long mult) (long nanos)))))))
+
+
 (defn try-parse-datetimes
   "Given unknown string value, attempt to parse out a datetime value.
   Returns tuple of
@@ -105,9 +135,9 @@
   (if-let [date-val (try (parse-local-date str-value)
                          (catch Exception e nil))]
     [:local-date date-val]
-    (if-let [time-val (try (parse-local-date-time str-value)
+    (if-let [time-val (try (parse-duration str-value)
                            (catch Exception e nil))]
-      [:local-time time-val]
+      [:duration time-val]
       (if-let [date-time-val (try (parse-local-date-time str-value)
                                   (catch Exception e nil))]
         [:local-date-time date-time-val]
@@ -130,6 +160,8 @@
     `(dtype-dt/pack-local-date-time (parse-local-date-time ~str-val))
     :packed-local-time
     `(dtype-dt/pack-local-time (parse-local-time ~str-val))
+    :packed-duration
+    `(dtype-dt/pack-duration (parse-duration ~str-val))
     :instant
     `(Instant/parse ~str-val)
     :zoned-date-time
@@ -183,6 +215,8 @@
     `(.add (as-list ~container) ~parsed-val)
     :local-time
     `(.add (as-list ~container) ~parsed-val)
+    :duration
+    `(.add (as-list ~container) ~parsed-val)
     :zoned-date-time
     `(.add (as-list ~container) ~parsed-val)
     :offset-date-time
@@ -192,6 +226,9 @@
     :packed-local-date
     `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
            (pmath/int ~parsed-val))
+    :packed-duration
+    `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
+           (pmath/long ~parsed-val))
     :packed-local-time
     `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
            (pmath/int ~parsed-val))
@@ -213,6 +250,8 @@
     (compile-time-add-to-container! :local-date container parsed-val)
     :local-date-time
     (compile-time-add-to-container! :local-date-time container parsed-val)
+    :duration
+    (compile-time-add-to-container! :duration container parsed-val)
     :local-time
     (compile-time-add-to-container! :local-time container parsed-val)
     :packed-local-date
@@ -232,9 +271,8 @@
        false)))
 
 (def all-datetime-datatypes
-  #{:instant :zoned-date-time :offset-date-time :local-date
-    :local-date-time :local-time :packed-local-date
-    :packed-local-time :packed-local-date-time})
+  (set (concat (flatten (seq dtype-dt/packed-type->unpacked-type-table))
+               [:zoned-date-time :offset-date-time])))
 
 (defn datetime-datatype?
   [dtype]

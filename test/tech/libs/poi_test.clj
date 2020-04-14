@@ -13,7 +13,6 @@
 (def stocks-file "test/data/stocks.xlsx")
 
 
-
 (deftest happy-path-parse-test
   (let [ds (first (xlsx-parse/workbook->datasets xlsx-file))
         ds2 (first (xlsx-parse/workbook->datasets xlsx-file))]

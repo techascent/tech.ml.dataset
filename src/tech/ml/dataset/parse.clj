@@ -293,7 +293,7 @@
         :int64 (simple-col-parser :int64)
         :float32 (simple-col-parser :float32)
         :float64 (simple-col-parser :float64)
-        :packed-local-time (make-datetime-simple-parser :packed-local-time)
+        :packed-duration (make-datetime-simple-parser :packed-duration)
         :packed-local-date (make-datetime-simple-parser :packed-local-date)
         :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)
         :zoned-date-time (make-datetime-simple-parser :zoned-date-time)

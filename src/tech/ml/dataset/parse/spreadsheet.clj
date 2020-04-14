@@ -113,27 +113,19 @@
                   container (unify-container-type-cell-type
                              container*
                              container-dtype
-                             cell-dtype)]
+                             cell-dtype)
+                  container-dtype (dtype/get-datatype container)]
               (add-missing-by-row-idx! container missing row-idx)
-              (case (dtype/get-datatype container)
-                :boolean (.add ^BooleanArrayList container
-                               (boolean cell-value))
-                :packed-local-date
-                (.add ^IntList
-                      (.backing_store ^TypedBuffer container)
-                      (int (dtype-dt/pack-local-date cell-value)))
-                :packed-local-time
-                (.add ^IntList
-                      (.backing_store ^TypedBuffer container)
-                      (int (dtype-dt/pack-local-time cell-value)))
-                :packed-local-date-time
-                (.add ^LongList
-                      (.backing_store ^TypedBuffer container)
-                      (long (dtype-dt/pack-local-date-time cell-value)))
-                :string (.add ^List container (.value cell))
-                :float64 (.add ^DoubleArrayList container
-                               (double cell-value))
-                (.add ^List container cell-value))))))
+              (if (parse-dt/datetime-datatype? container-dtype)
+                (parse-dt/add-to-container! container-dtype container
+                                            (dtype-dt/pack cell-value))
+                (case (dtype/get-datatype container)
+                  :boolean (.add ^BooleanArrayList container
+                                 (boolean cell-value))
+                  :string (.add ^List container (.value cell))
+                  :float64 (.add ^DoubleArrayList container
+                                 (double cell-value))
+                  (.add ^List container cell-value)))))))
         (column-data [this]
                      {:data @container*
                       :missing missing}))))
@@ -166,7 +158,8 @@
            (get parse/all-parsers datatype)
            datatype)
          _ (when-not (satisfies? parse/PSimpleColumnParser simple-parser)
-             (throw (Exception. "Parse does not satisfy the PSimpleColumnParser protocol")))
+             (throw (Exception.
+                     "Parse does not satisfy the PSimpleColumnParser protocol")))
          missing-val (col-impl/datatype->missing-value datatype)
          container (parse/make-parser-container simple-parser)
          missing (bitmap/->bitmap)
@@ -184,9 +177,10 @@
            (add-missing-by-row-idx! container missing row-idx)
            (if (.missing cell)
              (add-missing-fn)
-             (parse/attempt-simple-parse! parse/simple-parse! simple-parser container add-missing-fn
-                                          unparsed-data unparsed-indexes relaxed?
-                                          (cell-str-value cell)))))
+             (parse/attempt-simple-parse!
+              parse/simple-parse! simple-parser container add-missing-fn
+              unparsed-data unparsed-indexes relaxed?
+              (cell-str-value cell)))))
        (column-data [this]
          (parse/return-parse-data container missing unparsed-data unparsed-indexes)))))
   ([datatype]
@@ -280,10 +274,11 @@
                     coldata (get column-data (long col-idx))
                     coldata (if coldata
                               (ensure-n-rows (get column-data col-idx) n-rows)
-                              {:data (const-rdr/make-const-reader missing-value :float64 n-rows)
+                              {:data (const-rdr/make-const-reader
+                                      missing-value :float64 n-rows)
                                :missing (bitmap/->bitmap (range n-rows))})]
-                ;;We have heterogeneous data so if it isn't a specific datatype don't scan
-                ;;the data to make something else.
+                ;;We have heterogeneous data so if it isn't a specific datatype
+                ;;don't scan the data to make something else.
                 (assoc coldata
                        :name colname
                        :force-datatype? true))))
@@ -297,8 +292,8 @@
        (mapcat seq)
        ;;Group by column
        (group-by #(.getColumnNum ^Spreadsheet$Cell %))
-       ;;Convert lists of cells to lists of strings.  This allows us to share more code
-       ;;with the CSV parsing system.
+       ;;Convert lists of cells to lists of strings.  This allows us to share more
+       ;;code with the CSV parsing system.
        (map (fn [[k v]]
               [k (map cell-str-value v)]))
        (into {})))
@@ -324,15 +319,16 @@
                  (into {}))
             (rest rows)]
            [nil rows])
-         last-row-num (atom nil)
          scan-rows (when parser-fn
                      (scan-initial-rows rows parser-scan-len))
          col-parser-gen (reify
                           Function
                           (apply [this column-number]
                             (if parser-fn
-                              (let [colname (get header-row column-number column-number)]
-                                (make-parser parser-fn colname (scan-rows column-number)))
+                              (let [colname (get header-row column-number
+                                                 column-number)]
+                                (make-parser parser-fn colname
+                                             (scan-rows column-number)))
                               (default-column-parser))))]
      (process-spreadsheet-rows rows header-row? col-parser-gen
                                #(get header-row % %) (.name worksheet)))))

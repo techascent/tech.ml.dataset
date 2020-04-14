@@ -1,11 +1,9 @@
 (ns tech.ml.dataset.parse.mapseq
   "Sequences of maps are maybe the most basic pure datastructure for data.
-  Converting them into a more structured form is a bit of a PITA."
-  (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.ml.dataset.parse.datetime :as parse-dt]
+  Converting them into a more structured form (and back) is a key component of
+  dealing with datatets"
+  (:require [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.v2.datatype.argtypes :as argtypes]
             [tech.ml.dataset.parse.spreadsheet :as parse-spreadsheet]
             [clojure.set :as set])
   (:import [java.util HashMap List Iterator Map]
@@ -31,7 +29,10 @@
                     col-index (colname->idx k)]
                 (reify
                   dtype-proto/PDatatype
-                  (get-datatype [this] (dtype-proto/get-datatype v))
+                  (get-datatype [this]
+                    (if (= :scalar (argtypes/arg->arg-type v))
+                      (dtype-proto/get-datatype v)
+                      :object))
                   Spreadsheet$Cell
                   (missing [this] (nil? v))
                   (getColumnNum [this] (int col-index))
@@ -63,8 +64,10 @@
                           Function
                           (apply [this column-number]
                             (if parser-fn
-                              (let [colname (get initial-idx->colname (long column-number))]
-                                (parse-spreadsheet/make-parser parser-fn colname (scan-rows column-number)))
+                              (let [colname (get initial-idx->colname
+                                                 (long column-number))]
+                                (parse-spreadsheet/make-parser
+                                 parser-fn colname (scan-rows column-number)))
                               (parse-spreadsheet/default-column-parser))))
          col-idx->colname-data (atom nil)]
      (parse-spreadsheet/process-spreadsheet-rows

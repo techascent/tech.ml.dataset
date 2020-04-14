@@ -36,12 +36,14 @@
                         (dtype-dt/milliseconds-since-epoch->local-date 0))
     :packed-local-time (dtype-dt/pack
                         (dtype-dt/milliseconds->local-time 0))
+    :packed-duration 0
     :instant (dtype-dt/milliseconds-since-epoch->instant 0)
     :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
     :offset-date-time (dtype-dt/milliseconds-since-epoch->offset-date-time 0)
     :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
     :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
     :local-time (dtype-dt/milliseconds->local-time 0)
+    :duration (dtype-dt/milliseconds->duration 0)
     :string ""
     :text ""
     :keyword nil
