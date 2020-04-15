@@ -182,7 +182,7 @@
    (->> [:local-date :duration :local-date-time :zoned-date-time]
         (map (fn [datatype]
                (when-let [date-val (try
-                                     (parse-local-date str-value)
+                                     (parse-str datatype str-value)
                                      (catch Exception e nil))]
                  [datatype date-val])))
         (remove nil?)
