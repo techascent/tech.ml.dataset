@@ -257,6 +257,8 @@
     (compile-time-add-to-container! :local-date-time container parsed-val)
     :duration
     (compile-time-add-to-container! :duration container parsed-val)
+    :packed-duration
+    (compile-time-add-to-container! :packed-duration container parsed-val)
     :local-time
     (compile-time-add-to-container! :local-time container parsed-val)
     :packed-local-date
