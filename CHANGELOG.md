@@ -1,6 +1,10 @@
 # Changelog
 
-## 2.0-beta-14
+## 2.0-beta-16
+* Missing a datetime datatype for parse-str and add-to-container! means
+  a compile time error.  Packed durations can now be read from mapseqs.
+
+## 2.0-beta-15
 * Descriptive stats now works with instants.
 
 ## 2.0-beta-14

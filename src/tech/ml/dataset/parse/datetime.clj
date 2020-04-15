@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.parse.datetime
   (:require [clojure.string :as s]
             [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.casting :as casting]
             [primitive-math :as pmath])
   (:import [java.time LocalDate LocalDateTime LocalTime
             ZonedDateTime OffsetDateTime Instant Duration]
@@ -160,17 +161,37 @@
     `(dtype-dt/pack-local-date-time (parse-local-date-time ~str-val))
     :packed-local-time
     `(dtype-dt/pack-local-time (parse-local-time ~str-val))
+    :duration
+    `(parse-duration ~str-val)
     :packed-duration
     `(dtype-dt/pack-duration (parse-duration ~str-val))
     :instant
     `(Instant/parse ~str-val)
+    :packed-instant
+    `(dtype-dt/pack-instant (Instant/parse ~str-val))
     :zoned-date-time
     `(ZonedDateTime/parse ~str-val)
     :offset-date-time
     `(OffsetDateTime/parse ~str-val)))
 
 
-(defn datetime-parse-str-fn
+(defmacro ^:private make-parse-str-fn
+  [datatype str-val]
+  `(case ~datatype
+     ~@(->> dtype-dt/datetime-datatypes
+            (mapcat
+             (fn [dtype]
+               [dtype
+                `(compile-time-datetime-parse-str ~dtype ~str-val)])))))
+
+
+(defn parse-str
+  "Parse a string into a particular datetime type."
+  [datatype str-val]
+  (make-parse-str-fn datatype str-val))
+
+
+(defn datetime-formatter-parse-str-fn
   [datatype formatter]
   (case datatype
     :local-date
@@ -185,8 +206,6 @@
     #(dtype-dt/pack-local-date-time (LocalDateTime/parse % formatter))
     :packed-local-time
     #(dtype-dt/pack-local-time (LocalTime/parse % formatter))
-    :instant
-    (throw (Exception. "Instant parsers do not take format strings"))
     :zoned-date-time
     #(ZonedDateTime/parse % formatter)
     :offset-date-time
@@ -208,65 +227,28 @@
 
 (defmacro compile-time-add-to-container!
   [datatype container parsed-val]
-  (case datatype
-    :local-date
-    `(.add (as-list ~container) ~parsed-val)
-    :local-date-time
-    `(.add (as-list ~container) ~parsed-val)
-    :local-time
-    `(.add (as-list ~container) ~parsed-val)
-    :duration
-    `(.add (as-list ~container) ~parsed-val)
-    :zoned-date-time
-    `(.add (as-list ~container) ~parsed-val)
-    :offset-date-time
-    `(.add (as-list ~container) ~parsed-val)
-    :instant
-    `(.add (as-list ~container) ~parsed-val)
-    :packed-instant
-    `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
-           (pmath/long ~parsed-val))
-    :packed-local-date
-    `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
-           (pmath/int ~parsed-val))
-    :packed-duration
-    `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
-           (pmath/long ~parsed-val))
-    :packed-local-time
-    `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
-           (pmath/int ~parsed-val))
-    :packed-local-date-time
-    `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
-           (pmath/long ~parsed-val))))
+  (if (dtype-dt/packed-datatype? datatype)
+    (let [datatype (casting/un-alias-datatype datatype)]
+      (case datatype
+        :int32 `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
+                      (pmath/int ~parsed-val))
+        :int64 `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
+                      (pmath/long ~parsed-val))))
+    `(.add (as-list ~container) ~parsed-val)))
+
+
+(defmacro ^:private make-add-to-container-fn
+  [datatype container parsed-val]
+  `(case ~datatype
+     ~@(->> dtype-dt/datetime-datatypes
+            (mapcat (fn [dtype]
+                      [dtype
+                       `(compile-time-add-to-container! ~dtype ~container ~parsed-val)])))))
 
 
 (defn add-to-container!
   [datatype container parsed-val]
-  (case datatype
-    :instant
-    (compile-time-add-to-container! :instant container parsed-val)
-    :packed-instant
-    (compile-time-add-to-container! :packed-instant container parsed-val)
-    :zoned-date-time
-    (compile-time-add-to-container! :zoned-date-time container parsed-val)
-    :offset-date-time
-    (compile-time-add-to-container! :offset-date-time container parsed-val)
-    :local-date
-    (compile-time-add-to-container! :local-date container parsed-val)
-    :local-date-time
-    (compile-time-add-to-container! :local-date-time container parsed-val)
-    :duration
-    (compile-time-add-to-container! :duration container parsed-val)
-    :packed-duration
-    (compile-time-add-to-container! :packed-duration container parsed-val)
-    :local-time
-    (compile-time-add-to-container! :local-time container parsed-val)
-    :packed-local-date
-    (compile-time-add-to-container! :packed-local-date container parsed-val)
-    :packed-local-time
-    (compile-time-add-to-container! :packed-local-time container parsed-val)
-    :packed-local-date-time
-    (compile-time-add-to-container! :packed-local-date-time container parsed-val)))
+  (make-add-to-container-fn datatype container parsed-val))
 
 
 (defmacro datetime-can-parse?
@@ -293,9 +275,9 @@
   [datatype format-string-or-formatter]
   (cond
     (instance? DateTimeFormatter format-string-or-formatter)
-    (datetime-parse-str-fn datatype format-string-or-formatter)
+    (datetime-formatter-parse-str-fn datatype format-string-or-formatter)
     (string? format-string-or-formatter)
-    (datetime-parse-str-fn
+    (datetime-formatter-parse-str-fn
      datatype
      (DateTimeFormatter/ofPattern format-string-or-formatter))
     (fn? format-string-or-formatter)
