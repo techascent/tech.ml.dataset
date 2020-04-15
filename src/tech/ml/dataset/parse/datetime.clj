@@ -128,24 +128,6 @@
         (Duration/ofNanos (* (long mult) (long nanos)))))))
 
 
-(defn try-parse-datetimes
-  "Given unknown string value, attempt to parse out a datetime value.
-  Returns tuple of
-  [dtype value]"
-  [str-value]
-  (if-let [date-val (try (parse-local-date str-value)
-                         (catch Exception e nil))]
-    [:local-date date-val]
-    (if-let [time-val (try (parse-duration str-value)
-                           (catch Exception e nil))]
-      [:duration time-val]
-      (if-let [date-time-val (try (parse-local-date-time str-value)
-                                  (catch Exception e nil))]
-        [:local-date-time date-time-val]
-        [:string str-value]))))
-
-
-
 (defmacro compile-time-datetime-parse-str
   [datatype str-val]
   (case datatype
@@ -189,6 +171,23 @@
   "Parse a string into a particular datetime type."
   [datatype str-val]
   (make-parse-str-fn datatype str-val))
+
+
+(defn try-parse-datetimes
+  "Given unknown string value, attempt to parse out a datetime value.
+  Returns tuple of
+  [dtype value]"
+  [str-value]
+  (or
+   (->> [:local-date :duration :local-date-time :zoned-date-time]
+        (map (fn [datatype]
+               (when-let [date-val (try
+                                     (parse-local-date str-value)
+                                     (catch Exception e nil))]
+                 [datatype date-val])))
+        (remove nil?)
+        (first))
+   [:string str-value]))
 
 
 (defn datetime-formatter-parse-str-fn
