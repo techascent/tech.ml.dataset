@@ -96,7 +96,7 @@
                               {:selection column-name-seq})))
           indexes (if (= :all index-seq)
                     nil
-                    (int-array index-seq))]
+                    index-seq)]
       (->> column-name-seq
            (map (fn [col-name]
                   (let [col (ds-proto/column dataset col-name)]

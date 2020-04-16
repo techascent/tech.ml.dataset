@@ -59,7 +59,7 @@
   "Return a reader that produces a map of column-name->column-value"
   ([dataset options]
    (let [colnames (ds-proto/column-names dataset)]
-     (->> (value-reader dataset )
+     (->> (value-reader dataset options)
           (unary-op/unary-reader
            :object
            (zipmap colnames x)))))

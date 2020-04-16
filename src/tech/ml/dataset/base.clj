@@ -6,7 +6,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
-            [tech.v2.datatype.bitmap :refer [->bitmap]]
+            [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
@@ -215,6 +215,28 @@ index-seq - either keyword :all or list of indexes.  May contain duplicates."
   (select dataset col-name-seq :all))
 
 
+(defn drop-columns
+  [dataset col-name-seq]
+  (let [colname-set (set col-name-seq)]
+    (select dataset
+            (->> (column-names dataset)
+                 (remove colname-set))
+            :all)))
+
+
+(defn select-rows
+  [dataset row-indexes]
+  (select dataset :all row-indexes))
+
+
+(defn drop-rows
+  [dataset row-indexes]
+  (select dataset :all
+          (dtype-proto/set-and-not
+           (bitmap/->bitmap (range (row-count dataset)))
+           (bitmap/->bitmap row-indexes))))
+
+
 (defn index-value-seq
   "Get a sequence of tuples:
   [idx col-value-vec]
@@ -330,21 +352,29 @@ the correct type."
   (group-by-column colname dataset))
 
 
+(defn- ->comparator
+  [item]
+  (when item
+    (if (instance? java.util.Comparator item)
+      item
+      (comparator item))))
+
+
 (defn sort-by
-  "Sort a dataset by a key-fn and compare-fn.  Uses clojure's sort-by under the
-  covers."
+  "Sort a dataset by a key-fn and compare-fn."
   ([key-fn compare-fn dataset column-name-seq]
    (let [^List data (->> (or column-name-seq (column-names dataset))
                          (select-columns dataset)
-                         (mapseq-reader))
+                         (mapseq-reader)
+                         (dtype/reader-map
+                          #(key-fn %)))
          n-elems (.size data)]
-     (->> (range n-elems)
-          (clojure.core/sort-by #(key-fn (.get data %)) compare-fn)
+     (->> (dfn/argsort data :comparator (->comparator compare-fn))
           (select dataset :all))))
   ([key-fn compare-fn dataset]
    (sort-by key-fn compare-fn dataset :all))
   ([key-fn dataset]
-   (sort-by key-fn compare dataset :all)))
+   (sort-by key-fn nil dataset :all)))
 
 
 (defn ds-sort-by
@@ -354,7 +384,17 @@ the correct type."
   ([key-fn compare-fn dataset]
    (sort-by key-fn compare-fn dataset :all))
   ([key-fn dataset]
-   (sort-by key-fn compare dataset :all)))
+   (sort-by key-fn nil dataset :all)))
+
+
+(defn ->sort-by
+  "Version of sort-by used in -> statements common in dataflows"
+  ([dataset key-fn compare-fn column-name-seq]
+   (sort-by key-fn compare-fn dataset column-name-seq))
+  ([dataset key-fn compare-fn]
+   (sort-by key-fn compare-fn dataset :all))
+  ([dataset key-fn]
+   (sort-by key-fn nil dataset :all)))
 
 
 (defn sort-by-column
@@ -362,11 +402,10 @@ the correct type."
   ([colname compare-fn dataset]
    (let [^List data (dtype/->reader (dataset colname))
          n-elems (.size data)]
-     (->> (range n-elems)
-          (clojure.core/sort-by #(.get data %) compare-fn)
+     (->> (dfn/argsort data :comparator (->comparator compare-fn))
           (select dataset :all))))
   ([colname dataset]
-   (sort-by-column colname compare dataset)))
+   (sort-by-column colname nil dataset)))
 
 
 (defn ds-sort-by-column
@@ -374,6 +413,14 @@ the correct type."
   ([colname compare-fn dataset]
    (sort-by-column colname compare-fn dataset))
   ([colname dataset]
+   (sort-by-column colname dataset)))
+
+
+(defn ->sort-by-column
+  "sort-by-column used in -> dataflows"
+  ([dataset colname compare-fn]
+   (sort-by-column colname compare-fn dataset))
+  ([dataset colname]
    (sort-by-column colname dataset)))
 
 
@@ -605,10 +652,12 @@ the correct type."
   :header-row? - Defaults to true, indicates the first row is a header.
   :separator - Add a character separator to the list of separators to auto-detect.
   :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
-       a default permissive parser is used.  This way you parse anything that univocity
-       supports (so flat files and such).
+     a default permissive parser is used.  This way you parse anything that univocity
+     supports (so flat files and such).
   :skip-bad-rows? - For really bad files, some rows will not have the right column
-      counts for all rows.  This skips rows that fail this test.
+     counts for all rows.  This skips rows that fail this test.
+  :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
+     will result in an exception.
   :parser-fn -
    - keyword - all columns parsed to this datatype
    - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)

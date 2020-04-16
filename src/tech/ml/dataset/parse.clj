@@ -60,8 +60,11 @@
                            column-whitelist
                            column-blacklist
                            separator
-                           n-initial-skip-rows]
-                    :or {header-row? true}
+                           n-initial-skip-rows
+                           max-chars-per-column]
+                    :or {header-row? true
+                         ;;64K max chars per column.  This is a silly thing to have to set...
+                         max-chars-per-column (* 64 1024)}
                     :as options}]
   (if-let [csv-parser (:csv-parser options)]
     csv-parser
@@ -79,7 +82,8 @@
       (doto settings
         (.setSkipEmptyLines true)
         (.setIgnoreLeadingWhitespaces true)
-        (.setIgnoreTrailingWhitespaces true))
+        (.setIgnoreTrailingWhitespaces true)
+        (.setMaxCharsPerColumn (long max-chars-per-column)))
       (when n-initial-skip-rows
         (.setNumberOfRowsToSkip settings (int n-initial-skip-rows)))
       (when (or (seq column-whitelist)

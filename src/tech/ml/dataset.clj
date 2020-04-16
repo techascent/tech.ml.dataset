@@ -182,7 +182,7 @@
                                       frequencies
                                       (clojure.core/sort-by second >)
                                       ffirst)})))))
-             (clojure.core/sort-by :col-name)
+             (clojure.core/sort-by (comp str :col-name))
              ->dataset)
         existing-colname-set (->> (column-names stats-ds)
                                   set)]

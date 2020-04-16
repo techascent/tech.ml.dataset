@@ -127,6 +127,17 @@
     (into {} item)))
 
 
+(defn- ->efficient-reader
+  [item]
+  (cond
+    (instance? RoaringBitmap item)
+    (bitmap/bitmap->efficient-random-access-reader item)
+    (dtype-proto/convertible-to-reader? item)
+    item
+    :else
+    (long-array item)))
+
+
 (deftype Column
     [^RoaringBitmap missing
      data
@@ -283,21 +294,23 @@
       :spearman (dtype-fn/spearmans-correlation col other-column)
       :kendall (dtype-fn/kendalls-correlation col other-column)))
   (select [col idx-rdr]
-    (if (== 0 (dtype/ecount missing))
-      ;;common case
-      (Column. (->bitmap) (dtype/indexed-reader idx-rdr data) metadata)
-      ;;Uggh.  Construct a new missing set
-      (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
-            n-idx-elems (.lsize idx-rdr)
-            ^RoaringBitmap result-set (->bitmap)]
-        (parallel-for/serial-for
-         idx
-         n-idx-elems
-         (when (.contains missing (.read idx-rdr idx))
-           (.add result-set idx)))
-        (Column. result-set
-                 (dtype/indexed-reader idx-rdr data)
-                 metadata))))
+    (let [idx-rdr (->efficient-reader idx-rdr)]
+      (if (== 0 (dtype/ecount missing))
+        ;;common case
+        (Column. (->bitmap) (dtype/indexed-reader idx-rdr data)
+                 metadata)
+        ;;Uggh.  Construct a new missing set
+        (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
+              n-idx-elems (.lsize idx-rdr)
+              ^RoaringBitmap result-set (->bitmap)]
+          (parallel-for/serial-for
+           idx
+           n-idx-elems
+           (when (.contains missing (.read idx-rdr idx))
+             (.add result-set idx)))
+          (Column. result-set
+                   (dtype/indexed-reader idx-rdr data)
+                   metadata)))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)]
