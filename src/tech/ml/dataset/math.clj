@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.math
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.ml.utils :as ml-utils]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.base
@@ -11,7 +12,9 @@
             [tech.parallel.require :as parallel-req]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
-  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]))
+  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
+           [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
+           [tech.v2.datatype DoubleReader]))
 
 
 (defn correlation-table
@@ -335,6 +338,42 @@
                                                                  centroid-means
                                                                  row-idx col-idx)
                                             (aget global-means col-idx))))
-                                 (aset col-doubles row-idx (aget src-doubles row-idx))))
+                                 (aset col-doubles row-idx
+                                       (aget src-doubles row-idx))))
                               new-col)))))
                      dataset))))))
+
+(defn- key-sym->str
+  ^String [item]
+  (cond
+    (keyword? item) (name item)
+    (symbol? item) (name item)
+    :else
+    (str item)))
+
+
+(defn loess-interpolate
+  ([ds x-colname y-colname
+    {:keys [bandwidth iterations accuracy]
+     ;;Using R defaults, as close as we can get.
+     :or {bandwidth 0.75
+          iterations 4
+          accuracy LoessInterpolator/DEFAULT_ACCURACY}}]
+   (let [interp (LoessInterpolator. (double bandwidth)
+                                    (int iterations)
+                                    (double accuracy))
+         x-col (ds x-colname)
+         y-col (ds y-colname)
+         spline (.interpolate interp
+                              (dtype/make-container :java-array :float64 x-col)
+                              (dtype/make-container :java-array :float64 y-col))
+         new-col-name (keyword (str (key-sym->str y-colname) "-loess"))
+         n-elems (base/row-count ds)
+         x-rdr (typecast/datatype->reader :float64 x-col)]
+     (base/add-or-update-column ds new-col-name
+                              (reify DoubleReader
+                                (lsize [rdr] n-elems)
+                                (read [rdr idx]
+                                  (.value spline (.read x-rdr idx)))))))
+  ([ds x-colname y-colname]
+   (loess-interpolate ds x-colname y-colname {})))

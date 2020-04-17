@@ -97,6 +97,47 @@
                          name-values-seq->dataset)
 
 
+(defn column->dataset
+  "Transform a column into a sequence of maps using transform-fn.
+  Return dataset created out of the sequence of maps."
+  ([dataset colname transform-fn options]
+   (->> (pmap transform-fn (dataset colname))
+        (->>dataset options)))
+  ([dataset colname transform-fn]
+   (column->dataset dataset colname transform-fn {})))
+
+
+(defn append-columns
+  [dataset column-seq]
+  (new-dataset (dataset-name dataset)
+               (metadata dataset)
+               (clojure.core/concat (columns dataset) column-seq)))
+
+
+(defn column-labeled-mapseq
+  "Given a dataset, return a sequence of maps where several columns are all stored
+  in a :value key and a :label key contains a column name.  Used for quickly creating
+  timeseries or scatterplot labeled graphs.  Returns a lazy sequence, not a reader!
+  Return a sequence of maps with
+  {... - columns not in colname-seq
+   :value - value from one of the value columns
+   :label - name of the column the value came from
+  }"
+  [dataset value-colname-seq]
+  (let [colname-set (set value-colname-seq)
+        untouched-cols (remove colname-set (column-names dataset))]
+    ;;Ensure the value columns actually exist.
+    (select-columns dataset value-colname-seq)
+    (->> (mapseq-reader dataset)
+         (mapcat (fn [data]
+                   (let [mindata (select-keys data untouched-cols)]
+                     (->> value-colname-seq
+                          (map (fn [colname]
+                                 (assoc mindata
+                                        :value (get data colname)
+                                        :label colname))))))))))
+
+
 (defn n-permutations
   "Return n datasets with all permutations n of the columns possible.
   N must be less than (count (columns dataset))."
@@ -151,7 +192,8 @@
                         g-means
                         x-means
                         compute-centroid-and-global-means
-                        impute-missing-by-centroid-averages)
+                        impute-missing-by-centroid-averages
+                        loess-interpolate)
 
 
 (defn descriptive-stats
