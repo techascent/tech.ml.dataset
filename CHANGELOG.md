@@ -5,7 +5,6 @@
  * argsort is now used for all sort functions
  * `->` versions of sort added so you can sort in -> pathways
  * instants and such can used for sorting
- * windowing functions based on time
 
 ## 2.0-beta-16
 * Missing a datetime datatype for parse-str and add-to-container! means
