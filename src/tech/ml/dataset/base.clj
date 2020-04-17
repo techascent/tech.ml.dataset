@@ -237,6 +237,13 @@ index-seq - either keyword :all or list of indexes.  May contain duplicates."
            (bitmap/->bitmap row-indexes))))
 
 
+(defn missing
+  [dataset]
+  (reduce #(dtype-proto/set-or %1 (ds-col/missing %2))
+          (->bitmap)
+          dataset))
+
+
 (defn index-value-seq
   "Get a sequence of tuples:
   [idx col-value-vec]

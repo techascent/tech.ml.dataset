@@ -47,6 +47,10 @@
                         rename-columns
                         select
                         select-columns
+                        drop-columns
+                        select-rows
+                        drop-rows
+                        missing
                         add-or-update-column
                         value-reader
                         mapseq-reader
@@ -60,6 +64,8 @@
                         sort-by-column
                         ds-sort-by
                         ds-sort-by-column
+                        ->sort-by
+                        ->sort-by-column
                         filter
                         filter-column
                         ds-filter
