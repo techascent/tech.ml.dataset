@@ -2,10 +2,12 @@
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
   (:require [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.parallel.utils :as par-util]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.bitmap :as bitmap]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
@@ -15,7 +17,8 @@
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb])
-  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering])
+  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
+           [java.util HashSet])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
 
@@ -138,6 +141,20 @@
                                         :label colname))))))))))
 
 
+(defn ->distinct-by-column
+  "Drop successive rows where we already have a given key."
+  [ds colname]
+  (let [coldata (ds colname)
+        colset (HashSet.)
+        bitmap (bitmap/->bitmap)
+        n-elems (dtype/ecount coldata)
+        obj-rdr (typecast/datatype->reader :object coldata)]
+    (dotimes [idx n-elems]
+      (when (.add colset (.read obj-rdr idx))
+        (.add bitmap idx)))
+    (select-rows ds bitmap)))
+
+
 (defn n-permutations
   "Return n datasets with all permutations n of the columns possible.
   N must be less than (count (columns dataset))."
@@ -193,7 +210,7 @@
                         x-means
                         compute-centroid-and-global-means
                         impute-missing-by-centroid-averages
-                        loess-interpolate)
+                        interpolate-loess)
 
 
 (defn descriptive-stats

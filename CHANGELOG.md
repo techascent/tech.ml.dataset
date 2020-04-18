@@ -1,10 +1,29 @@
 # Changelog
 
-## 2.0-beta-17
+## 2.0-beta-19
  * descriptive stats works with mixed column name types
  * argsort is now used for all sort functions
  * `->` versions of sort added so you can sort in -> pathways
  * instants and such can used for sorting
+
+#### Added Functions
+ - `column->dataset` - map a transform function over a column and return a new
+   dataset from the result.  It is expected the transform function returns a map.
+ - `drop-rows`, `select-rows`, `drop-columns` - more granular select calls.
+ - `append-columns` - append a list of columns to a dataset.  Used with column->dataset.
+ - `column-labeled-mapseq` - Create a sequence of maps with a :value and :label members.
+   this flattens the dataset by producing Y maps per row instead of 1 map per row
+   where the maps themselves are labeled with the value in their :value member.  This
+   is useful to building vega charts.
+ - `->distinct-by-column` - take the first row where a given key is present.  The arrow
+   form of this indicats that unlike distinct, the dataset is the first argument.
+ - `->sort-by`, `->sort-by-column` - Forms of these functions for using in `(->)`
+    dataflows.
+ - `interpolate-loess` - Produce a new column from a given pair of columns using loess
+    interpolation to create the column.  The interpolator is saved as metadata on the
+	new column.
+
+
 
 ## 2.0-beta-16
 * Missing a datetime datatype for parse-str and add-to-container! means

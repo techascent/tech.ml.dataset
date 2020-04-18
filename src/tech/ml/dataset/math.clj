@@ -352,9 +352,10 @@
     (str item)))
 
 
-(defn loess-interpolate
+(defn interpolate-loess
+  "Interpolate using the LOESS regression engine.  Useful for smoothing out graphs."
   ([ds x-colname y-colname
-    {:keys [bandwidth iterations accuracy]
+    {:keys [bandwidth iterations accuracy result-name]
      ;;Using R defaults, as close as we can get.
      :or {bandwidth 0.75
           iterations 4
@@ -367,13 +368,17 @@
          spline (.interpolate interp
                               (dtype/make-container :java-array :float64 x-col)
                               (dtype/make-container :java-array :float64 y-col))
-         new-col-name (keyword (str (key-sym->str y-colname) "-loess"))
+         new-col-name (or result-name
+                          (keyword (str (key-sym->str y-colname) "-loess")))
          n-elems (base/row-count ds)
          x-rdr (typecast/datatype->reader :float64 x-col)]
-     (base/add-or-update-column ds new-col-name
-                              (reify DoubleReader
-                                (lsize [rdr] n-elems)
-                                (read [rdr idx]
-                                  (.value spline (.read x-rdr idx)))))))
+     (-> (base/add-or-update-column ds new-col-name
+                                    (reify DoubleReader
+                                      (lsize [rdr] n-elems)
+                                      (read [rdr idx]
+                                        (.value spline (.read x-rdr idx)))))
+         (base/update-column new-col-name
+                             #(with-meta % (assoc (meta %)
+                                                  :interpolator spline))))))
   ([ds x-colname y-colname]
-   (loess-interpolate ds x-colname y-colname {})))
+   (interpolate-loess ds x-colname y-colname {})))
