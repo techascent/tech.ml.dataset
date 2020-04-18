@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.0-beta-20
+ * sort-by works with generic comparison fns.
+
 ## 2.0-beta-19
  * descriptive stats works with mixed column name types
  * argsort is now used for all sort functions
