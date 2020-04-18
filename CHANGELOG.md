@@ -19,7 +19,7 @@
    where the maps themselves are labeled with the value in their :value member.  This
    is useful to building vega charts.
  - `->distinct-by-column` - take the first row where a given key is present.  The arrow
-   form of this indicats that unlike distinct, the dataset is the first argument.
+   form of this indicats the dataset is the first argument.
  - `->sort-by`, `->sort-by-column` - Forms of these functions for using in `(->)`
     dataflows.
  - `interpolate-loess` - Produce a new column from a given pair of columns using loess
