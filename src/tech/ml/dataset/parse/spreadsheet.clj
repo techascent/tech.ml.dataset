@@ -119,9 +119,12 @@
                              cell-dtype)
                   container-dtype (dtype/get-datatype container)]
               (add-missing-by-row-idx! container missing row-idx)
-              (if (parse-dt/datetime-datatype? container-dtype)
-                (parse-dt/add-to-container! container-dtype container
-                                            (dtype-dt/pack cell-value))
+              (if (dtype-dt/datetime-datatype? container-dtype)
+                (if (dtype-dt/packable-datatypes (dtype/get-datatype cell-value))
+                  (parse-dt/add-to-container! container-dtype container
+                                              (dtype-dt/pack cell-value))
+                  (parse-dt/add-to-container! container-dtype container
+                                              cell-value))
                 (case (dtype/get-datatype container)
                   :boolean (.add ^BooleanArrayList container
                                  (boolean cell-value))

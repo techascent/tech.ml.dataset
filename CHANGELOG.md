@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0-beta-21
+ * loading jsons files found issues with packing.
+ * optimized conversion to/from maps.
+
 ## 2.0-beta-20
  * sort-by works with generic comparison fns.
 
