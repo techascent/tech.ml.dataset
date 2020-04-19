@@ -34,7 +34,8 @@
                       (dtype-proto/get-datatype v)
                       :object))
                   Spreadsheet$Cell
-                  (missing [this] (nil? v))
+                  (missing [this] (or (nil? v)
+                                      (= "" v)))
                   (getColumnNum [this] (int col-index))
                   (value [this] v)
                   (doubleValue [this] (double v))
