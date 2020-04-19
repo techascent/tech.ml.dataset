@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Collections;
+
 
 
 public class FastStruct extends APersistentMap implements IObj{
@@ -57,7 +59,7 @@ public class FastStruct extends APersistentMap implements IObj{
   public IMapEntry entryAt(Object key){
 	Map.Entry e = slots.entryAt(key);
 	if(e != null)
-	  return MapEntry.create(e.getKey(), vals.get((int)e.getValue()));
+	  return MapEntry.create(e.getKey(), vals.get(RT.intCast(e.getValue())));
 	return ext.entryAt(key);
   }
 
@@ -67,7 +69,7 @@ public class FastStruct extends APersistentMap implements IObj{
       int i = RT.intCast( e.getValue() );
       List newVals = new ArrayList(vals);
       newVals.set(i,val);
-      return new FastStruct(meta, slots, newVals, ext);
+      return new FastStruct(meta, slots, Collections.unmodifiableList(newVals), ext);
     }
     return new FastStruct(meta, slots, vals, ext.assoc(key, val));
   }
