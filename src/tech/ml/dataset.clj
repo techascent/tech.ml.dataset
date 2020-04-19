@@ -259,6 +259,25 @@
         (set-dataset-name (str (dataset-name dataset) ": descriptive-stats")))))
 
 
+(defn reverse-map-categorical-columns
+  [dataset {:keys [column-name-seq]}]
+  (let [label-map (dataset-label-map dataset)
+        column-name-seq (or column-name-seq
+                            (column-names dataset))
+        column-name-seq (reduce-column-names dataset column-name-seq)
+        dataset
+        (reduce
+         (fn [dataset colname]
+           (if (contains? label-map colname)
+             (add-or-update-column dataset colname
+                                   (categorical/column-values->categorical
+                                    dataset colname label-map))
+             dataset))
+         dataset
+         column-name-seq)]
+    (select-columns dataset column-name-seq)))
+
+
 (defn ->flyweight
   "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown
   on missing values or if nil should be inserted in the map.  IF a label map is passed
@@ -268,40 +287,18 @@
                      error-on-missing-values?
                      number->string?]
               :or {error-on-missing-values? true}}]
-  (let [label-map (when number->string?
-                    (dataset-label-map dataset))
-        target-columns-and-vals
-        (->> (or column-name-seq
-                 (->> (columns dataset)
-                      (map ds-col/column-name)
-                      ((fn [colname-seq]
-                         (if number->string?
-                           (reduce-column-names dataset colname-seq)
-                           colname-seq)))))
-             (map (fn [colname]
-                    {:column-name colname
-                     :column-values
-                     (if (contains? label-map colname)
-                       (let [retval
-                             (categorical/column-values->categorical
-                              dataset colname label-map)]
-                         retval)
-                       (let [current-column (column dataset colname)]
-                         (when (and error-on-missing-values?
-                                    (not= 0 (dtype/ecount
-                                             (ds-col/missing current-column))))
-                           (throw (ex-info (format "Column %s has missing values"
-                                                   (ds-col/column-name current-column))
-                                           {})))
-                         (dtype/->reader current-column :object)))})))]
-    ;;Transpose the sequence of columns into a sequence of rows
-    (->> target-columns-and-vals
-         (map :column-values)
-         (apply interleave)
-         (partition (count target-columns-and-vals))
-         ;;Move to flyweight
-         (map zipmap
-              (repeat (map :column-name target-columns-and-vals))))))
+  (let [column-name-seq (or column-name-seq
+                            (column-names dataset))
+        dataset (if number->string?
+                  (reverse-map-categorical-columns dataset {:column-name-seq
+                                                            column-name-seq})
+                  (select-columns dataset column-name-seq))]
+    (when-let [missing-columns
+               (when error-on-missing-values?
+                 (seq (columns-with-missing-seq dataset)))]
+      (throw (Exception. (format "Columns with missing data detected: %s"
+                                 missing-columns))))
+    (mapseq-reader dataset)))
 
 
 (defn labels
@@ -309,15 +306,15 @@
   If label count is 1, then if there is a label-map associated with column
   generate sequence of labels by reverse mapping the column(s) back to the original
   dataset values.  If there are multiple label columns results are presented in
-  flyweight (sequence of maps) format."
+  a dataset."
   [dataset]
   (when-not (seq (col-filters/target? dataset))
     (throw (ex-info "No label columns indicated" {})))
   (let [original-label-column-names (->> (col-filters/inference? dataset)
                                          (reduce-column-names dataset))
-        flyweight-labels (->flyweight dataset
-                                      :column-name-seq original-label-column-names
-                                      :number->string? true)]
-    (if (= 1 (count original-label-column-names))
-      (map #(get % (first original-label-column-names)) flyweight-labels)
-      flyweight-labels)))
+        dataset (reverse-map-categorical-columns
+                 dataset {:column-name-seq
+                          original-label-column-names})]
+    (if (= 1 (column-count dataset))
+      (dtype/->reader (first dataset))
+      dataset)))
