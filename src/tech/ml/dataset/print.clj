@@ -2,15 +2,17 @@
   (:require [clojure.pprint :as pp]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.datetime :as dtype-dt])
   (:import [tech.v2.datatype ObjectReader]
-           [java.util List]))
+           [java.util List]
+           [tech.ml.dataset FastStruct]
+           [clojure.lang PersistentStructMap$Def
+            PersistentVector]))
 
+(set! *warn-on-reflection* true)
 
-(def ^:dynamic *default-float-format* "%.3f")
-(def ^:dynamic *default-print-length* 25)
+(def ^:dynamic *default-table-row-print-length* 25)
 
 
 (defn print-table
@@ -19,10 +21,7 @@
           (map (fn [item-map]
                  (->> item-map
                       (map (fn [[k v]]
-                             [k (if (or (float? v)
-                                        (double? v))
-                                  (format *default-float-format* v)
-                                  v)]))
+                             [k (dtype-pp/format-object v)]))
                       (into {}))))
           (pp/print-table ks)))
   ([data]
@@ -34,23 +33,33 @@
     :epoch-seconds})
 
 
+(defn dataset->readers
+  ^List [dataset {:keys [all-printable-columns?]
+                  :as _options}]
+  (->> (ds-proto/columns dataset)
+       (mapv (fn [coldata]
+               (let [col-reader (dtype/->reader coldata)]
+                 (if (or all-printable-columns?
+                         (dtype-dt/packed-datatype? (dtype/get-datatype col-reader)))
+                   (dtype-pp/reader-converter col-reader)
+                   col-reader))))))
+
+
 (defn value-reader
   "Return a reader that produces a vector of column values per index."
-  (^ObjectReader [dataset {:keys [all-printable-columns?]
-                           :as options}]
-   (let [n-elems (long (second (dtype/shape dataset)))
-         readers
-         (->> (ds-proto/columns dataset)
-              (map (fn [coldata]
-                     (let [col-reader (dtype/->reader coldata)]
-                       (if (or all-printable-columns?
-                               (not (datetime-epoch-types
-                                     (dtype/get-datatype col-reader))))
-                         (dtype-pp/reader-converter col-reader)
-                         col-reader)))))]
+  (^ObjectReader [dataset options]
+   (let [readers (dataset->readers dataset options)
+         n-rows (long (second (dtype/shape dataset)))
+         n-cols (long (first (dtype/shape dataset)))]
      (reify ObjectReader
-       (lsize [rdr] n-elems)
-       (read [rdr idx] (vec (map #(.get ^List % idx) readers))))))
+       (lsize [rdr] n-rows)
+       (read [rdr idx]
+         (reify ObjectReader
+           (lsize [inner-rdr] n-cols)
+           (read [inner-rd inner-idx]
+             ;;confusing because there is an implied transpose
+             (.get ^List (.get readers inner-idx)
+                   idx)))))))
   (^ObjectReader [dataset]
    (value-reader dataset {})))
 
@@ -58,11 +67,14 @@
 (defn mapseq-reader
   "Return a reader that produces a map of column-name->column-value"
   ([dataset options]
-   (let [colnames (ds-proto/column-names dataset)]
-     (->> (value-reader dataset options)
-          (unary-op/unary-reader
-           :object
-           (zipmap colnames x)))))
+   (let [colnamemap (->> (ds-proto/column-names dataset)
+                         (map-indexed #(vector %2 %1))
+                         (into {}))
+         readers (value-reader dataset options)]
+     (reify ObjectReader
+       (lsize [rdr] (.lsize readers))
+       (read [rdr idx]
+         (FastStruct. colnamemap (.read readers idx))))))
   ([dataset]
    (mapseq-reader dataset {})))
 
@@ -74,7 +86,7 @@
   (let [index-range (or index-range
                         (range
                          (min (second (dtype/shape dataset))
-                              *default-print-length*)))
+                              *default-table-row-print-length*)))
         print-ds (ds-proto/select dataset column-names index-range)
         column-names (ds-proto/column-names print-ds)]
     (with-out-str

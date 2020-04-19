@@ -292,7 +292,6 @@
              (ds/model-type dataset (ds/column-names dataset)))))))
 
 
-
 (deftest generalized-mapseq-ds
   (let [ds (ds/->dataset [{:a 1 :b {:a 1 :b 2}}
                           {:a 2}])]
