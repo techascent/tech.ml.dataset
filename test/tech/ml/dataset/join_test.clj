@@ -96,7 +96,8 @@
         recs (ds/mapseq-reader join-data)
         empty-int?    #{-32768}
         empty-string? #{""}
-        empty-val?    #(or (empty-int? %) (empty-string? %))
+        empty-val?    #(or (empty-int? %) (empty-string? %)
+                           (nil? %))
         realized       (some #(when (= (get % "CustomerID") 2) %) recs)
         unrealized     (filter #(not= % realized) recs)]
     (is (every? (complement empty-val?) (vals realized))

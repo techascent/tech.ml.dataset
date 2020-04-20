@@ -216,47 +216,70 @@
 (defn descriptive-stats
   "Get descriptive statistics across the columns of the dataset.
   In addition to the standard stats"
-  [dataset]
-  (let [stat-names [:col-name :datatype :n-valid :n-missing
-                    :mean :mode :min :max :standard-deviation :skew]
-        stats-ds
-        (->> (->dataset dataset)
-             (pmap (fn [ds-col]
-                     (let [n-missing (dtype/ecount (ds-col/missing ds-col))
-                           n-valid (- (dtype/ecount ds-col)
-                                      n-missing)
-                           col-dtype (dtype/get-datatype ds-col)
-                           col-reader (dtype/->reader ds-col
-                                                      col-dtype
-                                                      {:missing-policy :elide})]
-                       (merge
-                        {:col-name (ds-col/column-name ds-col)
-                         :datatype col-dtype
-                         :n-valid n-valid
-                         :n-missing n-missing}
-                        (cond
-                          (dtype-dt/datetime-datatype? col-dtype)
-                          (dtype-dt-ops/millisecond-descriptive-stats col-reader)
-                          (and (not (:categorical? (ds-col/metadata ds-col)))
-                               (casting/numeric-type? col-dtype))
-                          (dfn/descriptive-stats col-reader
-                                                 #{:min :mean :max
-                                                   :standard-deviation :skew})
-                          :else
-                          {:mode (->> col-reader
-                                      frequencies
-                                      (clojure.core/sort-by second >)
-                                      ffirst)})))))
-             (clojure.core/sort-by (comp str :col-name))
-             ->dataset)
-        existing-colname-set (->> (column-names stats-ds)
-                                  set)]
-    ;;This orders the columns by the ordering of stat-names but if for instance
-    ;;there were no numeric or no string columns it still works.
-    (-> stats-ds
-        (select-columns (->> stat-names
-                             (clojure.core/filter existing-colname-set)))
-        (set-dataset-name (str (dataset-name dataset) ": descriptive-stats")))))
+  ([dataset]
+   (descriptive-stats dataset {}))
+  ([dataset options]
+   (let [stat-names [:col-name :datatype :n-valid :n-missing
+                     :mean :mode :min :max :standard-deviation :skew
+                     :num-distinct-values :values]
+         stats-ds
+         (->> (->dataset dataset)
+              (pmap (fn [ds-col]
+                      (let [n-missing (dtype/ecount (ds-col/missing ds-col))
+                            n-valid (- (dtype/ecount ds-col)
+                                       n-missing)
+                            col-dtype (dtype/get-datatype ds-col)
+                            col-reader (dtype/->reader ds-col
+                                                       col-dtype
+                                                       {:missing-policy :elide})]
+                        (merge
+                         {:col-name (ds-col/column-name ds-col)
+                          :datatype col-dtype
+                          :n-valid n-valid
+                          :n-missing n-missing}
+                         (cond
+                           (dtype-dt/datetime-datatype? col-dtype)
+                           (dtype-dt-ops/millisecond-descriptive-stats col-reader)
+                           (and (not (:categorical? (ds-col/metadata ds-col)))
+                                (casting/numeric-type? col-dtype))
+                           (dfn/descriptive-stats col-reader
+                                                  #{:min :mean :max
+                                                    :standard-deviation :skew})
+                           :else
+                           (let [histogram (->> (frequencies col-reader)
+                                                (clojure.core/sort-by second >))]
+                             (merge
+                              {:mode (ffirst histogram)
+                               :num-distinct-values (count histogram)}
+                              (when (< (count histogram) (:categorical-threshold options 21))
+                                {:values (mapv first histogram)}))))))))
+              (clojure.core/sort-by (comp str :col-name))
+              ->dataset)
+         existing-colname-set (->> (column-names stats-ds)
+                                   set)]
+     ;;This orders the columns by the ordering of stat-names but if for instance
+     ;;there were no numeric or no string columns it still works.
+     (-> stats-ds
+         (select-columns (->> stat-names
+                              (clojure.core/filter existing-colname-set)))
+         (set-dataset-name (str (dataset-name dataset) ": descriptive-stats"))))))
+
+
+(defn brief
+  "Create a sequence of maps from a dataset where maps briefly describe the columns."
+  [ds]
+  (->> (descriptive-stats ds)
+       (mapseq-reader)
+       (map (fn [coldata]
+              (let [col (ds (:col-name coldata))
+                    col-dtype (:datatype coldata)]
+                (merge coldata
+                 (cond
+                   (#{:string :keyword} col-dtype)
+                   (let [unique-strs (ds-col/unique col)]
+                     (if (< (count unique-strs) 11)
+                       {:values unique-strs}
+                       {:num-distinct-values (count unique-strs)})))))))))
 
 
 (defn reverse-map-categorical-columns

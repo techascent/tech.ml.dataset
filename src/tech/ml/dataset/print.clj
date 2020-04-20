@@ -1,14 +1,17 @@
 (ns tech.ml.dataset.print
   (:require [clojure.pprint :as pp]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.ml.dataset.column :as ds-col]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.datetime :as dtype-dt])
   (:import [tech.v2.datatype ObjectReader]
            [java.util List]
            [tech.ml.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
-            PersistentVector]))
+            PersistentVector]
+           [org.roaringbitmap RoaringBitmap]))
 
 (set! *warn-on-reflection* true)
 
@@ -34,15 +37,28 @@
 
 
 (defn dataset->readers
-  ^List [dataset {:keys [all-printable-columns?]
+  ^List [dataset {:keys [all-printable-columns?
+                         missing-nil?]
+                  :or {missing-nil? true}
                   :as _options}]
   (->> (ds-proto/columns dataset)
        (mapv (fn [coldata]
-               (let [col-reader (dtype/->reader coldata)]
-                 (if (or all-printable-columns?
-                         (dtype-dt/packed-datatype? (dtype/get-datatype col-reader)))
-                   (dtype-pp/reader-converter col-reader)
-                   col-reader))))))
+               (let [col-reader (dtype/->reader coldata)
+                     ^RoaringBitmap missing (dtype/as-roaring-bitmap
+                                             (ds-col/missing coldata))
+                     col-rdr (typecast/datatype->reader
+                               :object
+                               (if (or all-printable-columns?
+                                       (dtype-dt/packed-datatype? (dtype/get-datatype col-reader)))
+                                 (dtype-pp/reader-converter col-reader)
+                                 col-reader))]
+                 (if missing-nil?
+                   (reify ObjectReader
+                     (lsize [rdr] (.size col-rdr))
+                     (read [rdr idx]
+                       (when-not (.contains missing idx)
+                         (.read col-rdr idx))))
+                   col-rdr))))))
 
 
 (defn value-reader
