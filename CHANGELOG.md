@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0-beta-23
+ * Updated description stats to provide list of distinct elements for categorical
+   columns of length less than 21.
+ * Updated mapseq system to provide nil values for missing data as opposed to the
+   specific column datatype's missing value indicator.  This can be overridden
+   by passing in `:missing-nil?` false as an option.
+ * Added `brief` function to main namespace so you can get a nice brief description
+   of your dataset when working from the REPL.  This prints out better than
+   `descriptive-stats`.
+
 ## 2.0-beta-21
  * loading jsons files found issues with packing.
  * optimized conversion to/from maps.

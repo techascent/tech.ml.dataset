@@ -4,8 +4,10 @@
             [tech.io :as io]
             [clojure.test :refer [deftest is]]))
 
-(deftest load-github-events
-  (let [ds (-> (io/get-json "https://api.github.com/events"
-                            :key-fn keyword)
-               (ds/->dataset))]
-    (is (= [8 30] (dtype/shape ds)))))
+(comment
+  ;;This sometimes returns a 500 error.
+  (deftest load-github-events
+    (let [ds (-> (io/get-json "https://api.github.com/events"
+                              :key-fn keyword)
+                 (ds/->dataset))]
+      (is (= [8 30] (dtype/shape ds))))))
