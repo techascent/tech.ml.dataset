@@ -266,20 +266,14 @@
 
 
 (defn brief
-  "Create a sequence of maps from a dataset where maps briefly describe the columns."
+  "Get a brief description, in mapseq form of a dataset.  A brief description is
+  the mapseq form of descriptive stats."
   [ds]
   (->> (descriptive-stats ds)
        (mapseq-reader)
-       (map (fn [coldata]
-              (let [col (ds (:col-name coldata))
-                    col-dtype (:datatype coldata)]
-                (merge coldata
-                 (cond
-                   (#{:string :keyword} col-dtype)
-                   (let [unique-strs (ds-col/unique col)]
-                     (if (< (count unique-strs) 11)
-                       {:values unique-strs}
-                       {:num-distinct-values (count unique-strs)})))))))))
+       ;;Remove nil entries from the data.
+       (map #(->> (clojure.core/filter second %)
+                  (into {})))))
 
 
 (defn reverse-map-categorical-columns
