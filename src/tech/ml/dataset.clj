@@ -11,6 +11,7 @@
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base]
             [tech.ml.dataset.modelling]
@@ -96,7 +97,9 @@
 
 
 (par-util/export-symbols tech.ml.dataset.impl.dataset
-                         new-dataset
+                         new-dataset)
+
+(par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
 
 

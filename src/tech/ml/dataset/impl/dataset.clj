@@ -196,27 +196,6 @@
     (str item-val)))
 
 
-(defn name-values-seq->dataset
-  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
-  of unknown (:object) datatype, the first item is checked. If it is a number,
-  then doubles are used.  If it is a string, then strings are used for the
-  column datatype.
-  All sequences must be the same length.
-  Returns a new dataset"
-  [name-values-seq & {:keys [dataset-name]
-                      :or {dataset-name "_unnamed"}}]
-  (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
-                   distinct)]
-    (when-not (= 1 (count sizes))
-      (throw (ex-info (format "Different sized columns detected: %s" sizes) {})))
-    (->> name-values-seq
-         (map (fn [[colname values-seq]]
-                (if (map? values-seq)
-                  (ds-col/ensure-column values-seq)
-                  (ds-col/new-column colname values-seq))))
-         (new-dataset dataset-name))))
-
-
 (defn parse-dataset
   ([input options]
    (->> (ds-parse/csv->columns input options)
