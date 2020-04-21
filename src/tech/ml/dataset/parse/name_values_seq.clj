@@ -44,9 +44,11 @@
                     (apply interleave)
                     (partition n-data)
                     (map #(zipmap colnames %)))
-        leftover-ds (parse-mapseq/mapseq->dataset values)]
+        leftover-ds (when (seq colnames)
+                      (parse-mapseq/mapseq->dataset values))]
     (-> (ds-impl/new-dataset dataset-name
                              {}
                              (concat (ds-proto/columns half-dataset)
-                                     (ds-proto/columns leftover-ds)))
+                                     (when leftover-ds
+                                       (ds-proto/columns leftover-ds))))
         (ds-proto/select name-order :all))))
