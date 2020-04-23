@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0-beta-25
+ * Optimized filter.  Record of optimization is on 
+   [zulip](https://clojurians.zulipchat.com/#narrow/stream/151924-data-science/topic/tech.2Eml.2Edataset.20-.20filter).
+   Synopsis is a speedup of like 10-20X depending on how much work you want to do :-).
+   The base filter pathway has a speedup of around 2-4X.
+
 ## 2.0-beta-23
  * Updated description stats to provide list of distinct elements for categorical
    columns of length less than 21.
