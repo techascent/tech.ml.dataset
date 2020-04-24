@@ -53,7 +53,6 @@
          colname->idx (fn [colname]
                         (.computeIfAbsent cell-name-hash colname
                                           colname-compute-fn))
-         sheet-name (or (:table-name options) "_unnamed")
          rows (->> mapseq
                    (map-indexed (fn [idx data]
                                   (map->row idx data colname->idx))))
@@ -79,6 +78,6 @@
                                 existing
                                 (set/map-invert cell-name-hash))))]
          (get mapdata % %))
-      sheet-name)))
+      options)))
   ([mapseq]
    (mapseq->dataset mapseq {})))

@@ -30,7 +30,6 @@
     (is (dfn/equals (ds "Id") (ds2 "Id")))))
 
 
-
 (deftest sparse-file-parse-test
   (let [ds (first (xlsx-parse/workbook->datasets sparse-file))]
     (is (= 8 (ds/row-count ds)))
@@ -61,3 +60,13 @@
                    xls-file
                    {:parser-fn {"Id" :int64}}))]
     (is (= :int64 (dtype/get-datatype (ds "Id"))))))
+
+
+(deftest xls-keyword-colnames
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   xls-file
+                   {:key-fn keyword}))]
+    ;;The first column is an integer so keyword returns nil for that.
+    ;;This is also a good example in that the system produces keywords with spaces
+    ;;in them...that definitely isn't ideal.
+    (is (every? keyword? (rest (ds/column-names ds))))))

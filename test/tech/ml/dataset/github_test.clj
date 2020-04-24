@@ -10,4 +10,6 @@
     (let [ds (-> (io/get-json "https://api.github.com/events"
                               :key-fn keyword)
                  (ds/->dataset))]
-      (is (= [8 30] (dtype/shape ds))))))
+      (is (every? keyword? (ds/column-names ds)))
+      (is (= [8 30] (dtype/shape ds)))))
+  )

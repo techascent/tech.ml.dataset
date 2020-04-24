@@ -246,7 +246,7 @@
   [rows header-row?
    col-parser-gen
    column-idx->column-name
-   dataset-name]
+   options]
   (let [columns (HashMap.)]
     (doseq [^Spreadsheet$Row row rows]
       (let [row-num (.getRowNum row)
@@ -288,7 +288,7 @@
                 (assoc coldata
                        :name colname
                        :force-datatype? true))))
-           (ds-impl/new-dataset dataset-name)))))
+           (ds-impl/new-dataset options)))))
 
 
 (defn scan-initial-rows
@@ -337,4 +337,6 @@
                                              (scan-rows column-number)))
                               (default-column-parser))))]
      (process-spreadsheet-rows rows header-row? col-parser-gen
-                               #(get header-row % %) (.name worksheet)))))
+                               #(get header-row % %)
+                               (merge {:dataset-name (.name worksheet)}
+                                      options)))))

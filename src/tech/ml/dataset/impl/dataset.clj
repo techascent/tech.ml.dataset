@@ -110,8 +110,8 @@
     (ds-col/supported-stats (first (vals colmap))))
 
 
-  (from-prototype [dataset table-name column-seq]
-    (new-dataset table-name column-seq))
+  (from-prototype [dataset dataset-name column-seq]
+    (new-dataset dataset-name column-seq))
 
 
   dtype-proto/PShape
@@ -165,20 +165,36 @@
   "Create a new dataset from a sequence of columns.  Data will be converted
   into columns using ds-col/ensure-column-seq.  If the column seq is simply a
   collection of vectors, for instance, columns will be named ordinally.
+  options map -
+    :dataset-name - Name of the dataset.  Defaults to \"_unnamed\".
+    :key-fn - Key function used on all column names before insertion into dataset.
+
   The return value fulfills the dataset protocols."
-  ([table-name ds-metadata column-seq]
-   (let [column-seq (ds-col/ensure-column-seq column-seq)]
+  ([options ds-metadata column-seq]
+   (let [column-seq (ds-col/ensure-column-seq column-seq)
+         ;;Options was dataset-name so have to keep that pathway going.
+         dataset-name (if (map? options)
+                        (:dataset-name options)
+                        options)
+         column-seq (if (and (map? options)
+                             (:key-fn options))
+                      (let [key-fn (:key-fn options)]
+                        (->> column-seq
+                             (map #(ds-col/set-name
+                                    %
+                                    (key-fn (ds-col/column-name %))))))
+                      column-seq)]
      (Dataset. (mapv ds-col/column-name column-seq)
                (->> column-seq
                     (map (juxt ds-col/column-name identity))
                     (into {}))
                (assoc (col-impl/->persistent-map ds-metadata)
                       :name
-                      table-name))))
-  ([table-name column-seq]
-   (new-dataset table-name {} column-seq))
+                      dataset-name))))
+  ([options column-seq]
+   (new-dataset options {} column-seq))
   ([column-seq]
-   (new-dataset "_unnamed" {} column-seq)))
+   (new-dataset {} {} column-seq)))
 
 
 (defmethod print-method Dataset
@@ -199,6 +215,6 @@
 (defn parse-dataset
   ([input options]
    (->> (ds-parse/csv->columns input options)
-        (new-dataset (:table-name options) {})))
+        (new-dataset options {})))
   ([input]
    (parse-dataset input {})))

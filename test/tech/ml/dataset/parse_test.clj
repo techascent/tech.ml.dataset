@@ -310,3 +310,8 @@
                               {:parser-fn
                                {"date" [:packed-local-date :relaxed?]}})]
     (verify-relaxed-parse ds)))
+
+
+(deftest csv-keyword-colnames
+  (let [stocks (ds-base/->dataset "test/data/stocks.csv" {:key-fn keyword})]
+    (is (every? keyword? (ds-base/column-names stocks)))))

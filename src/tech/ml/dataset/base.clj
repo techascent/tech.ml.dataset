@@ -650,13 +650,16 @@ the correct type."
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
   Options:
-  :table-name - set the name of the dataset.
+  :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
+  :dataset-name - set the name of the dataset.
   :column-whitelist - either sequence of string column names or sequence of column
-       indices of columns to whitelist.
+     indices of columns to whitelist.
   :column-blacklist - either sequence of string column names or sequence of column
-       indices of columns to blacklist.
+     indices of columns to blacklist.
   :num-rows - Number of rows to read
   :header-row? - Defaults to true, indicates the first row is a header.
+  :key-fn - function to be applied to column names.  Typical use is:
+     `:key-fn keyword`.
   :separator - Add a character separator to the list of separators to auto-detect.
   :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
      a default permissive parser is used.  This way you parse anything that univocity
@@ -687,11 +690,15 @@ the correct type."
 
   Returns a new dataset"
   ([dataset
-    {:keys [table-name]
+    {:keys [table-name dataset-name]
      :as options}]
    (let [dataset (if (instance? File dataset)
                    (.toString ^File dataset)
                    dataset)
+         ;;Unify table-name and dataset name with dataset-name
+         ;;taking precedence.
+         options (assoc options :dataset-name (or dataset-name
+                                                  table-name))
          dataset
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
@@ -714,7 +721,7 @@ the correct type."
                            #(-> (apply io/get-json % (apply clojure.core/concat
                                                             options))
                                 (ds-parse-mapseq/mapseq->dataset
-                                 (merge {:table-name dataset}
+                                 (merge {:dataset-name dataset}
                                         options)))
                            (or xls? xlsx?)
                            (let [parse-fn (parallel-require/require-resolve
@@ -730,17 +737,16 @@ the correct type."
                                               dataset))
                                  (first datasets))))
                            :else
-                           #(ds-impl/parse-dataset %
-                                                   (merge {:table-name dataset}
-                                                          options)))]
+                           #(ds-impl/parse-dataset % (merge {:dataset-name dataset}
+                                                            options)))]
              (with-open [istream (if gzipped?
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
                (open-fn istream)))
            :else
            (ds-parse-mapseq/mapseq->dataset dataset options))]
-     (if table-name
-       (ds-proto/set-dataset-name dataset table-name)
+     (if dataset-name
+       (ds-proto/set-dataset-name dataset dataset-name)
        dataset)))
   ([dataset]
    (->dataset dataset {})))
