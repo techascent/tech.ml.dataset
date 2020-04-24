@@ -182,8 +182,15 @@
 
 (defn select
   "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
-colname-seq - either keyword :all or list of column names with no duplicates.
-index-seq - either keyword :all or list of indexes.  May contain duplicates."
+  colname-seq - one of:
+    - :all - all the columns
+    - sequence of column names - those columns in that order.
+    - implementation of java.util.Map - column order is dictate by map iteration order
+       selected columns are subsequently named after the corresponding value in the map.
+       similar to `rename-columns` except this trims the result to be only the columns
+       in the map.
+  index-seq - either keyword :all or list of indexes.  May contain duplicates.
+  "
   [dataset colname-seq index-seq]
   (ds-proto/select dataset colname-seq index-seq))
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0-beta-28
+ * Fixed #36 - use key-fn uniformly across all loaded datatypes
+ * Fixed #45 - select can take a map.  This does a selection and 
+     a projection to new column names.
+
 ## 2.0-beta-27
  * Update `tech.datatype` with upgraded and fewer dependencies.
    - asm 7.1 (was 7.0)
