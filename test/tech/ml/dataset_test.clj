@@ -266,7 +266,7 @@
         ;;name order
         shuffled-ds (-> (ds/select-columns ds (shuffle (ds/column-names ds)))
                         (ds/select-columns colname-map))
-        shuffled-unordered (-> (ds/select-columns ds (shuffle (ds/column-names ds)))
+        shuffled-unordered (-> (ds/select-columns ds (reverse (ds/column-names ds)))
                                (ds/unordered-select colname-map :all))
         colname-vals (vec (vals colname-map))]
     (is (= colname-vals
