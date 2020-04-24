@@ -1,7 +1,13 @@
 # Changelog
 
+## 2.0-beta-26
+ * Update `tech.datatype` with upgraded and fewer dependencies.
+   - asm 7.1 (was 7.0)
+   - org.clojure/math.combinatorics 1.6 (was 1.2)
+   - *remove* org.clojure/test.check (came in from `kixi.stats`)
+
 ## 2.0-beta-25
- * Optimized filter.  Record of optimization is on 
+ * Optimized filter.  Record of optimization is on
    [zulip](https://clojurians.zulipchat.com/#narrow/stream/151924-data-science/topic/tech.2Eml.2Edataset.20-.20filter).
    Synopsis is a speedup of like 10-20X depending on how much work you want to do :-).
    The base filter pathway has a speedup of around 2-4X.

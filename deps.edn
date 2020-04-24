@@ -1,7 +1,7 @@
 {:paths ["src"]
  :deps {org.clojure/clojure              {:mvn/version "1.10.1"}
         camel-snake-kebab                {:mvn/version "0.4.0"}
-        techascent/tech.datatype         {:mvn/version "5.0-beta-12"}
+        techascent/tech.datatype         {:mvn/version "5.0-beta-14"}
         techascent/tech.io               {:mvn/version "3.17"}
         com.univocity/univocity-parsers  {:mvn/version "2.7.5"}
         org.apache.poi/poi-ooxml         {:mvn/version "4.1.2"}
