@@ -1,10 +1,10 @@
 # Changelog
 
-## 2.0-beta-26
+## 2.0-beta-27
  * Update `tech.datatype` with upgraded and fewer dependencies.
    - asm 7.1 (was 7.0)
    - org.clojure/math.combinatorics 1.6 (was 1.2)
-   - *remove* org.clojure/test.check (came in from `kixi.stats`)
+   - org.clojure/test.check 1.0.0
 
 ## 2.0-beta-25
  * Optimized filter.  Record of optimization is on
