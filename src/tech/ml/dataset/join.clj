@@ -142,7 +142,6 @@
     default-val
     (ds-base/dataset-name ds-table)))
 
-
 (defn- nice-column-names
   [& table-name-column-seq-pairs]
   (->>

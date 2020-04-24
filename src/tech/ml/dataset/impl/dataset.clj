@@ -79,12 +79,18 @@
         (ds-proto/update-column dataset col-name (constantly col-data))
         (ds-proto/add-column dataset col-data))))
 
-  (select [dataset column-name-seq index-seq]
+  (select [dataset column-name-seq-or-map index-seq]
     (let [all-names column-names
           all-name-set (set all-names)
-          column-name-seq (if (= :all column-name-seq)
-                            all-names
-                            column-name-seq)
+          map-selector? (instance? Map column-name-seq-or-map)
+          column-name-seq
+          (cond
+            (= :all column-name-seq-or-map)
+            all-names
+            map-selector?
+            (keys column-name-seq-or-map)
+            :else
+            column-name-seq-or-map)
           name-set (set column-name-seq)
           _ (when-let [missing (seq (c-set/difference name-set all-name-set))]
               (throw (ex-info (format "Invalid/missing column names: %s" missing)
@@ -96,14 +102,25 @@
                               {:selection column-name-seq})))
           indexes (if (= :all index-seq)
                     nil
-                    index-seq)]
-      (->> column-name-seq
-           (map (fn [col-name]
-                  (let [col (ds-proto/column dataset col-name)]
-                    (if indexes
-                      (ds-col/select col indexes)
-                      col))))
-           (new-dataset (ds-proto/dataset-name dataset) metadata))))
+                    index-seq)
+          retval
+          (->> column-name-seq
+               (map (fn [col-name]
+                      (let [col (ds-proto/column dataset col-name)]
+                        (if indexes
+                          (ds-col/select col indexes)
+                          col))))
+               (new-dataset (ds-proto/dataset-name dataset) metadata))]
+      ;;Perform rename functionality if requested
+      (if map-selector?
+        (let [colname-map column-name-seq-or-map]
+          (->> (ds-proto/columns retval)
+               (map (fn [col]
+                      (let [new-name (get colname-map (ds-col/column-name col))]
+                        (ds-col/set-name col new-name))))
+               (new-dataset (ds-proto/dataset-name dataset)
+                            (metadata dataset))))
+        retval)))
 
 
   (supported-column-stats [dataset]
@@ -173,9 +190,10 @@
   ([options ds-metadata column-seq]
    (let [column-seq (ds-col/ensure-column-seq column-seq)
          ;;Options was dataset-name so have to keep that pathway going.
-         dataset-name (if (map? options)
-                        (:dataset-name options)
-                        options)
+         dataset-name (or (if (map? options)
+                            (:dataset-name options)
+                            options)
+                          "_unnamed")
          column-seq (if (and (map? options)
                              (:key-fn options))
                       (let [key-fn (:key-fn options)]
