@@ -35,7 +35,6 @@
                         (zipmap ds-keys)))))))))
 
 
-
 (deftest k-fold-sanity
   (let [dataset-seq (ds/->k-fold-datasets (mapseq-fruit-dataset) 5 {})]
     (is (= 5 (count dataset-seq)))
@@ -253,3 +252,26 @@
 
     (is (= (vec (take 10 (ds :mass)))
            (vec (take 10 (reverse (ds2 :mass))))))))
+
+
+(deftest selection-map
+  (let [ds (ds/->dataset (mapseq-fruit-dataset))
+        colname-map (->> (take 3 (ds/column-names ds))
+                         (map (juxt identity #(keyword (str (name %) "-selected"))))
+                         (into {}))
+
+        ;;Enforce the order in the map.
+        ordered-ds (ds/select-columns ds colname-map)
+        ;;ensure normal ordering rules apply, make a dataset with random column
+        ;;name order
+        shuffled-ds (-> (ds/select-columns ds (shuffle (ds/column-names ds)))
+                        (ds/select-columns colname-map))
+        shuffled-unordered (-> (ds/select-columns ds (reverse (ds/column-names ds)))
+                               (ds/unordered-select colname-map :all))
+        colname-vals (vec (vals colname-map))]
+    (is (= colname-vals
+           (vec (ds/column-names ordered-ds))))
+    (is (= colname-vals
+           (vec (ds/column-names shuffled-ds))))
+    (is (not= colname-vals
+              (vec (ds/column-names shuffled-unordered))))))

@@ -20,7 +20,7 @@
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
            [tech.v2.datatype ObjectReader]
-           [java.util List HashSet]
+           [java.util List HashSet LinkedHashMap Map]
            [org.roaringbitmap RoaringBitmap]
            [it.unimi.dsi.fastutil.longs LongArrayList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
@@ -180,22 +180,17 @@
    (add-or-update-column dataset (ds-col/column-name column) column)))
 
 
-(defn rename-columns
-  "Rename a map of columns."
-  [dataset colname-map]
-  (->> (columns dataset)
-       (map (fn [col]
-              (if-let [new-name (get colname-map (ds-col/column-name col))]
-                (ds-col/set-name col new-name)
-                col)))
-       (ds-impl/new-dataset (dataset-name dataset)
-                            (metadata dataset))))
-
-
 (defn select
   "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
-colname-seq - either keyword :all or list of column names with no duplicates.
-index-seq - either keyword :all or list of indexes.  May contain duplicates."
+  colname-seq - one of:
+    - :all - all the columns
+    - sequence of column names - those columns in that order.
+    - implementation of java.util.Map - column order is dictate by map iteration order
+       selected columns are subsequently named after the corresponding value in the map.
+       similar to `rename-columns` except this trims the result to be only the columns
+       in the map.
+  index-seq - either keyword :all or list of indexes.  May contain duplicates.
+  "
   [dataset colname-seq index-seq]
   (ds-proto/select dataset colname-seq index-seq))
 
@@ -203,16 +198,41 @@ index-seq - either keyword :all or list of indexes.  May contain duplicates."
 (defn unordered-select
   "Perform a selection but use the order of the columns in the existing table; do
   *not* reorder the columns based on colname-seq.  Useful when doing selection based
-  on sets."
+  on sets or persistent hash maps."
   [dataset colname-seq index-seq]
-  (select dataset
-          (order-column-names dataset colname-seq)
-          index-seq))
+  (let [colname-seq (cond
+                      (instance? Map colname-seq)
+                      (->> (column-names dataset)
+                           (map (fn [colname]
+                                  (when-let [cn-seq (get colname-seq colname)]
+                                    [colname cn-seq])))
+                           (remove nil?)
+                           (reduce (fn [^Map item [k v]]
+                                     (.put item k v)
+                                     item)
+                                   (LinkedHashMap.)))
+                      (= :all colname-seq)
+                      colname-seq
+                      :else
+                      (order-column-names dataset colname-seq))]
+    (select dataset colname-seq index-seq)))
 
 
 (defn select-columns
   [dataset col-name-seq]
   (select dataset col-name-seq :all))
+
+
+(defn rename-columns
+  "Rename columns using a map.  Does not reorder columns."
+  [dataset colname-map]
+  (->> (ds-proto/columns dataset)
+       (map (fn [col]
+              (if-let [new-name (get colname-map (ds-col/column-name col))]
+                (ds-col/set-name col new-name)
+                col)))
+       (ds-impl/new-dataset (dataset-name dataset)
+                            (metadata dataset))))
 
 
 (defn drop-columns
@@ -650,13 +670,16 @@ the correct type."
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
   Options:
-  :table-name - set the name of the dataset.
+  :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
+  :dataset-name - set the name of the dataset.
   :column-whitelist - either sequence of string column names or sequence of column
-       indices of columns to whitelist.
+     indices of columns to whitelist.
   :column-blacklist - either sequence of string column names or sequence of column
-       indices of columns to blacklist.
+     indices of columns to blacklist.
   :num-rows - Number of rows to read
   :header-row? - Defaults to true, indicates the first row is a header.
+  :key-fn - function to be applied to column names.  Typical use is:
+     `:key-fn keyword`.
   :separator - Add a character separator to the list of separators to auto-detect.
   :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
      a default permissive parser is used.  This way you parse anything that univocity
@@ -687,11 +710,15 @@ the correct type."
 
   Returns a new dataset"
   ([dataset
-    {:keys [table-name]
+    {:keys [table-name dataset-name]
      :as options}]
    (let [dataset (if (instance? File dataset)
                    (.toString ^File dataset)
                    dataset)
+         ;;Unify table-name and dataset name with dataset-name
+         ;;taking precedence.
+         options (assoc options :dataset-name (or dataset-name
+                                                  table-name))
          dataset
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
@@ -714,7 +741,7 @@ the correct type."
                            #(-> (apply io/get-json % (apply clojure.core/concat
                                                             options))
                                 (ds-parse-mapseq/mapseq->dataset
-                                 (merge {:table-name dataset}
+                                 (merge {:dataset-name dataset}
                                         options)))
                            (or xls? xlsx?)
                            (let [parse-fn (parallel-require/require-resolve
@@ -730,17 +757,16 @@ the correct type."
                                               dataset))
                                  (first datasets))))
                            :else
-                           #(ds-impl/parse-dataset %
-                                                   (merge {:table-name dataset}
-                                                          options)))]
+                           #(ds-impl/parse-dataset % (merge {:dataset-name dataset}
+                                                            options)))]
              (with-open [istream (if gzipped?
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
                (open-fn istream)))
            :else
            (ds-parse-mapseq/mapseq->dataset dataset options))]
-     (if table-name
-       (ds-proto/set-dataset-name dataset table-name)
+     (if dataset-name
+       (ds-proto/set-dataset-name dataset dataset-name)
        dataset)))
   ([dataset]
    (->dataset dataset {})))

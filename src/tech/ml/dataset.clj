@@ -50,6 +50,7 @@
                         update-columns
                         rename-columns
                         select
+                        unordered-select
                         select-columns
                         drop-columns
                         select-rows
