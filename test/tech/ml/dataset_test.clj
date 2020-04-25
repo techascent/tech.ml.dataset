@@ -275,3 +275,9 @@
            (vec (ds/column-names shuffled-ds))))
     (is (not= colname-vals
               (vec (ds/column-names shuffled-unordered))))))
+
+
+(deftest boolean-double-arrays
+  (let [d (ds/->dataset [{:a true} {:a true} {:a false}])]
+    (is (= [1.0 1.0 0.0]
+           (vec (ds-col/to-double-array (d :a)))))))

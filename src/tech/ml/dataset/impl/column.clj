@@ -313,16 +313,14 @@
                    metadata)))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
-          any-missing? (not= 0 n-missing)]
+          any-missing? (not= 0 n-missing)
+          col-dtype (dtype/get-datatype col)]
       (when (and any-missing? error-on-missing?)
         (throw (Exception. "Missing values detected and error-on-missing set")))
-      (when-not (casting/numeric-type? (dtype/get-datatype col))
+      (when-not (or (= :boolean col-dtype)
+                    (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (if (not any-missing?)
-        (dtype/make-container :java-array :float64 col)
-        (let [d-reader (typecast/datatype->reader :float64 data)]
-          (dtype/make-container :java-array :float64
-                                (dtype/->reader col :float64))))))
+      (dtype/make-container :java-array :float64 col)))
   IObj
   (meta [this] (ds-col-proto/metadata this))
   (withMeta [this new-meta] (Column. missing data new-meta))
