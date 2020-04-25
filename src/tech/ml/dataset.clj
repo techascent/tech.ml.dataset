@@ -20,7 +20,8 @@
             [clojure.math.combinatorics :as comb])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [java.util HashSet])
-  (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
+                            rand-nth]))
 
 
 (set! *warn-on-reflection* true)
@@ -102,6 +103,53 @@
 
 (par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
+
+
+(defn head
+  "Get the first n row of a dataset.  Equivalent to
+  `(select-rows ds (range n)).  Arguments are reversed, however, so this can
+  be used in ->> operators."
+  ([n dataset]
+   (select-rows dataset (range n)))
+  ([dataset]
+   (head 5 dataset)))
+
+
+(defn tail
+  "Get the last n rows of a dataset.  Equivalent to
+  `(select-rows ds (range ...)).  Argument order is dataset-last, however, so this can
+  be used in ->> operators."
+  ([n dataset]
+   (let [n-rows (row-count dataset)
+         start-idx (max 0 (- n-rows (long n)))]
+     (select-rows dataset (range start-idx n-rows))))
+  ([dataset]
+   (tail 5 dataset)))
+
+
+(defn shuffle
+  [dataset]
+  (select-rows dataset (clojure.core/shuffle (range (row-count dataset)))))
+
+
+(defn sample
+  "Sample n-rows from a dataset.  Defaults to sampling *without* replacement."
+  ([n replacement? dataset]
+   (let [row-count (row-count dataset)
+         n (long n)]
+     (if replacement?
+       (select-rows dataset (repeatedly n #(rand-int row-count)))
+       (select-rows dataset (take (min n row-count)
+                                  (clojure.core/shuffle (range row-count)))))))
+  ([n dataset]
+   (sample n false dataset))
+  ([dataset]
+   (sample 5 false dataset)))
+
+(defn rand-nth
+  "Return a random row from the dataset in map format"
+  [dataset]
+  (clojure.core/rand-nth (mapseq-reader dataset)))
 
 
 (defn column->dataset
