@@ -4,6 +4,9 @@
  * Fixed #36 - use key-fn uniformly across all loaded datatypes
  * Fixed #45 - select can take a map.  This does a selection and 
      a projection to new column names.
+ * Fixed #41 - boolean columns failed to convert to doubles.
+ * Fixed #44 - head,tail,shuffle,rand-nth,sample all implemented in format
+     appropriate for `->>` operators.
 
 ## 2.0-beta-27
  * Update `tech.datatype` with upgraded and fewer dependencies.
