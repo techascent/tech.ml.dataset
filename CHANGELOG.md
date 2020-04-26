@@ -7,6 +7,7 @@
    this fits on a small repl nicely.  Possible to override.  `brief` overrides this
    to provide defaults to get more information.
  * `unique-by` returns indexes in order.
+ * Fixed #51 - mapseq parsing now follows proper number tower.
 
 ## 2.0-beta-28
  * Fixed #36 - use key-fn uniformly across all loaded datatypes

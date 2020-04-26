@@ -9,6 +9,7 @@
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.double-ops :as double-ops]
+            [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.ml.dataset.impl.column
              :refer [make-container]
              :as col-impl]
@@ -55,8 +56,22 @@
                                                       0)))
         @container*)
       (let [container-dtype (dtype/get-datatype @container*)]
-        (if (= container-dtype packed-cell-dtype)
+        (cond
+          (= container-dtype packed-cell-dtype)
           @container*
+          (and (casting/numeric-type? container-dtype)
+               (casting/numeric-type? cell-dtype)
+               (not (dtype-dt/datetime-datatype? cell-dtype))
+               (not (dtype-dt/datetime-datatype? container-dtype)))
+          (let [new-datatype (builtin-op-providers/widest-datatype
+                              container-dtype
+                              cell-dtype)
+                new-container (if (= new-datatype container-dtype)
+                                @container*
+                                (dtype/make-container :list new-datatype @container*))]
+            (reset! container* new-container)
+            new-container)
+          :else
           (let [obj-container (ArrayList.)]
             (.addAll obj-container ^List (if (packed-datatype-set container-dtype)
                                            (dtype-dt/unpack @container*)

@@ -288,3 +288,10 @@
         d2 (ds/remove-rows d (range 5))]
     (is (= (vec (drop 5 (d :fruit-name)))
            (vec (d2 :fruit-name))))))
+
+
+(deftest long-double-promotion
+  (is (= #{:float64}
+         (->> (ds/->dataset [{:a 1 :b (float 2.2)} {:a 1.2 :b 2}])
+              (map dtype/get-datatype)
+              set))))
