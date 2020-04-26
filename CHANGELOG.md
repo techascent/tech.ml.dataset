@@ -1,8 +1,8 @@
 # Changelog
 
 ## 2.0-beta-29
- * `brief` now does not return missing values.  Double or float values from a
-   mapseq result in missing indexes.
+ * `brief` now does not return missing values.  Double or float NaN or INF values 
+   from a mapseq result in missing indexes.
  * Set of columns used for default descriptive stats is reduced to original set as
    this fits on a small repl nicely.  Possible to override.  `brief` overrides this
    to provide defaults to get more information.
