@@ -163,13 +163,13 @@
     (is (= [7 24]
            (dtype/shape (ds/unique-by-column :width ds))))
     (is (dfn/equals [5.8 5.9 6.0 6.1 6.2 6.3 6.5
-                          6.7 6.8 6.9 7.0 7.1 7.2 7.3
-                          7.4 7.5 7.6 7.7 7.8 8.0 8.4
-                          9.0 9.2 9.6]
-                         (->> (ds/column (ds/unique-by-column :width ds)
-                                              :width)
-                              sort
-                              vec)))))
+                     6.7 6.8 6.9 7.0 7.1 7.2 7.3
+                     7.4 7.5 7.6 7.7 7.8 8.0 8.4
+                     9.0 9.2 9.6]
+                    (->> (ds/column (ds/unique-by-column :width ds)
+                                    :width)
+                         sort
+                         vec)))))
 
 
 (deftest ds-concat-nil-pun

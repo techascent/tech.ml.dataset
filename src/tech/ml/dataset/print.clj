@@ -7,7 +7,7 @@
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.v2.datatype.datetime :as dtype-dt])
   (:import [tech.v2.datatype ObjectReader]
-           [java.util List]
+           [java.util List HashMap Collections]
            [tech.ml.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
             PersistentVector]
@@ -36,7 +36,7 @@
     :epoch-seconds})
 
 
-(defn dataset->readers
+(defn- dataset->readers
   ^List [dataset {:keys [all-printable-columns?
                          missing-nil?]
                   :or {missing-nil? true}
@@ -49,7 +49,8 @@
                      col-rdr (typecast/datatype->reader
                                :object
                                (if (or all-printable-columns?
-                                       (dtype-dt/packed-datatype? (dtype/get-datatype col-reader)))
+                                       (dtype-dt/packed-datatype?
+                                        (dtype/get-datatype col-reader)))
                                  (dtype-pp/reader-converter col-reader)
                                  col-reader))]
                  (if missing-nil?
@@ -62,7 +63,14 @@
 
 
 (defn value-reader
-  "Return a reader that produces a vector of column values per index."
+  "Return a reader that produces a vector of column values per index.
+  Options:
+  :all-printable-columns? - When true, all columns are run through the datatype
+    library's reader-converter multimethod.  This can change the value of a column
+    such that it prints nicely but may not be an exact substitution for the column
+    value.
+  :missing-nil? - Substitute nil in for missing values to make missing value
+     detection downstream to be column datatype independent."
   (^ObjectReader [dataset options]
    (let [readers (dataset->readers dataset options)
          n-rows (long (second (dtype/shape dataset)))
@@ -81,17 +89,27 @@
 
 
 (defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value"
-  ([dataset options]
-   (let [colnamemap (->> (ds-proto/column-names dataset)
-                         (map-indexed #(vector %2 %1))
-                         (into {}))
+  "Return a reader that produces a map of column-name->column-value
+  Options:
+  :all-printable-columns? - When true, all columns are run through the datatype
+    library's reader-converter multimethod.  This can change the value of a column
+    such that it prints nicely but may not be an exact substitution for the column
+    value.
+  :missing-nil? - Substitute nil in for missing values to make missing value
+     detection downstream to be column datatype independent.
+  "
+  (^ObjectReader [dataset options]
+   (let [colnamemap (HashMap.)
+         _ (doseq [[c-name c-idx] (->> (ds-proto/column-names dataset)
+                                      (map-indexed #(vector %2 (int %1))))]
+             (.put colnamemap c-name c-idx))
+         colnamemap (Collections/unmodifiableMap colnamemap)
          readers (value-reader dataset options)]
      (reify ObjectReader
        (lsize [rdr] (.lsize readers))
        (read [rdr idx]
          (FastStruct. colnamemap (.read readers idx))))))
-  ([dataset]
+  (^ObjectReader [dataset]
    (mapseq-reader dataset {})))
 
 

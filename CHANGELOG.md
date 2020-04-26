@@ -1,8 +1,16 @@
 # Changelog
 
+## 2.0-beta-29
+ * `brief` now does not return missing values.  Double or float values from a
+   mapseq result in missing indexes.
+ * Set of columns used for default descriptive stats is reduced to original set as
+   this fits on a small repl nicely.  Possible to override.  `brief` overrides this
+   to provide defaults to get more information.
+ * `unique-by` returns indexes in order.
+
 ## 2.0-beta-28
  * Fixed #36 - use key-fn uniformly across all loaded datatypes
- * Fixed #45 - select can take a map.  This does a selection and 
+ * Fixed #45 - select can take a map.  This does a selection and
      a projection to new column names.
  * Fixed #41 - boolean columns failed to convert to doubles.
  * Fixed #44 - head,tail,shuffle,rand-nth,sample all implemented in format

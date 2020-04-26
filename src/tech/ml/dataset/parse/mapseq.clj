@@ -35,7 +35,9 @@
                       :object))
                   Spreadsheet$Cell
                   (missing [this] (or (nil? v)
-                                      (= "" v)))
+                                      (= "" v)
+                                      (and (number? v)
+                                           (not (Double/isFinite (double v))))))
                   (getColumnNum [this] (int col-index))
                   (value [this] v)
                   (doubleValue [this] (double v))

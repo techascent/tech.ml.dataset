@@ -20,7 +20,7 @@
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
            [tech.v2.datatype ObjectReader]
-           [java.util List HashSet LinkedHashMap Map]
+           [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
            [it.unimi.dsi.fastutil.longs LongArrayList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
@@ -521,15 +521,23 @@ the correct type."
   (first idx-seq))
 
 
+(defn- sorted-int32-sequence
+  [idx-seq]
+  (let [^ints data (dtype/make-container :java-array :int32 idx-seq)]
+    (Arrays/sort data)
+    data))
+
+
 (defn unique-by
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from key,idx-seq->idx-seq.  Defaults to first."
+  :keep-fn - Function from key,idx-seq->idx.  Defaults to first."
   [map-fn dataset & {:keys [column-name-seq keep-fn]
                     :or {keep-fn default-unique-by-keep-fn}}]
   (->> (group-by->indexes map-fn dataset column-name-seq)
        (map (fn [[k v]] (keep-fn k v)))
+       (sorted-int32-sequence)
        (select dataset :all)))
 
 
@@ -537,12 +545,14 @@ the correct type."
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from key, idx-seq->idx0seq.  Defaults to first."
+  :keep-fn - Function from key, idx-seq->idx.  Defaults to first."
   [colname dataset & {:keys [keep-fn]
                       :or {keep-fn default-unique-by-keep-fn}}]
   (->> (group-by-column->indexes colname dataset)
        (map (fn [[k v]] (keep-fn k v)))
+       (sorted-int32-sequence)
        (select dataset :all)))
+
 
 (defn- perform-aggregation
   [numeric-aggregate-fn

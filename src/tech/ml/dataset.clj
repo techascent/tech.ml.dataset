@@ -267,15 +267,33 @@
                         interpolate-loess)
 
 
+(defn all-descriptive-stats-names
+  "Returns the names of all descriptive stats in the order they will be returned
+  in the resulting dataset of descriptive stats.  This allows easy filtering
+  in the form for
+  (descriptive-stats ds {:stat-names (->> (all-descriptive-stats-names)
+                                          (remove #{:values :num-distinct-values}))})"
+  []
+  [:col-name :datatype :n-valid :n-missing
+   :mean :mode :min :max :standard-deviation :skew
+   :num-distinct-values :values])
+
+
 (defn descriptive-stats
   "Get descriptive statistics across the columns of the dataset.
-  In addition to the standard stats"
+  In addition to the standard stats.
+  Options:
+  :stat-names - defaults to (remove #{:values :num-distinct-values}
+                                    (all-descriptive-stats-names))
+  :n-categorical-values - Number of categorical values to report in the 'values'
+     field. nil means all values, defaults to 21."
   ([dataset]
    (descriptive-stats dataset {}))
   ([dataset options]
-   (let [stat-names [:col-name :datatype :n-valid :n-missing
-                     :mean :mode :min :max :standard-deviation :skew
-                     :num-distinct-values :values]
+   (let [stat-names (or (:stat-names options)
+                        (->> (all-descriptive-stats-names)
+                             ;;This just is too much information for small repls.
+                             (remove #{:values :num-distinct-values})))
          stats-ds
          (->> (->dataset dataset)
               (pmap (fn [ds-col]
@@ -305,8 +323,11 @@
                              (merge
                               {:mode (ffirst histogram)
                                :num-distinct-values (count histogram)}
-                              (when (< (count histogram) (:categorical-threshold options 21))
-                                {:values (mapv first histogram)}))))))))
+                              {:values
+                               (->> (map first histogram)
+                                    (take (or (:n-categorical-values options)
+                                              21))
+                                    vec)})))))))
               (clojure.core/sort-by (comp str :col-name))
               ->dataset)
          existing-colname-set (->> (column-names stats-ds)
@@ -322,12 +343,15 @@
 (defn brief
   "Get a brief description, in mapseq form of a dataset.  A brief description is
   the mapseq form of descriptive stats."
-  [ds]
-  (->> (descriptive-stats ds)
-       (mapseq-reader)
-       ;;Remove nil entries from the data.
-       (map #(->> (clojure.core/filter second %)
-                  (into {})))))
+  ([ds options]
+   (->> (descriptive-stats ds options)
+        (mapseq-reader)
+        ;;Remove nil entries from the data.
+        (map #(->> (clojure.core/filter second %)
+                   (into {})))))
+  ([ds]
+   (brief ds {:stat-names (all-descriptive-stats-names)
+              :n-categorical-values nil})))
 
 
 (defn reverse-map-categorical-columns
