@@ -281,3 +281,10 @@
   (let [d (ds/->dataset [{:a true} {:a true} {:a false}])]
     (is (= [1.0 1.0 0.0]
            (vec (ds-col/to-double-array (d :a)))))))
+
+
+(deftest remove-rows
+  (let [d (ds/->dataset (mapseq-fruit-dataset))
+        d2 (ds/remove-rows d (range 5))]
+    (is (= (vec (drop 5 (d :fruit-name)))
+           (vec (d2 :fruit-name))))))

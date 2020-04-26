@@ -2,6 +2,7 @@
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
   (:require [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
             [tech.parallel.utils :as par-util]
             [tech.v2.datatype.functional :as dfn]
@@ -103,6 +104,17 @@
 
 (par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
+
+
+(defn remove-rows
+  "Remove rows from the dataset."
+  [dataset row-idx-seq]
+  (if (seq row-idx-seq)
+    (let [row-count (row-count dataset)]
+      (select-rows dataset (dtype-proto/set-and-not
+                            (bitmap/->bitmap (range row-count))
+                            (bitmap/->bitmap row-idx-seq))))
+    dataset))
 
 
 (defn head
