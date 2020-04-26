@@ -125,7 +125,7 @@
 
 
 (defn new-column
-  "Create a new column from some values."
+  "Create a new column from some values"
   [dataset column-name values]
   (->> (if (ds-col/is-column? values)
          (ds-col/set-name values column-name)
@@ -140,8 +140,15 @@
 
 
 (defn remove-columns
+  "Same as drop-columns"
   [dataset colname-seq]
   (reduce ds-proto/remove-column dataset colname-seq))
+
+
+(defn drop-columns
+  "Same as remove-columns"
+  [dataset col-name-seq]
+  (remove-columns dataset col-name-seq))
 
 
 (defn update-column
@@ -235,26 +242,24 @@
                             (metadata dataset))))
 
 
-(defn drop-columns
-  [dataset col-name-seq]
-  (let [colname-set (set col-name-seq)]
-    (select dataset
-            (->> (column-names dataset)
-                 (remove colname-set))
-            :all)))
-
-
 (defn select-rows
   [dataset row-indexes]
   (select dataset :all row-indexes))
 
 
 (defn drop-rows
+  "Same as remove-rows."
   [dataset row-indexes]
   (select dataset :all
           (dtype-proto/set-and-not
            (bitmap/->bitmap (range (row-count dataset)))
            (bitmap/->bitmap row-indexes))))
+
+
+(defn remove-rows
+  "Same as drop-rows."
+  [dataset row-indexes]
+  (drop-rows dataset row-indexes))
 
 
 (defn missing

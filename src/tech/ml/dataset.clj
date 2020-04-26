@@ -47,6 +47,7 @@
                         new-column
                         remove-column
                         remove-columns
+                        drop-columns
                         update-column
                         order-column-names
                         update-columns
@@ -54,9 +55,9 @@
                         select
                         unordered-select
                         select-columns
-                        drop-columns
                         select-rows
                         drop-rows
+                        remove-rows
                         missing
                         add-or-update-column
                         value-reader
@@ -104,17 +105,6 @@
 
 (par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
-
-
-(defn remove-rows
-  "Remove rows from the dataset."
-  [dataset row-idx-seq]
-  (if (seq row-idx-seq)
-    (let [row-count (row-count dataset)]
-      (select-rows dataset (dtype-proto/set-and-not
-                            (bitmap/->bitmap (range row-count))
-                            (bitmap/->bitmap row-idx-seq))))
-    dataset))
 
 
 (defn head
