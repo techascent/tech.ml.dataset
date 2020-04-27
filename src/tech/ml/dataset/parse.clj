@@ -9,6 +9,7 @@
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.pprint :as dtype-pp]
+            [tech.v2.datatype.readers.update :as update-reader]
             [tech.ml.dataset.impl.column :refer [make-container] :as col-impl]
             [tech.ml.dataset.parse.datetime
              :refer [datetime-can-parse?]
@@ -348,16 +349,43 @@ will stop the parsing system.")
                    ""))))))))
 
 
+(defn cheap-missing-value-map
+  [^RoaringBitmap keys missing-value]
+  (let [n-elems (int (dtype/ecount keys))]
+    (reify
+      dtype-proto/PToBitmap
+      (convertible-to-bitmap? [m] true)
+      (as-roaring-bitmap [m] keys)
+      java.util.Map
+      (size [m] n-elems)
+      (containsKey [this k]
+        (.contains keys (int k)))
+      (get [this k] missing-value)
+      (getOrDefault [this k defval]
+        (if (.contains keys (int k))
+          missing-value
+          defval)))))
+
+
 (defn- attempt-container-promotion
-  [old-container next-dtype]
-  (let [converted-container
-        (if (#{:string :text} next-dtype)
-          (convert-reader-to-strings old-container)
-          old-container)
-        n-elems (dtype/ecount converted-container)
-        new-container (make-container next-dtype n-elems)]
-    (dtype/copy! converted-container new-container)
-    new-container))
+  [missing old-container next-dtype]
+  (let [n-elems (dtype/ecount old-container)
+        n-bitmap-elems (dtype/ecount missing)
+        new-container (make-container next-dtype n-elems)
+        missing-val (col-impl/datatype->missing-value next-dtype)]
+    (if (= n-elems n-bitmap-elems)
+      (dtype/set-constant! new-container 0 missing-val n-elems)
+      (let [converted-container
+            (if (#{:string :text} next-dtype)
+              (convert-reader-to-strings old-container)
+              old-container)
+            src-reader (if (.isEmpty ^RoaringBitmap missing)
+                         converted-container
+                         (update-reader/update-reader
+                          (dtype/->reader converted-container next-dtype)
+                          (cheap-missing-value-map missing missing-val)))]
+        (dtype/copy! src-reader new-container)
+        new-container))))
 
 
 (defn default-column-parser
@@ -386,7 +414,8 @@ will stop the parsing system.")
                   (let [next-dtype (first next-parser)
                         new-container
                         (try
-                          (attempt-container-promotion @container*
+                          (attempt-container-promotion missing
+                                                       @container*
                                                        next-dtype)
                           (catch Throwable e
                             (log/warnf  "Error promoting container %s->%s\n
@@ -397,7 +426,9 @@ falling back to :string"
                                                                  (first %))
                                                           @item-seq*))
                             (reset! simple-parser* (second (first @item-seq*)))
-                            (attempt-container-promotion @container* :string)))]
+                            (attempt-container-promotion missing
+                                                         @container*
+                                                         :string)))]
                     (reset! container* new-container))
                   (.simple-parse!
                    ^tech.ml.dataset.parse.PSimpleColumnParser @simple-parser*

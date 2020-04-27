@@ -73,7 +73,7 @@ public class FastStruct extends APersistentMap implements IObj{
   }
 
   public boolean containsKey(Object key){
-    return slots.containsKey(key);
+    return slots.containsKey(key) || ext.containsKey(key);
   }
 
   public IMapEntry entryAt(Object key){

@@ -10,6 +10,9 @@
              :refer [context-datatype]]
             [tech.v2.datatype.functional :as dtype-fn]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.casting :as casting]
+            [tech.v2.datatype.readers.update :as update-rdr]
+            [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.tensor :as tens]
             [tech.v2.datatype.typecast :as typecast]
             [tech.parallel.next-item-fn :as parallel-nfn]
@@ -225,12 +228,11 @@ of running a math expression.  e.g.:
   (ds/update-column
    dataset column-name
    (fn [col]
-     (let [missing-indexes (ds-col/missing col)]
-       (if (> (dtype/ecount missing-indexes) 0)
-         (dtype/write-indexes! (ds-col/clone col)
-                               (vec missing-indexes)
-                               (vec (repeat (dtype/ecount missing-indexes)
-                                            (:missing-value context))))
+     (let [missing-indexes (bitmap/->bitmap (ds-col/missing col))]
+       (if (not (.isEmpty missing-indexes))
+         (update-rdr/update-reader col (bitmap/bitmap-value->bitmap-map
+                                        missing-indexes
+                                        (:missing-value context)))
          col)))))
 
 (def-multiple-column-etl-operator one-hot

@@ -1,8 +1,15 @@
 # Changelog
 
+## 2.0-beta-30
+ * Parsing datetime types now works if the column starts with missing values.
+ * An efficient formulation of java.util.map is introduced for when you have 
+   a bitmap of keys and a single value:
+   `tech.v2.datatype.bitmap/bitmap-value->bitmap-map`.  This is used for
+   replace-missing type operations.
+
 ## 2.0-beta-29
  * `brief` now does not return missing values.  Double or float NaN or INF values 
-   from a mapseq result in missing indexes.
+   from a mapseq result in maps with fewer keys.
  * Set of columns used for default descriptive stats is reduced to original set as
    this fits on a small repl nicely.  Possible to override.  `brief` overrides this
    to provide defaults to get more information.
