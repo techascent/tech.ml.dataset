@@ -6,6 +6,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.parallel.utils :as par-util]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.readers.const :as const-rdr]
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.bitmap :as bitmap]
@@ -18,7 +19,8 @@
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
-            [clojure.math.combinatorics :as comb])
+            [clojure.math.combinatorics :as comb]
+            [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [java.util HashSet])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
@@ -170,6 +172,47 @@
   (new-dataset (dataset-name dataset)
                (metadata dataset)
                (clojure.core/concat (columns dataset) column-seq)))
+
+
+(defn columnwise-concat
+  "Given a dataset and a list of columns, produce a new dataset with
+  the columns concatenated to a new column with a :column column indicating
+  which column the original value came from.  Any columns not mentioned in the
+  list of columns are duplicated.
+
+  Example:
+
+
+  Options:
+  value-column-name - defaults to :value
+  colname-column-name - defaults to :column
+  "
+  ([dataset colnames {:keys [value-column-name
+                             colname-column-name]
+                       :or {value-column-name :value
+                            colname-column-name :column}
+                      :as _options}]
+   (let [row-count (row-count dataset)
+         colname-set (set colnames)
+         leftover-columns (remove (comp colname-set
+                                        ds-col/column-name)
+                                  dataset)]
+     ;;Note this is calling dataset's concat, not clojure.core's concat
+     ;;Use apply instead of reduce so that the concat function can see the
+     ;;entire dataset list at once.
+     (apply concat (map (fn [col-name]
+                          (let [data (dataset col-name)]
+                            (new-dataset
+                             ;;confusing...
+                             (clojure.core/concat
+                              [(ds-col/new-column colname-column-name
+                                                  (const-rdr/make-const-reader
+                                                   col-name :object row-count))
+                               (ds-col/set-name data value-column-name)]
+                              leftover-columns))))
+                        colnames))))
+  ([dataset colnames]
+   (columnwise-concat dataset colnames {})))
 
 
 (defn column-labeled-mapseq

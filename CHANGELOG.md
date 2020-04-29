@@ -1,14 +1,27 @@
 # Changelog
 
+## 2.0-beta-31
+ * Fixed #38 - set-missing/remove-rows can take infinite seqs - they are trimmed to
+   dataset length.
+ * Fixed #57 - Added columnwise-concat which is a far simpler version of dplyr's
+   https://tidyr.tidyverse.org/reference/pivot_longer.html.  This is implemented
+   efficiently in terms of indexed reader concatentation and as such should work
+   on tables of any size.
+ * - BREAKING PUBLIC API CHANGES - We are getting more strict on the API - if
+   a function is dataset-last (thus appropriate for `->>`) then any options must be 
+   passed before the dataset.  Same is true for the set of functions that are dataset 
+   first. Adhering to this standard makes us slightly better members of the clojure 
+   ecosystem and as such we are chosing to be more strict on this rather than less now.
+
 ## 2.0-beta-30
  * Parsing datetime types now works if the column starts with missing values.
- * An efficient formulation of java.util.map is introduced for when you have 
+ * An efficient formulation of java.util.map is introduced for when you have
    a bitmap of keys and a single value:
    `tech.v2.datatype.bitmap/bitmap-value->bitmap-map`.  This is used for
    replace-missing type operations.
 
 ## 2.0-beta-29
- * `brief` now does not return missing values.  Double or float NaN or INF values 
+ * `brief` now does not return missing values.  Double or float NaN or INF values
    from a mapseq result in maps with fewer keys.
  * Set of columns used for default descriptive stats is reduced to original set as
    this fits on a small repl nicely.  Possible to override.  `brief` overrides this

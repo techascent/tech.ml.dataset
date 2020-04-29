@@ -98,12 +98,12 @@
   (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
                (ds/set-inference-target :fruit-name))]
     (is (= 35
-           (count (ds/n-permutations ds 3))))
+           (count (ds/n-permutations 3 ds))))
     (is (= 20
-           (count (ds/n-feature-permutations ds 3))))
+           (count (ds/n-feature-permutations 3 ds))))
     ;;The label column shows up in every permutation.
     (is (every? :fruit-name
-                (->> (ds/n-feature-permutations ds 3)
+                (->> (ds/n-feature-permutations 3 ds)
                      (map (comp set ds/column-names)))))))
 
 
@@ -302,3 +302,15 @@
                (ds/update-column :fruit-name #(ds-col/set-missing % (range))))]
     (is (= (vec (range (ds/row-count ds)))
            (vec (dtype/->reader (ds-col/missing (ds :fruit-name))))))))
+
+
+(deftest columnwise-concat
+  (let [ds (-> [{:a 1 :b 2 :c 3 :d 1} {:a 4 :b 5 :c 6 :d 2}]
+               (ds/->dataset)
+               (ds/columnwise-concat [:c :a :b]))]
+    (is (= (vec [:c :c :a :a :b :b])
+           (vec (ds :column))))
+    (is (= (vec [3 6 1 4 2 5])
+           (vec (ds :value))))
+    (is (= (vec [1 2 1 2 1 2])
+           (vec (ds :d))))))
