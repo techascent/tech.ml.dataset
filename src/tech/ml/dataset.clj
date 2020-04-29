@@ -14,7 +14,7 @@
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
             [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.base]
+            [tech.ml.dataset.base :as ds-base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
@@ -148,6 +148,7 @@
   ([dataset]
    (sample 5 false dataset)))
 
+
 (defn rand-nth
   "Return a random row from the dataset in map format"
   [dataset]
@@ -211,8 +212,9 @@
 
 (defn n-permutations
   "Return n datasets with all permutations n of the columns possible.
-  N must be less than (count (columns dataset))."
-  [dataset n]
+  N must be less than (column-count dataset))."
+  [n dataset]
+  (ds-base/check-dataset-wrong-position n)
   (when-not (< n (first (dtype/shape dataset)))
     (throw (ex-info (format "%d permutations of %d columns"
                             n (first (dtype/shape dataset)))
@@ -227,7 +229,8 @@
 (defn n-feature-permutations
   "Given a dataset with at least one inference target column, produce all datasets
   with n feature columns and the label columns."
-  [dataset n]
+  [n dataset]
+  (ds-base/check-dataset-wrong-position n)
   (let [label-columns (col-filters/target? dataset)
         feature-columns (col-filters/not label-columns dataset)]
     (when-not (seq label-columns)

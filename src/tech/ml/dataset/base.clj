@@ -20,6 +20,7 @@
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
            [tech.v2.datatype ObjectReader]
+           [tech.ml.dataset.impl.dataset Dataset]
            [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
            [it.unimi.dsi.fastutil.longs LongArrayList])
@@ -250,10 +251,13 @@
 (defn drop-rows
   "Same as remove-rows."
   [dataset row-indexes]
-  (select dataset :all
-          (dtype-proto/set-and-not
-           (bitmap/->bitmap (range (row-count dataset)))
-           (bitmap/->bitmap row-indexes))))
+  (let [row-indexes (if (dtype/reader? row-indexes)
+                      row-indexes
+                      (take (row-count dataset) row-indexes))]
+    (select dataset :all
+            (dtype-proto/set-and-not
+             (bitmap/->bitmap (range (row-count dataset)))
+             (bitmap/->bitmap row-indexes)))))
 
 
 (defn remove-rows
@@ -304,21 +308,31 @@ the correct type."
   (ds-proto/from-prototype dataset table-name column-seq))
 
 
+(defn check-dataset-wrong-position
+  [item]
+  (when (instance? Dataset item)
+    (throw (Exception. "Dataset now must be passed as last option.
+This is an interface change and we do apologize!"))))
+
+
 (defn filter
   "dataset->dataset transformation.  Predicate is passed a map of
   colname->column-value."
-  [predicate dataset & [column-name-seq]]
-  (->> (or column-name-seq (column-names dataset))
-       (select-columns dataset)
-       (mapseq-reader)
-       (dfn/argfilter predicate)
-       (select dataset :all)))
+  ([predicate column-name-seq dataset]
+   (check-dataset-wrong-position column-name-seq)
+   (->> (or column-name-seq (column-names dataset))
+        (select-columns dataset)
+        (mapseq-reader)
+        (dfn/argfilter predicate)
+        (select dataset :all)))
+  ([predicate dataset]
+   (filter predicate nil dataset)))
 
 
 (defn ds-filter
   "Legacy method.  Please see filter"
   [predicate dataset & [column-name-seq]]
-  (filter predicate dataset column-name-seq))
+  (filter predicate column-name-seq dataset))
 
 
 (defn filter-column
@@ -339,21 +353,27 @@ the correct type."
 
 
 (defn group-by->indexes
-  [key-fn dataset & [column-name-seq]]
-  (->> (or column-name-seq (column-names dataset))
-       (select-columns dataset)
-       (mapseq-reader)
-       (dfn/arggroup-by key-fn)))
+  ([key-fn column-name-seq dataset]
+   (check-dataset-wrong-position column-name-seq)
+   (->> (or column-name-seq (column-names dataset))
+        (select-columns dataset)
+        (mapseq-reader)
+        (dfn/arggroup-by key-fn)))
+  ([key-fn dataset]
+   (group-by->indexes key-fn nil dataset)))
 
 
 (defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
   a map of colname->column-value.  Selecting which columns are used in the key-fn
   using column-name-seq is optional but will greatly improve performance."
-  [key-fn dataset & [column-name-seq]]
-  (->> (group-by->indexes key-fn dataset column-name-seq)
-       (map (fn [[k v]] [k (select dataset :all v)]))
-       (into {})))
+  ([key-fn column-name-seq dataset]
+   (check-dataset-wrong-position column-name-seq)
+   (->> (group-by->indexes key-fn column-name-seq dataset)
+        (map (fn [[k v]] [k (select dataset :all v)]))
+        (into {})))
+  ([key-fn dataset]
+   (group-by key-fn nil dataset)))
 
 
 (defn ds-group-by
@@ -394,7 +414,8 @@ the correct type."
 
 (defn sort-by
   "Sort a dataset by a key-fn and compare-fn."
-  ([key-fn compare-fn dataset column-name-seq]
+  ([key-fn compare-fn column-name-seq dataset]
+   (check-dataset-wrong-position column-name-seq)
    (let [^List data (->> (or column-name-seq (column-names dataset))
                          (select-columns dataset)
                          (mapseq-reader)
@@ -404,19 +425,20 @@ the correct type."
      (->> (dfn/argsort data :comparator (->comparator compare-fn))
           (select dataset :all))))
   ([key-fn compare-fn dataset]
-   (sort-by key-fn compare-fn dataset :all))
+   (sort-by key-fn compare-fn :all dataset))
   ([key-fn dataset]
-   (sort-by key-fn nil dataset :all)))
+   (sort-by key-fn nil :all dataset)))
 
 
 (defn ds-sort-by
   "Legacy method.  Please see sort-by"
-  ([key-fn compare-fn dataset column-name-seq]
+  ([key-fn compare-fn column-name-seq dataset]
+   (check-dataset-wrong-position column-name-seq)
    (sort-by key-fn compare-fn dataset column-name-seq))
   ([key-fn compare-fn dataset]
-   (sort-by key-fn compare-fn dataset :all))
+   (sort-by key-fn compare-fn :all dataset))
   ([key-fn dataset]
-   (sort-by key-fn nil dataset :all)))
+   (sort-by key-fn nil :all dataset)))
 
 
 (defn ->sort-by
@@ -516,10 +538,6 @@ the correct type."
   [dataset & other-datasets]
   (apply concat dataset other-datasets))
 
-(defn default-unique-by-keep-fn
-  [argkey idx-seq]
-  (first idx-seq))
-
 
 (defn- sorted-int32-sequence
   [idx-seq]
@@ -532,26 +550,34 @@ the correct type."
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from key,idx-seq->idx.  Defaults to first."
-  [map-fn dataset & {:keys [column-name-seq keep-fn]
-                    :or {keep-fn default-unique-by-keep-fn}}]
-  (->> (group-by->indexes map-fn dataset column-name-seq)
-       (map (fn [[k v]] (keep-fn k v)))
-       (sorted-int32-sequence)
-       (select dataset :all)))
+  :keep-fn - Function from key,idx-seq->idx.  Defaults to #(first %2)."
+  ([map-fn {:keys [column-name-seq keep-fn]
+            :or {keep-fn #(first %2)}
+            :as _options}
+    dataset]
+   (->> (group-by->indexes map-fn column-name-seq dataset)
+        (map (fn [[k v]] (keep-fn k v)))
+        (sorted-int32-sequence)
+        (select dataset :all)))
+  ([map-fn dataset]
+   (unique-by map-fn {} dataset)))
 
 
 (defn unique-by-column
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
 
-  :keep-fn - Function from key, idx-seq->idx.  Defaults to first."
-  [colname dataset & {:keys [keep-fn]
-                      :or {keep-fn default-unique-by-keep-fn}}]
-  (->> (group-by-column->indexes colname dataset)
-       (map (fn [[k v]] (keep-fn k v)))
-       (sorted-int32-sequence)
-       (select dataset :all)))
+  :keep-fn - Function from key, idx-seq->idx.  Defaults to #(first %2)."
+  ([colname {:keys [keep-fn]
+              :or {keep-fn #(first %2)}
+              :as _options}
+    dataset]
+   (->> (group-by-column->indexes colname dataset)
+        (map (fn [[k v]] (keep-fn k v)))
+        (sorted-int32-sequence)
+        (select dataset :all)))
+  ([colname dataset]
+   (unique-by-column colname {} dataset)))
 
 
 (defn- perform-aggregation
@@ -619,7 +645,7 @@ the correct type."
                           boolean-aggregate-fn count-true
                           default-aggregate-fn first}}]
   (finish-aggregate-by dataset
-                       (group-by->indexes map-fn dataset column-name-seq)
+                       (group-by->indexes map-fn column-name-seq dataset)
                        numeric-aggregate-fn
                        boolean-aggregate-fn
                        default-aggregate-fn
