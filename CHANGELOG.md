@@ -15,9 +15,8 @@
  * Fixed #57 - BREAKING PUBLIC API CHANGES - We are getting more strict on the API - if
    a function is dataset-last (thus appropriate for `->>`) then any options must be 
    passed before the dataset.  Same is true for the set of functions that are dataset 
-   first. Adhering to this standard makes us slightly better members of the clojure 
-   ecosystem and as such we are chosing to be more strict on this rather than less now.
-
+   first.  We will be more strict about this from now on.
+   
 ## 2.0-beta-30
  * Parsing datetime types now works if the column starts with missing values.
  * An efficient formulation of java.util.map is introduced for when you have
