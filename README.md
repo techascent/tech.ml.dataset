@@ -12,12 +12,8 @@ for datetime types and joins!
 
 
 * Quick code-oriented [walkthrough](docs/walkthrough.md)
-* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
 * [Summary of Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
-
-
-
-An example of using the dataset for [advanced regression techniques](https://github.com/cnuernber/ames-house-prices/blob/master/ames-housing-prices-clojure.md).
+* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
 
 
 ## Dataset Pipeline Processing
@@ -26,9 +22,10 @@ Dataset ETL for this library consists of loading heterogeneous columns of data a
 operating on that data in a mainly columnwise fashion.
 
 
-[tech.v2.datatype](https://github.com/techascent/tech.datatype) subsystem which is
+[tech.v2.datatype](https://github.com/techascent/tech.datatype) numeric subsystem which is
 described on our [blog](http://techascent.com/blog/datatype-library.html).
 [Here is a cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md).
+
 ## Walkthrough
 
 ```clojure
@@ -53,7 +50,6 @@ user> (take 5 (mapseq-fruit-dataset))
 
 ;; Here are the namespaces
 user> (require '[tech.ml.dataset :as ds])
-:tech.resource.gc Reference thread starting
 nil
 user> (require '[tech.v2.datatype.functional :as dfn])
 nil
