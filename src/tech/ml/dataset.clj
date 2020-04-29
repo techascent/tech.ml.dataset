@@ -181,9 +181,22 @@
   list of columns are duplicated.
 
   Example:
+user> (-> [{:a 1 :b 2 :c 3 :d 1} {:a 4 :b 5 :c 6 :d 2}]
+          (ds/->dataset)
+          (ds/columnwise-concat [:c :a :b]))
+null [6 3]:
 
+| :column | :value | :d |
+|---------+--------+----|
+|      :c |      3 |  1 |
+|      :c |      6 |  2 |
+|      :a |      1 |  1 |
+|      :a |      4 |  2 |
+|      :b |      2 |  1 |
+|      :b |      5 |  2 |
 
   Options:
+
   value-column-name - defaults to :value
   colname-column-name - defaults to :column
   "
@@ -199,7 +212,9 @@
                                   dataset)]
      ;;Note this is calling dataset's concat, not clojure.core's concat
      ;;Use apply instead of reduce so that the concat function can see the
-     ;;entire dataset list at once.
+     ;;entire dataset list at once.  This makes a more efficient reader implementation
+     ;;for each column if all the datasets are the same length which in this case
+     ;;they are guaranteed to be.
      (apply concat (map (fn [col-name]
                           (let [data (dataset col-name)]
                             (new-dataset
@@ -219,24 +234,19 @@
   "Given a dataset, return a sequence of maps where several columns are all stored
   in a :value key and a :label key contains a column name.  Used for quickly creating
   timeseries or scatterplot labeled graphs.  Returns a lazy sequence, not a reader!
+
+  See also `columnwise-concat`
+
   Return a sequence of maps with
   {... - columns not in colname-seq
    :value - value from one of the value columns
    :label - name of the column the value came from
   }"
   [dataset value-colname-seq]
-  (let [colname-set (set value-colname-seq)
-        untouched-cols (remove colname-set (column-names dataset))]
-    ;;Ensure the value columns actually exist.
-    (select-columns dataset value-colname-seq)
-    (->> (mapseq-reader dataset)
-         (mapcat (fn [data]
-                   (let [mindata (select-keys data untouched-cols)]
-                     (->> value-colname-seq
-                          (map (fn [colname]
-                                 (assoc mindata
-                                        :value (get data colname)
-                                        :label colname))))))))))
+  (->> (columnwise-concat dataset value-colname-seq
+                          {:value-column-name :value
+                           :colname-column-name :label})
+       (mapseq-reader)))
 
 
 (defn ->distinct-by-column
