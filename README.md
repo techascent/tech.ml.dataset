@@ -11,7 +11,10 @@ we support gzipped csv/tsv files.  The backing store behind tech.ml.dataset is
 for datetime types and joins!
 
 
-For a quick code-oriented intro, please see the [walkthrough](docs/walkthrough.md).
+* Quick code-oriented [walkthrough](docs/walkthrough.md)
+* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
+* [Summary of Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
+
 
 
 An example of using the dataset for [advanced regression techniques](https://github.com/cnuernber/ames-house-prices/blob/master/ames-housing-prices-clojure.md).
