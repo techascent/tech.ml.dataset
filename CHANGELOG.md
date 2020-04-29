@@ -3,7 +3,7 @@
 ## 2.0-beta-31
  * Fixed #38 - set-missing/remove-rows can take infinite seqs - they are trimmed to
    dataset length.
- * Fixed #47 - Added columnwise-concat which is a far simpler version of dplyr's
+ * Fixed #47 - Added `columnwise-concat` which is a far simpler version of dplyr's
    https://tidyr.tidyverse.org/reference/pivot_longer.html.  This is implemented
    efficiently in terms of indexed reader concatentation and as such should work
    on tables of any size.
