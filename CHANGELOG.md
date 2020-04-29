@@ -3,11 +3,11 @@
 ## 2.0-beta-31
  * Fixed #38 - set-missing/remove-rows can take infinite seqs - they are trimmed to
    dataset length.
- * Fixed #57 - Added columnwise-concat which is a far simpler version of dplyr's
+ * Fixed #47 - Added columnwise-concat which is a far simpler version of dplyr's
    https://tidyr.tidyverse.org/reference/pivot_longer.html.  This is implemented
    efficiently in terms of indexed reader concatentation and as such should work
    on tables of any size.
- * - BREAKING PUBLIC API CHANGES - We are getting more strict on the API - if
+ * Fixed #57 - BREAKING PUBLIC API CHANGES - We are getting more strict on the API - if
    a function is dataset-last (thus appropriate for `->>`) then any options must be 
    passed before the dataset.  Same is true for the set of functions that are dataset 
    first. Adhering to this standard makes us slightly better members of the clojure 
