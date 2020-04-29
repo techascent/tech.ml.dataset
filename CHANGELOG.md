@@ -1,4 +1,9 @@
 # Changelog
+## 2.0-beta-32
+ * `tech.datatype` added a [method](https://github.com/techascent/tech.datatype/blob/bcffe8abe81a53022a5e5d24eae2577c58287bb7/src/tech/v2/datatype.clj#L519) 
+   to transform a reader into a  persistent-vector-like object that derives from 
+   `clojure.lang.APersistentVector` and thus gains benefit from the excellent equality
+   and hash semantics of persistent vectors.
 
 ## 2.0-beta-31
  * Fixed #38 - set-missing/remove-rows can take infinite seqs - they are trimmed to
