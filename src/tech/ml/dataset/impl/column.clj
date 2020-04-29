@@ -274,9 +274,13 @@
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
-    (Column. (->bitmap long-rdr)
-             data
-             metadata))
+    (let [long-rdr (if (dtype/reader? long-rdr)
+                     long-rdr
+                     ;;handle infinite seq's
+                     (take (dtype/ecount data) long-rdr))]
+      (Column. (->bitmap long-rdr)
+               data
+               metadata)))
   (unique [this] (set (dtype/->reader this)))
   (stats [col stats-set]
     (when-not (casting/numeric-type? (dtype-proto/get-datatype col))

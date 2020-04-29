@@ -295,3 +295,10 @@
          (->> (ds/->dataset [{:a 1 :b (float 2.2)} {:a 1.2 :b 2}])
               (map dtype/get-datatype)
               set))))
+
+
+(deftest set-missing-range
+  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+               (ds/update-column :fruit-name #(ds-col/set-missing % (range))))]
+    (is (= (vec (range (ds/row-count ds)))
+           (vec (dtype/->reader (ds-col/missing (ds :fruit-name))))))))
