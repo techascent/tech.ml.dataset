@@ -758,8 +758,11 @@ This is an interface change and we do apologize!"))))
                    dataset)
          ;;Unify table-name and dataset name with dataset-name
          ;;taking precedence.
-         options (assoc options :dataset-name (or dataset-name
-                                                  table-name))
+         dataset-name (or dataset-name
+                          table-name)
+         options (if dataset-name
+                   (assoc options :dataset-name dataset-name)
+                   options)
          dataset
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)

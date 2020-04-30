@@ -314,3 +314,10 @@
            (vec (ds :value))))
     (is (= (vec [1 2 1 2 1 2])
            (vec (ds :d))))))
+
+
+(deftest default-names
+  (is (= "test/data/stocks.csv"
+         (ds/dataset-name (ds/->dataset "test/data/stocks.csv"))))
+  (is (= "stocks"
+         (ds/dataset-name (ds/->dataset "test/data/stocks.xlsx")))))
