@@ -188,7 +188,14 @@
 
   The return value fulfills the dataset protocols."
   ([options ds-metadata column-seq]
-   (let [column-seq (ds-col/ensure-column-seq column-seq)
+   (let [column-seq (->> (ds-col/ensure-column-seq column-seq)
+                         (map-indexed (fn [idx column]
+                                        (let [cname (ds-col/column-name
+                                                     column)]
+                                          (if (and (string? cname)
+                                                   (empty? cname))
+                                            (ds-col/set-name column idx)
+                                            column)))))
          ;;Options was dataset-name so have to keep that pathway going.
          dataset-name (or (if (map? options)
                             (:dataset-name options)

@@ -315,3 +315,9 @@
 (deftest csv-keyword-colnames
   (let [stocks (ds-base/->dataset "test/data/stocks.csv" {:key-fn keyword})]
     (is (every? keyword? (ds-base/column-names stocks)))))
+
+
+(deftest parse-empty-column-name
+  (let [data (ds-base/->dataset "test/data/rcsv.csv")]
+    (is (= #{0 "Urban Female" "Urban Male" "Rural Female" "Rural Male"}
+           (set (ds-base/column-names data))))))

@@ -307,7 +307,8 @@ Implementations should check their metadata before doing calculations."
             (col-proto/is-column? item)
             item
             (map? item)
-            (ensure-column item)
+            (ensure-column (update item :name
+                                   #(or % idx)))
             (dtype/reader? item)
             (let [{:keys [data missing]} (ensure-column-reader item)]
               (col-impl/new-column idx data {} missing))
