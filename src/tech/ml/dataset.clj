@@ -20,11 +20,12 @@
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
             [clojure.math.combinatorics :as comb]
+            [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [java.util HashSet])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth]))
+                            rand-nth reduce]))
 
 
 (set! *warn-on-reflection* true)
@@ -172,6 +173,25 @@
   (new-dataset (dataset-name dataset)
                (metadata dataset)
                (clojure.core/concat (columns dataset) column-seq)))
+
+
+(defn reduce
+  "In parallel, run function over each column and produce a new dataset with a
+  single row of the result.  Returns a new dataset with the same columns as the
+  original.  Exceptions are logged with 'warn' and a missing value for that column
+  is produced."
+  [reduce-fn dataset]
+  (->> dataset
+       (pmap (fn [col]
+               [(ds-col/column-name col)
+                (try
+                  (reduce-fn col)
+                  (catch Throwable e
+                    (log/warn e)
+                    nil))]))
+       (into {})
+       (vector)
+       (->>dataset)))
 
 
 (defn columnwise-concat
@@ -332,7 +352,7 @@ null [6 3]:
   []
   [:col-name :datatype :n-valid :n-missing
    :mean :mode :min :max :standard-deviation :skew
-   :num-distinct-values :values])
+   :n-values :values])
 
 
 (defn descriptive-stats
@@ -349,7 +369,7 @@ null [6 3]:
    (let [stat-names (or (:stat-names options)
                         (->> (all-descriptive-stats-names)
                              ;;This just is too much information for small repls.
-                             (remove #{:values :num-distinct-values})))
+                             (remove #{:values :n-values})))
          stats-ds
          (->> (->dataset dataset)
               (pmap (fn [ds-col]
@@ -378,7 +398,7 @@ null [6 3]:
                                                 (clojure.core/sort-by second >))]
                              (merge
                               {:mode (ffirst histogram)
-                               :num-distinct-values (count histogram)}
+                               :n-values (count histogram)}
                               {:values
                                (->> (map first histogram)
                                     (take (or (:n-categorical-values options)
@@ -411,13 +431,17 @@ null [6 3]:
 
 
 (defn reverse-map-categorical-columns
+  "Given a dataset where we have converted columns from a categorical representation
+  to either a numeric reprsentation or a one-hot representation, reverse map
+  back to the original dataset given the reverse mapping of label->number in
+  the column's metadata."
   [dataset {:keys [column-name-seq]}]
   (let [label-map (dataset-label-map dataset)
         column-name-seq (or column-name-seq
                             (column-names dataset))
         column-name-seq (reduce-column-names dataset column-name-seq)
         dataset
-        (reduce
+        (clojure.core/reduce
          (fn [dataset colname]
            (if (contains? label-map colname)
              (add-or-update-column dataset colname
