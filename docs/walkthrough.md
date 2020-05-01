@@ -3,7 +3,7 @@
 
 Let's take a moment to walkthrough the `tech.ml.dataset system`.  This system was built
 over the course of a few months in order to make working with columnar data easier
-in the same manner as one would work with DataFrames in R or Pandas in Python.  While
+in the same manner as one would work with `data.table` in R or `pandas` in Python.  While
 it takes design inspiration from these sources it does not strive to be a copy in any
 way but rather an extension to the core Clojure language that is built for good
 performance when processing datasets of realistic sizes which in our case means
