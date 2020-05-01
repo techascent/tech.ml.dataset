@@ -703,73 +703,66 @@ Support for reading datetime types and manipulating them.  Please checkout the
 
 
 ```clojure
-user> (def stock-ds (ds/->dataset "test/data/stocks.csv"))
-#'user/stock-ds
-user> stock-ds
-test/data/stocks.csv [560 3]:
+user> (def stocks (ds/->dataset "test/data/stocks.csv"))
+#'user/stocks
 
-| symbol |       date |  price |
-|--------+------------+--------|
-|   MSFT | 2000-01-01 | 39.810 |
-|   MSFT | 2000-02-01 | 36.350 |
-|   MSFT | 2000-03-01 | 43.220 |
-|   MSFT | 2000-04-01 | 28.370 |
-|   MSFT | 2000-05-01 | 25.450 |
-|   MSFT | 2000-06-01 | 32.540 |
-|   MSFT | 2000-07-01 | 28.400 |
-|   MSFT | 2000-08-01 | 28.400 |
-|   MSFT | 2000-09-01 | 24.530 |
-|   MSFT | 2000-10-01 | 28.020 |
-|   MSFT | 2000-11-01 | 23.340 |
-|   MSFT | 2000-12-01 | 17.650 |
-|   MSFT | 2001-01-01 | 24.840 |
-|   MSFT | 2001-02-01 | 24.000 |
-|   MSFT | 2001-03-01 | 22.250 |
-|   MSFT | 2001-04-01 | 27.560 |
-|   MSFT | 2001-05-01 | 28.140 |
-|   MSFT | 2001-06-01 | 29.700 |
-|   MSFT | 2001-07-01 | 26.930 |
-|   MSFT | 2001-08-01 | 23.210 |
-|   MSFT | 2001-09-01 | 20.820 |
-|   MSFT | 2001-10-01 | 23.650 |
-|   MSFT | 2001-11-01 | 26.120 |
-|   MSFT | 2001-12-01 | 26.950 |
-|   MSFT | 2002-01-01 | 25.920 |
-user> (dtype/get-datatype (stock-ds "date"))
+user> (ds/head stocks)
+test/data/stocks.csv [5 3]:
+
+| :symbol |      :date | :price |
+|---------+------------+--------|
+|    MSFT | 2000-01-01 |  39.81 |
+|    MSFT | 2000-02-01 |  36.35 |
+|    MSFT | 2000-03-01 |  43.22 |
+|    MSFT | 2000-04-01 |  28.37 |
+|    MSFT | 2000-05-01 |  25.45 |
+user> (dtype/get-datatype (stocks :date))
 :packed-local-date
 
 user> (require '[tech.v2.datatype.datetime.operations :as dtype-dt-ops])
 nil
-user> (ds/update-column stock-ds "date" dtype-dt-ops/get-epoch-milliseconds)
-test/data/stocks.csv [560 3]:
 
-| symbol |                 date |  price |
-|--------+----------------------+--------|
-|   MSFT | 2000-01-01T06:00:00Z | 39.810 |
-|   MSFT | 2000-02-01T06:00:00Z | 36.350 |
-|   MSFT | 2000-03-01T06:00:00Z | 43.220 |
-|   MSFT | 2000-04-01T06:00:00Z | 28.370 |
-|   MSFT | 2000-05-01T06:00:00Z | 25.450 |
-|   MSFT | 2000-06-01T06:00:00Z | 32.540 |
-|   MSFT | 2000-07-01T06:00:00Z | 28.400 |
-|   MSFT | 2000-08-01T06:00:00Z | 28.400 |
-|   MSFT | 2000-09-01T06:00:00Z | 24.530 |
-|   MSFT | 2000-10-01T06:00:00Z | 28.020 |
-|   MSFT | 2000-11-01T06:00:00Z | 23.340 |
-|   MSFT | 2000-12-01T06:00:00Z | 17.650 |
-|   MSFT | 2001-01-01T06:00:00Z | 24.840 |
-|   MSFT | 2001-02-01T06:00:00Z | 24.000 |
-|   MSFT | 2001-03-01T06:00:00Z | 22.250 |
-|   MSFT | 2001-04-01T06:00:00Z | 27.560 |
-|   MSFT | 2001-05-01T06:00:00Z | 28.140 |
-|   MSFT | 2001-06-01T06:00:00Z | 29.700 |
-|   MSFT | 2001-07-01T06:00:00Z | 26.930 |
-|   MSFT | 2001-08-01T06:00:00Z | 23.210 |
-|   MSFT | 2001-09-01T06:00:00Z | 20.820 |
-|   MSFT | 2001-10-01T06:00:00Z | 23.650 |
-|   MSFT | 2001-11-01T06:00:00Z | 26.120 |
-|   MSFT | 2001-12-01T06:00:00Z | 26.950 |
-|   MSFT | 2002-01-01T06:00:00Z | 25.920 |
+user> (ds/head (ds/update-column stocks :date dtype-dt-ops/get-epoch-milliseconds))
+test/data/stocks.csv [5 3]:
+
+| :symbol |                :date | :price |
+|---------+----------------------+--------|
+|    MSFT | 2000-01-01T00:00:00Z |  39.81 |
+|    MSFT | 2000-02-01T00:00:00Z |  36.35 |
+|    MSFT | 2000-03-01T00:00:00Z |  43.22 |
+|    MSFT | 2000-04-01T00:00:00Z |  28.37 |
+|    MSFT | 2000-05-01T00:00:00Z |  25.45 |
+
+
+;;How about the yearly averages by symbol of the stocks
+user> (require '[tech.v2.datatype.functional :as dfn])
+nil
+
+user> (->> (ds/add-or-update-column stocks :years (dtype-dt-ops/get-years (stocks :date)))
+           (ds/group-by (juxt :symbol :years))
+           (vals)
+           ;;stream is a sequence of datasets at this point.
+           (map (fn [ds]
+                  {:symbol (first (ds :symbol))
+                   :years (first (ds :years))
+                   :avg-price (dfn/mean (ds :price))}))
+           (sort-by (juxt :symbol :years))
+           (ds/->>dataset)
+           (ds/head 10))
+_unnamed [10 3]:
+
+| :symbol | :years | :avg-price |
+|---------+--------+------------|
+|    AAPL |   2000 |      21.75 |
+|    AAPL |   2001 |      10.18 |
+|    AAPL |   2002 |      9.408 |
+|    AAPL |   2003 |      9.347 |
+|    AAPL |   2004 |      18.72 |
+|    AAPL |   2005 |      48.17 |
+|    AAPL |   2006 |      72.04 |
+|    AAPL |   2007 |      133.4 |
+|    AAPL |   2008 |      138.5 |
+|    AAPL |   2009 |      150.4 |
 ```
 
 ## Joins
@@ -845,37 +838,59 @@ We use apache poi [directly](../src/tech/libs/poi/parse.clj) to generate dataset
 from xls and xlsx files.  This feature is, like joins, very new.
 
 ```clojure
-user> (first (poi-parse/workbook->datasets "test/data/file_example_XLS_1000.xls"))
-Sheet1 [1000 8]:
+user> (ds/head (ds/->dataset "test/data/file_example_XLS_1000.xls"))
+Sheet1 [5 8]:
 
-|      0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
-|--------+------------+-----------+--------+---------------+--------+------------+----------|
-|  1.000 |      Dulce |     Abril | Female | United States | 32.000 | 15/10/2017 | 1562.000 |
-|  2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 16/08/2016 | 1582.000 |
-|  3.000 |     Philip |      Gent |   Male |        France | 36.000 | 21/05/2015 | 2587.000 |
-|  4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 15/10/2017 | 3549.000 |
-|  5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 16/08/2016 | 2468.000 |
-|  6.000 |     Gaston |     Brumm |   Male | United States | 24.000 | 21/05/2015 | 2554.000 |
-|  7.000 |       Etta |      Hurn | Female | Great Britain | 56.000 | 15/10/2017 | 3598.000 |
-|  8.000 |    Earlean |    Melgar | Female | United States | 27.000 | 16/08/2016 | 2456.000 |
-|  9.000 |   Vincenza |   Weiland | Female | United States | 40.000 | 21/05/2015 | 6548.000 |
-| 10.000 |     Fallon |   Winward | Female | Great Britain | 28.000 | 16/08/2016 | 5486.000 |
-| 11.000 |    Arcelia |    Bouska | Female | Great Britain | 39.000 | 21/05/2015 | 1258.000 |
-| 12.000 |   Franklyn |    Unknow |   Male |        France | 38.000 | 15/10/2017 | 2579.000 |
-| 13.000 |    Sherron |  Ascencio | Female | Great Britain | 32.000 | 16/08/2016 | 3256.000 |
-| 14.000 |     Marcel | Zabriskie |   Male | Great Britain | 26.000 | 21/05/2015 | 2587.000 |
-| 15.000 |       Kina |  Hazelton | Female | Great Britain | 31.000 | 16/08/2016 | 3259.000 |
-| 16.000 |   Shavonne |       Pia | Female |        France | 24.000 | 21/05/2015 | 1546.000 |
-| 17.000 |     Shavon |    Benito | Female |        France | 39.000 | 15/10/2017 | 3579.000 |
-| 18.000 |   Lauralee |   Perrine | Female | Great Britain | 28.000 | 16/08/2016 | 6597.000 |
-| 19.000 |     Loreta |    Curren | Female |        France | 26.000 | 21/05/2015 | 9654.000 |
-| 20.000 |     Teresa |    Strawn | Female |        France | 46.000 | 21/05/2015 | 3569.000 |
-| 21.000 |    Belinda |   Partain | Female | United States | 37.000 | 15/10/2017 | 2564.000 |
-| 22.000 |      Holly |      Eudy | Female | United States | 52.000 | 16/08/2016 | 8561.000 |
-| 23.000 |       Many |    Cuccia | Female | Great Britain | 46.000 | 21/05/2015 | 5489.000 |
-| 24.000 |     Libbie |     Dalby | Female |        France | 42.000 | 21/05/2015 | 5489.000 |
-| 25.000 |     Lester |   Prothro |   Male |        France | 21.000 | 15/10/2017 | 6574.000 |
+|     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
+|-------+------------+-----------+--------+---------------+-------+------------+------|
+| 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 15/10/2017 | 1562 |
+| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 16/08/2016 | 1582 |
+| 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 21/05/2015 | 2587 |
+| 4.000 |   Kathleen |    Hanner | Female | United States | 25.00 | 15/10/2017 | 3549 |
+| 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 16/08/2016 | 2468 |
 ```
+
+In this example, we actually failed to parse the date because it is in an international
+format (day-month-year) and the dataset system automatically defaults to the American
+(month-day-year).  In this case you actually have 2 options.  You can reload the entire
+file and specify a datatype and DateTimeFormatter format for the column:
+
+```clojure
+
+user> (ds/head (ds/->dataset "test/data/file_example_XLS_1000.xls" {:parser-fn
+                                                                    {"Date" [:local-date "dd/MM/yyyy"]}}))
+Sheet1 [5 8]:
+
+|     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
+|-------+------------+-----------+--------+---------------+-------+------------+------|
+| 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 2017-10-15 | 1562 |
+| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 2016-08-16 | 1582 |
+| 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 2015-05-21 | 2587 |
+| 4.000 |   Kathleen |    Hanner | Female | United States | 25.00 | 2017-10-15 | 3549 |
+| 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 2016-08-16 | 2468 |
+```
+
+
+Or you can reparse just that column using the above parse syntax:
+
+```clojure
+user> (require '[tech.ml.dataset.column :as ds-col])
+nil
+user> (def unparsed (ds/->dataset "test/data/file_example_XLS_1000.xls"))
+#'user/unparsed
+user> (ds/head (ds/update-column unparsed "Date"
+                                 (partial ds-col/parse-column [:local-date "dd/MM/yyyy"])))
+Sheet1 [5 8]:
+
+|     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
+|-------+------------+-----------+--------+---------------+-------+------------+------|
+| 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 2017-10-15 | 1562 |
+| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 2016-08-16 | 1582 |
+| 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 2015-05-21 | 2587 |
+| 4.000 |   Kathleen |    Hanner | Female | United States | 25.00 | 2017-10-15 | 3549 |
+| 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 2016-08-16 | 2468 |
+```
+
 
 ## Writing A Dataset Out
 
