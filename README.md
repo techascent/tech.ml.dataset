@@ -95,16 +95,8 @@ user> (take 2 (ds/mapseq-reader csv-data))
 ;;Data is stored in primitive arrays (even most datetimes!) and strings are stored
 ;;in string tables.  You can load really large datasets with this thing!
 
-;;Datasets are sequence of columns.  Dataset and columns implement the clojure metdata
-;;interfaces.
-user> (->> csv-data
-           (map (fn [column]
-                  (meta column))))
-({:categorical? true, :name "symbol", :size 560, :datatype :string}
- {:name "date", :size 560, :datatype :packed-local-date}
- {:name "price", :size 560, :datatype :float32})
-
- ;;Columns themselves are sequences of their entries.
+;;Datasets are sequence of columns.
+;;Columns themselves are sequences of their entries.
 user> (csv-data "symbol")
 #tech.ml.dataset.column<string>[560]
 symbol
@@ -115,6 +107,14 @@ Gender
 [Female, Female, Male, Female, Female, Male, Female, Female, Female, Female, Female, Male, Female, Male, Female, Female, Female, Female, Female, Female, ...]
 user> (take 5 (xls-data "Gender"))
 ("Female" "Female" "Male" "Female" "Female")
+
+Dataset and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+user> (->> csv-data
+           (map (fn [column]
+                  (meta column))))
+({:categorical? true, :name "symbol", :size 560, :datatype :string}
+ {:name "date", :size 560, :datatype :packed-local-date}
+ {:name "price", :size 560, :datatype :float32})
 
 ;;We can get a brief description of the dataset:
 
