@@ -6,7 +6,7 @@
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
-input-stream.  We support these formats: **raw/gzipped csv/tsv files, xls, xlsx files, json,
+input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
 and sequences of maps** as input sources.
 
 Data storage is efficient (primitive arrays), datetime types are often converted to
