@@ -177,6 +177,10 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 * [datatype cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md)
 
 
+## Keywords
+ - csv, xlsx, pandas, dataframe, dplyr, data.table, modelling 
+
+
 ## License
 
 Copyright © 2019 Complements of TechAscent, LLC
