@@ -65,10 +65,8 @@ user>
 
 
 ;;Loading from the web is no problem
-
-user> (require '[tech.ml.dataset :as ds])
-nil
-user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" {:header-row? false}))
+user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" 
+                                  {:header-row? false}))
 #'user/airports
 user> (ds/head airports)
 https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
