@@ -735,17 +735,25 @@ This is an interface change and we do apologize!"))))
           - Return value must be implement tech.ml.dataset.parser.PColumnParser in
             which case that is used or can return nil in which case the default
             column parser is used.
-   - tuple - pair of [datatype parse-fn] in which case container of type [datatype] will be created.
+   - tuple - pair of [datatype parse-fn] in which case container of type [datatype]
+           will be created.
            parse-fn can be one of:
-        :relaxed? - data will be parsed such that parse failures of the standard parse functions do not stop
-             the parsing process.  :unparsed-values and :unparsed-indexes are available in the metadata of the
-             column that tell you the values that failed to parse and their respective indexes.
-        fn? - function from str-> one of #{:missing :parse-failure value}.  Exceptions here always kill the parse
-             process.
-        string? - for datetime types, this will turned into a DateTimeFormatter via DateTimeFormatter/ofPattern.
-        DateTimeFormatter - use with the appropriate temporal parse static function to parse the value.
+        :relaxed? - data will be parsed such that parse failures of the standard
+           parse functions do not stop the parsing process.  :unparsed-values and
+           :unparsed-indexes are available in the metadata of the column that tell
+           you the values that failed to parse and their respective indexes.
+        fn? - function from str-> one of #{:missing :parse-failure value}.
+           Exceptions here always kill the parse process.  :missing will get marked
+           in the missing indexes, and :parse-failure will result in the index being
+           added to missing, the unparsed the column's :unparsed-values and
+           :unparsed-indexes will be updated.
+        string? - for datetime types, this will turned into a DateTimeFormatter via
+           DateTimeFormatter/ofPattern.
+        DateTimeFormatter - use with the appropriate temporal parse static function
+           to parse the value.
    - map - the header-name-or-idx is used to lookup value.  If not nil, then
-           value can be any of the above options.  Else the default column parser is used.
+           value can be any of the above options.  Else the default column parser
+           is used.
   :parser-scan-len - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 
