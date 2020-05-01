@@ -4,11 +4,21 @@
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
 
-Dataset and ETL pipeline for machine learning.  Datasets are currently in-memory
-columnwise databases and we support parsing from file or input-stream which means
-we support gzipped csv/tsv files.  The backing store behind tech.ml.dataset is
-[tech.datatype](https://github.com/techascent/tech.datatype).  We now have support
-for datetime types and joins!
+Dataset and ETL pipeline for data processing and machine learning.  Datasets are
+currently in-memory columnwise databases and we support parsing from file or
+input-stream which means we support gzipped csv/tsv files, xls, xlsx files, json,
+and sequences of maps as input sources.
+
+Data storage is efficient (primitive arrays), datetime types are often converted to
+an integer representation and strings are loaded into string tables.  These features
+together dramatically increase the working set size in memory.  Because data is stored
+in columnar fashion columnwise operations on the dataset are very fast.
+
+Conversion back into sequences of maps is very efficient and we have support for
+writing the dataset back out to csv, tsv, and gzipped varieties of those.
+
+
+`tech.ml.dataset` is a professional tool for working with datasets that fit into memory.
 
 
 * Quick code-oriented [walkthrough](docs/walkthrough.md)
@@ -124,6 +134,19 @@ user> (ds/brief csv-data)
   :n-values 5,
   :datatype :string,
   :n-valid 560})
+
+;;Another view of that brief:
+
+
+user> (ds/descriptive-stats csv-data)
+test/data/stocks.csv: descriptive-stats [3 10]:
+
+| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
+|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
+|      date | :packed-local-date |      560 |          0 | 2005-05-12 |       | 2000-01-01 | 2010-03-01 |                     |       |
+|     price |           :float32 |      560 |          0 |      100.7 |       |      5.970 |      707.0 |               132.6 | 2.413 |
+|    symbol |            :string |      560 |          0 |            |  MSFT |            |            |                     |       |
+
 
 ;;There are analogues of the clojure.core functions that apply to dataset:
 ;;filter, group-by, sort-by.  These are all implemented efficiently.
