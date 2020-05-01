@@ -108,13 +108,16 @@ Gender
 user> (take 5 (xls-data "Gender"))
 ("Female" "Female" "Male" "Female" "Female")
 
-Dataset and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+
+;;datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+
 user> (->> csv-data
            (map (fn [column]
                   (meta column))))
 ({:categorical? true, :name "symbol", :size 560, :datatype :string}
  {:name "date", :size 560, :datatype :packed-local-date}
  {:name "price", :size 560, :datatype :float32})
+
 
 ;;We can get a brief description of the dataset:
 
@@ -164,8 +167,11 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 
 ;;Joins (left, right, inner) are all implemented.
 
-;;Columnwise arithmetic manipulations are provided via the
+;;Columnwise arithmetic manipulations (+,-, and many more) are provided via the
 ;;tech.v2.datatype.functional namespace.
+
+;;Datetime columns can be operated on - plus,minus, get-years, get-days, and 
+;;many more - uniformly via the tech.v2.datatype.datetime.operations namespace.
 
 ;;There is much more.  Please checkout the walkthough and try it out!
 ```
