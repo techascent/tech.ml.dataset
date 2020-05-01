@@ -17,8 +17,6 @@ in columnar fashion columnwise operations on the dataset are very fast.
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
-`tech.ml.dataset` is a professional tool for working with datasets.
-
 ## Mini Walkthrough
 
 ```clojure
@@ -67,10 +65,8 @@ user>
 
 
 ;;Loading from the web is no problem
-
-user> (require '[tech.ml.dataset :as ds])
-nil
-user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" {:header-row? false}))
+user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" 
+                                  {:header-row? false}))
 #'user/airports
 user> (ds/head airports)
 https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
@@ -99,16 +95,8 @@ user> (take 2 (ds/mapseq-reader csv-data))
 ;;Data is stored in primitive arrays (even most datetimes!) and strings are stored
 ;;in string tables.  You can load really large datasets with this thing!
 
-;;Datasets are sequence of columns.  Dataset and columns implement the clojure metdata
-;;interfaces.
-user> (->> csv-data
-           (map (fn [column]
-                  (meta column))))
-({:categorical? true, :name "symbol", :size 560, :datatype :string}
- {:name "date", :size 560, :datatype :packed-local-date}
- {:name "price", :size 560, :datatype :float32})
-
- ;;Columns themselves are sequences of their entries.
+;;Datasets are sequence of columns.
+;;Columns themselves are sequences of their entries.
 user> (csv-data "symbol")
 #tech.ml.dataset.column<string>[560]
 symbol
@@ -119,6 +107,17 @@ Gender
 [Female, Female, Male, Female, Female, Male, Female, Female, Female, Female, Female, Male, Female, Male, Female, Female, Female, Female, Female, Female, ...]
 user> (take 5 (xls-data "Gender"))
 ("Female" "Female" "Male" "Female" "Female")
+
+
+;;datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+
+user> (->> csv-data
+           (map (fn [column]
+                  (meta column))))
+({:categorical? true, :name "symbol", :size 560, :datatype :string}
+ {:name "date", :size 560, :datatype :packed-local-date}
+ {:name "price", :size 560, :datatype :float32})
+
 
 ;;We can get a brief description of the dataset:
 
@@ -168,8 +167,11 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 
 ;;Joins (left, right, inner) are all implemented.
 
-;;Columnwise arithmetic manipulations are provided via the
+;;Columnwise arithmetic manipulations (+,-, and many more) are provided via the
 ;;tech.v2.datatype.functional namespace.
+
+;;Datetime columns can be operated on - plus,minus, get-years, get-days, and 
+;;many more - uniformly via the tech.v2.datatype.datetime.operations namespace.
 
 ;;There is much more.  Please checkout the walkthough and try it out!
 ```
