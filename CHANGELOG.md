@@ -1,6 +1,6 @@
 # Changelog
-## 2.0-beta-32-SNAPSHOT
- * Issue 52 - CSV columns with empty column names get indexes.  Before they would cause
+## 2.0-beta-32
+ * Issue 52 - CSV columns with empty column names get named after their index.  Before they would cause
    an exception.
  * `tech.datatype` added a [method](https://github.com/techascent/tech.datatype/blob/bcffe8abe81a53022a5e5d24eae2577c58287bb7/src/tech/v2/datatype.clj#L519) 
    to transform a reader into a  persistent-vector-like object that derives from 
