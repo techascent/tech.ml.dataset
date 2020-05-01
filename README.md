@@ -6,12 +6,12 @@
 
 Dataset and ETL pipeline for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
-input-stream which means we support gzipped csv/tsv files, xls, xlsx files, json,
-and sequences of maps as input sources.
+input-stream which means we support **gzipped csv/tsv files, xls, xlsx files, json,
+and sequences of maps** as input sources.
 
 Data storage is efficient (primitive arrays), datetime types are often converted to
 an integer representation and strings are loaded into string tables.  These features
-together dramatically increase the working set size in memory.  Because data is stored
+together dramatically decrease the working set size in memory.  Because data is stored
 in columnar fashion columnwise operations on the dataset are very fast.
 
 Conversion back into sequences of maps is very efficient and we have support for
