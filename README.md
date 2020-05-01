@@ -153,7 +153,7 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 ;;Columnwise arithmetic manipulations are provided via the
 ;;tech.v2.datatype.functional namespace.
 
-;;There is much more.  Please checking the walkthough and try it out!
+;;There is much more.  Please checkout the walkthough and try it out!
 ```
 
 ## More Documentation
