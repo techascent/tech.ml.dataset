@@ -65,6 +65,24 @@ Sheet1 [5 8]:
 | 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 2016-08-16 | 2468 |
 user>
 
+
+;;Loading from the web is no problem
+
+user> (require '[tech.ml.dataset :as ds])
+nil
+user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" {:header-row? false}))
+#'user/airports
+user> (ds/head airports)
+https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
+
+| 0 |                                           1 |            2 |                3 |   4 |    5 |      6 |     7 |    8 |    9 | 10 |                   11 |      12 |          13 |
+|---+---------------------------------------------+--------------+------------------+-----+------+--------+-------+------+------+----+----------------------+---------+-------------|
+| 1 |                              Goroka Airport |       Goroka | Papua New Guinea | GKA | AYGA | -6.082 | 145.4 | 5282 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+| 2 |                              Madang Airport |       Madang | Papua New Guinea | MAG | AYMD | -5.207 | 145.8 |   20 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+| 3 |                Mount Hagen Kagamuga Airport |  Mount Hagen | Papua New Guinea | HGU | AYMH | -5.827 | 144.3 | 5388 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+| 4 |                              Nadzab Airport |       Nadzab | Papua New Guinea | LAE | AYNZ | -6.570 | 146.7 |  239 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+| 5 | Port Moresby Jacksons International Airport | Port Moresby | Papua New Guinea | POM | AYPY | -9.443 | 147.2 |  146 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+
 ;;At any point you can get a sequence of maps back.  We implement a special version
 ;;of Clojure's APersistentMap that is much more efficient than even records and shares
 ;;the backing store with the dataset.
