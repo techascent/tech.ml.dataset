@@ -4,7 +4,7 @@
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
 
-Dataset and ETL pipeline for data processing and machine learning.  Datasets are
+`tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
 input-stream which means we support **gzipped csv/tsv files, xls, xlsx files, json,
 and sequences of maps** as input sources.
