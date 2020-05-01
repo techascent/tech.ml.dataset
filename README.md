@@ -20,11 +20,6 @@ writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
 `tech.ml.dataset` is a professional tool for working with datasets that fit into memory.
 
-
-* Quick code-oriented [walkthrough](docs/walkthrough.md)
-* [Summary of Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
-* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
-
 ## Mini Walkthrough
 
 ```clojure
@@ -161,6 +156,13 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 
 ;;There is lots, lots more than here.  Please see walkthough and try it out!
 ```
+
+## More Documentation
+
+* Quick code-oriented [walkthrough](docs/walkthrough.md)
+* [Summary of Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
+* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
+
 
 ## Questions, Community
 * [zulip stream](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev)
