@@ -17,8 +17,6 @@ in columnar fashion columnwise operations on the dataset are very fast.
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
-`tech.ml.dataset` is a professional tool for working with datasets.
-
 ## Mini Walkthrough
 
 ```clojure
