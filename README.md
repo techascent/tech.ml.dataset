@@ -179,8 +179,8 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 ## More Documentation
 
 * Quick code-oriented [walkthrough](docs/walkthrough.md)
-* [Summary of Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
+* [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 
 
 ## Questions, Community
