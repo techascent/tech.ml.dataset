@@ -82,8 +82,8 @@ type :object during generic options.
 
 
 One very important aspect to note is that columns marked as `:object` datatypes will
-use the **Clojure numerics stack** during mathematical operations.  This is
-important because Clojure numerics stack, unlike the java or scala numerics stacks,
+use the Clojure numerics stack during mathematical operations.  This is
+important because Clojure number tower, similar to the APL number tower,
 actively promotes values to the next appropriate size and is thus less error prone
 to use if you aren't absolutely certain of your value range how it interacts with
 your arithmetic pathways.
