@@ -221,7 +221,7 @@ user> (type (.data ^Column (concrete "price-lag")))
 
 
 This ability - lazily define a column via interface implementation and still
-efficiently operate on that column - that separates the implementation of
+efficiently operate on that column - separates the implementation of
 the `tech.ml.dataset` library from other libraries in this field.  This is likely
 to have an interesting and different set of advantages and disadvantages that will
 present themselves over time.  The dataset library is very loosely bound to the
