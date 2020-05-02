@@ -246,7 +246,7 @@ Given a map of name->column data produce a new dataset.  If column data is untyp
 (like a persistent vector) then the column datatype is either string or double,
 dependent upon the first entry of the column data sequence.
 
-Of the column data is one of the object numeric primitive types, so
+If the column data is one of the object numeric primitive types, so
 `Float` as opposed to `float`, then missing elements will be marked as
 missing and the default empty-value will be used in the primitive storage.
 
