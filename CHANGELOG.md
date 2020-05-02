@@ -3,6 +3,9 @@
  * `tech.v2.datatype` namespace has a new function - [make-reader](https://github.com/techascent/tech.datatype/blob/d735507fe6155e4e112e5640df4c211213f0deba/src/tech/v2/datatype.clj#L458) - that reifies
    a reader of the appropriate type.  This allows you to make new columns that have
    nontrivial translations and datatypes much easier than before.
+ * `tech.v2.datatype` namespace has a new function - [->typed-reader](https://github.com/techascent/tech.datatype/blob/5b4745f728a2773ae542fac9613ffd1c482b9750/src/tech/v2/datatype.clj#L557) - that typecasts the incoming object into a reader of the appropriate datatype.
+ This means that .read calls will be strongly typed and is useful for building up a set 
+ of typed variables before using `make-reader` above.
 
 ## 2.0-beta-32
  * Issue 52 - CSV columns with empty column names get named after their index.  Before they would cause
