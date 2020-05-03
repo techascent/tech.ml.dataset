@@ -11,7 +11,7 @@
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.parallel.for :as parallel-for])
-  (:import [java.util ArrayList]
+  (:import [java.util ArrayList HashSet Collections Set]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
@@ -281,7 +281,19 @@
       (Column. (->bitmap long-rdr)
                data
                metadata)))
-  (unique [this] (set (dtype/->reader this)))
+  (unique [this]
+    (let [rdr (dtype/->reader this)]
+      (->> (parallel-for/indexed-map-reduce
+            (dtype/ecount rdr)
+            (fn [^long start-idx ^long len]
+              (let [data (HashSet.)]
+                (dotimes [iter len]
+                  (.add data (rdr (unchecked-add iter start-idx))))
+                data))
+            (partial reduce (fn [^Set lhs ^Set rhs]
+                              (.addAll lhs rhs)
+                              lhs)))
+           (into #{}))))
   (stats [col stats-set]
     (when-not (casting/numeric-type? (dtype-proto/get-datatype col))
       (throw (ex-info "Stats aren't available on non-numeric columns"

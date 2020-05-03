@@ -61,7 +61,7 @@
 (defn skew-column-filter
   [dataset]
   (with-ds dataset
-    (cf/and cf/numeric?
+    (cf/and cf/numeric-and-non-categorical-and-not-target
             #(cf/not "SalePrice")
             (fn []
               (cf/> #(let [skewness (dfn/skewness
@@ -341,7 +341,8 @@
                         full-ames-pt-2)
             skewed-set (set (skew-column-filter dataset))]
         ;;This count seems rather high...a diff against the python stuff would be wise.
-        (is (= 98 (count skewed-set)))
+        (is (= 64 (count skewed-set)))
+        (is (= 45 (count (cf/categorical? dataset))))
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
@@ -360,16 +361,16 @@
                         0.001))
         (let [pca-ds (dsp/pca dataset)]
           (is (= 127 (count (ds/columns dataset))))
-          (is (= 11 (count (cf/categorical? pca-ds))))
-          (is (= 63 (count (ds/columns pca-ds))))
+          (is (= 45 (count (cf/categorical? pca-ds))))
+          (is (= 75 (count (ds/columns pca-ds))))
           (is (= 1 (count (cf/target? pca-ds)))))
         (let [pca-ds (dsp/pca dataset
                               cf/numeric-and-non-categorical-and-not-target
                               :n-components 10)]
-          (is (= 11 (count (cf/categorical? dataset))))
-          (is (= 11 (count (cf/categorical? pca-ds))))
+          (is (= 45 (count (cf/categorical? dataset))))
+          (is (= 45 (count (cf/categorical? pca-ds))))
           (is (= 127 (count (ds/columns dataset))))
-          (is (= 22 (count (ds/columns pca-ds))))
+          (is (= 56 (count (ds/columns pca-ds))))
           (is (= 1 (count (cf/target? pca-ds)))))))))
 
 

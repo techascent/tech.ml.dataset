@@ -10,7 +10,11 @@
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
-            [tech.ml.utils :as utils]))
+            [tech.ml.utils :as utils]
+            [tech.parallel.for :as parallel-for])
+  (:import [java.util HashMap Map]
+           [java.util.function Function BiFunction BiConsumer]))
+
 
 (def ^:private known-values
   {"true" 1
@@ -55,6 +59,34 @@
                  str-table))))
 
 
+(defn make-string-table-from-column
+  [column]
+  (let [rdr (dtype/->reader column)
+        final-map (HashMap.)
+        final-combiner (reify Function
+                         (apply [_ key]
+                           (unchecked-long (.size final-map))))
+        final-consumer (reify BiConsumer
+                         (accept [_ key val]
+                           (.computeIfAbsent final-map
+                                             key final-combiner)))]
+    (parallel-for/indexed-map-reduce
+     (dtype/ecount rdr)
+     (fn [^long start-idx ^long len]
+       (let [retval (HashMap.)
+             compute-op (reify Function
+                          (apply [_ key]
+                            (unchecked-long (.size retval))))]
+         (dotimes [iter len]
+           (.computeIfAbsent retval (rdr (unchecked-add iter start-idx))
+                             compute-op))
+         retval))
+     ;;mapv here for side effects
+     (partial mapv (fn [^Map lhs] (.forEach lhs final-consumer))))
+    ;;Keep things as persistent maps so writing/reading to/from edn is good.
+    (into {} final-map)))
+
+
 (defn build-categorical-map
   "Given a dataset and these columns, produce a label-map of
   column-name to specific categorical label-map."
@@ -65,10 +97,9 @@
          (map (fn [column-name]
                 [column-name (if provided-table
                                provided-table
-                               (make-string-table-from-table-args
-                                (ds-col/unique
-                                 (ds/column
-                                  dataset column-name))))]))
+                               (make-string-table-from-column
+                                (ds/column
+                                 dataset column-name)))]))
          (into {}))))
 
 
@@ -76,21 +107,21 @@
   "Given a categorical map for a given column, produce a new column
   of the desired datatype with the values mapped to the table values."
   [categorical-map new-dtype old-column]
-  (let [existing-values (dtype/->reader old-column)
-        column-name (ds-col/column-name old-column)
-        categorical-map (get categorical-map column-name)
+  (let [column-name (ds-col/column-name old-column)
+        ^Map categorical-map (get categorical-map column-name)
         data-values
         (dtype/make-array-of-type
          new-dtype
-         (->> existing-values
-              (map (fn [item-val]
-                     (if-let [lookup-val (get categorical-map item-val)]
-                       lookup-val
-                       (throw (ex-info (format "Failed to find lookup for value %s"
-                                               item-val)
-                                       {:item-value item-val
-                                        :possible-values (set (keys categorical-map))
-                                        :column-name column-name}))))))
+         (dtype/reader-map
+          #(let [val (.getOrDefault categorical-map % ::missing-value)]
+             (when (= val ::missing-value)
+               (throw (ex-info (format "Failed to find lookup for value %s"
+                                       %)
+                               {:item-value %
+                                :possible-values (set (keys categorical-map))
+                                :column-name column-name})))
+             val)
+          old-column)
          {:unchecked? true})]
     (col-impl/new-column column-name data-values
                          (assoc (ds-col/metadata old-column)

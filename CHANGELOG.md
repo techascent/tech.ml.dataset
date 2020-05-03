@@ -1,4 +1,9 @@
 # Changelog
+
+## 2.0-beta-34
+ * Major speed (100x+) improvements to `tech.ml.dataset.column/unique` and especially 
+   `tech.ml.dataset.pipeline/string->number.
+
 ## 2.0-beta-33
  * `tech.v2.datatype` namespace has a new function - [make-reader](https://github.com/techascent/tech.datatype/blob/d735507fe6155e4e112e5640df4c211213f0deba/src/tech/v2/datatype.clj#L458) - that reifies
    a reader of the appropriate type.  This allows you to make new columns that have

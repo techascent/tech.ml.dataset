@@ -22,7 +22,6 @@
                   (ds-pipe/range-scale)
                   (ds/set-inference-target :fruit-name))
 
-        origin-ds (mapseq-fruit-dataset)
         src-keys (set (keys (first (mapseq-fruit-dataset))))
         result-keys (set (->> (ds/columns dataset)
                               (map ds-col/column-name)))
