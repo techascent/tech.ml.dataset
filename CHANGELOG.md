@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0-beta-35-SNAPSHOT
+## 2.0-beta-35
  * `tech.datatype` - all readers are marked as sequential.
  * `unroll-column` - Given a column that may container either iterable or scalar data,
     unroll it so it only contains scalar data duplicating rows.
