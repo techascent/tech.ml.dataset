@@ -333,6 +333,15 @@
     (is (= [1 1 2 2 3]
            (vec (ds :a))))
     (is (= [2 3 4 5 :a]
+           (vec (ds :b)))))
+  (let [ds (-> (ds/->dataset (flatten (repeat 20
+                                              [{:a 1 :b [:a :b]}
+                                               {:a 2 :b [:c :d]}
+                                               {:a 3 :b :a}])))
+               (ds/unroll-column :b {:datatype :keyword}))]
+    (is (= (flatten (repeat 20 [1 1 2 2 3]))
+           (vec (ds :a))))
+    (is (= (flatten (repeat 20 [:a :b :c :d :a]))
            (vec (ds :b))))))
 
 
