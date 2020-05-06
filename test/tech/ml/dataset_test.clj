@@ -12,7 +12,9 @@
             [clojure.java.io :as io]
             [clojure.string :as s]
             [camel-snake-kebab.core :refer [->kebab-case]])
-  (:import [smile.projection PCA]))
+  (:import [smile.projection PCA]
+           [java.util List]
+           ))
 
 
 (def mapseq-fruit-dataset
@@ -321,3 +323,14 @@
          (ds/dataset-name (ds/->dataset "test/data/stocks.csv"))))
   (is (= "stocks"
          (ds/dataset-name (ds/->dataset "test/data/stocks.xlsx")))))
+
+
+(deftest unroll
+  (let [ds (-> (ds/->dataset [{:a 1 :b [2 3]}
+                              {:a 2 :b [4 5]}
+                              {:a 3 :b :a}])
+               (ds/unroll-column :b))]
+    (is (= [1 1 2 2 3]
+           (vec (ds :a))))
+    (is (= [2 3 4 5 :a]
+           (vec (ds :b))))))

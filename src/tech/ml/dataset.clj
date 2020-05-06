@@ -11,6 +11,7 @@
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
@@ -19,13 +20,16 @@
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
             [tech.v2.datatype.casting :as casting]
+            [tech.parallel.for :as parallel-for]
             [clojure.math.combinatorics :as comb]
             [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [java.util HashSet Map])
+           [java.util HashSet Map List]
+           [it.unimi.dsi.fastutil.longs LongArrayList]
+           [org.roaringbitmap RoaringBitmap])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth reduce]))
+                            rand-nth]))
 
 
 (set! *warn-on-reflection* true)
@@ -282,6 +286,56 @@ null [6 3]:
                           {:value-column-name :value
                            :colname-column-name :label})
        (mapseq-reader)))
+
+
+(defn unroll-column
+  "Unroll a column that has some (or all) sequential data as entries.
+  Returns a new dataset with same columns but with other columns duplicated
+  where the unroll happened.  Column now contains only scalar data.
+
+  Any missing indexes are dropped.
+
+  Options -
+  :datatype - datatype of the resulting column if one aside from :object is desired."
+  ([dataset column-name]
+   (unroll-column dataset column-name {}))
+  ([dataset column-name options]
+   (let [coldata (dtype/->reader (dataset column-name))
+         result-datatype (or (:datatype options) :object)
+         ^RoaringBitmap missing (ds-col/missing (dataset column-name))
+         cast-fn (if (casting/numeric-type? result-datatype)
+                   #(casting/cast % result-datatype)
+                   identity)
+         [indexes container]
+         (parallel-for/indexed-map-reduce
+          (dtype/ecount coldata)
+          (fn [^long start-idx ^long len]
+            (let [^List container (col-impl/make-container result-datatype)
+                  indexes (LongArrayList.)]
+              (dotimes [iter len]
+                (let [idx (+ iter start-idx)]
+                  (when-not (.contains missing idx)
+                    (let [data-item (coldata idx)]
+                      (if (instance? Iterable data-item)
+                        (parallel-for/doiter
+                         data data-item
+                         (.add container (cast-fn data))
+                         (.add indexes idx))
+                        (do
+                          (.add container (cast-fn data-item))
+                          (.add indexes idx)))))))
+              [indexes container]))
+          (partial clojure.core/reduce
+                   (fn [[lhs-indexes lhs-container]
+                        [rhs-indexes rhs-container]]
+                     (.addAll ^List lhs-indexes ^List rhs-indexes)
+                     (.addAll ^List lhs-container ^List rhs-container)
+                     [lhs-indexes lhs-container])))]
+     (-> (remove-column dataset column-name)
+         (select-rows indexes)
+         (add-or-update-column column-name (col-impl/new-column
+                                            column-name
+                                            container))))))
 
 
 (defn ->distinct-by-column

@@ -1,7 +1,10 @@
 # Changelog
 
+## 2.0-beta-35-SNAPSHOT
+ * `tech.datatype` - all readers are marked as sequential.
+
 ## 2.0-beta-34
- * Major speed (100x+) improvements to `tech.ml.dataset.column/unique` and especially 
+ * Major speed (100x+) improvements to `tech.ml.dataset.column/unique` and especially
    `tech.ml.dataset.pipeline/string->number.
 
 ## 2.0-beta-33
@@ -9,32 +12,32 @@
    a reader of the appropriate type.  This allows you to make new columns that have
    nontrivial translations and datatypes much easier than before.
  * `tech.v2.datatype` namespace has a new function - [->typed-reader](https://github.com/techascent/tech.datatype/blob/5b4745f728a2773ae542fac9613ffd1c482b9750/src/tech/v2/datatype.clj#L557) - that typecasts the incoming object into a reader of the appropriate datatype.
- This means that .read calls will be strongly typed and is useful for building up a set 
+ This means that .read calls will be strongly typed and is useful for building up a set
  of typed variables before using `make-reader` above.
- * Some documentation on the implications of 
+ * Some documentation on the implications of
    [columns, readers, and datatypes](docs/columns-readers-and-datatypes.md).
 
 ## 2.0-beta-32
  * Issue 52 - CSV columns with empty column names get named after their index.  Before they would cause
    an exception.
- * `tech.datatype` added a [method](https://github.com/techascent/tech.datatype/blob/bcffe8abe81a53022a5e5d24eae2577c58287bb7/src/tech/v2/datatype.clj#L519) 
-   to transform a reader into a  persistent-vector-like object that derives from 
+ * `tech.datatype` added a [method](https://github.com/techascent/tech.datatype/blob/bcffe8abe81a53022a5e5d24eae2577c58287bb7/src/tech/v2/datatype.clj#L519)
+   to transform a reader into a  persistent-vector-like object that derives from
    `clojure.lang.APersistentVector` and thus gains benefit from the excellent equality
    and hash semantics of persistent vectors.
 
 ## 2.0-beta-31
  * Fixed #38 - set-missing/remove-rows can take infinite seqs - they are trimmed to
    dataset length.
- * Fixed #47 - Added [`columnwise-concat`](https://github.com/techascent/tech.ml.dataset/blob/bb3f3dbad78a04d81c08d6ae8f1507c6f4e26ed9/src/tech/ml/dataset.clj#L177) 
+ * Fixed #47 - Added [`columnwise-concat`](https://github.com/techascent/tech.ml.dataset/blob/bb3f3dbad78a04d81c08d6ae8f1507c6f4e26ed9/src/tech/ml/dataset.clj#L177)
    which is a far simpler version of dplyr's
    https://tidyr.tidyverse.org/reference/pivot_longer.html.  This is implemented
    efficiently in terms of indexed reader concatentation and as such should work
    on tables of any size.
  * Fixed #57 - BREAKING PUBLIC API CHANGES - We are getting more strict on the API - if
-   a function is dataset-last (thus appropriate for `->>`) then any options must be 
-   passed before the dataset.  Same is true for the set of functions that are dataset 
+   a function is dataset-last (thus appropriate for `->>`) then any options must be
+   passed before the dataset.  Same is true for the set of functions that are dataset
    first.  We will be more strict about this from now on.
-   
+
 ## 2.0-beta-30
  * Parsing datetime types now works if the column starts with missing values.
  * An efficient formulation of java.util.map is introduced for when you have
