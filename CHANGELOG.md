@@ -2,6 +2,9 @@
 
 ## 2.0-beta-35-SNAPSHOT
  * `tech.datatype` - all readers are marked as sequential.
+ * `unroll-column` - Given a column that may container either iterable or scalar data,
+    unroll it so it only contains scalar data duplicating rows.
+ * Issue 61 - Empty bitsets caused exceptions.
 
 ## 2.0-beta-34
  * Major speed (100x+) improvements to `tech.ml.dataset.column/unique` and especially

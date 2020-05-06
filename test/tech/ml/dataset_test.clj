@@ -334,3 +334,10 @@
            (vec (ds :a))))
     (is (= [2 3 4 5 :a]
            (vec (ds :b))))))
+
+
+(deftest empty-bitmap
+  (let [ds (ds/->dataset [{:a 1 :b 1} {:a 2 :b 2}])]
+    (is (= 0 (ds/row-count (ds/select-rows ds (ds/missing ds))))))
+  (let [ds (ds/->dataset [{:a 1 :b 1} {:b 2}])]
+    (is (= 1 (ds/row-count (ds/select-rows ds (ds/missing ds)))))))
