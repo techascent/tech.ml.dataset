@@ -1,4 +1,6 @@
 # Changelog
+## 2.0-beta-36
+ * generic column data lists now support `.addAll`
 
 ## 2.0-beta-35
  * `tech.datatype` - all readers are marked as sequential.
