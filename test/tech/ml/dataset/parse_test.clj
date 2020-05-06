@@ -321,3 +321,8 @@
   (let [data (ds-base/->dataset "test/data/rcsv.csv")]
     (is (= #{0 "Urban Female" "Urban Male" "Rural Female" "Rural Male"}
            (set (ds-base/column-names data))))))
+
+
+(deftest parse-ip-addrs-as-string
+  (let [data (ds-base/->dataset "test/data/ip-addrs.csv")]
+    (is (= :string (dtype/get-datatype (data "ip"))))))

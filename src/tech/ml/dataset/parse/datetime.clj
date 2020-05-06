@@ -103,8 +103,7 @@
   (try
     (Duration/parse str-data)
     (catch Throwable e
-      (let [str-data (.trim str-data)
-            duration-str (local-time-preparse str-data)
+      (let [duration-str (.trim str-data)
             [duration-str mult] (if (.startsWith duration-str "-")
                                   [(.substring duration-str 1) -1]
                                   [duration-str 1])
