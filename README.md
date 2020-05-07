@@ -189,7 +189,7 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 * [slack (data science channel)](https://clojurians.slack.com/archives/C0BQDEJ8M)
 
 
-## Examples
+## Further Reading
 
 * [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
 * [regression pipelines](test/tech/ml/dataset/ames_test.clj)
