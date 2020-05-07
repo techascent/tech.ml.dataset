@@ -184,6 +184,7 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 
 
 ## Questions, Community
+
 * [zulip stream](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev)
 * [slack (data science channel)](https://clojurians.slack.com/archives/C0BQDEJ8M)
 
@@ -193,7 +194,6 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 * [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
 * [regression pipelines](test/tech/ml/dataset/ames_test.clj)
 * [tech.v2.datatype](https://github.com/techascent/tech.datatype) numeric subsystem
-   which is described on our [blog](http://techascent.com/blog/datatype-library.html)
 * [datatype cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md)
 
 
