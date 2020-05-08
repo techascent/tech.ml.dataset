@@ -14,6 +14,7 @@
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
+            [tech.ml.dataset.dynamic-int-list :as int-list]
             [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base :as ds-base]
@@ -25,8 +26,9 @@
             [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [java.util HashSet Map List]
+           [java.util HashSet Map List Iterator]
            [it.unimi.dsi.fastutil.longs LongArrayList]
+           [it.unimi.dsi.fastutil.ints IntArrayList]
            [org.roaringbitmap RoaringBitmap])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth]))
@@ -316,40 +318,66 @@ _unnamed [5 2]:
   ([dataset column-name options]
    (let [coldata (dtype/->reader (dataset column-name))
          result-datatype (or (:datatype options) :object)
+         idx-colname (when-let [idx-name (:indexes? options)]
+                       (if (boolean? idx-name)
+                         :indexes
+                         idx-name))
          ^RoaringBitmap missing (ds-col/missing (dataset column-name))
          cast-fn (if (casting/numeric-type? result-datatype)
                    #(casting/cast % result-datatype)
                    identity)
-         [indexes container]
+         [indexes container idx-container]
          (parallel-for/indexed-map-reduce
           (dtype/ecount coldata)
           (fn [^long start-idx ^long len]
             (let [^List container (col-impl/make-container result-datatype)
-                  indexes (LongArrayList.)]
+                  indexes (LongArrayList.)
+                  ^List idx-container (when idx-colname
+                                        (IntArrayList.))]
               (dotimes [iter len]
                 (let [idx (+ iter start-idx)]
                   (when-not (.contains missing idx)
                     (let [data-item (coldata idx)]
-                      (if (instance? Iterable data-item)
-                        (parallel-for/doiter
-                         data data-item
-                         (.add container (cast-fn data))
-                         (.add indexes idx))
+                      (if (or (dtype/reader? data-item)
+                              (instance? Iterable data-item))
+                        (let [^Iterator src-iter (if (instance? Iterable data-item)
+                                                   (.iterator ^Iterable data-item)
+                                                   (.iterator ^Iterable
+                                                              (dtype/->reader
+                                                               data-item)))]
+                          (loop [continue? (.hasNext src-iter)
+                                 inner-idx 0]
+                            (when continue?
+                              (.add container (cast-fn (.next src-iter)))
+                              (.add indexes idx)
+                              (when idx-colname
+                                (.add idx-container (unchecked-int
+                                                     inner-idx)))
+                              (recur (.hasNext src-iter)
+                                     (unchecked-inc inner-idx)))))
+                        ;;Else treat value as scalar
                         (do
                           (.add container (cast-fn data-item))
-                          (.add indexes idx)))))))
-              [indexes container]))
+                          (.add indexes idx)
+                          (when idx-colname
+                            (.add idx-container (unchecked-int 0)))))))))
+              [indexes container idx-container]))
           (partial clojure.core/reduce
-                   (fn [[lhs-indexes lhs-container]
-                        [rhs-indexes rhs-container]]
+                   (fn [[lhs-indexes lhs-container lhs-idx-container]
+                        [rhs-indexes rhs-container rhs-idx-container]]
                      (.addAll ^List lhs-indexes ^List rhs-indexes)
                      (.addAll ^List lhs-container ^List rhs-container)
-                     [lhs-indexes lhs-container])))]
+                     (when lhs-idx-container
+                       (.addAll ^List lhs-idx-container ^List rhs-idx-container))
+                     [lhs-indexes lhs-container lhs-idx-container])))]
      (-> (remove-column dataset column-name)
          (select-rows indexes)
          (add-or-update-column column-name (col-impl/new-column
                                             column-name
-                                            container))))))
+                                            container))
+         (#(if idx-container
+             (add-or-update-column % idx-colname idx-container)
+             %))))))
 
 
 (defn ->distinct-by-column

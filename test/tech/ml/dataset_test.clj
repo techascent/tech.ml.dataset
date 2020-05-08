@@ -333,7 +333,8 @@
     (is (= [1 1 2 2 3]
            (vec (ds :a))))
     (is (= [2 3 4 5 :a]
-           (vec (ds :b)))))
+           (vec (ds :b))))
+    )
   (let [ds (-> (ds/->dataset (flatten (repeat 20
                                               [{:a 1 :b [:a :b]}
                                                {:a 2 :b [:c :d]}
@@ -342,7 +343,27 @@
     (is (= (flatten (repeat 20 [1 1 2 2 3]))
            (vec (ds :a))))
     (is (= (flatten (repeat 20 [:a :b :c :d :a]))
-           (vec (ds :b))))))
+           (vec (ds :b)))))
+  (let [ds (-> (ds/->dataset [{:a 1 :b [2 3]}
+                              {:a 2 :b [4 5]}
+                              {:a 3 :b :a}])
+               (ds/unroll-column :b {:indexes? true}))]
+    (is (= [1 1 2 2 3]
+           (vec (ds :a))))
+    (is (= [2 3 4 5 :a]
+           (vec (ds :b))))
+    (is (= [0 1 0 1 0]
+           (vec (ds :indexes)))))
+  (let [ds (-> (ds/->dataset [{:a 1 :b [2 3]}
+                              {:a 2 :b [4 5]}
+                              {:a 3 :b :a}])
+               (ds/unroll-column :b {:indexes? :unroll-indexes}))]
+    (is (= [1 1 2 2 3]
+           (vec (ds :a))))
+    (is (= [2 3 4 5 :a]
+           (vec (ds :b))))
+    (is (= [0 1 0 1 0]
+           (vec (ds :unroll-indexes))))))
 
 
 (deftest empty-bitmap
