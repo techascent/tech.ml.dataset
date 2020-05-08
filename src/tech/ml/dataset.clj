@@ -312,7 +312,10 @@ _unnamed [5 2]:
 |  3 | :a |
 
   Options -
-  :datatype - datatype of the resulting column if one aside from :object is desired."
+  :datatype - datatype of the resulting column if one aside from :object is desired.
+  :indexes? - If true, create a new column that records the indexes of the values from
+    the original column.  Can also be a truthy value (like a keyword) and the column
+    will be named this."
   ([dataset column-name]
    (unroll-column dataset column-name {}))
   ([dataset column-name options]
