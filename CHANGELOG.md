@@ -1,4 +1,9 @@
 # Changelog
+## 2.0-beta-29
+ * renamed 'column-map' to 'column-name->column-map'.  This is a public interface change
+   and we do apologize!
+ * added 'column-map' which maps a function over one or more columns.  The result column
+   has a missing set that is the union of the input columns' missing sets.
 
 ## 2.0-beta-28
  * [issue-64] - more tests revealed more problems with concat with different column

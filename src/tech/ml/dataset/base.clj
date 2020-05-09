@@ -79,7 +79,7 @@
   (ds-proto/columns dataset))
 
 
-(defn column-map
+(defn column-name->column-map
   "clojure map of column-name->column"
   [datatypes]
   (->> (ds-proto/columns datatypes)

@@ -48,7 +48,7 @@
                         maybe-column
                         column
                         columns
-                        column-map
+                        column-name->column-map
                         column-names
                         has-column?
                         columns-with-missing-seq
@@ -181,6 +181,29 @@
                (clojure.core/concat (columns dataset) column-seq)))
 
 
+(defn column-map
+  "Produce a new column as the result of mapping a fn over other columns.
+  The result column will have a datatype of the widened combination of all
+  the input column datatypes.
+  The result column's missing indexes is the union of all input columns."
+  [dataset result-colname map-fn colname & colnames]
+  (let [all-colnames (->> (clojure.core/concat [colname]
+                                               colnames)
+                          (remove nil?)
+                          vec)
+        ;;Select the src columns to generate an error.
+        src-ds (select-columns dataset all-colnames)
+        missing-set (if (== 1 (count all-colnames))
+                      (ds-col/missing (src-ds (first all-colnames)))
+                      (reduce dtype-proto/set-or
+                              (map ds-col/missing src-ds)))
+        result-reader (apply dtype/typed-reader-map
+                             map-fn (columns src-ds))]
+    (add-or-update-column
+     dataset result-colname
+     (ds-col/new-column result-colname result-reader {} missing-set))))
+
+
 (defn columnwise-reduce
   "In parallel, run function over each column and produce a new dataset with a
   single row of the result.  Returns a new dataset with the same columns as the
@@ -189,7 +212,12 @@
 
   In addition to being a function from column->scalar, reduce-fn may be a map of
   colname to reduction function in which case only columns which have entries in
-  the map are reduced, other columns are dropped.  "
+  the map are reduced, other columns are dropped.
+
+  This function is deprecated -
+  https://github.com/techascent/tech.ml.dataset/issues/43
+
+  "
   [reduce-fn dataset]
   (let [colnames (if (instance? Map reduce-fn)
                    (let [keyset (.keySet ^Map reduce-fn)]

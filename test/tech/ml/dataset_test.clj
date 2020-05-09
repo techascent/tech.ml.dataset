@@ -443,6 +443,18 @@
            (vec (ds :a))))))
 
 
+(deftest typed-column-map-missing
+  (let [ds (-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}])
+               (ds/column-map
+                :a
+                (fn ^double [^double lhs ^double rhs]
+                  (+ lhs rhs))
+                :a :b))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [false false true]
+           (vec (dfn/is-finite? (ds :a)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
