@@ -480,7 +480,7 @@ This is an interface change and we do apologize!"))))
 
 (defn concat
   "Concatenate datasets.  Respects missing values.  Datasets must all have the same
-  columns."
+  columns.  Result column datatypes will be a widening cast of the datatypes."
   [dataset & other-datasets]
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
                       (remove nil?)
@@ -506,14 +506,12 @@ This is an interface change and we do apologize!"))))
         (->> column-list
              (map (fn [[colname columns]]
                     (let [columns (map :column columns)
-                          column-values (reader-concat/concat-readers columns)
-                          col-dtypes (set (map dtype/get-datatype columns))
-                          _ (when-not (== 1 (count col-dtypes))
-                              (throw (Exception.
-                                      (format
-                                       "Column %s has mismatched datatypes: %s"
-                                       colname
-                                       col-dtypes))))
+                          final-dtype (if (== 1 (count columns))
+                                        (dtype/get-datatype (first columns))
+                                        (reduce builtin-op-providers/widest-datatype
+                                                (map dtype/get-datatype columns)))
+                          column-values (reader-concat/concat-readers
+                                         {:datatype final-dtype} columns)
                           missing
                           (->> (reduce
                                 (fn [[missing offset] col]

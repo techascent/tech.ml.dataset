@@ -80,8 +80,7 @@
          missing# ~missing
          missing-val# (casting/datatype->cast-fn
                        :unknown ~datatype
-                       (datatype->missing-value
-                        (dtype/get-datatype ~data)))
+                       (datatype->missing-value ~datatype))
          n-elems# (long ~n-elems)]
      (reify ~(typecast/datatype->reader-type datatype)
        (getDatatype [this#] (.getDatatype rdr#))
@@ -144,6 +143,10 @@
      ^IPersistentMap metadata]
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-proto/get-datatype data))
+  dtype-proto/PSetDatatype
+  (set-datatype [this new-dtype]
+    (Column. missing (dtype-proto/set-datatype data new-dtype)
+             metadata))
   dtype-proto/PCountable
   (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToReader

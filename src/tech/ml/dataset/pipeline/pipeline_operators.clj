@@ -269,13 +269,13 @@ strings with a known value."
   (ds/update-column
    dataset column-name
    (fn [col]
-     (let [result-dtype (or (:result-datatype op-args)
-                            (dtype/get-datatype col))
-           map-fn (:value-map context)
-           new-col-name (or (:result-name op-args)
-                            (ds-col/column-name col))]
-       (as-> (mapv #(get map-fn % %) (dtype/->reader col)) col-values
-         (ds-col/new-column column-name col-values (ds-col/metadata col)))))))
+     (let [map-fn (:value-map context)
+           new-rdr (-> (dtype/reader-map
+                        #(get map-fn % %)
+                        col)
+                       (dtype/set-datatype (dtype/get-datatype col)))]
+       (ds-col/new-column column-name new-rdr (ds-col/metadata col)
+                          (ds-col/missing col))))))
 
 
 (def-single-column-etl-operator update-column

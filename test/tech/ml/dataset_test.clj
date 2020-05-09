@@ -333,8 +333,7 @@
     (is (= [1 1 2 2 3]
            (vec (ds :a))))
     (is (= [2 3 4 5 :a]
-           (vec (ds :b))))
-    )
+           (vec (ds :b)))))
   (let [ds (-> (ds/->dataset (flatten (repeat 20
                                               [{:a 1 :b [:a :b]}
                                                {:a 2 :b [:c :d]}
@@ -371,3 +370,56 @@
     (is (= 0 (ds/row-count (ds/select-rows ds (ds/missing ds))))))
   (let [ds (ds/->dataset [{:a 1 :b 1} {:b 2}])]
     (is (= 1 (ds/row-count (ds/select-rows ds (ds/missing ds)))))))
+
+
+(deftest concat-columns-widening
+  (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}])
+        ds2 (ds/->dataset [{:a (byte 2) :b 2}])
+        cds1 (ds/concat ds ds2)
+        cds2 (ds/concat ds2 ds)]
+    (is (= #{:int64 :float64}
+           (set (map dtype/get-datatype cds1))))
+    (is (= #{:int64 :float64}
+           (set (map dtype/get-datatype cds2))))))
+
+
+(deftest set-datatype-lose-missing
+  (let [ds (-> (ds/->dataset [{:a 1 :b 1} {:b 2}])
+               (ds/update-column :a #(dtype/set-datatype % :int32)))]
+    (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
+    (is (= :int32 (dtype/get-datatype (ds :a))))
+    (is (= [1 Integer/MIN_VALUE]
+           (vec (ds :a))))))
+
+
+
+(deftest set-datatype-with-new-column
+  (let [ds (-> (ds/->dataset [{:a 1 :b 1} {:b 2}])
+               (ds/update-column :a #(ds-col/new-column
+                                      (ds-col/column-name %)
+                                      (let [src-rdr (dtype/->typed-reader % :int32)]
+                                        (dtype/make-reader :int32
+                                                           (.lsize src-rdr)
+                                                           (.read src-rdr idx)))
+                                      {}
+                                      (ds-col/missing %))))]
+    (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
+    (is (= :int32 (dtype/get-datatype (ds :a))))
+    (is (= [1 Integer/MIN_VALUE]
+           (vec (ds :a))))))
+
+
+(comment
+
+  (def test-ds (ds/->dataset
+                "https://github.com/genmeblog/techtest/raw/master/data/who.csv.gz"))
+
+  (->> '("new_sp_m014" "new_sp_m1524")
+       (ds/select-columns test-ds)
+       (ds/columns)
+       (map (comp :datatype meta)))
+
+  (ds/columnwise-concat test-ds '("new_sp_m014" "new_sp_m1524"))
+  (ds/columnwise-concat test-ds '("new_sp_m1524" "new_sp_m014"))
+
+  )

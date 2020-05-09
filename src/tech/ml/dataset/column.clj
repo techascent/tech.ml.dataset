@@ -171,6 +171,23 @@ Implementations should check their metadata before doing calculations."
    (parse-column datatype {} col)))
 
 
+(defn ensure-column-reader
+  [values-seq]
+  (if (dtype/reader? values-seq)
+    values-seq
+    (dtype/make-container :list
+                          (dtype/get-datatype values-seq)
+                          values-seq)))
+
+
+(defn new-column
+  ([name data] (new-column name data nil nil))
+  ([name data metadata] (new-column name data metadata nil))
+  ([name data metadata missing]
+   (let [coldata (ensure-column-reader data)]
+     (col-impl/new-column name coldata metadata missing))))
+
+
 (def object-primitive-array-types
   {(Class/forName "[Ljava.lang.Boolean;") :boolean
    (Class/forName "[Ljava.lang.Byte;") :int8
@@ -242,39 +259,26 @@ Implementations should check their metadata before doing calculations."
      :missing sparse-indexes}))
 
 
-(defn ensure-column-reader
-  [values-seq]
-  (let [values-seq (if (dtype/reader? values-seq)
-                     values-seq
-                     (dtype/make-container :list
-                                           (dtype/get-datatype values-seq)
-                                           values-seq))]
-    (if (= :object (dtype/get-datatype values-seq))
+(defn scan-data-for-missing
+  [coldata]
+  (let [data-reader (ensure-column-reader coldata)]
+    (if (= :object (dtype/get-datatype data-reader))
       (cond
-        (contains? object-primitive-array-types (type values-seq))
-        (process-object-primitive-array-data values-seq)
-        (boolean? (first values-seq))
-        (scan-object-numeric-data-for-missing :boolean values-seq)
-        (number? (first values-seq))
-        (scan-object-numeric-data-for-missing :float64 values-seq)
-        (string? (first values-seq))
-        (scan-object-data-for-missing :string values-seq)
-        (keyword? (first values-seq))
-        (scan-object-data-for-missing :keyword values-seq)
-        (symbol? (first values-seq))
-        (scan-object-data-for-missing :symbol values-seq)
+        (contains? object-primitive-array-types (type data-reader))
+        (process-object-primitive-array-data data-reader)
+        (boolean? (first data-reader))
+        (scan-object-numeric-data-for-missing :boolean data-reader)
+        (number? (first data-reader))
+        (scan-object-numeric-data-for-missing :float64 data-reader)
+        (string? (first data-reader))
+        (scan-object-data-for-missing :string data-reader)
+        (keyword? (first data-reader))
+        (scan-object-data-for-missing :keyword data-reader)
+        (symbol? (first data-reader))
+        (scan-object-data-for-missing :symbol data-reader)
         :else
-        {:data values-seq})
-      {:data values-seq})))
-
-
-(defn new-column
-  ([name data] (new-column name data nil nil))
-  ([name data metadata] (new-column name data metadata nil))
-  ([name data metadata missing]
-   (let [{coldata :data
-          scanned-missing :missing} (ensure-column-reader data)]
-     (col-impl/new-column name coldata metadata (or missing scanned-missing)))))
+        {:data data-reader})
+      {:data data-reader})))
 
 
 (defn ensure-column
@@ -291,7 +295,7 @@ Implementations should check their metadata before doing calculations."
       (col-impl/new-column
        name
        (if-not force-datatype?
-         (:data (ensure-column-reader data))
+         (:data (scan-data-for-missing data))
          data)
        metadata missing))
     :else
@@ -310,10 +314,10 @@ Implementations should check their metadata before doing calculations."
             (ensure-column (update item :name
                                    #(or % idx)))
             (dtype/reader? item)
-            (let [{:keys [data missing]} (ensure-column-reader item)]
+            (let [{:keys [data missing]} (scan-data-for-missing item)]
               (col-impl/new-column idx data {} missing))
             (instance? Iterable item)
-            (let [{:keys [data missing]} (ensure-column-reader item)]
+            (let [{:keys [data missing]} (scan-data-for-missing item)]
               (col-impl/new-column idx data {} missing))
             :else
             (throw (ex-info "Item does not appear to be either randomly accessable or iterable"

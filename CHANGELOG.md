@@ -1,4 +1,9 @@
 # Changelog
+
+## 2.0-beta-37-SNAPSHOT
+ * `unroll-column` takes an optional argument `:indexes?` that will record the source
+   index in the entry the unrolled data came from.
+
 ## 2.0-beta-36
  * generic column data lists now support `.addAll`
 

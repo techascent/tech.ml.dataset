@@ -38,7 +38,6 @@
                               cf/boolean?))))
 
 
-
 (deftest basic-pipeline-test
   (let [dataset (missing-pipeline src-ds)]
     (is (= 19 (count (ds/columns-with-missing-seq src-ds))))
