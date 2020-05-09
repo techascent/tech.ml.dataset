@@ -377,23 +377,33 @@
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
-    (is (= #{:int64 :float64}
+    (is (= #{:int32 :float64}
            (set (map dtype/get-datatype cds1))))
-    (is (= #{:int64 :float64}
+    (is (= #{:int32 :float64}
            (set (map dtype/get-datatype cds2)))))
   (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
                           {:b (float 2)}])
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
-    (is (= #{:int64 :float64}
+    (is (= #{:int32 :float64}
            (set (map dtype/get-datatype cds1))))
-    (is (= #{:int64 :float64}
+    (is (= #{:int32 :float64}
            (set (map dtype/get-datatype cds2))))
-    (is (= [1 Long/MIN_VALUE 2]
+    (is (= [1 Integer/MIN_VALUE 2]
            (vec (cds1 :a))))))
 
 
+(deftest concat-columns-various-datatypes
+  (let [stocks (ds/->dataset "test/data/stocks.csv")
+        ds1 (ds/select-rows stocks (range 10))
+        ds2 (ds/select-rows stocks (range 10 20))
+        res (ds/concat ds1 ds2)]
+    (is (= :packed-local-date
+           (dtype/get-datatype (res "date")))))
+  (let [ds (ds/->dataset [{:a "a" :b 0}])
+        res (ds/concat ds ds)]
+    (is (= :string (dtype/get-datatype (res :a))))))
 
 
 (deftest set-datatype-lose-missing
@@ -403,7 +413,6 @@
     (is (= :int32 (dtype/get-datatype (ds :a))))
     (is (= [1 Integer/MIN_VALUE]
            (vec (ds :a))))))
-
 
 
 (deftest set-datatype-with-new-column
@@ -419,6 +428,18 @@
     (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
     (is (= :int32 (dtype/get-datatype (ds :a))))
     (is (= [1 Integer/MIN_VALUE]
+           (vec (ds :a))))))
+
+
+(deftest typed-column-map
+  (let [ds (-> (ds/->dataset [{:a 1.0} {:a 2.0}])
+               (ds/update-column
+                :a
+                #(dtype/typed-reader-map (fn ^double [^double in]
+                                           (if (< in 2.0) (- in) in))
+                                         %)))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [-1.0 2.0]
            (vec (ds :a))))))
 
 

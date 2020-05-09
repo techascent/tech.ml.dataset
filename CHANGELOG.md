@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.0-beta-28
+ * [issue-64] - more tests revealed more problems with concat with different column
+   types.
+ * added `tech.v2.datatype/typed-reader-map` where the result datatype is derived
+   from the input datatypes of the input readers.  The result of map-fn is
+   unceremoniously coerced to this datatype -
+```clojure
+user> (-> (ds/->dataset [{:a 1.0} {:a 2.0}])
+               (ds/update-column
+                :a
+                #(dtype/typed-reader-map (fn ^double [^double in]
+                                           (if (< in 2.0) (- in) in))
+                                         %)))
+_unnamed [2 1]:
+
+|     :a |
+|--------|
+| -1.000 |
+|  2.000 |
+```
+ * Cleaned up the tech.datatype widen datatype code so it models a property type graph
+   with clear unification rules (where the parent are equal else :object).
+
 ## 2.0-beta-37
  * [issue-64] - concat columns with different datatypes does a widening.  In addition,
    there are tested pathways to change the datatype of a column without changing the

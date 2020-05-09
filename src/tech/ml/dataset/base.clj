@@ -512,6 +512,9 @@ This is an interface change and we do apologize!"))))
                                                 (map dtype/get-datatype columns)))
                           column-values (reader-concat/concat-readers
                                          {:datatype final-dtype} columns)
+                          ;; _ (println "src-dtype" (map dtype/get-datatype columns))
+                          ;; _ (println "target-dtype" final-dtype)
+                          ;; _ (println "value-datype" (dtype/get-datatype column-values))
                           missing
                           (->> (reduce
                                 (fn [[missing offset] col]
