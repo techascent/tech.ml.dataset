@@ -353,7 +353,7 @@
            (vec (ds :b))))
     (is (= [0 1 0 1 0]
            (vec (ds :indexes)))))
-  (let [ds (-> (ds/->dataset [{:a 1 :b [2 3]}
+  (let [ds (-> (ds/->dataset [{:a 1 :b (int-array [2 3])}
                               {:a 2 :b [4 5]}
                               {:a 3 :b :a}])
                (ds/unroll-column :b {:indexes? :unroll-indexes}))]
@@ -380,7 +380,20 @@
     (is (= #{:int64 :float64}
            (set (map dtype/get-datatype cds1))))
     (is (= #{:int64 :float64}
-           (set (map dtype/get-datatype cds2))))))
+           (set (map dtype/get-datatype cds2)))))
+  (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
+                          {:b (float 2)}])
+        ds2 (ds/->dataset [{:a (byte 2) :b 2}])
+        cds1 (ds/concat ds ds2)
+        cds2 (ds/concat ds2 ds)]
+    (is (= #{:int64 :float64}
+           (set (map dtype/get-datatype cds1))))
+    (is (= #{:int64 :float64}
+           (set (map dtype/get-datatype cds2))))
+    (is (= [1 Long/MIN_VALUE 2]
+           (vec (cds1 :a))))))
+
+
 
 
 (deftest set-datatype-lose-missing
