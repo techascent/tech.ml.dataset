@@ -1,6 +1,9 @@
 # Changelog
 
-## 2.0-beta-37-SNAPSHOT
+## 2.0-beta-37
+ * [issue-64] - concat columns with different datatypes does a widening.  In addition,
+   there are tested pathways to change the datatype of a column without changing the
+   missing set.
  * `unroll-column` takes an optional argument `:indexes?` that will record the source
    index in the entry the unrolled data came from.
 
