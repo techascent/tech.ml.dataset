@@ -3,7 +3,25 @@
  * renamed 'column-map' to 'column-name->column-map'.  This is a public interface change
    and we do apologize!
  * added 'column-map' which maps a function over one or more columns.  The result column
-   has a missing set that is the union of the input columns' missing sets.
+   has a missing set that is the union of the input columns' missing sets:
+```clojure
+user> (-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}])
+          (ds/column-map
+           :summed
+           (fn ^double [^double lhs ^double rhs]
+             (+ lhs rhs))
+           :a :b))
+_unnamed [3 3]:
+
+| :a |    :b | :summed |
+|----+-------+---------|
+|  1 |       |         |
+|    | 2.000 |         |
+|  2 | 3.000 |   5.000 |
+user> (tech.ml.dataset.column/missing
+       (*1 :summed))
+#{0,1}
+```
 
 ## 2.0-beta-28
  * [issue-64] - more tests revealed more problems with concat with different column
