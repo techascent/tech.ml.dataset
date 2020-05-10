@@ -282,7 +282,9 @@
            (add-cell-value! parser cell row-num)))))
     ;;This will order the columns
     (let [column-set (bitmap/->bitmap (keys columns))
-          n-columns (inc (.last column-set))
+          n-columns (if-not (.isEmpty column-set)
+                      (inc (.last column-set))
+                      0)
           column-data (->> columns
                            (map (fn [[k v]]
                                   [(long k) (column-data v)]))
