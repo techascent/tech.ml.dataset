@@ -305,3 +305,11 @@
                            :b "goodbye"}])]
     (is (= #{:object :string}
            (set (map dtype/get-datatype ds))))))
+
+
+(deftest datetime-missing
+  (let [ds (ds/->dataset [{:d "1971-01-01"}
+                          {:d "1970-01-01"}
+                          {:d nil}
+                          {:d "0001-01-01"}])]
+    (is (= 1 (dtype/ecount (ds-col/missing (ds :d)))))))

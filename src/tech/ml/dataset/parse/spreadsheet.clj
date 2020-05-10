@@ -96,6 +96,23 @@
           (.add missing (+ n-elems idx)))))))
 
 
+(defn- add-value-to-container
+  [container-dtype container cell-value]
+  (if (dtype-dt/datetime-datatype? container-dtype)
+    (if (dtype-dt/packable-datatypes (dtype/get-datatype cell-value))
+      (parse-dt/add-to-container! container-dtype container
+                                  (dtype-dt/pack cell-value))
+      (parse-dt/add-to-container! container-dtype container
+                                  cell-value))
+    (case container-dtype
+      :boolean (.add ^BooleanArrayList container
+                     (boolean cell-value))
+      :string (.add ^List container cell-value)
+      :float64 (.add ^DoubleArrayList container
+                     (double cell-value))
+      (.add ^List container cell-value))))
+
+
 (defn default-column-parser
   []
   (let [container* (atom nil)
@@ -116,7 +133,7 @@
                                      container-dtype)]
               (add-missing-by-row-idx! container missing row-idx)
               (.add missing (dtype/ecount container))
-              (.add ^List container missing-value))
+              (add-value-to-container container-dtype container missing-value))
             (let [container-dtype (when-not (= (dtype/ecount missing)
                                                (dtype/ecount @container*))
                                     (dtype/get-datatype @container*))
@@ -134,19 +151,7 @@
                              cell-dtype)
                   container-dtype (dtype/get-datatype container)]
               (add-missing-by-row-idx! container missing row-idx)
-              (if (dtype-dt/datetime-datatype? container-dtype)
-                (if (dtype-dt/packable-datatypes (dtype/get-datatype cell-value))
-                  (parse-dt/add-to-container! container-dtype container
-                                              (dtype-dt/pack cell-value))
-                  (parse-dt/add-to-container! container-dtype container
-                                              cell-value))
-                (case (dtype/get-datatype container)
-                  :boolean (.add ^BooleanArrayList container
-                                 (boolean cell-value))
-                  :string (.add ^List container (.value cell))
-                  :float64 (.add ^DoubleArrayList container
-                                 (double cell-value))
-                  (.add ^List container cell-value)))))))
+              (add-value-to-container container-dtype container cell-value)))))
         (column-data [this]
                      {:data @container*
                       :missing missing}))))
