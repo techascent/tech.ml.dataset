@@ -10,11 +10,14 @@
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.bitmap :as bitmap]
+            [tech.v2.datatype.pprint :as dtype-pp]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.string-table :as str-table]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.dynamic-int-list :as int-list]
+            [tech.ml.dataset.parse :as dt-parse]
             [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base :as ds-base]
@@ -26,7 +29,7 @@
             [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [java.util HashSet Map List Iterator]
+           [java.util HashSet Map List Iterator Collection ArrayList]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList]
            [org.roaringbitmap RoaringBitmap])
@@ -202,6 +205,96 @@
     (add-or-update-column
      dataset result-colname
      (ds-col/new-column result-colname result-reader {} missing-set))))
+
+
+(defn column-cast
+  "Cast a column to a new datatype.  This is never a lazy operation.  If the old
+  and new datatypes match and not cast-fn is provided, then dtype/clone is called
+  on the column.
+
+  colname may be a scalar or a tuple of [src-col dst-col].
+
+  datatype may be a datatype enumeration or a tuple of
+  [datatype cast-fn] where cast-fn may return either a new value,
+  the :tech.ml.dataset.parse/missing, or :tech.ml.dataset.parse/parse-failure.
+  Exceptions are propagated to the caller.  The new column has at least the
+  existing missing set (if no attempt returns :missing or :cast-failure).
+  :cast-failure means the value gets added to metadata key :unparsed-data
+  and the index gets added to :unparsed-indexes.
+
+
+  If the existing datatype is string, then tech.ml.datatype.column/parse-column
+  is called.
+
+  Casts between numeric datatypes need no cast-fn but one may be provided.
+  Casts to string need no cast-fn but one may be provided.
+  Casts from string to anything will call tech.ml.dataset.column/parse-column."
+  [dataset colname datatype]
+  (let [[src-colname dst-colname] (if (instance? Collection colname)
+                                    colname
+                                    [colname colname])
+        src-col (dataset src-colname)
+        src-dtype (dtype/get-datatype src-col)
+        [dst-dtype cast-fn] (if (instance? Collection datatype)
+                              datatype
+                              [datatype nil])]
+    (add-or-update-column
+     dataset dst-colname
+     (cond
+       (and (= src-dtype dst-dtype)
+            (nil? cast-fn))
+       (dtype/clone src-col)
+       (= src-dtype :string)
+       (ds-col/parse-column datatype src-col)
+       :else
+       (let [cast-fn (or cast-fn
+                         (cond
+                           (= dst-dtype :string)
+                           str
+                           (or (= :boolean dst-dtype)
+                               (casting/numeric-type? dst-dtype))
+                           #(casting/cast % dst-dtype)
+                           :else
+                           (throw (Exception.
+                                   (format "Cast fn must be provided for datatype %"
+                                           dst-dtype)))))
+             ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap
+                                     (ds-col/missing src-col))
+             ^RoaringBitmap new-missing (dtype/clone missing)
+             col-reader (dtype-pp/reader-converter (dtype/->reader src-col))
+             n-elems (dtype/ecount col-reader)
+             unparsed-data (ArrayList.)
+             unparsed-indexes (bitmap/->bitmap)
+             result (if (= dst-dtype :string)
+                      (str-table/make-string-table n-elems)
+                      (dtype/make-container :java-array dst-dtype n-elems))
+             res-writer (dtype/->writer result)
+             missing-val (col-impl/datatype->missing-value dst-dtype)]
+         (parallel-for/parallel-for
+          idx
+          n-elems
+          (if (.contains missing idx)
+            (res-writer idx missing-val)
+            (let [existing-val (col-reader idx)
+                  new-val (cast-fn existing-val)]
+              (cond
+                (= new-val :tech.ml.dataset.parse/missing)
+                (locking new-missing
+                  (.add new-missing idx)
+                  (res-writer idx missing-val))
+                (= new-val :tech.ml.dataset.parse/parse-failure)
+                (locking new-missing
+                  (res-writer idx missing-val)
+                  (.add new-missing idx)
+                  (.add unparsed-indexes idx)
+                  (.add unparsed-data existing-val))
+                :else
+                (res-writer idx new-val)))))
+         (ds-col/new-column dst-colname result (assoc
+                                                (meta src-col)
+                                                :unparsed-indexes unparsed-indexes
+                                                :unparsed-data unparsed-data)
+                            missing))))))
 
 
 (defn columnwise-reduce

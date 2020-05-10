@@ -49,12 +49,20 @@
                 set)))))
 
 
-(deftest log1p-fails-on-wrong-datatype
+(deftest log1p-changes-datatype
   ;;This causes actual data corruption--if the column datatype gets clipped
   ;;back to an integer type you get values like 12 instead of 12.5.  For this
-  ;;dataset that destroys the accuracy.
-  (is (thrown? Throwable
-               (dsp/m= src-ds "SalePrice" #(dfn/log1p (col))))))
+  ;;dataset that destroys the accuracy so we make sure the log1p operation does
+  ;;in fact change the datatype correctly.
+  (is (dfn/equals [12.24769911637256
+                   12.109016442313738
+                   12.317171167298682
+                   11.849404844423074
+                   12.429220196836383]
+                  (->> (dsp/m= src-ds "SalePrice" #(dfn/log1p (col)))
+                       (#(ds/column % "SalePrice"))
+                       (take 5)
+                       (vec)))))
 
 
 (defn skew-column-filter

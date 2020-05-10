@@ -462,6 +462,26 @@
     (is (= 8.0 (dfn/mean (ds :a))))))
 
 
+(deftest column-cast-test
+  (let [ds (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+        price-dtype (dtype/get-datatype (ds :price))
+        _ (is (dfn/equals (ds :price)
+                          (-> (ds/column-cast ds :price :string)
+                              (ds/column-cast :price price-dtype)
+                              (ds/column :price))))
+        date-dtype (dtype/get-datatype (ds :date))
+        _ (is (dfn/equals (ds :date)
+                          (-> (ds/column-cast ds :date :string)
+                              (ds/column-cast :date date-dtype)
+                              (ds/column :date))))]
+    ;;Custom cast fn
+    (is (= [40 36 43 28 25]
+           (->> (ds/column-cast ds :price [:int32 #(Math/round (double %))])
+                (#(ds/column % :price))
+                (take 5)
+                (vec))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
