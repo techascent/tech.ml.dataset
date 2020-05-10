@@ -1,4 +1,76 @@
 # Changelog
+
+## 2.0-beta-30
+ * `tech.v2.datatype.functional` will now change the datatype appropriately on a
+    lot of unary math operations.  So for instance calling sin, cos, log, or log1p
+	on an integer reader will now return a floating point reader.  These methods used
+	to throw.
+ * subtle bug in the ->reader method defined for object arrays meant that sometimes
+   attempting math on object columns would fail.
+ * `tech.ml.dataset/column-cast` - Changes the column datatype via a an optionally
+   privided cast function.  This function is powerful - it will correctly convert
+   packed types to their string representation, it will use the parsing system on
+   string columns and it uses the same complex datatype argument as
+   `tech.ml.dataset.column/parse-column`:
+```clojure
+user> (doc ds/column-cast)
+-------------------------
+tech.ml.dataset/column-cast
+([dataset colname datatype])
+  Cast a column to a new datatype.  This is never a lazy operation.  If the old
+  and new datatypes match and not cast-fn is provided, then dtype/clone is called
+  on the column.
+
+  colname may be a scalar or a tuple of [src-col dst-col].
+
+  datatype may be a datatype enumeration or a tuple of
+  [datatype cast-fn] where cast-fn may return either a new value,
+  the :tech.ml.dataset.parse/missing, or :tech.ml.dataset.parse/parse-failure.
+  Exceptions are propagated to the caller.  The new column has at least the
+  existing missing set (if no attempt returns :missing or :cast-failure).
+  :cast-failure means the value gets added to metadata key :unparsed-data
+  and the index gets added to :unparsed-indexes.
+
+
+  If the existing datatype is string, then tech.ml.datatype.column/parse-column
+  is called.
+
+  Casts between numeric datatypes need no cast-fn but one may be provided.
+  Casts to string need no cast-fn but one may be provided.
+  Casts from string to anything will call tech.ml.dataset.column/parse-column.
+user> (def stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword}))
+
+#'user/stocks
+user> (ds/head stocks)
+test/data/stocks.csv [5 3]:
+
+| :symbol |      :date | :price |
+|---------+------------+--------|
+|    MSFT | 2000-01-01 |  39.81 |
+|    MSFT | 2000-02-01 |  36.35 |
+|    MSFT | 2000-03-01 |  43.22 |
+|    MSFT | 2000-04-01 |  28.37 |
+|    MSFT | 2000-05-01 |  25.45 |
+user> (ds/head stocks)
+test/data/stocks.csv [5 3]:
+
+| :symbol |      :date | :price |
+|---------+------------+--------|
+|    MSFT | 2000-01-01 |  39.81 |
+|    MSFT | 2000-02-01 |  36.35 |
+|    MSFT | 2000-03-01 |  43.22 |
+|    MSFT | 2000-04-01 |  28.37 |
+|    MSFT | 2000-05-01 |  25.45 |
+user> (take 5 (stocks :price))
+(39.81 36.35 43.22 28.37 25.45)
+user> (take 5 ((ds/column-cast stocks :price :string) :price))
+("39.81" "36.35" "43.22" "28.37" "25.45")
+user> (take 5 ((ds/column-cast stocks :price [:int32 #(Math/round (double %))]) :price))
+(40 36 43 28 25)
+user>
+```
+
+
 ## 2.0-beta-29
  * renamed 'column-map' to 'column-name->column-map'.  This is a public interface change
    and we do apologize!
