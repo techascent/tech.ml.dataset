@@ -18,7 +18,7 @@ user> (doc ds/column-cast)
 tech.ml.dataset/column-cast
 ([dataset colname datatype])
   Cast a column to a new datatype.  This is never a lazy operation.  If the old
-  and new datatypes match and not cast-fn is provided, then dtype/clone is called
+  and new datatypes match and no cast-fn is provided then dtype/clone is called
   on the column.
 
   colname may be a scalar or a tuple of [src-col dst-col].
@@ -27,7 +27,7 @@ tech.ml.dataset/column-cast
   [datatype cast-fn] where cast-fn may return either a new value,
   the :tech.ml.dataset.parse/missing, or :tech.ml.dataset.parse/parse-failure.
   Exceptions are propagated to the caller.  The new column has at least the
-  existing missing set (if no attempt returns :missing or :cast-failure).
+  existing missing set if no attempt returns :missing or :cast-failure.
   :cast-failure means the value gets added to metadata key :unparsed-data
   and the index gets added to :unparsed-indexes.
 
