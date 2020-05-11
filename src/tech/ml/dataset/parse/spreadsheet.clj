@@ -270,10 +270,12 @@
   (let [columns (HashMap.)]
     (doseq [^Spreadsheet$Row row rows]
       (let [row-num (.getRowNum row)
-            row-num (- (long (if header-row?
-                               (dec row-num)
-                               row-num))
-                       n-initial-skip-rows)]
+            row-num (long (if header-row?
+                            (dec row-num)
+                            row-num))
+            row-num (long (if n-initial-skip-rows
+                            (- row-num n-initial-skip-rows)
+                            row-num))]
         (parallel-for/doiter
          cell row
          (let [^Spreadsheet$Cell cell cell

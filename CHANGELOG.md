@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0-beta-42
+ * `n-initial-skip-rows` works with xlsx spreadsheets.
+ * `assoc`, `dissoc` implemented in the main dataset namespace.
+
 ## 2.0-beta-41
  * issue-67 - Various `tech.v2.datatype.functional` functions are updated to be
  more permissive about their inputs and cast the result to the appropriate
