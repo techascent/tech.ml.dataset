@@ -1,11 +1,11 @@
 # Changelog
 
-## 2.0-beta-31
+## 2.0-beta-41
  * issue-67 - Various `tech.v2.datatype.functional` functions are updated to be
  more permissive about their inputs and cast the result to the appropriate
  datatype.
 
-## 2.0-beta-30
+## 2.0-beta-40
  * issue-65 - datetimes in mapseqs were partially broken.
  * `tech.v2.datatype.functional` will now change the datatype appropriately on a
     lot of unary math operations.  So for instance calling sin, cos, log, or log1p
@@ -101,7 +101,7 @@ user> (tech.ml.dataset.column/missing
 #{0,1}
 ```
 
-## 2.0-beta-28
+## 2.0-beta-38
  * [issue-64] - more tests revealed more problems with concat with different column
    types.
  * added `tech.v2.datatype/typed-reader-map` where the result datatype is derived
