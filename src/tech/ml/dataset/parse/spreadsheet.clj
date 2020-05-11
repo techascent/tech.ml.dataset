@@ -266,13 +266,14 @@
   [rows header-row?
    col-parser-gen
    column-idx->column-name
-   options]
+   {:keys [n-initial-skip-rows] :as options}]
   (let [columns (HashMap.)]
     (doseq [^Spreadsheet$Row row rows]
       (let [row-num (.getRowNum row)
-            row-num (long (if header-row?
-                            (dec row-num)
-                            row-num))]
+            row-num (- (long (if header-row?
+                               (dec row-num)
+                               row-num))
+                       n-initial-skip-rows)]
         (parallel-for/doiter
          cell row
          (let [^Spreadsheet$Cell cell cell
@@ -332,11 +333,17 @@
    (sheet->dataset worksheet {}))
   ([^Spreadsheet$Sheet worksheet {:keys [header-row?
                                          parser-fn
-                                         parser-scan-len]
+                                         parser-scan-len
+                                         n-initial-skip-rows]
                                   :or {header-row? true
                                        parser-scan-len 100}
                                   :as options}]
    (let [rows (iterator-seq (.iterator worksheet))
+         rows (if n-initial-skip-rows
+                (drop-while #(< (.getRowNum ^Spreadsheet$Row %)
+                                (long n-initial-skip-rows))
+                            rows)
+                rows)
          [header-row rows]
          (if header-row?
            ;;Always have to keep in mind that columns are sparse.

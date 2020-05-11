@@ -49,3 +49,22 @@
            (->> (ds "date")
                 (map type)
                 frequencies)))))
+
+
+(deftest skip-rows-test
+  (let [ds (ds/->dataset "test/data/holdings-daily-us-en-mdy.xlsx"
+                         {:n-initial-skip-rows 4
+                          :parser-fn {"Identifier" :string
+                                      "Weight" :float64}})]
+    (is (= #{:float64 :string}
+           (set (map dtype/get-datatype ds))))
+    (is (= ["Name"
+	   "Ticker"
+	   "Identifier"
+	   "SEDOL"
+	   "Weight"
+	   "Sector"
+	   "Shares Held"
+	   "Local Currency"
+	   8]
+           (vec (ds/column-names ds))))))
