@@ -34,7 +34,7 @@
            [it.unimi.dsi.fastutil.ints IntArrayList]
            [org.roaringbitmap RoaringBitmap])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth]))
+                            rand-nth assoc dissoc]))
 
 
 (set! *warn-on-reflection* true)
@@ -117,6 +117,41 @@
 
 (par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
+
+
+(defn assoc
+  "If column exists, replace.  Else append new column.  The datatype of the new column
+  will the the datatype of the coldata.
+
+  coldata may be a sequence in which case 'vec' will be called and the datatype will be
+  :object.
+
+  coldata may be a reader, in which case the datatype will be the datatype of the
+  reader.  One way to make a reader is tech.v2.datatype/make-reader or anything
+  deriving from java.util.List and java.util.RandomAccess will do.
+
+  coldata may also be a new column (tech.ml.dataset.column/new-column) in which case
+  the missing set and the column metadata can be provided."
+  ([dataset colname coldata & more]
+   (do
+     (when-not (== 0 (rem (count more) 2))
+       (throw (Exception. "assoc requires an even number of arguments")))
+     (->> more
+          (partition 2)
+          (reduce #(add-or-update-column %1 (first %2) (second %2))
+                  (add-or-update-column dataset colname coldata)))))
+  ([dataset colname coldata]
+   (add-or-update-column dataset colname coldata)))
+
+
+(defn dissoc
+  "Remove one more more columns from the dataset."
+  ([dataset colname & more]
+   (->> more
+        (reduce #(remove-column %1 %2)
+                (remove-column dataset colname))))
+  ([dataset colname]
+   (remove-column dataset colname)))
 
 
 (defn head
@@ -290,7 +325,7 @@
                   (.add unparsed-data existing-val))
                 :else
                 (res-writer idx new-val)))))
-         (ds-col/new-column dst-colname result (assoc
+         (ds-col/new-column dst-colname result (clojure.core/assoc
                                                 (meta src-col)
                                                 :unparsed-indexes unparsed-indexes
                                                 :unparsed-data unparsed-data)
