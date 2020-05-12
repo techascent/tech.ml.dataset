@@ -62,10 +62,13 @@
                            column-blacklist
                            separator
                            n-initial-skip-rows
-                           max-chars-per-column]
+                           max-chars-per-column
+                           max-num-columns]
                     :or {header-row? true
-                         ;;64K max chars per column.  This is a silly thing to have to set...
-                         max-chars-per-column (* 64 1024)}
+                         ;;64K max chars per column.  This is a silly thing to have
+                         ;;to set...
+                         max-chars-per-column (* 64 1024)
+                         max-num-columns 8192}
                     :as options}]
   (if-let [csv-parser (:csv-parser options)]
     csv-parser
@@ -84,7 +87,8 @@
         (.setSkipEmptyLines true)
         (.setIgnoreLeadingWhitespaces true)
         (.setIgnoreTrailingWhitespaces true)
-        (.setMaxCharsPerColumn (long max-chars-per-column)))
+        (.setMaxCharsPerColumn (long max-chars-per-column))
+        (.setMaxColumns (long max-num-columns)))
       (when n-initial-skip-rows
         (.setNumberOfRowsToSkip settings (int n-initial-skip-rows)))
       (when (or (seq column-whitelist)
