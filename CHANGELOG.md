@@ -2,8 +2,12 @@
 
 ## 2.0-beta-42
  * `tech.v2.datatype` was causing double-read on boolean readers.
- * issue-72 - added `max-num-columns` because csv and tsv files with 
-   more than 512 columns were failing to parse.  New default is 8192.
+ * issue-72 - added `max-num-columns` because csv and tsv files with more than 512
+   columns were failing to parse.  New default is 8192.
+ * issue-70 - The results of any join have two maps in their metadata -
+   :left-column-names - map of original left-column-name->new-column-name.
+   :right-column-names - map of original right-column-name->new-column-name.
+
 
 ## 2.0-beta-42
  * `n-initial-skip-rows` works with xlsx spreadsheets.
