@@ -169,10 +169,38 @@
                          (unchecked-inc idx)))
                 (similar-colname-type original-colname
                                       new-col-name)))]
-        [(conj final-columns (ds-col/set-name column colname))
+        [(conj final-columns (with-meta column
+                               (assoc (meta column)
+                                      :name colname
+                                      :src-table-name prefix
+                                      :previous-colname original-colname)))
          (conj name-set colname)]))
     [[] #{}])
    (first)))
+
+
+(defn- update-join-metadata
+  [result-table lhs-table-name rhs-table-name]
+  (let [name-data (->> (map meta result-table)
+                       (group-by :src-table-name))]
+    (with-meta result-table
+      (assoc (meta result-table)
+             :left-column-names
+             (->> (get name-data lhs-table-name)
+                  (map (juxt :previous-colname :name))
+                  (into {}))
+             :right-column-names
+             (->> (get name-data rhs-table-name)
+                  (map (juxt :previous-colname :name))
+                  (into {}))))))
+
+
+(defn- fix-inner-join-metadata
+  [result-table lhs-join-colname rhs-join-colname]
+  (with-meta result-table
+    (assoc-in (meta result-table)
+              [:right-column-names rhs-join-colname]
+              lhs-join-colname)))
 
 
 (defn- finalize-join-result
@@ -187,12 +215,14 @@
      {:inner
        (let [lhs-columns (map #(ds-col/select % lhs-indexes) lhs-columns)
              rhs-columns (map #(ds-col/select % rhs-indexes) rhs-columns)]
-         (ds-base/from-prototype
-          lhs "inner-join"
-          (nice-column-names
-           [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
-                                   lhs-columns)]
-           [rhs-table-name rhs-columns])))
+         (-> (ds-base/from-prototype
+              lhs "inner-join"
+              (nice-column-names
+               [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
+                                       lhs-columns)]
+               [rhs-table-name rhs-columns]))
+             (update-join-metadata lhs-table-name rhs-table-name)
+             (fix-inner-join-metadata lhs-colname rhs-colname)))
        :lhs-indexes lhs-indexes
        :rhs-indexes rhs-indexes}
       (when rhs-missing
@@ -207,12 +237,13 @@
                            (ds-col/extend-column-with-empty
                             (ds-col/select old-col lhs-indexes)
                             n-empty))))]
-           (ds-base/from-prototype
-            lhs "right-outer-join"
-            (nice-column-names
-             [lhs-table-name lhs-columns]
-             [rhs-table-name (concat [(ds-col/select rhs-join-column rhs-indexes)]
-                                     rhs-columns)])))})
+           (-> (ds-base/from-prototype
+                lhs "right-outer-join"
+                (nice-column-names
+                 [lhs-table-name lhs-columns]
+                 [rhs-table-name (concat [(ds-col/select rhs-join-column rhs-indexes)]
+                                         rhs-columns)]))
+               (update-join-metadata lhs-table-name rhs-table-name)))})
       (when lhs-missing
         {:lhs-missing lhs-missing
          :left-outer
@@ -225,12 +256,13 @@
                            (ds-col/extend-column-with-empty
                             (ds-col/select old-col rhs-indexes)
                             n-empty))))]
-           (ds-base/from-prototype
-            lhs "left-outer-join"
-            (nice-column-names
-             [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
-                                     lhs-columns)]
-             [rhs-table-name rhs-columns])))}))))
+           (-> (ds-base/from-prototype
+                lhs "left-outer-join"
+                (nice-column-names
+                 [lhs-table-name (concat [(ds-col/select lhs-join-column lhs-indexes)]
+                                         lhs-columns)]
+                 [rhs-table-name rhs-columns]))
+               (update-join-metadata lhs-table-name rhs-table-name)))}))))
 
 
 (defn hash-join-int32

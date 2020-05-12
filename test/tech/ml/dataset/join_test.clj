@@ -88,6 +88,18 @@
                              "ShipperID" :int16}}))
 
 
+(deftest inner-join-test
+  (let [lhs (lhs-customer-db)
+        rhs (rhs-customer-db)
+        join-data (ds-join/inner-join "CustomerID" lhs rhs)
+        lhs-colname-map (:left-column-names (meta join-data))
+        rhs-colname-map (:right-column-names (meta join-data))]
+    (is (= (count lhs-colname-map)
+           (ds/column-count lhs)))
+    (is (= (count rhs-colname-map)
+           (ds/column-count rhs)))))
+
+
 ;;sample from https://www.w3schools.com/sql/sql_join_left.asp
 (deftest left-join-test
   (let [lhs (lhs-customer-db)
@@ -99,7 +111,9 @@
         empty-val?    #(or (empty-int? %) (empty-string? %)
                            (nil? %))
         realized       (some #(when (= (get % "CustomerID") 2) %) recs)
-        unrealized     (filter #(not= % realized) recs)]
+        unrealized     (filter #(not= % realized) recs)
+        lhs-colname-map (:left-column-names (meta join-data))
+        rhs-colname-map (:right-column-names (meta join-data))]
     (is (every? (complement empty-val?) (vals realized))
         "Ana's record should be fully realized.")
     (is (every? identity
@@ -107,18 +121,28 @@
                       unrealized]
                   ;;We can't do order date because they are dates
                   (every? empty-val? [OrderID ShipperID])))
-        "Everyone else should have missing entries from RHS.")))
+        "Everyone else should have missing entries from RHS.")
+    (is (= (count lhs-colname-map)
+           (ds/column-count lhs)))
+    (is (= (count rhs-colname-map)
+           (ds/column-count rhs)))))
 
 
 (deftest right-join-test
   (let [lhs (lhs-customer-db)
         rhs (rhs-customer-db)
-        join-data (ds-join/right-join "CustomerID" lhs rhs)]
+        join-data (ds-join/right-join "CustomerID" lhs rhs)
+        lhs-colname-map (:left-column-names (meta join-data))
+        rhs-colname-map (:right-column-names (meta join-data))]
     (is (= #{2 37 77} (set (join-data "right.CustomerID"))))
     (is (= #{"Ana Trujillo" ""} (set (join-data "ContactName"))))
     (is (= #{5021 -32768} (set (map int (join-data "PostalCode")))))
     (is (= #{1 2} (set (ds-col/missing (join-data "ContactName")))))
-    (is (= #{1 2} (set (ds-col/missing (join-data "PostalCode")))))))
+    (is (= #{1 2} (set (ds-col/missing (join-data "PostalCode")))))
+    (is (= (count lhs-colname-map)
+           (ds/column-count lhs)))
+    (is (= (count rhs-colname-map)
+           (ds/column-count rhs)))))
 
 
 (deftest duplicate-column-test
