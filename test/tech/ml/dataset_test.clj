@@ -11,9 +11,10 @@
             [tech.v2.datatype.unary-op :as unary-op]
             [clojure.java.io :as io]
             [clojure.string :as s]
+            [clojure.tools.logging :as log]
             [camel-snake-kebab.core :refer [->kebab-case]])
   (:import [smile.projection PCA]
-           [java.util List]
+           [java.util List HashSet]
            ))
 
 
@@ -480,6 +481,26 @@
                 (#(ds/column % :price))
                 (take 5)
                 (vec))))))
+
+
+(deftest column-clone-double-read
+  (let [ds (ds/->dataset "test/data/stocks.csv"
+                         {:key-fn keyword})
+        read-indexes (HashSet.)
+        new-ds (ds/assoc ds
+                         :price-2
+                         (dtype/clone
+                          (dtype/make-reader
+                           :boolean
+                           (ds/row-count ds)
+                           (do
+                             (locking read-indexes
+                               (when (.contains read-indexes idx)
+                                 (throw (Exception. "Double read!!")))
+                               (.add read-indexes idx))
+                             true))))]
+    (is (= [true true true true true]
+           (vec (take 5 (new-ds :price-2)))))))
 
 
 (comment
