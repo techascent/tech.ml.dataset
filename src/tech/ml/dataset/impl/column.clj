@@ -305,7 +305,7 @@
     (dtype-fn/descriptive-stats (dtype/->reader
                                  col
                                  (dtype/get-datatype col)
-                                 {:elide-missing? true})
+                                 {:missing-policy :elide})
                                 stats-set))
   (correlation [col other-column correlation-type]
     (case correlation-type

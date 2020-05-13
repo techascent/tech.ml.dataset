@@ -503,6 +503,16 @@
            (vec (take 5 (new-ds :price-2)))))))
 
 
+(deftest stats-with-missing
+  (let [DSm2 (ds/name-values-seq->dataset {:a [nil nil nil 1 2 nil 3
+                                               4 nil nil nil 11 nil]
+                                           :b [nil 2   2   2 2 3   nil 3 nil
+                                               3   nil   4  nil]})]
+    (dtype/->reader (DSm2 :a) :int64 {:missing-policy :elide})
+    (is (> (:mean (ds-col/stats (DSm2 :a) #{:mean})) 0.0))
+    (is (> (:mean (ds-col/stats (DSm2 :b) #{:mean})) 0.0))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
