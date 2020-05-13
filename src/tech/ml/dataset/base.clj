@@ -251,13 +251,16 @@
 (defn drop-rows
   "Same as remove-rows."
   [dataset row-indexes]
-  (let [row-indexes (if (dtype/reader? row-indexes)
+  (let [n-rows (row-count dataset)
+        row-indexes (if (dtype/reader? row-indexes)
                       row-indexes
-                      (take (row-count dataset) row-indexes))]
-    (select dataset :all
-            (dtype-proto/set-and-not
-             (bitmap/->bitmap (range (row-count dataset)))
-             (bitmap/->bitmap row-indexes)))))
+                      (take n-rows row-indexes))]
+    (if (== 0 (dtype/ecount row-indexes))
+      dataset
+      (select dataset :all
+              (dtype-proto/set-and-not
+               (bitmap/->bitmap (range n-rows))
+               row-indexes)))))
 
 
 (defn remove-rows
@@ -512,9 +515,6 @@ This is an interface change and we do apologize!"))))
                                                 (map dtype/get-datatype columns)))
                           column-values (reader-concat/concat-readers
                                          {:datatype final-dtype} columns)
-                          ;; _ (println "src-dtype" (map dtype/get-datatype columns))
-                          ;; _ (println "target-dtype" final-dtype)
-                          ;; _ (println "value-datype" (dtype/get-datatype column-values))
                           missing
                           (->> (reduce
                                 (fn [[missing offset] col]
