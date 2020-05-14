@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0-beta-45-SNAPSHOT
+ * isssue-71 - Added shape function to main dataset api.  Returns shape in row major 
+   format.
+ * issue-69 - Columns elide missing values during print operation.
+
 ## 2.0-beta-44
  * drop-rows on an empty set is a noop.
  * `tech.ml.dataset.column/stats` was wrong for columns with missing
