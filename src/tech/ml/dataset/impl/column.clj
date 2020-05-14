@@ -361,12 +361,20 @@
     (let [n-elems (dtype/ecount data)
           format-str (if (> n-elems 20)
                        "#tech.ml.dataset.column<%s>%s\n%s\n[%s...]"
-                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")]
+                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")
+          ;;Make the data printable
+          src-rdr (dtype-pp/reader-converter item)
+          data-rdr (dtype/make-reader
+                    :object
+                    (dtype/ecount src-rdr)
+                    (if (.contains missing idx)
+                      nil
+                      (src-rdr idx)))]
       (format format-str
               (name (dtype/get-datatype item))
               [n-elems]
               (ds-col-proto/column-name item)
-              (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
+              (-> (dtype-proto/sub-buffer data-rdr 0 (min 20 n-elems))
                   (dtype-pp/print-reader-data))))))
 
 
