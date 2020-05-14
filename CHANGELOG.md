@@ -1,6 +1,12 @@
 # Changelog
 
-## 2.0-beta-42
+## 2.0-beta-44
+ * drop-rows on an empty set is a noop.
+ * `tech.ml.dataset.column/stats` was wrong for columns with missing
+   values.
+
+
+## 2.0-beta-43
  * `tech.v2.datatype` was causing double-read on boolean readers.
  * issue-72 - added `max-num-columns` because csv and tsv files with more than 512
    columns were failing to parse.  New default is 8192.
