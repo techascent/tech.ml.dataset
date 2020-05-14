@@ -105,6 +105,12 @@
                         write-csv!)
 
 
+(defn shape
+  "Returns shape in row-major format of [n-columns n-rows]."
+  [dataset]
+  (dtype/shape dataset))
+
+
 (par-util/export-symbols tech.ml.dataset.join
                          hash-join
                          inner-join
