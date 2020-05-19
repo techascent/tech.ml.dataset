@@ -645,7 +645,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
    (let [stat-names (or (:stat-names options)
                         (->> (all-descriptive-stats-names)
                              ;;This just is too much information for small repls.
-                             (remove #{:values :n-values :quartile-1 :quartile-3})))
+                             (remove #{:values :n-values :quartile-1 :quartile-3 :histogram})))
          stats-ds
          (->> (->dataset dataset)
               (pmap (fn [ds-col]
