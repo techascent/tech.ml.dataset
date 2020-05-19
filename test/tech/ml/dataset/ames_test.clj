@@ -391,7 +391,7 @@
   []
   (let [stats-data (ds/descriptive-stats src-ds)
         corr-data (ds-pipe/correlation-table src-ds :colname-seq ["SalePrice"])]
-    (is (= [10 81]
+    (is (= [11 81]
            (dtype/shape stats-data)))
     (is (= 81
            (->> corr-data
