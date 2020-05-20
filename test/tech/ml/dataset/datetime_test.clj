@@ -46,10 +46,11 @@
                                                     (dtype-dt/unpack-local-date)
                                                     (dtype-dt/local-date->instant)))
                                               :instant)))
-        desc-stats (ds/descriptive-stats stocks)
+        desc-stats (ds/descriptive-stats stocks {:stat-names (ds/all-descriptive-stats-names)})
         date-only (-> (ds/filter-column #(= "date" %) :col-name desc-stats)
                       (ds/mapseq-reader)
                       (first))]
     (is (every? dtype-dt/datetime-datatype?
                 (map dtype/get-datatype
-                     (vals (select-keys date-only [:min :mean :max])))))))
+                     (vals (select-keys date-only [:min :mean :max
+                                                   :quartile-1 :quartile-3])))))))

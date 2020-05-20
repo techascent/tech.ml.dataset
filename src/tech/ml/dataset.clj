@@ -638,7 +638,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   :stat-names - defaults to (remove #{:values :num-distinct-values}
                                     (all-descriptive-stats-names))
   :n-categorical-values - Number of categorical values to report in the 'values'
-     field. nil means all values, defaults to 21."
+     field. Defaults to 21."
   ([dataset]
    (descriptive-stats dataset {}))
   ([dataset options]
