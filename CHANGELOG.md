@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0-beta-45-SNAPSHOT
+## 2.0-beta-45
  * issue-76 - quartiles for datetime types in descriptive stats
  * issue-71 - Added shape function to main dataset api.  Returns shape in row major
    format.
