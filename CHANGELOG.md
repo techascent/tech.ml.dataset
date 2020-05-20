@@ -1,7 +1,11 @@
 # Changelog
 
-## 2.0-beta-45-SNAPSHOT
- * isssue-71 - Added shape function to main dataset api.  Returns shape in row major 
+## 2.0-beta-46
+ * Conversion of instant->zoned-date-time uses UTC zone instead of system zone.
+
+## 2.0-beta-45
+ * issue-76 - quartiles for datetime types in descriptive stats
+ * issue-71 - Added shape function to main dataset api.  Returns shape in row major
    format.
  * issue-69 - Columns elide missing values during print operation.
 

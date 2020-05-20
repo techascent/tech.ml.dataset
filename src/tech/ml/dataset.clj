@@ -627,8 +627,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                           (remove #{:values :num-distinct-values}))})"
   []
   [:col-name :datatype :n-valid :n-missing
-   :mean :mode :min :max :standard-deviation :skew
-   :n-values :values])
+   :min :quartile-1 :mean :mode :quartile-3 :max
+   :standard-deviation :skew :n-values :values :histogram])
 
 
 (defn descriptive-stats
@@ -638,14 +638,14 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   :stat-names - defaults to (remove #{:values :num-distinct-values}
                                     (all-descriptive-stats-names))
   :n-categorical-values - Number of categorical values to report in the 'values'
-     field. nil means all values, defaults to 21."
+     field. Defaults to 21."
   ([dataset]
    (descriptive-stats dataset {}))
   ([dataset options]
    (let [stat-names (or (:stat-names options)
                         (->> (all-descriptive-stats-names)
                              ;;This just is too much information for small repls.
-                             (remove #{:values :n-values})))
+                             (remove #{:values :n-values :quartile-1 :quartile-3 :histogram})))
          stats-ds
          (->> (->dataset dataset)
               (pmap (fn [ds-col]
@@ -667,19 +667,21 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                            (and (not (:categorical? (ds-col/metadata ds-col)))
                                 (casting/numeric-type? col-dtype))
                            (dfn/descriptive-stats col-reader
-                                                  #{:min :mean :max
-                                                    :standard-deviation :skew})
+                                                  #{:min :quartile-1 :mean :quartile-3
+                                                    :max :standard-deviation :skew})
                            :else
                            (let [histogram (->> (frequencies col-reader)
-                                                (clojure.core/sort-by second >))]
+                                                (clojure.core/sort-by second >))
+                                 max-categorical-values (or (:n-categorical-values options) 21)]
                              (merge
                               {:mode (ffirst histogram)
                                :n-values (count histogram)}
                               {:values
                                (->> (map first histogram)
-                                    (take (or (:n-categorical-values options)
-                                              21))
-                                    vec)})))))))
+                                    (take max-categorical-values)
+                                    (vec))}
+                              (when (< (count histogram) max-categorical-values)
+                                {:histogram histogram}))))))))
               (clojure.core/sort-by (comp str :col-name))
               ->dataset)
          existing-colname-set (->> (column-names stats-ds)
