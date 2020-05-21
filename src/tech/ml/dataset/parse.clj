@@ -32,7 +32,7 @@
            [java.time.format DateTimeFormatter]
            [tech.v2.datatype.typed_buffer TypedBuffer]
            [tech.v2.datatype ObjectReader]
-           [java.util Iterator HashMap ArrayList List Map RandomAccess]
+           [java.util Iterator HashMap ArrayList List Map RandomAccess UUID]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]
@@ -185,15 +185,18 @@
     :int64 `(Long/parseLong ~val)
     :float32 `(Float/parseFloat ~val)
     :float64 `(Double/parseDouble ~val)
+    :uuid `(UUID/fromString ~val)
     :keyword `(keyword ~val)
     :symbol `(symbol ~val)))
 
 
 (defmacro dtype->missing-val
   [datatype]
-  `(casting/datatype->cast-fn :unknown
-                              ~datatype
-                              (col-impl/datatype->missing-value ~datatype)))
+  (if (= :object (casting/flatten-datatype datatype))
+    `(col-impl/datatype->missing-value ~datatype)
+    `(casting/datatype->cast-fn :unknown
+                                ~datatype
+                                (col-impl/datatype->missing-value ~datatype))))
 
 
 (defmacro simple-col-parser
@@ -302,6 +305,7 @@
         :int64 (simple-col-parser :int64)
         :float32 (simple-col-parser :float32)
         :float64 (simple-col-parser :float64)
+        :uuid (simple-col-parser :uuid)
         :packed-duration (make-datetime-simple-parser :packed-duration)
         :packed-local-date (make-datetime-simple-parser :packed-local-date)
         :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)

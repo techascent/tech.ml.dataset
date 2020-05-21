@@ -140,7 +140,10 @@
                   original-cell-dtype (dtype/get-datatype cell)
                   [cell-dtype cell-value]
                   (if (= :string original-cell-dtype)
-                    (parse-dt/try-parse-datetimes (.value cell))
+                    (try
+                      [:uuid (parse/dtype->parse-fn :uuid (.value cell))]
+                      (catch Throwable e
+                        (parse-dt/try-parse-datetimes (.value cell))))
                     [original-cell-dtype (case original-cell-dtype
                                            :boolean (.boolValue cell)
                                            :float64 (.doubleValue cell)

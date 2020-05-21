@@ -14,8 +14,8 @@
             [clojure.tools.logging :as log]
             [camel-snake-kebab.core :refer [->kebab-case]])
   (:import [smile.projection PCA]
-           [java.util List HashSet]
-           ))
+           [java.util List HashSet UUID]
+           [java.io File]))
 
 
 (def mapseq-fruit-dataset
@@ -508,9 +508,30 @@
                                                4 nil nil nil 11 nil]
                                            :b [nil 2   2   2 2 3   nil 3 nil
                                                3   nil   4  nil]})]
-    (dtype/->reader (DSm2 :a) :int64 {:missing-policy :elide})
     (is (> (:mean (ds-col/stats (DSm2 :a) #{:mean})) 0.0))
     (is (> (:mean (ds-col/stats (DSm2 :b) #{:mean})) 0.0))))
+
+
+(deftest uuids-test
+  (let [uuids (repeatedly 5 #(UUID/randomUUID))
+        ds (ds/->dataset
+            (->> uuids
+                 (map-indexed (fn [idx uuid]
+                                {:a uuid
+                                 :b (str uuid)
+                                 :c idx}))))]
+    (is (= :uuid (dtype/get-datatype (ds :a))))
+    (is (= :uuid (dtype/get-datatype (ds :b))))
+    (is (= (vec uuids)
+           (vec (ds :a))))
+    (let [test-fname (str (UUID/randomUUID) ".csv")
+          _ (ds/write-csv! ds test-fname)
+          loaded-ds (try (ds/->dataset test-fname
+                                       {:key-fn keyword})
+                         (finally
+                           (.delete (File. test-fname))))]
+      (is (= (vec (ds :a))
+             (vec (loaded-ds :a)))))))
 
 
 (comment

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0-beta-47
+ * UUIDs are now supported as datatypes.  This includes parsing them from strings
+   out of csv and xlsx files and as a fully supported object in mapseq pathways.
+
 ## 2.0-beta-46
  * Conversion of instant->zoned-date-time uses UTC zone instead of system zone.
 
