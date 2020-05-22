@@ -169,7 +169,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
 
   For options documentation see dataset-data->str."
   ([ds options]
-   (format "%s %s:\n%s"
+   (format "%s %s:\n\n%s"
            (ds-proto/dataset-name ds)
            ;;make row major shape to avoid confusion
            (vec (reverse (dtype/shape ds)))
