@@ -101,8 +101,15 @@
                         ->dataset
                         ->>dataset
                         from-prototype
-                        dataset->string
                         write-csv!)
+
+
+(par-util/export-symbols tech.ml.dataset.print
+                         dataset-data->str
+                         dataset->str)
+
+;;Renamed for backwards compat.
+(def ^{:doc "Deprecated method.  See dataset->str"} dataset->string dataset->str)
 
 
 (defn shape

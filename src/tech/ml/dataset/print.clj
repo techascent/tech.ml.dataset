@@ -1,12 +1,10 @@
 (ns tech.ml.dataset.print
-  (:require [clojure.pprint :as pp]
-            [tech.ml.protocols.dataset :as ds-proto]
+  (:require [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.column :as ds-col]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.pprint :as dtype-pp]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.pprint :as pp])
   (:import [tech.v2.datatype ObjectReader]
            [java.util List HashMap Collections ArrayList]
            [tech.ml.dataset FastStruct]
@@ -14,97 +12,43 @@
             PersistentVector]
            [org.roaringbitmap RoaringBitmap]))
 
+
 (set! *warn-on-reflection* true)
 
+;;The default number of rows to print
 (def ^:dynamic *default-table-row-print-length* 25)
+;;The default line policy - see dataset-data->str
+(def ^:dynamic *default-print-line-policy* :repl)
+;;The default max width with 'nil' indicating no limit.
+(def ^:dynamic *default-print-column-max-width* nil)
 
 
-(defn- dataset->readers
-  ^List [dataset {:keys [all-printable-columns?
-                         missing-nil?]
-                  :or {missing-nil? true}
-                  :as _options}]
-  (->> (ds-proto/columns dataset)
-       (mapv (fn [coldata]
-               (let [col-reader (dtype/->reader coldata)
-                     ^RoaringBitmap missing (dtype/as-roaring-bitmap
-                                             (ds-col/missing coldata))
-                     col-rdr (typecast/datatype->reader
-                               :object
-                               (if (or all-printable-columns?
-                                       (dtype-dt/packed-datatype?
-                                        (dtype/get-datatype col-reader)))
-                                 (dtype-pp/reader-converter col-reader)
-                                 col-reader))]
-                 (if missing-nil?
-                   (reify ObjectReader
-                     (lsize [rdr] (.size col-rdr))
-                     (read [rdr idx]
-                       (when-not (.contains missing idx)
-                         (.read col-rdr idx))))
-                   col-rdr))))))
 
-
-(defn value-reader
-  "Return a reader that produces a vector of column values per index.
-  Options:
-  :all-printable-columns? - When true, all columns are run through the datatype
-    library's reader-converter multimethod.  This can change the value of a column
-    such that it prints nicely but may not be an exact substitution for the column
-    value.
-  :missing-nil? - Substitute nil in for missing values to make missing value
-     detection downstream to be column datatype independent."
-  (^ObjectReader [dataset options]
-   (let [readers (dataset->readers dataset options)
-         n-rows (long (second (dtype/shape dataset)))
-         n-cols (long (first (dtype/shape dataset)))]
-     (reify ObjectReader
-       (lsize [rdr] n-rows)
-       (read [rdr idx]
-         (reify ObjectReader
-           (lsize [inner-rdr] n-cols)
-           (read [inner-rd inner-idx]
-             ;;confusing because there is an implied transpose
-             (.get ^List (.get readers inner-idx)
-                   idx)))))))
-  (^ObjectReader [dataset]
-   (value-reader dataset {})))
-
-
-(defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value
-  Options:
-  :all-printable-columns? - When true, all columns are run through the datatype
-    library's reader-converter multimethod.  This can change the value of a column
-    such that it prints nicely but may not be an exact substitution for the column
-    value.
-  :missing-nil? - Substitute nil in for missing values to make missing value
-     detection downstream to be column datatype independent.
-  "
-  (^ObjectReader [dataset options]
-   (let [colnamemap (HashMap.)
-         _ (doseq [[c-name c-idx] (->> (ds-proto/column-names dataset)
-                                      (map-indexed #(vector %2 (int %1))))]
-             (.put colnamemap c-name c-idx))
-         colnamemap (Collections/unmodifiableMap colnamemap)
-         readers (value-reader dataset options)]
-     (reify ObjectReader
-       (lsize [rdr] (.lsize readers))
-       (read [rdr idx]
-         (FastStruct. colnamemap (.read readers idx))))))
-  (^ObjectReader [dataset]
-   (mapseq-reader dataset {})))
+(defn- print-stringify
+  [item]
+  (-> (if (or (vector? item)
+              (map? item)
+              (set? item))
+        (with-out-str
+          (pp/pprint item))
+        (dtype-pp/format-object item))
+      (str/replace "|" "\\|")))
 
 
 (defn- reader->string-lines
-  [reader-data ^RoaringBitmap missing
-   line-policy]
+  [reader-data ^RoaringBitmap missing line-policy column-max-width]
   (dtype/object-reader
    (dtype/ecount reader-data)
    #(if (.contains missing (int %))
       nil
-      (let [lines
-            (str/split-lines (.toString ^Object (reader-data %)))]
+      (let [lines (str/split-lines (print-stringify (reader-data %)))
+            lines (if (number? column-max-width)
+                    (let [width (long column-max-width)]
+                      (->> lines (map (fn [^String line]
+                                        (if (> (count line) width)
+                                          (.substring line 0 width)
+                                          line)))))
+                    lines)]
         (case line-policy
           :single
           [(first lines)]
@@ -131,28 +75,44 @@
     (.toString builder)))
 
 
-(def ^:dynamic *default-dataset-line-policy* :repl)
+(defn dataset-data->str
+  "Convert the dataset values to a string.
 
+  Options may be provided in the dataset metadata or may be provided
+  as an options map.  The options map overrides the dataset metadata.
 
-(defn dataset->str
+  :print-index-range - The set of indexes to print.  Defaults to:
+    (range *default-table-row-print-length*)
+  :print-line-policy - defaults to :repl - one of
+    - :repl - multiline table - default nice printing for repl
+    - :markdown - lines delimited by <br>
+    - :single - Only print first line
+  :print-column-max-width - set the max width of a column when printing.
+
+  Example for conservative printing:
+tech.ml.dataset.github-test> (def ds (with-meta ds
+                                       (assoc (meta ds)
+                                              :print-column-max-width 25
+                                              :print-line-policy :single)))"
   ([dataset]
-   (dataset->str dataset {}))
-  ([dataset {:keys [column-names index-range
-                    line-policy]
-             :or {column-names :all}}]
-   (let [index-range (or index-range
+   (dataset-data->str dataset {}))
+  ([dataset options]
+   (let [{:keys [print-index-range print-line-policy print-column-max-width]}
+         (merge (meta dataset) options)
+         index-range (or print-index-range
                          (range
                           (min (second (dtype/shape dataset))
                                *default-table-row-print-length*)))
-         line-policy (or line-policy
-                         *default-dataset-line-policy*)
-         print-ds (ds-proto/select dataset column-names index-range)
+         line-policy (or print-line-policy *default-print-line-policy*)
+         column-width (or print-column-max-width *default-print-column-max-width*)
+         print-ds (ds-proto/select dataset :all index-range)
          column-names (map #(.toString ^Object %)
                            (ds-proto/column-names print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (dtype-pp/reader-converter)
                                   (reader->string-lines (ds-col/missing %)
-                                                        line-policy)
+                                                        line-policy
+                                                        column-width)
                                   ;;Do the conversion to string once.
                                   (dtype/clone)
                                   (dtype/->reader))
@@ -201,3 +161,18 @@
                            column-widths))]
              (append-line! builder (fmt-row "| " " | " " |" row-data))))))
      (.toString builder))))
+
+
+(defn dataset->str
+  "Convert a dataset to a string.  Prints a single line header and then calls
+  dataset-data->str.
+
+  For options documentation see dataset-data->str."
+  ([ds options]
+   (format "%s %s:\n%s"
+           (ds-proto/dataset-name ds)
+           ;;make row major shape to avoid confusion
+           (vec (reverse (dtype/shape ds)))
+           (dataset-data->str ds options)))
+  ([ds]
+   (dataset->str ds {})))

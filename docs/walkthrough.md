@@ -265,6 +265,67 @@ _unnamed [5 2]:
 | 5.000 |     e |
 ```
 
+## Printing
+
+
+Printing out datasets comes in several flavors.  Datasets support multiline printing:
+```clojure
+user> (require '[tech.v2.tensor :as dtt])
+nil
+user> (def test-tens (dtt/->tensor (partition 3 (range 9))))
+#'user/test-tens
+user> (ds/->dataset [{:a 1 :b test-tens}{:a 2 :b test-tens}])
+_unnamed [2 2]:
+| :a |                            :b |
+|----|-------------------------------|
+|  1 | #tech.v2.tensor<float64>[3 3] |
+|    | [[0.000 1.000 2.000]          |
+|    |  [3.000 4.000 5.000]          |
+|    |  [6.000 7.000 8.000]]         |
+|  2 | #tech.v2.tensor<float64>[3 3] |
+|    | [[0.000 1.000 2.000]          |
+|    |  [3.000 4.000 5.000]          |
+|    |  [6.000 7.000 8.000]]         |
+```
+
+You can provide options to control printing via the metadata of the dataset:
+```clojure
+user> (def tens-ds *1)
+#'user/tens-ds
+user> (with-meta tens-ds
+        (assoc (meta tens-ds)
+               :print-line-policy :single))
+_unnamed [2 2]:
+| :a |                            :b |
+|----|-------------------------------|
+|  1 | #tech.v2.tensor<float64>[3 3] |
+|  2 | #tech.v2.tensor<float64>[3 3] |
+```
+
+This is especially useful when dealing with new datasets that may have large amounts
+of per-column data:
+```clojure
+user> (require '[tech.io :as io])
+nil
+user> (def events-ds (-> (io/get-json "https://api.github.com/events"
+                              :key-fn keyword)
+                 (ds/->dataset)))
+#'user/events-ds
+user> (ds/head (with-meta events-ds
+                 (assoc (meta events-ds)
+                        :print-line-policy :single
+                        :print-column-max-width 25)))
+_unnamed [5 8]:
+|         :id |       :type |         :actor |                     :repo |              :payload | :public |          :created_at |           :org |
+|-------------|-------------|----------------|---------------------------|-----------------------|---------|----------------------|----------------|
+| 12416500733 | CreateEvent |  {:id 1391351, |            {:id 62506473, |   {:ref "mix-target", |    true | 2020-05-22T18:21:21Z |                |
+| 12416500729 |   PushEvent | {:id 10810283, |           {:id 266179290, | {:push_id 5115363028, |    true | 2020-05-22T18:21:21Z |                |
+| 12416500724 |   PushEvent |  {:id 1036482, |            {:id 65323404, | {:push_id 5115363022, |    true | 2020-05-22T18:21:21Z | {:id 12449437, |
+| 12416500717 |   ForkEvent | {:id 56911385, |           {:id 249431040, |              {:forkee |    true | 2020-05-22T18:21:21Z |                |
+| 12416500714 | IssuesEvent | {:id 63518697, | {:id 247704958, :name "18 |    {:action "closed", |    true | 2020-05-22T18:21:21Z |  {:id 6233994, |
+```
+
+
 ## Basic Dataset Manipulation
 
 Dataset are logically maps when treated like functions and sequences of columns when

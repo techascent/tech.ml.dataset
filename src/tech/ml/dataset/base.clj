@@ -291,7 +291,7 @@ duplicate values."
        (map-indexed vector)))
 
 
-(par-util/export-symbols tech.ml.dataset.print
+(par-util/export-symbols tech.ml.dataset.readers
                          value-reader
                          mapseq-reader)
 

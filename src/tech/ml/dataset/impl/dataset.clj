@@ -168,14 +168,9 @@
   (iterator [item]
     (->> (ds-proto/columns item)
          (.iterator)))
-
   Object
   (toString [item]
-    (format "%s %s:\n%s"
-            (ds-proto/dataset-name item)
-            ;;make row major shape to avoid confusion
-            (vec (reverse (dtype/shape item)))
-            (ds-print/print-dataset item))))
+    (ds-print/dataset->str item)))
 
 
 (defn new-dataset

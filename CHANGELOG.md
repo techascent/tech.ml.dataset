@@ -1,4 +1,7 @@
 # Changelog
+## 2.0-beta-48
+ * much better printing.  Dataset now correctly print multiline column data and there
+   are a set of options to control the printing.  See `dataset->str`.
 
 ## 2.0-beta-47
  * UUIDs are now supported as datatypes.  This includes parsing them from strings
