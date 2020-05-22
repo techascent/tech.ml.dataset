@@ -182,7 +182,7 @@ can additionally be a DateTimeFormat format string or a DateTimeFormat object:
 
 ```clojure
 nil
-user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx")
+user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx")
                            :all (range 5)))
 
 #'user/data
@@ -199,7 +199,7 @@ Sheet1 [5 8]:
 user> ;; Note the Date actually didn't parse out because it is dd/MM/yyyy format:
 user> (dtype/get-datatype (data "Date"))
 :string
-user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx"
+user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
                                          {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}})
                            :all (range 5)))
 
@@ -217,7 +217,7 @@ Sheet1 [5 8]:
 user> (dtype/get-datatype (data "Date"))
 :local-date
 
-user> (def data (ds/select (ds/->dataset "test/data/file_example_XLSX_1000.xlsx"
+user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
                                          {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]
                                                       "Id" :int32
                                                       0 :int32
