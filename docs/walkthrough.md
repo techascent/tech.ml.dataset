@@ -325,6 +325,8 @@ _unnamed [5 8]:
 | 12416500714 | IssuesEvent | {:id 63518697, | {:id 247704958, :name "18 |    {:action "closed", |    true | 2020-05-22T18:21:21Z |  {:id 6233994, |
 ```
 
+The full list of possible options is provided in the documentation for [dataset-data->str](https://github.com/techascent/tech.ml.dataset/blob/0ec98572dae64355ca1ab69b9209db17a810cad8/src/tech/ml/dataset/print.clj#L78).
+
 
 ## Basic Dataset Manipulation
 
