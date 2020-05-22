@@ -139,7 +139,7 @@ tech.ml.dataset/->dataset
   Returns a new dataset
 nil
 
-user> (ds/->dataset "data/ames-house-prices/train.csv"
+user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5})
 data/ames-house-prices/train.csv [4 3]:
@@ -150,7 +150,7 @@ data/ames-house-prices/train.csv [4 3]:
 |    181500 |     1262 |        0 |
 |    223500 |      920 |      866 |
 |    140000 |      961 |      756 |
-user> (ds/->dataset "data/ames-house-prices/train.csv"
+user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5
                      :parser-fn :float32})
@@ -162,11 +162,11 @@ data/ames-house-prices/train.csv [4 3]:
 | 181500.000 | 1262.000 |    0.000 |
 | 223500.000 |  920.000 |  866.000 |
 | 140000.000 |  961.000 |  756.000 |
-user> (ds/->dataset "data/ames-house-prices/train.csv"
+user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5
                      :parser-fn {"SalePrice" :float32}})
-data/ames-house-prices/train.csv [4 3]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [4 3]:
 
 |  SalePrice | 1stFlrSF | 2ndFlrSF |
 |------------+----------+----------|
@@ -421,7 +421,7 @@ The dataset system offers two methods to select subrects of information from the
 dataset.  This results in a new dataset.
 
 ```clojure
-(def ames-ds (ds/->dataset "file://data/ames-house-prices/train.csv.gz"))
+(def ames-ds (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"))
 #'user/ames-ds
 user> (ds/column-names ames-ds)
 ("Id"
@@ -632,7 +632,7 @@ user> (->> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "G
 This is best illustrated by an example:
 
 ```clojure
-user> (def stocks (ds/->dataset "test/data/stocks.csv"))
+user> (def stocks (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv"))
 #'user/stocks
 user> (ds/select stocks :all (range 5))
 test/data/stocks.csv [5 3]:
@@ -858,12 +858,12 @@ may be a tuple in which case it will be destructured like:
 
 ```clojure
 user> (def test-ds
-        (ds/->dataset "data/ames-house-prices/train.csv"
+        (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5}))
 #'user/test-ds
 user> test-ds
-data/ames-house-prices/train.csv [4 3]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [4 3]:
 
 | SalePrice | 1stFlrSF | 2ndFlrSF |
 |-----------+----------+----------|
@@ -915,7 +915,7 @@ We use apache poi [directly](../src/tech/libs/poi/parse.clj) to generate dataset
 from xls and xlsx files.  This feature is, like joins, very new.
 
 ```clojure
-user> (ds/head (ds/->dataset "test/data/file_example_XLS_1000.xls"))
+user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
 Sheet1 [5 8]:
 
 |     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
@@ -934,12 +934,11 @@ file and specify a datatype and DateTimeFormatter format for the column:
 
 ```clojure
 
-user> (ds/head (ds/->dataset "test/data/file_example_XLS_1000.xls" {:parser-fn
-                                                                    {"Date" [:local-date "dd/MM/yyyy"]}}))
+user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"
+                             {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}}))
 Sheet1 [5 8]:
-
 |     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
-|-------+------------+-----------+--------+---------------+-------+------------+------|
+|-------|------------|-----------|--------|---------------|-------|------------|------|
 | 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 2017-10-15 | 1562 |
 | 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 2016-08-16 | 1582 |
 | 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 2015-05-21 | 2587 |
@@ -953,7 +952,7 @@ Or you can reparse just that column using the above parse syntax:
 ```clojure
 user> (require '[tech.ml.dataset.column :as ds-col])
 nil
-user> (def unparsed (ds/->dataset "test/data/file_example_XLS_1000.xls"))
+user> (def unparsed (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
 #'user/unparsed
 user> (ds/head (ds/update-column unparsed "Date"
                                  (partial ds-col/parse-column [:local-date "dd/MM/yyyy"])))
