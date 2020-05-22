@@ -5,9 +5,10 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.pprint :as dtype-pp]
-            [tech.v2.datatype.datetime :as dtype-dt])
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [clojure.string :as str])
   (:import [tech.v2.datatype ObjectReader]
-           [java.util List HashMap Collections]
+           [java.util List HashMap Collections ArrayList]
            [tech.ml.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
             PersistentVector]
@@ -16,24 +17,6 @@
 (set! *warn-on-reflection* true)
 
 (def ^:dynamic *default-table-row-print-length* 25)
-
-
-(defn print-table
-  ([ks data]
-     (->> data
-          (map (fn [item-map]
-                 (->> item-map
-                      (map (fn [[k v]]
-                             [k (dtype-pp/format-object v)]))
-                      (into {}))))
-          (pp/print-table ks)))
-  ([data]
-   (print-table (sort (keys (first data))) data)))
-
-
-(def datetime-epoch-types
-  #{:epoch-milliseconds
-    :epoch-seconds})
 
 
 (defn- dataset->readers
@@ -113,16 +96,108 @@
    (mapseq-reader dataset {})))
 
 
+(defn- reader->string-lines
+  [reader-data ^RoaringBitmap missing
+   line-policy]
+  (dtype/object-reader
+   (dtype/ecount reader-data)
+   #(if (.contains missing (int %))
+      nil
+      (let [lines
+            (str/split-lines (.toString ^Object (reader-data %)))]
+        (case line-policy
+          :single
+          [(first lines)]
+          :markdown
+          [(str/join "<br>" lines)]
+          :repl
+          lines)))))
 
-(defn print-dataset
-  [dataset & {:keys [column-names index-range]
-              :or {column-names :all}}]
-  (let [index-range (or index-range
-                        (range
-                         (min (second (dtype/shape dataset))
-                              *default-table-row-print-length*)))
-        print-ds (ds-proto/select dataset column-names index-range)
-        column-names (ds-proto/column-names print-ds)]
-    (with-out-str
-      (print-table column-names (mapseq-reader print-ds
-                                               {:all-printable-columns? true})))))
+
+(defn- append-line!
+  [^StringBuilder builder line]
+  (.append builder line)
+  (.append builder "\n"))
+
+
+(defn- rpad-str
+  [col-width line]
+  (let [n-data (count line)
+        n-pad (- (long col-width) n-data)
+        builder (StringBuilder.)]
+    (.append builder line)
+    (dotimes [idx n-pad]
+      (.append builder " "))
+    (.toString builder)))
+
+
+(def ^:dynamic *default-dataset-line-policy* :repl)
+
+
+(defn dataset->str
+  ([dataset]
+   (dataset->str dataset {}))
+  ([dataset {:keys [column-names index-range
+                    line-policy]
+             :or {column-names :all}}]
+   (let [index-range (or index-range
+                         (range
+                          (min (second (dtype/shape dataset))
+                               *default-table-row-print-length*)))
+         line-policy (or line-policy
+                         *default-dataset-line-policy*)
+         print-ds (ds-proto/select dataset column-names index-range)
+         column-names (map #(.toString ^Object %)
+                           (ds-proto/column-names print-ds))
+         string-columns (map #(-> (dtype/->reader %)
+                                  (dtype-pp/reader-converter)
+                                  (reader->string-lines (ds-col/missing %)
+                                                        line-policy)
+                                  ;;Do the conversion to string once.
+                                  (dtype/clone)
+                                  (dtype/->reader))
+                             print-ds)
+         n-rows (long (second (dtype/shape print-ds)))
+         row-heights (ArrayList.)
+         _ (.addAll row-heights (repeat n-rows 0))
+         column-widths
+         (->> string-columns
+              (map (fn [colname coldata]
+                     (->> coldata
+                          (map-indexed
+                           (fn [row-idx lines]
+                             ;;Side effecting record row height.
+                             (.set row-heights (int row-idx)
+                                   (max (int (.get row-heights row-idx))
+                                        (count lines)))
+                             (apply max (count colname) (map count lines))))
+                          (apply max)))
+                   column-names))
+         spacers (map #(apply str (repeat % "-")) column-widths)
+         fmts (map #(str "%" % "s") column-widths)
+         fmt-row (fn [leader divider trailer row]
+                   (str leader
+                        (apply str
+                               (interpose
+                                divider
+                                (map #(format %1 %2) fmts row)))
+                        trailer))
+         builder (StringBuilder.)]
+     (append-line! builder (fmt-row "| " " | " " |" column-names))
+     (append-line! builder (fmt-row "|-" "-|-" "-|" spacers))
+     (dotimes [idx n-rows]
+       (let [row-height (long (.get row-heights idx))]
+         (dotimes [inner-idx row-height]
+           (let [row-data
+                 (->> string-columns
+                      (map (fn [c-width column]
+                             (let [lines (column idx)]
+                               (if (< inner-idx (count lines))
+                                 (if (== 1 (count lines))
+                                   (.get ^List lines inner-idx)
+                                   (->> (.get ^List lines inner-idx)
+                                        (rpad-str c-width)))
+                                 "")))
+                           column-widths))]
+             (append-line! builder (fmt-row "| " " | " " |" row-data))))))
+     (.toString builder))))
