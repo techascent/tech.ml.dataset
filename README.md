@@ -23,7 +23,7 @@ writing the dataset back out to csv, tsv, and gzipped varieties of those.
 user> (require '[tech.ml.dataset :as ds])
 nil
 ;; We support many file formats
-user> (def csv-data (ds/->dataset "test/data/stocks.csv"))
+user> (def csv-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv"))
 #'user/csv-data
 user> (ds/head csv-data)
 test/data/stocks.csv [5 3]:
@@ -35,7 +35,7 @@ test/data/stocks.csv [5 3]:
 |   MSFT | 2000-03-01 | 43.22 |
 |   MSFT | 2000-04-01 | 28.37 |
 |   MSFT | 2000-05-01 | 25.45 |
-user> (def xls-data (ds/->dataset "test/data/file_example_XLS_1000.xls"))
+user> (def xls-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
 #'user/xls-data
 user> (ds/head xls-data)
 Sheet1 [5 8]:
@@ -50,7 +50,7 @@ Sheet1 [5 8]:
 
 ;;And you can have fine grained control over parsing
 
-user> (ds/head (ds/->dataset "test/data/file_example_XLS_1000.xls"
+user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"
                              {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}}))
 Sheet1 [5 8]:
 
