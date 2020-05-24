@@ -7,4 +7,5 @@
   :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
   :lein-tools-deps/config {:config-files [:install :user :project]}
   :profiles {:dev {:lein-tools-deps/config {:resolve-aliases [:test]}}}
+  :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"])
