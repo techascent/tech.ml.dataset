@@ -280,8 +280,10 @@
     (let [long-rdr (if (dtype/reader? long-rdr)
                      long-rdr
                      ;;handle infinite seq's
-                     (take (dtype/ecount data) long-rdr))]
-      (Column. (->bitmap long-rdr)
+                     (take (dtype/ecount data) long-rdr))
+          bitmap (->bitmap long-rdr)]
+      (.runOptimize bitmap)
+      (Column. bitmap
                data
                metadata)))
   (unique [this]
@@ -398,6 +400,7 @@
                            (#{:string :keyword :symbol} (dtype/get-datatype data)))
                     (assoc metadata :categorical? true)
                     metadata)]
+     (.runOptimize missing)
      (Column. missing data (assoc metadata :name name))))
   ([name data metadata]
    (new-column name data metadata (->bitmap)))

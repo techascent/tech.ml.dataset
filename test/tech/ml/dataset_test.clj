@@ -534,6 +534,18 @@
              (vec (loaded-ds :a)))))))
 
 
+(deftest filter-empty
+  (let [ds (ds/name-values-seq->dataset {:V1 (take 9 (cycle [1 2]))
+                                         :V2 (range 1 10)
+                                         :V3 (take 9 (cycle [0.5 1.0 1.5]))
+                                         :V4 (take 9 (cycle [\A \B \C]))})
+        result (ds/filter (constantly false) ds)]
+    (is (= 0 (ds/row-count result)))
+    (is (= (ds/column-count ds)
+           (ds/column-count result)))
+    (is (string? (.toString result)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

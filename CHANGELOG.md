@@ -1,4 +1,11 @@
 # Changelog
+## 2.0-beta-50
+ * Memory optimization to roaring bitmap (5-10%).
+ * Issue-82 - Empty datasets no longer printed.
+
+## 2.0-beta-49
+ * Small fix to printing to make pandoc work better.
+
 ## 2.0-beta-48
  * much better printing.  Dataset now correctly print multiline column data and there
    are a set of options to control the printing.  See `dataset->str`.
