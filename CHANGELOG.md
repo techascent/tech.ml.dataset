@@ -1,6 +1,10 @@
 # Changelog
+## 2.0-beta-51-SNAPSHOT
+ * profiled group-by-column quite a bit.  Found/fixed several issues,
+   about 10X faster if table is wide as compared to long.
+
 ## 2.0-beta-50
- * Memory optimization to roaring bitmap (5-10%).
+ * Memory optimization related to roaring bitmap usage.
  * Issue-82 - Empty datasets no longer printed.
 
 ## 2.0-beta-49

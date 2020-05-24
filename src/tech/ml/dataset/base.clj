@@ -373,7 +373,7 @@ This is an interface change and we do apologize!"))))
   ([key-fn column-name-seq dataset]
    (check-dataset-wrong-position column-name-seq)
    (->> (group-by->indexes key-fn column-name-seq dataset)
-        (map (fn [[k v]] [k (select dataset :all v)]))
+        (pmap (fn [[k v]] [k (select dataset :all v)]))
         (into {})))
   ([key-fn dataset]
    (group-by key-fn nil dataset)))
@@ -396,9 +396,9 @@ This is an interface change and we do apologize!"))))
   "Return a map of column-value->dataset."
   [colname dataset]
   (->> (group-by-column->indexes colname dataset)
-       (map (fn [[k v]]
-              [k (-> (select dataset :all v)
-                     (set-dataset-name k))]))
+       (pmap (fn [[k v]]
+               [k (-> (select dataset :all v)
+                      (set-dataset-name k))]))
        (into {})))
 
 (defn ds-group-by-column

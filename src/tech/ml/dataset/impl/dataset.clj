@@ -7,6 +7,7 @@
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
+            [tech.v2.datatype.bitmap :as bitmap]
             [clojure.set :as c-set])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
@@ -16,28 +17,27 @@
 (declare new-dataset)
 
 
-(deftype Dataset [column-names
+(deftype Dataset [^List columns
                   colmap
                   ^IPersistentMap metadata]
   ds-proto/PColumnarDataset
   (dataset-name [dataset] (:name metadata))
   (set-dataset-name [dataset new-name]
-    (Dataset.
-     column-names
-     colmap
+    (Dataset. columns colmap
      (assoc metadata :name new-name)))
   (maybe-column [dataset column-name]
-    (get colmap column-name))
+    (when-let [idx (get colmap column-name)]
+      (.get columns (int idx))))
 
   (metadata [dataset] metadata)
   (set-metadata [dataset meta-map]
-    (Dataset. column-names colmap
+    (Dataset. columns colmap
               (col-impl/->persistent-map meta-map)))
 
-  (columns [dataset] (mapv (partial get colmap) column-names))
+  (columns [dataset] columns)
 
   (add-column [dataset col]
-    (let [existing-names (set column-names)
+    (let [existing-names (set (map ds-col/column-name columns))
           new-col-name (ds-col/column-name col)]
       (when (existing-names new-col-name)
         (throw (ex-info (format "Column of same name (%s) already exists in columns"
@@ -51,9 +51,8 @@
        (concat (ds-proto/columns dataset) [col]))))
 
   (remove-column [dataset col-name]
-    (->> (ds-proto/columns dataset)
-         (remove #(= (ds-col/column-name %)
-                     col-name))
+    (->> columns
+         (remove #(= (ds-col/column-name %) col-name))
          (new-dataset (ds-proto/dataset-name dataset) metadata)))
 
   (update-column [dataset col-name col-fn]
@@ -61,14 +60,15 @@
       (throw (ex-info (format "Failed to find column %s" col-name)
                       {:col-name col-name
                        :col-names (keys colmap)})))
-    (let [col (get colmap col-name)
+    (let [col-idx (get colmap col-name)
+          col (.get columns (int col-idx))
           new-col-data (col-fn col)]
       (Dataset.
-       column-names
-       (assoc colmap col-name
+       (assoc columns col-idx
               (if (ds-col/is-column? new-col-data)
                 (ds-col/set-name new-col-data col-name)
                 (ds-col/new-column (ds-col/column-name col) new-col-data)))
+       colmap
        metadata)))
 
   (add-or-update-column [dataset col-name new-col-data]
@@ -80,51 +80,50 @@
         (ds-proto/add-column dataset col-data))))
 
   (select [dataset column-name-seq-or-map index-seq]
-    (let [all-names column-names
-          all-name-set (set all-names)
-          map-selector? (instance? Map column-name-seq-or-map)
-          column-name-seq
-          (cond
-            (= :all column-name-seq-or-map)
-            all-names
-            map-selector?
-            (keys column-name-seq-or-map)
-            :else
-            column-name-seq-or-map)
-          name-set (set column-name-seq)
-          _ (when-let [missing (seq (c-set/difference name-set all-name-set))]
-              (throw (ex-info (format "Invalid/missing column names: %s" missing)
-                              {:all-columns all-name-set
-                               :selection column-name-seq})))
-          _ (when-not (= (count name-set)
-                         (count column-name-seq))
-              (throw (ex-info "Duplicate column names detected"
-                              {:selection column-name-seq})))
+    ;;Conversion to a reader is expensive in some cases so do it here
+    ;;to avoid each column doing it.
+    (let [map-selector? (instance? Map column-name-seq-or-map)
           indexes (if (= :all index-seq)
                     nil
-                    index-seq)
-          retval
-          (->> column-name-seq
-               (map (fn [col-name]
-                      (let [col (ds-proto/column dataset col-name)]
-                        (if indexes
-                          (ds-col/select col indexes)
-                          col))))
-               (new-dataset (ds-proto/dataset-name dataset) metadata))]
-      ;;Perform rename functionality if requested
-      (if map-selector?
-        (let [colname-map column-name-seq-or-map]
-          (->> (ds-proto/columns retval)
-               (map (fn [col]
-                      (let [new-name (get colname-map (ds-col/column-name col))]
-                        (ds-col/set-name col new-name))))
-               (new-dataset (ds-proto/dataset-name dataset)
-                            (metadata dataset))))
-        retval)))
+                    (if-let [bmp (dtype/as-roaring-bitmap index-seq)]
+                      (dtype/->reader
+                       (bitmap/bitmap->efficient-random-access-reader
+                        bmp))
+                      (if (dtype/reader? index-seq)
+                        (dtype/->reader index-seq)
+                        (dtype/->reader (dtype/make-container
+                                         :java-array :int32
+                                         index-seq)))))
+          columns
+          (cond
+            (= :all column-name-seq-or-map)
+            columns
+            map-selector?
+            (->> column-name-seq-or-map
+                 (map (fn [[old-name new-name]]
+                        (if-let [col-idx (get colmap old-name)]
+                          (let [col (.get columns (unchecked-int col-idx))]
+                            (ds-col/set-name col new-name))
+                          (throw (Exception.
+                                  (format "Failed to find column %s" old-name)))))))
+            :else
+            (->> column-name-seq-or-map
+                 (map (fn [colname]
+                        (if-let [col-idx (get colmap colname)]
+                          (.get columns (unchecked-int col-idx))
+                          (throw (Exception.
+                                  (format "Failed to find column %s" colname))))))))]
+      (->> columns
+           ;;select may be slow if we have to recalculate missing values.
+           (map (fn [col]
+                  (if indexes
+                    (ds-col/select col indexes)
+                    col)))
+           (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
 
   (supported-column-stats [dataset]
-    (ds-col/supported-stats (first (vals colmap))))
+    (ds-col/supported-stats (first columns)))
 
 
   (from-prototype [dataset dataset-name column-seq]
@@ -133,22 +132,21 @@
 
   dtype-proto/PShape
   (shape [m]
-    [(count column-names)
-     (if-let [first-col (first (vals colmap))]
+    [(count columns)
+     (if-let [first-col (first columns)]
        (dtype/ecount first-col)
        0)])
 
   dtype-proto/PCopyRawData
   (copy-raw->item! [raw-data ary-target target-offset options]
-    (dtype-proto/copy-raw->item! (ds-proto/columns raw-data) ary-target
-                                 target-offset options))
+    (dtype-proto/copy-raw->item! columns ary-target target-offset options))
   dtype-proto/PClone
   (clone [item]
     (new-dataset (ds-proto/dataset-name item)
                  metadata
-                 (mapv dtype/clone (ds-proto/columns item))))
+                 (mapv dtype/clone columns)))
   Counted
-  (count [this] (count column-names))
+  (count [this] (count columns))
 
   IFn
   (invoke [item col-name]
@@ -162,7 +160,7 @@
 
   IObj
   (meta [this] metadata)
-  (withMeta [this metadata] (Dataset. column-names colmap metadata))
+  (withMeta [this metadata] (Dataset. columns colmap metadata))
 
   Iterable
   (iterator [item]
@@ -204,9 +202,11 @@
                                     %
                                     (key-fn (ds-col/column-name %))))))
                       column-seq)]
-     (Dataset. (mapv ds-col/column-name column-seq)
+     (Dataset. (vec column-seq)
                (->> column-seq
-                    (map (juxt ds-col/column-name identity))
+                    (map-indexed
+                     (fn [idx col]
+                       [(ds-col/column-name col) idx]))
                     (into {}))
                (assoc (col-impl/->persistent-map ds-metadata)
                       :name
