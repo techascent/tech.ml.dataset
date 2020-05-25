@@ -1,14 +1,13 @@
 language: clojure
-lein: 2.8.1
+lein: 2.9.3
 before_install:
   - curl -O https://download.clojure.org/install/linux-install-1.10.0.403.sh && chmod +x linux-install-1.10.0.403.sh && sudo ./linux-install-1.10.0.403.sh
-
 addons:
   apt:
     packages:
     - libopenblas-dev
-    - liblapack3
-
-
+    - liblapack3    
 before_script:
  - ./scripts/get-data.sh
+cache:
+  directories: "$HOME/.m2"
