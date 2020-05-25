@@ -2,6 +2,8 @@
 ## 2.0-beta-51-SNAPSHOT
  * profiled group-by-column quite a bit.  Found/fixed several issues,
    about 10X faster if table is wide as compared to long.
+ * Fixed printing in a few edge cases.
+ * Issue-84 - `tech.ml.dataset.column/scan-data-for-missing` fix.
 
 ## 2.0-beta-50
  * Memory optimization related to roaring bitmap usage.
