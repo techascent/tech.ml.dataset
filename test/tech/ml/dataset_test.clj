@@ -546,6 +546,14 @@
     (is (string? (.toString result)))))
 
 
+(deftest nil-mapseq-values
+  (let [ds (ds/->dataset [{:a nil} {:a 1} {}])]
+    (is (= #{0 2}
+           (set (ds/missing ds))))
+    (is (= [nil 1 nil]
+           (vec (dtype/->reader (ds :a) :object))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

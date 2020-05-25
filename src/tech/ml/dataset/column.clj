@@ -277,7 +277,7 @@ Implementations should check their metadata before doing calculations."
         (symbol? (first data-reader))
         (scan-object-data-for-missing :symbol data-reader)
         :else
-        {:data data-reader})
+        (scan-object-data-for-missing :object data-reader))
       {:data data-reader})))
 
 

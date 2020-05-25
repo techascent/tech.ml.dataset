@@ -270,7 +270,8 @@
    col-parser-gen
    column-idx->column-name
    {:keys [n-initial-skip-rows] :as options}]
-  (let [columns (HashMap.)]
+  (let [columns (HashMap.)
+        last-row-num* (atom -1)]
     (doseq [^Spreadsheet$Row row rows]
       (let [row-num (.getRowNum row)
             row-num (long (if header-row?
@@ -279,6 +280,7 @@
             row-num (long (if n-initial-skip-rows
                             (- row-num n-initial-skip-rows)
                             row-num))]
+        (swap! last-row-num* max row-num)
         (parallel-for/doiter
          cell row
          (let [^Spreadsheet$Cell cell cell
@@ -295,10 +297,8 @@
                            (map (fn [[k v]]
                                   [(long k) (column-data v)]))
                            (into {}))
-          n-rows (->> (vals column-data)
-                      (map (comp dtype/ecount :data))
-                      (apply max 0)
-                      (long))
+
+          n-rows (inc @last-row-num*)
           missing-value (get @col-impl/dtype->missing-val-map
                              :float64)]
       (->> (range n-columns)

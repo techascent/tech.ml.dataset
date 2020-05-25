@@ -119,7 +119,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                              print-ds)
          n-rows (long (second (dtype/shape print-ds)))
          row-heights (ArrayList.)
-         _ (.addAll row-heights (repeat n-rows 0))
+         _ (.addAll row-heights (repeat n-rows 1))
          column-widths
          (->> string-columns
               (map (fn [colname coldata]
@@ -169,10 +169,15 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
 
   For options documentation see dataset-data->str."
   ([ds options]
-   (format "%s %s:\n\n%s"
-           (ds-proto/dataset-name ds)
-           ;;make row major shape to avoid confusion
-           (vec (reverse (dtype/shape ds)))
-           (dataset-data->str ds options)))
+   (if (= [0 0] (dtype/shape ds))
+     (format "%s %s"
+             (ds-proto/dataset-name ds)
+             ;;make row major shape to avoid confusion
+             (vec (reverse (dtype/shape ds))))
+     (format "%s %s:\n\n%s"
+             (ds-proto/dataset-name ds)
+             ;;make row major shape to avoid confusion
+             (vec (reverse (dtype/shape ds)))
+             (dataset-data->str ds options))))
   ([ds]
    (dataset->str ds {})))

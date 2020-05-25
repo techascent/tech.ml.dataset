@@ -58,7 +58,6 @@
          rows (->> mapseq
                    (map-indexed (fn [idx data]
                                   (map->row idx data colname->idx))))
-
          scan-rows (when parser-fn
                      (parse-spreadsheet/scan-initial-rows rows parser-scan-len))
          initial-idx->colname (set/map-invert cell-name-hash)

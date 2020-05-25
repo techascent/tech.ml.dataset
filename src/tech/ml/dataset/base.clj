@@ -12,6 +12,7 @@
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.parse.mapseq :as ds-parse-mapseq]
+            [tech.ml.dataset.parse.name-values-seq :as nvs-parse]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.for :as parallel-for]
@@ -819,6 +820,8 @@ This is an interface change and we do apologize!"))))
                                    (io/gzip-input-stream dataset)
                                    (io/input-stream dataset))]
                (open-fn istream)))
+           (map? dataset)
+           (nvs-parse/name-values-seq->dataset dataset options)
            :else
            (ds-parse-mapseq/mapseq->dataset dataset options))]
      (if dataset-name

@@ -8,19 +8,14 @@
             [tech.ml.dataset.column :as ds-col]))
 
 
-(defn name-values-seq->dataset
-  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
-  of unknown (:object) datatype, the first item is checked. If it is a number,
-  then doubles are used.  If it is a string, then strings are used for the
-  column datatype.
-  All sequences must be the same length.
-  Returns a new dataset"
-  [name-values-seq & {:keys [dataset-name]
-                      :or {dataset-name "_unnamed"}}]
+(defn parse-nvs
+  [name-values-seq options]
   (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
                    distinct)
+
         _ (when-not (= 1 (count sizes))
-            (throw (ex-info (format "Different sized columns detected: %s" sizes) {})))
+            (throw (ex-info (format "Different sized columns detected: %s"
+                                    sizes) {})))
         name-order (map first name-values-seq)
         ;;Allow explicit missing/etc to be passed in.
         map-data (filter (comp map? second) name-values-seq)
@@ -34,7 +29,7 @@
                                  (if (map? values-seq)
                                    (ds-col/ensure-column values-seq)
                                    (ds-col/new-column colname values-seq))))
-                          (ds-impl/new-dataset dataset-name))
+                          (ds-impl/new-dataset options))
         colname-set (set (ds-proto/column-names half-dataset))
         leftover (remove (comp colname-set first) name-values-seq)
         n-data (count leftover)
@@ -45,10 +40,20 @@
                     (partition n-data)
                     (map #(zipmap colnames %)))
         leftover-ds (when (seq colnames)
-                      (parse-mapseq/mapseq->dataset values))]
-    (-> (ds-impl/new-dataset dataset-name
-                             {}
+                      (parse-mapseq/mapseq->dataset values options))]
+    (-> (ds-impl/new-dataset options
                              (concat (ds-proto/columns half-dataset)
                                      (when leftover-ds
                                        (ds-proto/columns leftover-ds))))
         (ds-proto/select name-order :all))))
+
+
+(defn name-values-seq->dataset
+  "Given a sequence of [name data-seq], produce a columns.  If data-seq is
+  of unknown (:object) datatype, the first item is checked. If it is a number,
+  then doubles are used.  If it is a string, then strings are used for the
+  column datatype.
+  All sequences must be the same length.
+  Returns a new dataset"
+  [name-values-seq & {:as options}]
+  (parse-nvs name-values-seq options))
