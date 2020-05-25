@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.0-beta-52
+ * `dtype/clone` works correctly for arrays.
+
 ## 2.0-beta-51
  * profiled group-by-column quite a bit.  Found/fixed several issues,
    about 10X faster if table is wide as compared to long.
