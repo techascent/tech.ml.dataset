@@ -554,6 +554,26 @@
            (vec (dtype/->reader (ds :a) :object))))))
 
 
+(deftest select-row
+  (let [ds (ds/name-values-seq->dataset {:V1 (take 9 (cycle [1 2]))
+                                         :V2 (range 1 10)
+                                         :V3 (take 9 (cycle [0.5 1.0 1.5]))
+                                         :V4 (take 9 (cycle [\A \B \C]))})]
+
+    (is (= [2 6 1.5 \C]
+           (-> (ds/select-rows ds 5)
+               (ds/value-reader)
+               (first)
+               (vec))))
+
+    (is (= [2 6 1.5 \C]
+           (-> (ds/select-rows ds [5])
+               (ds/value-reader)
+               (first)
+               (vec))))))
+
+
+
 (comment
 
   (def test-ds (ds/->dataset

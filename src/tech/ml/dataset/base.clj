@@ -201,7 +201,10 @@
   index-seq - either keyword :all or list of indexes.  May contain duplicates.
   "
   [dataset colname-seq index-seq]
-  (ds-proto/select dataset colname-seq index-seq))
+  (let [index-seq (if (number? index-seq)
+                    [index-seq]
+                    index-seq)]
+    (ds-proto/select dataset colname-seq index-seq)))
 
 
 (defn unordered-select
