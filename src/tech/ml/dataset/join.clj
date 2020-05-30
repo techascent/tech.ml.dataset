@@ -37,7 +37,7 @@
     (keyword? orign-name) (keyword new-name)
     (symbol? orign-name) (symbol new-name)
     :else
-    (keyword new-name)))
+    new-name))
 
 
 (defn- colname->lhs-rhs-colnames

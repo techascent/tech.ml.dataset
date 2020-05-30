@@ -162,6 +162,18 @@
            (count (distinct (ds/column-names jt)))))))
 
 
+(deftest join-tuple-cname
+  (let [DS (ds/->dataset [{:a 11 [:a :b] 2}])
+        lj (ds/left-join :a DS DS)
+        rj (ds/right-join :a DS DS)
+        ljt (ds/left-join [[:a :b][:a :b]] DS DS)]
+    ;;no nil column names
+    (is (every? identity (ds/column-names lj)))
+    (is (every? identity (ds/column-names rj)))
+    (is (every? identity (ds/column-names ljt)))
+    ))
+
+
 
 (comment
 
