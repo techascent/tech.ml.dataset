@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0-beta-54
+ * Issue-88 - rename column fails on false name
+
+## 2.0-beta-53
+ * Issue-86 - joins on datasets with not typical names
+ * Issue-85 - select-rows can take a scalar.
+
 ## 2.0-beta-52
  * `dtype/clone` works correctly for arrays.
 
