@@ -573,6 +573,22 @@
                (vec))))))
 
 
+(deftest columns-named-false
+  (let [DS (ds/->dataset [{false 1} {false 2}])]
+    (is (= [1 2]
+           (vec (DS false)))))
+  (let [DS (ds/->dataset [{:a 1} {:a 2}])]
+    (is (= [1 2]
+           (-> (ds/rename-columns DS {:a false})
+               (ds/column false)
+               vec))))
+  (let [DS (ds/->dataset [{:a 1} {:a 2}])]
+    (is (= [1 2]
+           (-> (ds/select-columns DS {:a false})
+               (ds/column false)
+               vec)))))
+
+
 
 (comment
 

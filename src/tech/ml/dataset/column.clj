@@ -289,8 +289,8 @@ Implementations should check their metadata before doing calculations."
     (col-proto/is-column? item)
     item
     (map? item)
-    (let [{:keys [name data missing metadata force-datatype?]} item]
-      (when-not (and name data)
+    (let [{:keys [name data missing metadata force-datatype?] :as cdata} item]
+      (when-not (and (contains? cdata :name) data)
         (throw (Exception. "Column data map must have name and data")))
       (col-impl/new-column
        name
@@ -312,7 +312,9 @@ Implementations should check their metadata before doing calculations."
             item
             (map? item)
             (ensure-column (update item :name
-                                   #(or % idx)))
+                                   #(if (nil? %)
+                                      idx
+                                      %)))
             (dtype/reader? item)
             (let [{:keys [data missing]} (scan-data-for-missing item)]
               (col-impl/new-column idx data {} missing))

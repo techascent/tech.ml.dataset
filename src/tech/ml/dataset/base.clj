@@ -240,9 +240,10 @@
   [dataset colname-map]
   (->> (ds-proto/columns dataset)
        (map (fn [col]
-              (if-let [new-name (get colname-map (ds-col/column-name col))]
-                (ds-col/set-name col new-name)
-                col)))
+              (let [old-name (ds-col/column-name col)]
+                (if (contains? colname-map old-name)
+                  (ds-col/set-name col (get colname-map old-name))
+                  col))))
        (ds-impl/new-dataset (dataset-name dataset)
                             (metadata dataset))))
 
