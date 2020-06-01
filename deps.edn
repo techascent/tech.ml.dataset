@@ -6,8 +6,8 @@
         com.univocity/univocity-parsers  {:mvn/version "2.7.5"}
         org.apache.poi/poi-ooxml         {:mvn/version "4.1.2"}
         org.dhatim/fastexcel-reader      {:mvn/version "0.10.12"}
-        com.github.haifengl/smile-core   {:mvn/version "1.5.3"}
-        com.github.haifengl/smile-netlib {:mvn/version "1.5.3"}}
+        com.github.haifengl/smile-core   {:mvn/version "2.4.0"}
+        com.github.haifengl/smile-netlib {:mvn/version "2.4.0"}}
  :aliases {:test
            {:extra-deps
             {criterium {:mvn/version "0.4.5"}

@@ -46,8 +46,8 @@
                              (map dtype/->array-copy)
                              (into-array (Class/forName "[D")))
         ^PCA pca-data (case method
-                        :svd (PCA. array-of-arrays)
-                        :correlation (PCA. array-of-arrays true))
+                        :svd (PCA/fit array-of-arrays)
+                        :correlation (PCA/cor array-of-arrays))
         ;;We transform out of the tensor system so that we can be sure the output of
         ;;pca-dataset can be saved with a simple system.  Tensors aren't serializeable.
         data-transform (fn [item]

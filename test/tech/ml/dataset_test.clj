@@ -80,10 +80,10 @@
         pca-info (pca/pca-dataset test-ds)
         transformed-ds (pca/pca-transform-dataset test-ds pca-info 3 :float64)
         trans-tens (ds-tens/dataset->row-major-tensor transformed-ds :float64)
-        smile-svd-pca (doto (PCA. (->> test-data
-                                       tens/rows
-                                       (map dtype/->array-copy)
-                                       (into-array (Class/forName "[D"))))
+        smile-svd-pca (doto (PCA/fit (->> test-data
+                                          tens/rows
+                                          (map dtype/->array-copy)
+                                          (into-array (Class/forName "[D"))))
                         (.setProjection (int 3)))
         smile-transformed-ds (-> (.project smile-svd-pca
                                            (->> test-data

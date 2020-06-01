@@ -121,21 +121,24 @@
 (defn k-means
   "Nan-aware k-means.
   Returns array of centroids in row-major array-of-array-of-doubles format."
-  ^"[[D" [dataset & [k max-iterations num-runs error-on-missing?]]
+  ^"[[D" [dataset & [k max-iterations num-runs error-on-missing?
+                     tolerance]]
   ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
-  (let [num-runs (int (or num-runs 1))]
+  (let [num-runs (int (or num-runs 1))
+        tolerance (double (or tolerance 1E-4))]
     (if true ;;(= num-runs 1)
       (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
-                        (int (or k 5))
-                        (int (or max-iterations 100)))
+                        (int (or k 5)))
           (.centroids))
       ;;This fails as the initial distortion calculation returns nan
-      (-> (KMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
-                   (int (or k 5))
-                   (int (or max-iterations 100))
-                   (int num-runs))
+      (-> (KMeans/fit
+           (to-row-major-double-array-of-arrays dataset error-on-missing?)
+           (int (or k 5))
+           (int (or max-iterations 100))
+           (int num-runs)
+           tolerance)
           (.centroids)))))
 
 
@@ -154,8 +157,8 @@
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
   (ensure-no-missing! dataset "G-Means - dataset cannot have missing values")
-  (-> (GMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
-               (int (or max-k 5)))
+  (-> (GMeans/fit (to-row-major-double-array-of-arrays dataset error-on-missing?)
+                  (int (or max-k 5)))
       (.centroids)))
 
 
@@ -167,8 +170,8 @@
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
   (ensure-no-missing! dataset "X-Means - dataset cannot have missing values")
-  (-> (XMeans. (to-row-major-double-array-of-arrays dataset error-on-missing?)
-               (int (or max-k 5)))
+  (-> (XMeans/fit (to-row-major-double-array-of-arrays dataset error-on-missing?)
+                  (int (or max-k 5)))
       (.centroids)))
 
 
