@@ -391,7 +391,7 @@
            (set (map dtype/get-datatype cds1))))
     (is (= #{:int32 :float64}
            (set (map dtype/get-datatype cds2))))
-    (is (= [1 Integer/MIN_VALUE 2]
+    (is (= [1 nil 2]
            (vec (cds1 :a))))))
 
 
@@ -412,7 +412,7 @@
                (ds/update-column :a #(dtype/set-datatype % :int32)))]
     (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
     (is (= :int32 (dtype/get-datatype (ds :a))))
-    (is (= [1 Integer/MIN_VALUE]
+    (is (= [1 nil]
            (vec (ds :a))))))
 
 
@@ -428,7 +428,7 @@
                                       (ds-col/missing %))))]
     (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
     (is (= :int32 (dtype/get-datatype (ds :a))))
-    (is (= [1 Integer/MIN_VALUE]
+    (is (= [1 nil]
            (vec (ds :a))))))
 
 
@@ -587,6 +587,12 @@
            (-> (ds/select-columns DS {:a false})
                (ds/column false)
                vec)))))
+
+
+(deftest column-sequences-use-nil-missing
+  (let [ds (ds/->dataset [{:a 1} {:b 2}])]
+    (is (= [1 nil] (vec (ds :a))))
+    (is (= [nil 2] (vec (ds :b))))))
 
 
 

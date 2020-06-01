@@ -261,7 +261,7 @@
   (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
   (iterator [col]
-    (.iterator ^Iterable (dtype/->reader col)))
+    (.iterator ^Iterable (dtype/->reader col :object)))
 
   ds-col-proto/PIsColumn
   (is-column? [this] true)

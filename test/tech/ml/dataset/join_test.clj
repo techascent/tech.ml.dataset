@@ -135,8 +135,8 @@
         lhs-colname-map (:left-column-names (meta join-data))
         rhs-colname-map (:right-column-names (meta join-data))]
     (is (= #{2 37 77} (set (join-data "right.CustomerID"))))
-    (is (= #{"Ana Trujillo" ""} (set (join-data "ContactName"))))
-    (is (= #{5021 -32768} (set (map int (join-data "PostalCode")))))
+    (is (= #{"Ana Trujillo" nil} (set (join-data "ContactName"))))
+    (is (= #{5021 nil} (set (map #(when % (int %)) (join-data "PostalCode")))))
     (is (= #{1 2} (set (ds-col/missing (join-data "ContactName")))))
     (is (= #{1 2} (set (ds-col/missing (join-data "PostalCode")))))
     (is (= (count lhs-colname-map)
