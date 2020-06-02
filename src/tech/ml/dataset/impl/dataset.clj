@@ -121,6 +121,16 @@
                     col)))
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
+  (select-columns-by-index [dataset num-seq]
+    (let [col-indexes (int-array (distinct num-seq))]
+      (when-not (== (count col-indexes) (count num-seq))
+        (throw (Exception. (format "Duplicate column selection detected: %s"
+                                   num-seq))))
+      (->> col-indexes
+           (map (fn [^long idx]
+                  (.get columns idx)))
+           (new-dataset (ds-proto/dataset-name dataset) metadata))))
+
 
   (supported-column-stats [dataset]
     (ds-col/supported-stats (first columns)))

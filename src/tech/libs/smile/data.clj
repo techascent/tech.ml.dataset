@@ -2,15 +2,20 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [clojure.set :as set])
   (:import [tech.ml.dataset.impl.dataset Dataset]
            [smile.data DataFrame Tuple]
+           [java.time.format DateTimeFormatter]
+           [java.time LocalDate LocalTime LocalDateTime]
+           [smile.math.matrix Matrix]
            [smile.data.type StructType StructField DataType DataType$ID DataTypes]
            [smile.data.vector BaseVector Vector BooleanVector ByteVector ShortVector
             IntVector LongVector FloatVector DoubleVector StringVector]
+           [smile.data.measure NominalScale DiscreteMeasure]
            [org.roaringbitmap RoaringBitmap]
            [java.util Collection List ArrayList]))
 
@@ -69,55 +74,190 @@
        (mapv column->field)
        (#(StructType. ^List %))))
 
-(defmacro datatype->smile-vec-type
+(defn datatype->smile-vec-type
   "Datatype has to be a compile time constant"
   [datatype]
   (case (casting/safe-flatten datatype)
-    :boolean `BooleanVector
-    :int8 `ByteVector
-    :int16 `ShortVector
-    :int32 `IntegerVector
-    :int64 `LongVector
-    :float32 `FloatVector
-    :float64 `DoubleVector
-    :string `StringVector
-    :object `Vector))
+    :boolean 'BooleanVector
+    :int8 'ByteVector
+    :int16 'ShortVector
+    :int32 'IntVector
+    :int64 'LongVector
+    :float32 'FloatVector
+    :float64 'DoubleVector
+    :string 'StringVector
+    :object 'Vector))
+
+
+(defn- as-string-array ^"[Ljava.lang.String;"[item] item)
+
+
+(defn datatype->getter-name
+  [datatype]
+  (case datatype
+    :boolean `getBoolean
+    :int8 `getByte
+    :int16 `getShort
+    :int32 `getInt
+    :int64 `getLong
+    :float32 `getFloat
+    :float64 `getDouble))
+
+
+(declare column->smile)
 
 
 (defmacro implement-smile-vector
-  [datatype column]
-  `(let [field (column->field col)
-        col-rdr (dtype/->reader col)
-        ^RoaringBitmap missing (ds-col/missing col)]
-    (reify BaseVector
+  [datatype column col-rdr]
+  `(let [column# ~column
+         field# (column->field column#)
+         col-rdr# (typecast/datatype->reader ~datatype ~col-rdr)
+         ^RoaringBitmap missing# (ds-col/missing column#)]
+     (reify
+       ~(datatype->smile-vec-type datatype)
+       (name [v#] (.name field#))
+       (type [v#] (.type field#))
+       (measure [v#] (.measure field#))
+       (size [v#] (count column#))
+       ;;Data is not always backed by array
+       (array [v#] (typecast/datatype->array-cast-fn
+                    ~datatype
+                    (dtype/->array column#)))
+       (toDoubleArray [v#] (typecast/as-double-array
+                           (dtype/make-container :java-array :float64 column#)))
+       (toIntArray [v#] (typecast/as-int-array
+                        (dtype/make-container :java-array :int32 column#)))
+       (toStringArray [v#] (as-string-array
+                           (dtype/make-container :java-array :string column#)))
+       (get [v# ^int i#]
+         (when-not (.contains missing# i#)
+           (col-rdr# i#)))
+       (~(datatype->getter-name datatype) [v# i#] (.read col-rdr# i#))
+       (^BaseVector get [v# ^"[I" indexes#]
+        (column->smile (ds-col/select column# indexes#)))
+       (stream [v#] (.typedStream col-rdr#)))))
+
+(defn factorize-string-column
+  ([column ^tech.v2.datatype.ObjectReader col-rdr ^DiscreteMeasure scale]
+   (let [scale-size (.size scale)
+         ^RoaringBitmap missing (ds-col/missing column)]
+     (cond
+       (< scale-size Byte/MAX_VALUE)
+       (dtype/make-reader :int8 (dtype/ecount column)
+                          (byte
+                           (if (.contains missing idx)
+                             -1
+                             (.valueOf scale (.read col-rdr idx)))))
+
+       (< scale-size Short/MAX_VALUE)
+       (dtype/make-reader :int16 (dtype/ecount column)
+                          (short
+                           (if (.contains missing idx)
+                             -1
+                             (.valueOf scale (.read col-rdr idx)))))
+       (< scale-size Integer/MAX_VALUE)
+       (dtype/make-reader :int32 (dtype/ecount column)
+                          (int
+                           (if (.contains missing idx)
+                             -1
+                             (.valueOf scale (.read col-rdr idx)))))
+       :else
+       (dtype/make-reader :int64 (dtype/ecount column)
+                          (long
+                           (if (.contains missing idx)
+                             -1
+                             (.valueOf scale (.read col-rdr idx))))))))
+  ([column]
+   (let [rdr (dtype/->reader column)]
+     (factorize-string-column column rdr (->> (ds-col/unique column)
+                                              (into-array String)
+                                              (as-string-array)
+                                              (NominalScale.))))))
+
+(defn string-vector
+  ^StringVector [column col-rdr]
+  (let [field (column->field column)
+        col-rdr (typecast/datatype->reader :string col-rdr)
+        ^RoaringBitmap missing (ds-col/missing column)]
+    (reify
+      StringVector
       (name [v] (.name field))
       (type [v] (.type field))
       (measure [v] (.measure field))
-      (size [v] (count col))
-      ;;Data is not always backed by array
-      (array [v] (dtype/->array col))
-      (toDoubleArray [v] (dtype/make-container :java-array :float64 col))
-      (toIntArray [v] (dtype/make-container :java-array :int32 col))
-      (toStringArray [v] (dtype/make-container :java-array :string col))
+      (size [v] (count column))
+      (anyNull [v] (not (.isEmpty missing)))
+      (isNullAt [v i] (.contains missing i))
+      (toArray [v] (typecast/datatype->array-cast-fn
+                    :string
+                    (dtype/->array column)))
+      (toDoubleArray [v] (throw (Exception. "Unimplemented")))
+      (toIntArray [v] (throw (Exception. "Unimplemented")))
+      (toStringArray [v] (as-string-array
+                          (dtype/make-container :java-array :string column)))
       (get [v ^int i]
         (when-not (.contains missing i)
           (col-rdr i)))
-      (^BaseVector get [v ^ints indexes]
-       (column->smile (ds-col/select col indexes)))
-      (getByte [v i]
-        (.read (typecast/datatype->reader :int8 col-rdr) i))
-      (getShort [v i]
-        (.read (typecast/datatype->reader :int16 col-rdr) i))
-      (getInt [v i]
-        (.read (typecast/datatype->reader :int32 col-rdr) i))
-      (getLong [v i]
-        (.read (typecast/datatype->reader :int64 col-rdr) i))
-      (getFloat [v i]
-        (.read (typecast/datatype->reader :float32 col-rdr) i))
-      (getDouble [v i]
-        (.read (typecast/datatype->reader :float64 col-rdr) i))
-      (stream [v]
-        (.parallelStream ^Collection col-rdr)))))
+      (^BaseVector get [v ^"[I" indexes]
+       (column->smile (ds-col/select column indexes)))
+      (^Vector toDate [v ^DateTimeFormatter formatter]
+       (-> (ds-col/parse-column [:local-date #(LocalDate/parse ^String % formatter)]
+                                column)
+           (column->smile)))
+      (^Vector toTime [v ^DateTimeFormatter formatter]
+       (-> (ds-col/parse-column [:local-time #(LocalTime/parse ^String % formatter)]
+                                column)
+           (column->smile)))
+      (^Vector toDateTime [v ^DateTimeFormatter formatter]
+       (-> (ds-col/parse-column [:local-date-time
+                                 #(LocalDateTime/parse ^String % formatter)]
+                                column)
+           (column->smile)))
+      (nominal [v]
+        (->> (ds-col/unique column)
+             (into-array String)
+             (as-string-array)
+             (NominalScale.)))
+      (factorize [v scale]
+        (factorize-string-column column col-rdr scale))
+      (stream [v] (.typedStream col-rdr)))))
+
+
+(defn object-vector
+  ^Vector [column col-rdr]
+  (let [field (column->field column)
+        col-rdr (typecast/datatype->reader :object col-rdr)
+        ^RoaringBitmap missing (ds-col/missing column)]
+    (reify
+      Vector
+      (name [v] (.name field))
+      (type [v] (.type field))
+      (measure [v] (.measure field))
+      (size [v] (count column))
+      (anyNull [v] (not (.isEmpty missing)))
+      (isNullAt [v i] (.contains missing i))
+      ;;Data is not always backed by array
+      (toArray [v] (dtype/->array-copy column))
+      (toDoubleArray [v] (throw (Exception. "Unimplemented")))
+      (toIntArray [v] (throw (Exception. "Unimplemented")))
+      (toStringArray [v] (as-string-array
+                          (dtype/make-container :java-array :string column)))
+      (get [v ^int i]
+        (when-not (.contains missing i)
+          (col-rdr i)))
+      (^BaseVector get [v ^"[I" indexes]
+       (column->smile (ds-col/select column indexes)))
+      (^Vector toDate [v]
+       (when-not (= :local-date (dtype/get-datatype col-rdr))
+         (throw (Exception. "Unimplemented")))
+       v)
+      (^Vector toTime [v]
+       (when-not (= :local-time (dtype/get-datatype col-rdr))
+         (throw (Exception. "Unimplemented")))
+       v)
+      (^Vector toDateTime [v]
+       (when-not (= :local-date-time (dtype/get-datatype col-rdr))
+         (throw (Exception. "Unimplemented"))))
+      (stream [v] (.typedStream col-rdr)))))
 
 
 (defn column->smile
@@ -135,43 +275,29 @@
       :int64 (implement-smile-vector :int64 col col-rdr)
       :float32 (implement-smile-vector :float32 col col-rdr)
       :float64 (implement-smile-vector :float64 col col-rdr)
-      ))
-  (let [field (column->field col)
-        col-rdr (dtype/->reader col)
-        ^RoaringBitmap missing (ds-col/missing col)]
-
-    (reify BaseVector
-      (name [v] (.name field))
-      (type [v] (.type field))
-      (measure [v] (.measure field))
-      (size [v] (count col))
-      ;;Data is not always backed by array
-      (array [v] (dtype/->array col))
-      (toDoubleArray [v] (dtype/make-container :java-array :float64 col))
-      (toIntArray [v] (dtype/make-container :java-array :int32 col))
-      (toStringArray [v] (dtype/make-container :java-array :string col))
-      (get [v ^int i]
-        (when-not (.contains missing i)
-          (col-rdr i)))
-      (^BaseVector get [v ^ints indexes]
-       (column->smile (ds-col/select col indexes)))
-      (getByte [v i]
-        (.read (typecast/datatype->reader :int8 col-rdr) i))
-      (getShort [v i]
-        (.read (typecast/datatype->reader :int16 col-rdr) i))
-      (getInt [v i]
-        (.read (typecast/datatype->reader :int32 col-rdr) i))
-      (getLong [v i]
-        (.read (typecast/datatype->reader :int64 col-rdr) i))
-      (getFloat [v i]
-        (.read (typecast/datatype->reader :float32 col-rdr) i))
-      (getDouble [v i]
-        (.read (typecast/datatype->reader :float64 col-rdr) i))
-      (stream [v]
-        (.parallelStream ^Collection col-rdr)))))
+      :string (string-vector col col-rdr)
+      (object-vector col col-rdr))))
 
 
-(declare dataset->smile)
+(declare dataset->smile smile-dataframe->dataset)
+
+
+(defn factorize-dataset
+  [ds]
+  (->> ds
+       (map (fn [col]
+              (->>
+               (let [col-dtype (dtype/get-datatype col)]
+                 (cond
+                   (= :string col-dtype)
+                   (factorize-string-column col)
+                   (or (= :local-time col-dtype)
+                       (= :packed-local-time col-dtype))
+                   (dtype-dt-ops/get-milliseconds col)
+                   (dtype-dt/datetime-datatype? col-dtype)
+                   (dtype-dt-ops/get-epoch-milliseconds col)
+                   :else
+                   col)))))))
 
 
 (deftype SmileDataFrame [ds ^RoaringBitmap ds-missing
@@ -189,8 +315,16 @@
   ;;Dataset<Tuple> Implementation
   (size [this] (int (ds/row-count ds)))
   (ncols [this] (int (ds/column-count ds)))
-  (toArray [this])
-  (toMatrix [this])
+  (toArray [this]
+    (->> (factorize-dataset ds)
+         (map #(dtype/make-container :java-array :float64 %))
+         (into-array)))
+  (toMatrix [this]
+    (let [retval (Matrix/of (ds/row-count ds) (ds/column-count ds) 0)]
+      ;;Given the matrix is row major, we can just copy successive columns directly
+      ;;into the data portion.
+      (dtype/copy-raw->item! (factorize-dataset ds) (.data retval))
+      retval))
   (^boolean isNullAt [this ^int row-num ^int col-num]
    (.contains ^RoaringBitmap (.get missing col-num)
               row-num))
@@ -256,8 +390,71 @@
   (^BaseVector column [this ^int idx]
    (column->smile (nth ds idx)))
   (^Vector vector [this ^int idx]
+   (let [retval (column->smile (nth ds idx))]
+     (when-not (instance? Vector retval)
+       (throw (Exception. "Datatype is not converted to vector")))
+     retval))
+  (^BooleanVector booleanVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :boolean (dtype/get-datatype col))
+        (throw (Exception. "Column is not a boolean column")))
+      (column->smile col)))
+  (^ByteVector byteVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :int8 (dtype/get-datatype col))
+        (throw (Exception. "Column is not a byte column")))
+      (column->smile col)))
+  (^ShortVector shortVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :int16 (dtype/get-datatype col))
+        (throw (Exception. "Column is not a short column")))
+      (column->smile col)))
+  (^IntVector intVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :int32 (dtype/get-datatype col))
+        (throw (Exception. "Column is not an int column")))
+      (column->smile col)))
+  (^LongVector longVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :int64 (dtype/get-datatype col))
+        (throw (Exception. "Column is not a long column")))
+      (column->smile col)))
+  (^FloatVector floatVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :float32 (dtype/get-datatype col))
+        (throw (Exception. "Column is not a float column")))
+      (column->smile col)))
+  (^DoubleVector doubleVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :float64 (dtype/get-datatype col))
+        (throw (Exception. "Column is not a double column")))
+      (column->smile col)))
+  (^StringVector stringVector [this ^int col-num]
+    (let [col (nth ds col-num)]
+      (when-not (= :string (dtype/get-datatype col))
+        (throw (Exception. "Column is not a string column")))
+      (column->smile col)))
+  (^DataFrame select [this ^ints col-indexes]
+   (-> (ds/select-columns-by-index ds col-indexes)
+       (dataset->smile)))
+  (^DataFrame drop [this ^ints col-indexes]
+   (let [col-indexes (set (map long col-indexes))]
+     (->> (range (ds/column-count ds))
+          (remove col-indexes)
+          (ds/select-columns-by-index ds)
+          (dataset->smile))))
+  (^DataFrame merge [this ^"[Lsmile.data.DataFrame;" dataframes]
+   (->> dataframes
+        (map smile-dataframe->dataset)
+        (reduce (fn [ds other-ds]
+                  (ds/append-columns ds other-ds))
+                ds)
+        (dataset->smile)))
+  (^DataFrame union [this ^"[Lsmile.data.DataFrame;" dataframes]
+   (->> dataframes
+        (map smile-dataframe->dataset)
+        (apply ds/concat ds)))
 
-   )
   (^DataFrame of [this ^ints indexes]
       (dataset->smile (ds/select-rows ds indexes)))
 
@@ -272,5 +469,23 @@
 
 (defn dataset->smile
   "Convert a dataset to a smile.data DataFrame"
-  [ds]
-  )
+  ^DataFrame [ds]
+  (if (instance? DataFrame ds)
+    ds
+    (let [^RoaringBitmap ds-missing (if (== 0 (ds/column-count ds))
+                                      (RoaringBitmap.)
+                                      (reduce dtype/set-or
+                                              (map ds-col/missing ds)))
+          missing (mapv ds-col/missing ds)
+          readers (mapv dtype/->reader ds)
+          schema (dataset->schema ds)]
+      (.runOptimize ds-missing)
+      (SmileDataFrame. ds ds-missing missing readers schema))))
+
+
+(defn smile-dataframe->dataset
+  [df]
+  (if (instance? SmileDataFrame df)
+    (.ds ^SmileDataFrame df)
+
+    ))

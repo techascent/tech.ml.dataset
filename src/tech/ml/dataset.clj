@@ -23,6 +23,7 @@
             [tech.ml.dataset.base :as ds-base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
+            [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype.casting :as casting]
             [tech.parallel.for :as parallel-for]
             [clojure.math.combinatorics :as comb]
@@ -102,6 +103,11 @@
                         ->>dataset
                         from-prototype
                         write-csv!)
+
+
+(defn select-columns-by-index
+  [ds idx-seq]
+  (ds-proto/select-columns-by-index ds idx-seq))
 
 
 (par-util/export-symbols tech.ml.dataset.print

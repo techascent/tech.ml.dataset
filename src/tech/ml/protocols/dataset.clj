@@ -25,6 +25,8 @@ Error if column does not exist.")
     "Reorder/trim dataset according to this sequence of indexes.  Returns a new dataset.
 colname-seq - either keyword :all or list of column names with no duplicates.
 index-seq - either keyword :all or list of indexes.  May contain duplicates.")
+  (select-columns-by-index [dataset num-seq]
+    "Select a subset of columns by index.")
   (supported-column-stats [dataset]
     "Return the set of natively supported stats for the dataset.  This must be at least
 #{:mean :variance :median :skew}.")
