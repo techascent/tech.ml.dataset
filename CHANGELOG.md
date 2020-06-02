@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.0-beta-XX
+ * Datatype readers now suppport typed java stream creation (typedStream method).
+
 ## 2.0-beta-54
  * Issue-88 - rename column fails on false name
 
