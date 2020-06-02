@@ -1,4 +1,7 @@
 # Changelog
+## 2.0-beta-55
+ * Issue-89 - column iterables operate in object space meaning missing
+   values are nil as opposed to the datatype's missing value indicator.
 
 ## 2.0-beta-54
  * Issue-88 - rename column fails on false name
