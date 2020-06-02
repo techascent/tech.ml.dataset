@@ -8,7 +8,8 @@
   (:import [tech.ml.dataset.impl.dataset Dataset]
            [smile.data DataFrame Tuple]
            [smile.data.type StructType StructField DataType DataType$ID DataTypes]
-           [smile.data.vector BaseVector]
+           [smile.data.vector BaseVector Vector BooleanVector ByteVector ShortVector
+            IntVector LongVector FloatVector DoubleVector StringVector]
            [org.roaringbitmap RoaringBitmap]
            [java.util Collection List ArrayList]))
 
@@ -89,9 +90,9 @@
       (^BaseVector get [v ^ints indexes]
        (column->smile (ds-col/select col indexes)))
       (getByte [v i]
-        (.read (typecast/datatype->reader :int8 col-rdr) i));
+        (.read (typecast/datatype->reader :int8 col-rdr) i))
       (getShort [v i]
-        (.read (typecast/datatype->reader :int16 col-rdr) i));
+        (.read (typecast/datatype->reader :int16 col-rdr) i))
       (getInt [v i]
         (.read (typecast/datatype->reader :int32 col-rdr) i))
       (getLong [v i]
