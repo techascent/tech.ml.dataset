@@ -44,7 +44,6 @@
                                 new-col-name)
                         {:existing-columns existing-names
                          :column-name new-col-name})))
-
       (new-dataset
        (ds-proto/dataset-name dataset)
        metadata
