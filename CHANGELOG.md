@@ -1,4 +1,11 @@
 # Changelog
+
+## 2.0-beta-56
+ * Upgraded smile to latest version (2.4.0).  This is a very new API so if
+   you are relying transitively on smile via dataset this probably broken your
+   systems.  Smile 1.4.X and smile 2.X are very different interfaces so this 
+   is important to get in before releasing a 2.0 version of dataset.
+
 ## 2.0-beta-55
  * Issue-89 - column iterables operate in object space meaning missing
    values are nil as opposed to the datatype's missing value indicator.
