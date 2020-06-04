@@ -1,4 +1,7 @@
 # Changelog
+## 2.0-beta-55
+ * Issue-89 - column iterables operate in object space meaning missing
+   values are nil as opposed to the datatype's missing value indicator.
 
 ## 2.0-beta-XX
  * Datatype readers now suppport typed java stream creation (typedStream method).
