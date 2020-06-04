@@ -608,20 +608,21 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 
 (par-util/export-symbols tech.ml.dataset.modelling
-                        set-inference-target
-                        column-label-map
-                        inference-target-label-map
-                        dataset-label-map
-                        inference-target-label-inverse-map
-                        num-inference-classes
-                        feature-ecount
-                        model-type
-                        column-values->categorical
-                        reduce-column-names
-                        has-column-label-map?
-                        ->k-fold-datasets
-                        ->train-test-split
-                        ->row-major)
+                         set-inference-target
+                         inference-target-column-names
+                         column-label-map
+                         inference-target-label-map
+                         dataset-label-map
+                         inference-target-label-inverse-map
+                         num-inference-classes
+                         feature-ecount
+                         model-type
+                         column-values->categorical
+                         reduce-column-names
+                         has-column-label-map?
+                         ->k-fold-datasets
+                         ->train-test-split
+                         ->row-major)
 
 
 (par-util/export-symbols tech.ml.dataset.math

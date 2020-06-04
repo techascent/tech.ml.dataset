@@ -41,6 +41,12 @@
                                 :inference
                                 :feature)))))))
 
+(defn inference-target-column-names
+  [ds]
+  (->> (map meta ds)
+       (filter #(= :inference (:column-type %)))
+       (map :name)))
+
 
 (defn column-label-map
   [dataset column-name]
