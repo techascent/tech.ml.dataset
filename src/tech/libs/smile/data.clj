@@ -4,7 +4,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.casting :as casting]
-            [tech.ml.dataset :as ds]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.string-table :as str-table]
             [clojure.set :as set])
@@ -131,7 +131,7 @@
       (VectorFactory/genericVector field col-ary))))
 
 
-(defn dataset->smile-dataframe
+(defn dataset->dataframe
   "Convert a dataset to a smile.data DataFrame"
   ^DataFrame [ds]
   (if (instance? DataFrame ds)
@@ -228,9 +228,10 @@
   (->writer [v options] (dtype-proto/->writer (.array v) options)))
 
 
-(defn smile-dataframe->dataset
+(defn dataframe->dataset
   ([df {:keys [unify-strings?]
-        :or {unify-strings? true}}]
+        :or {unify-strings? true}
+        :as options}]
    (->> df
         (map (fn [^BaseVector smile-vec]
                {:name (.name smile-vec)
@@ -241,9 +242,9 @@
                     (dtype/copy! smile-vec str-t)
                     str-t)
                   smile-vec)}))
-        (ds/new-dataset "_unnamed")))
+        (ds-impl/new-dataset options  {:name "_unnamed"})))
   ([df]
-   (smile-dataframe->dataset df {})))
+   (dataframe->dataset df {})))
 
 
 (defmethod print-method DataFrameImpl

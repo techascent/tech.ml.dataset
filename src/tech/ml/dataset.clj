@@ -26,6 +26,7 @@
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype.casting :as casting]
             [tech.parallel.for :as parallel-for]
+            [tech.libs.smile.data :as smile-data]
             [clojure.math.combinatorics :as comb]
             [clojure.tools.logging :as log]
             [clojure.set :as set])
@@ -102,6 +103,7 @@
                         ->dataset
                         ->>dataset
                         from-prototype
+                        ensure-array-backed
                         write-csv!)
 
 
@@ -772,7 +774,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   If label count is 1, then if there is a label-map associated with column
   generate sequence of labels by reverse mapping the column(s) back to the original
   dataset values.  If there are multiple label columns results are presented in
-  a dataset."
+  a dataset.
+  Return a reader of labels"
   [dataset]
   (when-not (seq (col-filters/target? dataset))
     (throw (ex-info "No label columns indicated" {})))
@@ -784,3 +787,19 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
     (if (= 1 (column-count dataset))
       (dtype/->reader (first dataset))
       dataset)))
+
+
+(defn dataset->smile-dataframe
+  "Convert a dataset to a smile dataframe.
+
+  This operation may clone columns if they aren't backed by java heap arrays.
+  See ensure-array-backed
+
+  It is important to note that smile supports a subset of the functionality in
+  tech.ml.dataset.  One difference is smile columns have string column names and
+  have no missing set.
+
+  Returns a smile.data.DataFrame"
+  ^smile.data.DataFrame [ds]
+  (-> (ensure-array-backed ds)
+      (smile-data/dataset->dataframe)))
