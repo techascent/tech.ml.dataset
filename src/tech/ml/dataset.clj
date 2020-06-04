@@ -789,6 +789,24 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
       dataset)))
 
 
+(defn invert-string->number
+  "When ds-pipe/string->number is called it creates label maps.  This reverts
+  the dataset back to those labels"
+  [ds]
+  (->> (map meta ds)
+       (clojure.core/filter :label-map)
+       (reduce (fn [ds {:keys [name label-map]}]
+                 (let [src-rdr (dtype/->reader (ds name))
+                       inv-map (set/map-invert label-map)]
+                   (assoc
+                    ds name
+                    (dtype/clone
+                     (dtype/object-reader
+                      (row-count ds)
+                      #(get inv-map (long (src-rdr %)) nil))))))
+               ds)))
+
+
 (defn dataset->smile-dataframe
   "Convert a dataset to a smile dataframe.
 
