@@ -72,10 +72,16 @@
     (str cname)))
 
 
+(defn smile-struct-field
+  ^StructField [name dtype]
+  (StructField. (colname->str name)
+                (datatype->smile dtype)))
+
+
 (defn column->field
   ^StructField [col]
-  (StructField. (colname->str (ds-col/column-name col))
-                (datatype->smile (dtype/get-datatype col))))
+  (smile-struct-field (ds-col/column-name col)
+                      (dtype/get-datatype col)))
 
 
 (defn datatype->smile-vec-type
