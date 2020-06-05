@@ -2,7 +2,7 @@
 
 ## 2.0-beta-56
  * Upgraded smile to latest version (2.4.0).  This is a very new API so if
-   you are relying transitively on smile via dataset this probably broken your
+   you are relying transitively on smile via dataset this probably broke your
    systems.  Smile 1.4.X and smile 2.X are very different interfaces so this 
    is important to get in before releasing a 2.0 version of dataset.
 
