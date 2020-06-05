@@ -190,36 +190,49 @@
 
   The return value fulfills the dataset protocols."
   ([options ds-metadata column-seq]
-   (let [column-seq (->> (ds-col/ensure-column-seq column-seq)
-                         (map-indexed (fn [idx column]
-                                        (let [cname (ds-col/column-name
-                                                     column)]
-                                          (if (and (string? cname)
-                                                   (empty? cname))
-                                            (ds-col/set-name column idx)
-                                            column)))))
-         ;;Options was dataset-name so have to keep that pathway going.
+   (let [;;Options was dataset-name so have to keep that pathway going.
          dataset-name (or (if (map? options)
                             (:dataset-name options)
                             options)
-                          "_unnamed")
-         column-seq (if (and (map? options)
-                             (:key-fn options))
-                      (let [key-fn (:key-fn options)]
-                        (->> column-seq
-                             (map #(ds-col/set-name
-                                    %
-                                    (key-fn (ds-col/column-name %))))))
-                      column-seq)]
-     (Dataset. (vec column-seq)
-               (->> column-seq
-                    (map-indexed
-                     (fn [idx col]
-                       [(ds-col/column-name col) idx]))
-                    (into {}))
-               (assoc (col-impl/->persistent-map ds-metadata)
-                      :name
-                      dataset-name))))
+                          "_unnamed")]
+     (if-not (seq column-seq)
+       (Dataset. [] {}
+                 (assoc (col-impl/->persistent-map ds-metadata)
+                        :name
+                        dataset-name))
+       (let [column-seq (->> (ds-col/ensure-column-seq column-seq)
+                             (map-indexed (fn [idx column]
+                                            (let [cname (ds-col/column-name
+                                                         column)]
+                                              (if (and (string? cname)
+                                                       (empty? cname))
+                                                (ds-col/set-name column idx)
+                                                column)))))
+             sizes (->> (map dtype/ecount column-seq)
+                        distinct)
+             column-seq (if (== (count sizes) 1)
+                          column-seq
+                          (let [max-size (long (apply max 0 sizes))]
+                            (->> column-seq
+                                 (map #(ds-col/extend-column-with-empty
+                                        % (- max-size (count %)))))))
+             column-seq (if (and (map? options)
+                                 (:key-fn options))
+                          (let [key-fn (:key-fn options)]
+                            (->> column-seq
+                                 (map #(ds-col/set-name
+                                        %
+                                        (key-fn (ds-col/column-name %))))))
+                          column-seq)]
+         (Dataset. (vec column-seq)
+                   (->> column-seq
+                        (map-indexed
+                         (fn [idx col]
+                           [(ds-col/column-name col) idx]))
+                        (into {}))
+                   (assoc (col-impl/->persistent-map ds-metadata)
+                          :name
+                          dataset-name))))))
   ([options column-seq]
    (new-dataset options {} column-seq))
   ([column-seq]

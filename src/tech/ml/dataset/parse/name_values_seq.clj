@@ -10,13 +10,7 @@
 
 (defn parse-nvs
   [name-values-seq options]
-  (let [sizes (->> (map (comp dtype/ecount second) name-values-seq)
-                   distinct)
-
-        _ (when-not (= 1 (count sizes))
-            (throw (ex-info (format "Different sized columns detected: %s"
-                                    sizes) {})))
-        name-order (map first name-values-seq)
+  (let [name-order (map first name-values-seq)
         ;;Allow explicit missing/etc to be passed in.
         map-data (filter (comp map? second) name-values-seq)
         ;;fastpaths for primitive arrays - no need to scan the data.
