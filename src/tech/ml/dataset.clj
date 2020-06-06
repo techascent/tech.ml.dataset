@@ -792,19 +792,21 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 (defn invert-string->number
   "When ds-pipe/string->number is called it creates label maps.  This reverts
-  the dataset back to those labels"
+  the dataset back to those labels.  Currently results in object columns
+  so a cast operation may be needed to convert to desired datatype."
   [ds]
   (->> (map meta ds)
        (clojure.core/filter :label-map)
+       ;;TODO - map back to original datatype.  Currently
        (reduce (fn [ds {:keys [name label-map]}]
                  (let [src-rdr (dtype/->reader (ds name))
                        inv-map (set/map-invert label-map)]
                    (assoc
                     ds name
-                    (dtype/clone
-                     (dtype/object-reader
-                      (row-count ds)
-                      #(get inv-map (long (src-rdr %)) nil))))))
+                    (-> (dtype/object-reader
+                         (row-count ds)
+                         #(get inv-map (long (src-rdr %)) nil))
+                        (dtype/clone)))))
                ds)))
 
 
