@@ -23,8 +23,10 @@
             [tech.ml.dataset.base :as ds-base]
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
+            [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype.casting :as casting]
             [tech.parallel.for :as parallel-for]
+            [tech.libs.smile.data :as smile-data]
             [clojure.math.combinatorics :as comb]
             [clojure.tools.logging :as log]
             [clojure.set :as set])
@@ -101,7 +103,13 @@
                         ->dataset
                         ->>dataset
                         from-prototype
+                        ensure-array-backed
                         write-csv!)
+
+
+(defn select-columns-by-index
+  [ds idx-seq]
+  (ds-proto/select-columns-by-index ds idx-seq))
 
 
 (par-util/export-symbols tech.ml.dataset.print
@@ -600,20 +608,21 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 
 (par-util/export-symbols tech.ml.dataset.modelling
-                        set-inference-target
-                        column-label-map
-                        inference-target-label-map
-                        dataset-label-map
-                        inference-target-label-inverse-map
-                        num-inference-classes
-                        feature-ecount
-                        model-type
-                        column-values->categorical
-                        reduce-column-names
-                        has-column-label-map?
-                        ->k-fold-datasets
-                        ->train-test-split
-                        ->row-major)
+                         set-inference-target
+                         inference-target-column-names
+                         column-label-map
+                         inference-target-label-map
+                         dataset-label-map
+                         inference-target-label-inverse-map
+                         num-inference-classes
+                         feature-ecount
+                         model-type
+                         column-values->categorical
+                         reduce-column-names
+                         has-column-label-map?
+                         ->k-fold-datasets
+                         ->train-test-split
+                         ->row-major)
 
 
 (par-util/export-symbols tech.ml.dataset.math
@@ -766,7 +775,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   If label count is 1, then if there is a label-map associated with column
   generate sequence of labels by reverse mapping the column(s) back to the original
   dataset values.  If there are multiple label columns results are presented in
-  a dataset."
+  a dataset.
+  Return a reader of labels"
   [dataset]
   (when-not (seq (col-filters/target? dataset))
     (throw (ex-info "No label columns indicated" {})))
@@ -778,3 +788,39 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
     (if (= 1 (column-count dataset))
       (dtype/->reader (first dataset))
       dataset)))
+
+
+(defn invert-string->number
+  "When ds-pipe/string->number is called it creates label maps.  This reverts
+  the dataset back to those labels.  Currently results in object columns
+  so a cast operation may be needed to convert to desired datatype."
+  [ds]
+  (->> (map meta ds)
+       (clojure.core/filter :label-map)
+       ;;TODO - map back to original datatype.  Currently
+       (reduce (fn [ds {:keys [name label-map]}]
+                 (let [src-rdr (dtype/->reader (ds name))
+                       inv-map (set/map-invert label-map)]
+                   (assoc
+                    ds name
+                    (-> (dtype/object-reader
+                         (row-count ds)
+                         #(get inv-map (long (src-rdr %)) nil))
+                        (dtype/clone)))))
+               ds)))
+
+
+(defn dataset->smile-dataframe
+  "Convert a dataset to a smile dataframe.
+
+  This operation may clone columns if they aren't backed by java heap arrays.
+  See ensure-array-backed
+
+  It is important to note that smile supports a subset of the functionality in
+  tech.ml.dataset.  One difference is smile columns have string column names and
+  have no missing set.
+
+  Returns a smile.data.DataFrame"
+  ^smile.data.DataFrame [ds]
+  (-> (ensure-array-backed ds)
+      (smile-data/dataset->dataframe)))

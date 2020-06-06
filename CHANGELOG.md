@@ -1,7 +1,33 @@
 # Changelog
+
+## 2.0-beta-56 --
+**breaking changes**
+ * Upgraded smile to latest version (2.4.0).  This is a very new API so if
+   you are relying transitively on smile via dataset this may have broke your
+   systems.  Smile 1.4.X and smile 2.X are very different interfaces so this
+   is important to get in before releasing a 2.0 version of dataset.
+
+ There is now an efficient conversion to/from smile dataframes.
+
+### New Functions
+   * `->dataset` conversion a smile dataframe to a dataset.
+   * `dataset->smile-dataframe` conversion a dataset to a smile dataframe.
+     Columns that are reader based will be copied into java arrays.  To enable
+	 predictable behavior a new function was added.
+   * `ensure-array-backed` - ensure each column in the dataset has a zerocopy
+   conversion to a java array enabled by `tech.v2.datatype/->array`.
+   * `invert-string->number` - The pipeline function `string->number` stores a string
+     table in the column metadata.  Using this metadata, invert the string->number
+	 operation returning the column back to its original state.  This metadata is
+	 :label-map which is a map from column-data to number.
+
+
 ## 2.0-beta-55
  * Issue-89 - column iterables operate in object space meaning missing
    values are nil as opposed to the datatype's missing value indicator.
+
+## 2.0-beta-XX
+ * Datatype readers now suppport typed java stream creation (typedStream method).
 
 ## 2.0-beta-54
  * Issue-88 - rename column fails on false name

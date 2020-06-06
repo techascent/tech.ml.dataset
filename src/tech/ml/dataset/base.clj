@@ -7,12 +7,14 @@
             [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.parse.mapseq :as ds-parse-mapseq]
             [tech.ml.dataset.parse.name-values-seq :as nvs-parse]
+            [tech.libs.smile.data :as smile-data]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
             [tech.parallel.for :as parallel-for]
@@ -24,6 +26,7 @@
            [tech.ml.dataset.impl.dataset Dataset]
            [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
+           [smile.data DataFrame]
            [it.unimi.dsi.fastutil.longs LongArrayList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
@@ -786,7 +789,8 @@ This is an interface change and we do apologize!"))))
            dataset
            (instance? InputStream dataset)
            (ds-impl/parse-dataset dataset options)
-
+           (instance? DataFrame dataset)
+           (smile-data/dataframe->dataset dataset options)
            (string? dataset)
            (let [^String dataset dataset
                  {:keys [gzipped? json? tsv? xls? xlsx?]}
@@ -868,6 +872,41 @@ This is an interface change and we do apologize!"))))
        (read [this# idx#]
          (when-not (.contains missing# idx#)
            (data->string (.read reader# idx#)))))))
+
+
+(defn ensure-array-backed
+  "Ensure the column data in the dataset is stored in pure java arrays.  This is
+  sometimes necessary for interop with other libraries and this operation will
+  force any lazy computations to complete.  This also clears the missing set
+  for each column and writes the missing values to the new arrays.
+
+  Columns that are already array backed and that have no missing values are not
+  changed and retuned.
+
+  The postcondition is that dtype/->array will return a java array in the appropriate
+  datatype for each column.
+
+  options -
+  :unpack? - unpack packed datetime types.  Defaults to true"
+  ([ds {:keys [unpack?]
+        :or {unpack? true}}]
+   (reduce (fn [ds col]
+             (let [col-dtype (dtype/get-datatype col)
+                   colname (ds-col/column-name col)
+                   col (if (and unpack? (dtype-dt/datetime-datatype? col-dtype))
+                         (dtype-dt/unpack col)
+                         col)]
+               (if (dtype/->array col)
+                 ds
+                 (add-or-update-column ds
+                                       colname
+                                       (dtype/make-container :java-array
+                                                             (dtype/get-datatype col)
+                                                             col)))))
+           ds
+           (columns ds)))
+  ([ds]
+   (ensure-array-backed ds {})))
 
 
 (defn write-csv!
