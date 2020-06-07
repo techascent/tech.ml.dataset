@@ -8,7 +8,9 @@
 currently in-memory columnwise databases and we support parsing from file or
 input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
 and sequences of maps** as input sources.  [SQL bindings](https://github.com/techascent/tech.ml.dataset.sql) 
-are provided as a separate library.
+are provided as a separate library. We also support [efficient conversion](src/libs/smile/data.clj) 
+to/from smile DataFrames and thus we have transitive support for Apache Arrow and Parquet files.  Load
+a DataFrame and then call ->dataset on the dataframe :-).
 
 Data storage is [efficient](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) 
 (primitive arrays), datetime types are often converted to an integer representation
