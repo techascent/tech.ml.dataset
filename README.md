@@ -7,12 +7,12 @@
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
 input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
-and sequences of maps** as input sources.  [SQL bindings](https://github.com/techascent/tech.ml.dataset.sql) 
-are provided as a separate library. We also support [efficient conversion](src/tech/libs/smile/data.clj) 
+and sequences of maps** as input sources.  [SQL bindings](https://github.com/techascent/tech.ml.dataset.sql)
+are provided as a separate library. We also support [efficient conversion](src/tech/libs/smile/data.clj)
 to/from smile DataFrames and thus we have transitive support for Apache Arrow and Parquet files.  Load
 a DataFrame and then call ->dataset on the dataframe :-).
 
-Data storage is [efficient](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) 
+Data storage is [efficient](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37)
 (primitive arrays), datetime types are often converted to an integer representation
 and strings are loaded into string tables.  These features together dramatically
 decrease the working set size in memory.  Because data is stored in columnar fashion
@@ -69,7 +69,7 @@ user>
 
 
 ;;Loading from the web is no problem
-user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat" 
+user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat"
                                   {:header-row? false}))
 #'user/airports
 user> (ds/head airports)
@@ -174,11 +174,32 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 ;;Columnwise arithmetic manipulations (+,-, and many more) are provided via the
 ;;tech.v2.datatype.functional namespace.
 
-;;Datetime columns can be operated on - plus,minus, get-years, get-days, and 
+;;Datetime columns can be operated on - plus,minus, get-years, get-days, and
 ;;many more - uniformly via the tech.v2.datatype.datetime.operations namespace.
 
 ;;There is much more.  Please checkout the walkthough and try it out!
 ```
+
+### Arrow and Parquet Support
+
+This support comes in via the smile pathway and thus there is currently not great
+support for missing values for those two formats.  You will need to rescan the data
+most likely to know where the missing values lie.
+
+#### Parquet Depenedencies
+
+```clojure
+org.apache.parquet/parquet-hadoop {:mvn/version "1.10.1"}
+org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
+```
+
+#### Arrow Dependencies
+
+```clojure
+org.apache.arrow/arrow-memory {:mvn/version "0.16.0"}
+org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
+```
+
 
 ## More Documentation
 
@@ -204,7 +225,7 @@ test/data/stocks.csv: descriptive-stats [3 10]:
 
 
 ## Keywords
- - csv, xlsx, pandas, dataframe, dplyr, data.table, modelling 
+ - csv, xlsx, pandas, dataframe, dplyr, data.table, modelling
 
 
 ## License
