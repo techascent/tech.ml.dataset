@@ -742,7 +742,12 @@ This is an interface change and we do apologize!"))))
   Options:
   :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
   :dataset-name - set the name of the dataset.
-  :file-type - Override filetype discovery mechanism for strings
+  :file-type - Override filetype discovery mechanism for strings or force a particular
+     parser for an input stream.  Note that arrow and parquet must have paths on disk
+     and cannot currently load from input stream.  Acceptible file types are:
+     #{:csv :tsv :xlsx :xls :arrow :parquet}.
+  :gzipped? - for file formats that support it, override autodetection and force
+     creation of a gzipped input stream as opposed to a normal input stream.
   :column-whitelist - either sequence of string column names or sequence of column
      indices of columns to whitelist.
   :column-blacklist - either sequence of string column names or sequence of column
