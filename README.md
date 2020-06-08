@@ -186,7 +186,7 @@ This support comes in via the smile pathway and thus there is currently not grea
 support for missing values for those two formats.  You will need to rescan the data
 most likely to know where the missing values lie.
 
-#### Parquet Depenedencies
+#### Parquet Dependencies
 
 ```clojure
 org.apache.parquet/parquet-hadoop {:mvn/version "1.10.1"}
