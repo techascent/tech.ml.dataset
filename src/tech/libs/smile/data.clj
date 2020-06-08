@@ -163,7 +163,7 @@
   (get-datatype [v]
     (if-let [retval (get smile->datatype-map (.type v))]
       retval
-      (throw (Exception. "Unrecognized datatype"))))
+      :object))
   dtype-proto/PCountable
   (ecount [v] (long (.size v))))
 
@@ -244,8 +244,21 @@
                 :data
                 (if (and unify-strings?
                          (= :string (dtype/get-datatype smile-vec)))
-                  (let [str-t (str-table/make-string-table (dtype/ecount smile-vec))]
-                    (dtype/copy! smile-vec str-t)
+                  (let [str-t (str-table/make-string-table (dtype/ecount smile-vec))
+                        col-rdr (dtype/->reader smile-vec)
+                        str-rdr (dtype/object-reader
+                                 (dtype/ecount col-rdr)
+                                 #(let [read-val (col-rdr %)]
+                                    (cond
+                                      (string? read-val)
+                                      read-val
+                                      (nil? read-val)
+                                      ""
+                                      :else
+                                      (throw (Exception.
+                                              (format "Value not a string: %s"
+                                                      read-val))))))]
+                    (dtype/copy! str-rdr str-t)
                     str-t)
                   smile-vec)}))
         (ds-impl/new-dataset options  {:name "_unnamed"})))

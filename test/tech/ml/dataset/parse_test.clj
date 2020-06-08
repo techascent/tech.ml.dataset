@@ -326,3 +326,27 @@
 (deftest parse-ip-addrs-as-string
   (let [data (ds-base/->dataset "test/data/ip-addrs.csv")]
     (is (= :string (dtype/get-datatype (data "ip"))))))
+
+
+(def arrow-file "test/data/iris.feather")
+(def parquet-file "test/data/parquet/userdata1.parquet")
+
+
+(deftest parse-parquet
+  (let [ds (ds-base/->dataset parquet-file)]
+    (is (= 13 (ds-base/column-count ds)))
+    (is (= 1000 (ds-base/row-count ds)))
+    (is (= #{:local-date-time :float64 :int32 :string}
+           (->> (map dtype/get-datatype ds)
+                set)))))
+
+
+
+;; Failing due to apprently invalid iris.feather file
+;; (deftest parse-arrow
+;;   (let [ds (ds-base/->dataset arrow-file)]
+;;     (is (= 13 (ds-base/column-count ds)))
+;;     (is (= 1000 (ds-base/row-count ds)))
+;;     (is (= #{:local-date-time :float64 :int32 :string}
+;;            (->> (map dtype/get-datatype ds)
+;;                 set)))))

@@ -9,7 +9,8 @@
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.readers.concat :as concat-rdr]
-            [tech.v2.datatype.readers.const :as const-rdr])
+            [tech.v2.datatype.readers.const :as const-rdr]
+            [tech.v2.datatype.builtin-op-providers :as builtin-op-providers])
   (:import [it.unimi.dsi.fastutil.longs LongArrayList]
            [java.util List]
            [tech.ml.dataset.impl.column Column]
@@ -261,24 +262,17 @@ Implementations should check their metadata before doing calculations."
 
 (defn scan-data-for-missing
   [coldata]
-  (let [data-reader (ensure-column-reader coldata)]
-    (if (= :object (dtype/get-datatype data-reader))
-      (cond
-        (contains? object-primitive-array-types (type data-reader))
-        (process-object-primitive-array-data data-reader)
-        (boolean? (first data-reader))
-        (scan-object-numeric-data-for-missing :boolean data-reader)
-        (number? (first data-reader))
-        (scan-object-numeric-data-for-missing :float64 data-reader)
-        (string? (first data-reader))
-        (scan-object-data-for-missing :string data-reader)
-        (keyword? (first data-reader))
-        (scan-object-data-for-missing :keyword data-reader)
-        (symbol? (first data-reader))
-        (scan-object-data-for-missing :symbol data-reader)
-        :else
-        (scan-object-data-for-missing :object data-reader))
-      {:data data-reader})))
+  (if (contains? object-primitive-array-types coldata)
+    (process-object-primitive-array-data coldata)
+    (let [data-reader (dtype/->reader (ensure-column-reader coldata))]
+      (if (= :object (dtype/get-datatype data-reader))
+        (let [target-dtype (reduce builtin-op-providers/widest-datatype
+                                   (->> data-reader
+                                        (remove nil?)
+                                        (take 20)
+                                        (map dtype/get-datatype)))]
+          (scan-object-numeric-data-for-missing target-dtype data-reader))
+        {:data data-reader}))))
 
 
 (defn ensure-column

@@ -327,7 +327,7 @@
 (deftest default-names
   (is (= "test/data/stocks.csv"
          (ds/dataset-name (ds/->dataset "test/data/stocks.csv"))))
-  (is (= "stocks"
+  (is (= "test/data/stocks.xlsx"
          (ds/dataset-name (ds/->dataset "test/data/stocks.xlsx")))))
 
 

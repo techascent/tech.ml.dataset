@@ -27,6 +27,7 @@
            [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
            [smile.data DataFrame]
+           [smile.io Read]
            [it.unimi.dsi.fastutil.longs LongArrayList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
@@ -693,22 +694,41 @@ This is an interface change and we do apologize!"))))
   (take-nth n-val dataset))
 
 
-(defn- get-file-info
+(defn- str->file-info
   [^String file-str]
-  (let [gzipped? (.endsWith file-str ".gz")
-        json? (or (.endsWith file-str ".json")
-                  (.endsWith file-str ".json.gz"))
-        tsv? (or (.endsWith file-str ".tsv")
-                 (.endsWith file-str ".tsv.gz"))
-        xlsx? (or (.endsWith file-str ".xlsx")
-                  (.endsWith file-str ".xlsx.gz"))
-        xls? (or (.endsWith file-str ".xls")
-                 (.endsWith file-str ".xls.gz"))]
+  (let [file-str (.toLowerCase ^String file-str)
+        gzipped? (.endsWith file-str ".gz")
+        file-type (cond
+                    (or (.endsWith file-str ".json")
+                        (.endsWith file-str ".json.gz"))
+                    :json
+                    (or (.endsWith file-str ".tsv")
+                        (.endsWith file-str ".tsv.gz"))
+                    :tsv
+                    (or (.endsWith file-str ".xlsx")
+                        (.endsWith file-str ".xlsx.gz"))
+                    :xlsx
+                    (or (.endsWith file-str ".xls")
+                        (.endsWith file-str ".xls.gz"))
+                    :xls
+                    (.endsWith file-str ".parquet")
+                    :parquet
+                    (.endsWith file-str ".feather")
+                    :feather
+                    :else
+                    :csv)]
     {:gzipped? gzipped?
-     :json? json?
-     :tsv? tsv?
-     :xls? xls?
-     :xlsx? xlsx?}))
+     :file-type file-type}))
+
+
+(defn- wrap-stream-fn
+  [dataset gzipped? open-fn]
+  (with-open [^InputStream istream (if (instance? InputStream dataset)
+                                     dataset
+                                     (if gzipped?
+                                       (io/gzip-input-stream dataset)
+                                       (io/input-stream dataset)))]
+    (open-fn istream)))
 
 
 (defn ->dataset
@@ -722,6 +742,7 @@ This is an interface change and we do apologize!"))))
   Options:
   :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
   :dataset-name - set the name of the dataset.
+  :file-type - Override filetype discovery mechanism for strings
   :column-whitelist - either sequence of string column names or sequence of column
      indices of columns to whitelist.
   :column-blacklist - either sequence of string column names or sequence of column
@@ -779,7 +800,9 @@ This is an interface change and we do apologize!"))))
          ;;Unify table-name and dataset name with dataset-name
          ;;taking precedence.
          dataset-name (or dataset-name
-                          table-name)
+                          table-name
+                          (when (string? dataset)
+                            dataset))
          options (if dataset-name
                    (assoc options :dataset-name dataset-name)
                    options)
@@ -791,45 +814,65 @@ This is an interface change and we do apologize!"))))
            (ds-impl/parse-dataset dataset options)
            (instance? DataFrame dataset)
            (smile-data/dataframe->dataset dataset options)
-           (string? dataset)
-           (let [^String dataset dataset
-                 {:keys [gzipped? json? tsv? xls? xlsx?]}
-                 (get-file-info dataset)
-                 options (if (and tsv? (not (contains? options :separator)))
-                           (assoc options :separator \tab)
-                           options)
-                 options (if (and json? (not (contains? options :key-fn)))
-                           (assoc options :key-fn keyword)
-                           options)
-                 open-fn (cond
-                           json?
-                           #(-> (apply io/get-json % (apply clojure.core/concat
-                                                            options))
-                                (ds-parse-mapseq/mapseq->dataset
-                                 (merge {:dataset-name dataset}
-                                        options)))
-                           (or xls? xlsx?)
-                           (let [parse-fn (parallel-require/require-resolve
-                                           'tech.libs.poi/workbook->datasets)
-                                 options (if xls?
-                                           (assoc options :poi-file-type :xls)
-                                           (assoc options :poi-file-type :xlsx))]
-                             (fn [istream]
-                               (let [datasets (parse-fn istream options)]
-                                 (when-not (== 1 (count datasets))
-                                   (log/warnf "Found multiple (%d) worksheets when parsing %s"
-                                              (count datasets)
-                                              dataset))
-                                 (first datasets))))
-                           :else
-                           #(ds-impl/parse-dataset % (merge {:dataset-name dataset}
-                                                            options)))]
-             (with-open [istream (if gzipped?
-                                   (io/gzip-input-stream dataset)
-                                   (io/input-stream dataset))]
-               (open-fn istream)))
            (map? dataset)
            (nvs-parse/parse-nvs dataset options)
+           (or (string? dataset) (instance? InputStream dataset))
+           (let [{:keys [file-type gzipped?]}
+                 (cond
+                   (:file-type options)
+                   {:file-type (:file-type options)
+                    :gzipped? (:gzipped? options)}
+                   (string? dataset)
+                   (str->file-info dataset)
+                   :else
+                   {:file-type :csv})]
+             (cond
+               (= file-type :json)
+               (let [options (if (not (contains? options :key-fn))
+                               (assoc options :key-fn keyword)
+                               options)]
+                 (wrap-stream-fn
+                  dataset gzipped?
+                  #(-> (apply io/get-json % (apply clojure.core/concat
+                                                   options))
+                       (ds-parse-mapseq/mapseq->dataset options))))
+
+
+               (or (= file-type :xls) (= file-type :xlsx))
+               (let [parse-fn (parallel-require/require-resolve
+                               'tech.libs.poi/workbook->datasets)
+                     options (if (= file-type :xls)
+                               (assoc options :poi-file-type :xls)
+                               (assoc options :poi-file-type :xlsx))]
+                 (wrap-stream-fn
+                  dataset gzipped?
+                  (fn [istream]
+                    (let [datasets (parse-fn istream options)]
+                      (when-not (== 1 (count datasets))
+                        (log/warnf "Found multiple (%d) worksheets when parsing %s"
+                                   (count datasets)
+                                   dataset))
+                      (first datasets)))))
+               (or (= file-type :feather) (= file-type :parquet))
+               (do
+                 (when-not (string? dataset)
+                   (throw (Exception.
+                           "Arrow and parquet files must be string paths.")))
+                 (let [^String dataset dataset]
+                   (-> (case file-type
+                         :feather
+                         (Read/arrow dataset)
+                         :parquet
+                         (Read/parquet dataset))
+                       (->dataset options))))
+               :else
+               (wrap-stream-fn
+                dataset gzipped?
+                #(ds-impl/parse-dataset
+                  % (merge {:dataset-name dataset}
+                           (when (= file-type :tsv)
+                             {:separator \tab})
+                           options)))))
            :else
            (ds-parse-mapseq/mapseq->dataset dataset options))]
      (if dataset-name
@@ -921,7 +964,7 @@ This is an interface change and we do apologize!"))))
   ([ds output options]
    (let [{:keys [gzipped? tsv?]}
          (when (string? output)
-           (get-file-info output))
+           (str->file-info output))
          headers (into-array String (map data->string
                                          (column-names ds)))
          ^List str-readers
