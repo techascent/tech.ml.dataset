@@ -600,6 +600,15 @@
     (is (= [nil 2] (vec (ds :b))))))
 
 
+(deftest ->dataset-nvs-parse-test
+  (let [ds (ds/->dataset {:a [1 2 3]
+                          :b [4 5 6]})]
+    (is (= [1 2 3]
+           (vec (ds :a))))
+    (is (= [4 5 6]
+           (vec (ds :b))))))
+
+
 
 (comment
 

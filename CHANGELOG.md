@@ -1,6 +1,9 @@
 # Changelog
 
-## 2.0-beta-56 --
+## 2.0-beta-57
+ * Issue-92 - ->dataset failed for map-style datasets
+
+## 2.0-beta-56 
 **breaking changes**
  * Upgraded smile to latest version (2.4.0).  This is a very new API so if
    you are relying transitively on smile via dataset this may have broke your

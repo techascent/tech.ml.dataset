@@ -829,7 +829,7 @@ This is an interface change and we do apologize!"))))
                                    (io/input-stream dataset))]
                (open-fn istream)))
            (map? dataset)
-           (nvs-parse/name-values-seq->dataset dataset options)
+           (nvs-parse/parse-nvs dataset options)
            :else
            (ds-parse-mapseq/mapseq->dataset dataset options))]
      (if dataset-name
