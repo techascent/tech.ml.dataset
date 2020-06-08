@@ -609,6 +609,13 @@
            (vec (ds :b))))))
 
 
+(deftest apply-works-with-columns-and-vectors
+  (let [ds (ds/->dataset {:a [1 2 3]
+                          :b [4 5 6]})
+        a-col (ds :a)]
+    (is (= 2 (apply a-col [1])))
+    (is (= 2 (apply (dtype/->reader a-col) [1])))))
+
 
 (comment
 

@@ -358,6 +358,10 @@
   IFn
   (invoke [this idx]
     (.read (typecast/datatype->reader :object this) idx))
+  (applyTo [this args]
+    (when-not (= 1 (count args))
+      (throw (Exception. "Too many arguments to column")))
+    (.invoke this (first args)))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)
