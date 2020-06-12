@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0-beta-58
+ * `tech.datatype` now supports persistent vectors made via `clojure.core.vector-of`.
+   `vector-of` is a nice middle ground between raw persistent vectors and java arrays
+   and may be a simple path for many users into typed storage and datasets.
+   
+
 ## 2.0-beta-57
  * Issue-92 - ->dataset failed for map-style datasets
  * Issue-93 - use smile.io to load arrow/parquet files via `->dataset`
