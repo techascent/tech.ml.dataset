@@ -617,6 +617,16 @@
     (is (= 2 (apply (dtype/->reader a-col) [1])))))
 
 
+(deftest vector-of-test
+  (let [ds (ds/->dataset {:a (vector-of :float 1 2 3 4)
+                          :b (vector-of :short 1 2 3 4)})]
+    (is (= #{:float32 :int16}
+           (set (map dtype/get-datatype ds))))
+    (let [cds (dtype/clone ds)]
+      (is (every? #(not (nil? %))
+                  (map dtype/->array cds))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

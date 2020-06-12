@@ -1,9 +1,13 @@
 # Changelog
 
-## 2.0-beta-58
+## 2.0-beta-59
  * `tech.datatype` now supports persistent vectors made via `clojure.core.vector-of`.
    `vector-of` is a nice middle ground between raw persistent vectors and java arrays
    and may be a simple path for many users into typed storage and datasets.
+   
+   
+## 2.0-beta-58 
+ - mistake release...nothing to see here....
    
 
 ## 2.0-beta-57
