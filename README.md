@@ -12,7 +12,7 @@ are provided as a separate library. We also support [efficient conversion](src/t
 to/from smile DataFrames and thus we have transitive support for Apache Arrow and Parquet files.  Load
 a DataFrame and then call ->dataset on the dataframe :-).
 
-Data storage is [efficient](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37)
+Data size in memory is [minimized](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37)
 (primitive arrays), datetime types are often converted to an integer representation
 and strings are loaded into string tables.  These features together dramatically
 decrease the working set size in memory.  Because data is stored in columnar fashion
@@ -20,6 +20,8 @@ columnwise operations on the dataset are very fast.
 
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
+
+An alternative cutting-edge api is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
 ## Mini Walkthrough
 
