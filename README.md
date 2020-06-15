@@ -21,6 +21,8 @@ columnwise operations on the dataset are very fast.
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
+For a simple all-in-one data exploration pathway please checkout [simpledata](https://github.com/cnuernber/simpledata).
+
 An alternative cutting-edge api is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
 ## Mini Walkthrough
