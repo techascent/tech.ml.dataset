@@ -2,6 +2,12 @@
 
 ## 2.01
  * Issue-94 - Ragged csv data loads automatically now.
+ * Issue-87 - Printing double numbers is much better.
+ * Fixed saving tsv files - was writing out csv files.
+ * Fixed writing packed datatypes - was writing integers.
+ * Added parallelized loading of csv - helps a bit but only if parsing
+   is really expensive, so only when lots of datetime types or something
+   of that nature.
 
 ## 2.0
  * No changes from beta-59
