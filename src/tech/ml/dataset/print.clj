@@ -120,7 +120,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   (reader->string-lines (ds-col-proto/missing %)
                                                         line-policy
                                                         column-width
-                                                        false)
+                                                        true)
                                   ;;Do the conversion to string once.
                                   (dtype/clone)
                                   (dtype/->reader))

@@ -44,7 +44,7 @@
   (let [sgn (if (neg? x) 1 0)]
     (if (or e? (not (pos? lft)))
       (+ sgn 1)
-      lft)))
+      (+ sgn lft))))
 
 (defn- precision
   [^double x ^long digits ^long threshold]
@@ -70,7 +70,9 @@
   "Find best matching presision for given sequence."
   [xs ^long digits ^long threshold]
   (reduce (fn [[ce? ^long cexp ^long clft ^long crght ^long non-finite-len] x]
-            (let [^double x (or x ##NaN)]
+            (let [^double x (if (instance? Float x)
+                              (Double/valueOf (str x))
+                              (or x ##NaN))]
               (if (Double/isFinite x)
                 (let [[e? ^long exp ^long lft ^long rght] (precision x digits threshold)]
                   (if (and e? (pos? threshold))
@@ -110,8 +112,6 @@
                                            (== ##Inf x) "Inf"
                                            (== ##-Inf x) "-Inf"
                                            :else "NaN"))))))))
-
-(cl-format nil "~5@A" "dfs")
 
 (defn format-sequence
   "Format sequence of double for given:
