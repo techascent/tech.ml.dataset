@@ -341,6 +341,15 @@
                 set)))))
 
 
+(deftest parse-ragged
+  (let [ds (ds-base/->dataset "test/data/ragged.csv"
+                              {:header-row? false})]
+    (is (= 12 (ds-base/column-count ds)))
+    (is (= [4 24 31 33 65 67 68 71 75 76 93 97]
+           (vec ((ds-base/value-reader ds) 4))))
+    (is (= [10 33 51 66 67 84 nil nil nil nil nil nil]
+           (vec ((ds-base/value-reader ds) 10))))))
+
 
 ;; Failing due to apprently invalid iris.feather file
 ;; (deftest parse-arrow

@@ -760,8 +760,11 @@ This is an interface change and we do apologize!"))))
   :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
      a default permissive parser is used.  This way you parse anything that univocity
      supports (so flat files and such).
-  :skip-bad-rows? - For really bad files, some rows will not have the right column
-     counts for all rows.  This skips rows that fail this test.
+  :bad-row-policy - One of three options: :skip, :error, :carry-on.  Defaults to
+     :carry-on.  Some csv data has ragged rows and in this case we have several options
+     .  If the option is :carry-on then we either create a new column or add missing
+     values for columns that had no data for that row.
+  :skip-bad-rows? - Legacy option.  Use :bad-row-policy.
   :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
      will result in an exception.
   :max-num-columns - Defaults to 8192.  CSV,TSV files with more columns than this

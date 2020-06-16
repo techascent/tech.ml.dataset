@@ -589,7 +589,9 @@ falling back to :string"
                     simple-parser->parser-fn
                     datetime-formatter-fn
                     general-parser-fn)
-       (default-column-parser-fn))))
+       (default-column-parser-fn))
+     :else
+     (default-column-parser-fn)))
   ([parser-fn header-row-name scan-rows]
    (make-parser parser-fn header-row-name scan-rows
                 default-column-parser
@@ -606,6 +608,7 @@ falling back to :string"
   [row-seq {:keys [header-row?
                    parser-fn
                    parser-scan-len
+                   bad-row-policy
                    skip-bad-rows?]
             :or {header-row? true
                  parser-scan-len 100}
@@ -613,41 +616,72 @@ falling back to :string"
   (let [initial-row (first row-seq)
         n-cols (count initial-row)
         header-row (when header-row? initial-row)
+        bad-row-policy (if (not bad-row-policy)
+                         (if skip-bad-rows?
+                           :skip
+                           :carry-on)
+                         bad-row-policy)
         row-seq (if header-row?
                   (rest row-seq)
                   row-seq)
-        ^List column-parsers (vec (if parser-fn
-                                    (let [scan-rows (take parser-scan-len row-seq)
-                                          n-rows (count scan-rows)
-                                          scan-cols (->> (apply interleave scan-rows)
-                                                         (partition n-rows))]
-                                      (map (partial make-parser parser-fn)
-                                           (or header-row (range n-cols))
-                                           scan-cols))
-                                    (repeatedly n-cols default-column-parser)))]
+        column-parsers (ArrayList.)
+        _ (.addAll column-parsers
+                   (if parser-fn
+                     (let [scan-rows (take parser-scan-len row-seq)
+                           n-rows (count scan-rows)
+                           scan-cols (->> (apply interleave scan-rows)
+                                          (partition n-rows))]
+                       (map (partial make-parser parser-fn)
+                            (or header-row (range n-cols))
+                            scan-cols))
+                     (repeatedly n-cols default-column-parser)))]
     (doseq [^"[Ljava.lang.String;" row row-seq]
-      (if-not (= n-cols (alength row))
-        (if-not skip-bad-rows?
-          (throw (Exception.
-                  (format "Row has invalid length: %d\n%s"
-                          (count row) (vec row))))
-          (log/warnf "Skipping row (invalid length): %d" (count row)))
-        (loop [col-idx 0]
-          (when (< col-idx n-cols)
-            (let [^String row-data (aget row col-idx)
-                  parser (.get column-parsers col-idx)]
-              (if (and row-data
-                       (> (.length row-data) 0)
-                       (not (.equalsIgnoreCase "na" row-data)))
-                (parse! parser row-data)
-                (missing! parser))
-              (recur (unchecked-inc col-idx)))))))
+      (let [row-len (alength row)
+            n-cols (.size column-parsers)
+            skip-row?
+            (when-not (== (.size column-parsers) row-len)
+              (case bad-row-policy
+                :error
+                (throw (Exception.
+                        (format "Row has invalid length: %d\n%s"
+                                (count row) (vec row))))
+                :skip
+                (do
+                  (log/warnf "Skipping row (invalid length): %d" row-len)
+                  true)
+                :carry-on
+                (do
+                  (if (< row-len n-cols)
+                    (dotimes [iter (- n-cols row-len)]
+                      (-> (.get column-parsers (+ row-len iter))
+                          (missing!)))
+                    (dotimes [iter (- row-len n-cols)]
+                      (let [new-parser (make-parser parser-fn (+ n-cols iter) [])
+                            n-data (dtype/ecount (:data (column-data
+                                                         (.get column-parsers 0))))]
+                        (dotimes [data-iter n-data]
+                          (missing! new-parser))
+                        (.add column-parsers new-parser))))
+                  false)))]
+        (when-not skip-row?
+          (loop [col-idx 0]
+            (when (< col-idx row-len)
+              (let [^String row-data (aget row col-idx)
+                    parser (.get column-parsers col-idx)]
+                (if (and row-data
+                         (> (.length row-data) 0)
+                         (not (.equalsIgnoreCase "na" row-data)))
+                  (parse! parser row-data)
+                  (missing! parser))
+                (recur (unchecked-inc col-idx))))))))
     (mapv (fn [init-row-data parser]
             (assoc (column-data parser)
                    :name init-row-data))
           (if header-row?
-            initial-row
-            (range n-cols))
+            (concat initial-row
+                    (range (count initial-row)
+                           (.size column-parsers)))
+            (range (.size column-parsers)))
           column-parsers)))
 
 
