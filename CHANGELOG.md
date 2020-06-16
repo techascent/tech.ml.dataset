@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.01
+ * Issue-94 - Ragged csv data loads automatically now.
+
+## 2.0
+ * No changes from beta-59
+
 ## 2.0-beta-59
  * `tech.datatype` now supports persistent vectors made via `clojure.core.vector-of`.
    `vector-of` is a nice middle ground between raw persistent vectors and java arrays
