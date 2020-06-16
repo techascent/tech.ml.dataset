@@ -903,27 +903,6 @@ This is an interface change and we do apologize!"))))
   (with-out-str
     ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
 
-(defn- data->string
-  ^String [data-item]
-  (if data-item
-    (cond
-      (string? data-item) data-item
-      (keyword? data-item) (name data-item)
-      (symbol? data-item) (name data-item)
-      :else (.toString ^Object data-item))))
-
-
-(defmacro datatype->string-reader
-  [datatype column]
-  `(let [reader# (typecast/datatype->reader ~datatype ~column)
-         ^RoaringBitmap missing# (ds-col/missing ~column)
-         n-elems# (.lsize reader#)]
-     (reify ObjectReader
-       (lsize [this#] n-elems#)
-       (read [this# idx#]
-         (when-not (.contains missing# idx#)
-           (data->string (.read reader# idx#)))))))
-
 
 (defn ensure-array-backed
   "Ensure the column data in the dataset is stored in pure java arrays.  This is
@@ -960,6 +939,26 @@ This is an interface change and we do apologize!"))))
    (ensure-array-backed ds {})))
 
 
+(defn- data->string
+  ^String [data-item]
+  (if data-item
+    (cond
+      (string? data-item) data-item
+      (keyword? data-item) (name data-item)
+      (symbol? data-item) (name data-item)
+      :else (.toString ^Object data-item))))
+
+
+(defn ->string-reader
+  [reader ^RoaringBitmap missing]
+  (let [reader (dtype/->reader reader)
+        n-elems (dtype/ecount reader)]
+    (dtype/object-reader n-elems #(if (.contains missing (int %))
+                                    nil
+                                    (-> (reader %)
+                                        data->string)))))
+
+
 (defn write-csv!
   "Write a dataset to a tsv or csv output stream.  Closes output if a stream
   is passed in.  File output format will be inferred if output is a string -
@@ -970,7 +969,7 @@ This is an interface change and we do apologize!"))))
   :separator - in case output isn't a string, you can use either \\, or \\tab to switch
     between csv or tsv output respectively."
   ([ds output options]
-   (let [{:keys [gzipped? tsv?]}
+   (let [{:keys [gzipped? file-type]}
          (when (string? output)
            (str->file-info output))
          headers (into-array String (map data->string
@@ -978,14 +977,13 @@ This is an interface change and we do apologize!"))))
          ^List str-readers
          (->> (columns ds)
               (mapv (fn [coldata]
-                      (case (dtype/get-datatype coldata)
-                        :int16 (datatype->string-reader :int16 coldata)
-                        :int32 (datatype->string-reader :int32 coldata)
-                        :int64 (datatype->string-reader :int64 coldata)
-                        :float32 (datatype->string-reader :float32 coldata)
-                        :float64 (datatype->string-reader :float64 coldata)
-                        (datatype->string-reader :object coldata)))))
-         tsv? (or tsv? (= \tab (:separator options)))
+                      (let [dtype (dtype/get-datatype coldata)
+                            missing (ds-col/missing coldata)
+                            coldata (if (dtype-dt/packed-datatype? dtype)
+                                      (dtype-dt/unpack coldata)
+                                      coldata)]
+                        (->string-reader coldata missing)))))
+         tsv? (or (= file-type :tsv) (= \tab (:separator options)))
          n-cols (column-count ds)
          n-rows (row-count ds)
          str-rdr (reify ObjectReader

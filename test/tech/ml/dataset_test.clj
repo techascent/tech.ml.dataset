@@ -627,6 +627,20 @@
                   (map dtype/->array cds))))))
 
 
+(deftest serialize-datetime
+  (let [ds (ds/->dataset "test/data/stocks.csv")
+        _ (ds/write-csv! ds "test.tsv.gz")
+        save-ds (ds/->dataset "test.tsv.gz")
+        fdata (java.io.File. "test.tsv.gz")]
+    (is (= (ds/row-count ds) (ds/row-count save-ds)))
+    (is (= (ds/column-count ds) (ds/column-count save-ds)))
+    (is (= (set (map dtype/get-datatype ds))
+           (set (map dtype/get-datatype save-ds))))
+    ;; (when (.exists fdata)
+    ;;   (.delete fdata))
+    ))
+
+
 (comment
 
   (def test-ds (ds/->dataset
