@@ -4,8 +4,8 @@
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.parse.mapseq :as parse-mapseq]
             [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.dataset.column :as ds-col]))
+            [tech.ml.dataset.impl.column :as ds-col-impl]
+            [tech.ml.protocols.dataset :as ds-proto]))
 
 
 (defn parse-nvs
@@ -21,8 +21,8 @@
         half-dataset (->> (concat map-data known-container-data)
                           (map (fn [[colname values-seq]]
                                  (if (map? values-seq)
-                                   (ds-col/ensure-column values-seq)
-                                   (ds-col/new-column colname values-seq))))
+                                   (ds-col-impl/ensure-column values-seq)
+                                   (ds-col-impl/new-column colname values-seq))))
                           (ds-impl/new-dataset options))
         colname-set (set (ds-proto/column-names half-dataset))
         leftover (remove (comp colname-set first) name-values-seq)

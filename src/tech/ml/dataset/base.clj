@@ -694,7 +694,7 @@ This is an interface change and we do apologize!"))))
   (take-nth n-val dataset))
 
 
-(defn- str->file-info
+(defn str->file-info
   [^String file-str]
   (let [file-str (.toLowerCase ^String file-str)
         gzipped? (.endsWith file-str ".gz")
@@ -721,7 +721,7 @@ This is an interface change and we do apologize!"))))
      :file-type file-type}))
 
 
-(defn- wrap-stream-fn
+(defn wrap-stream-fn
   [dataset gzipped? open-fn]
   (with-open [^InputStream istream (if (instance? InputStream dataset)
                                      dataset
@@ -818,8 +818,6 @@ This is an interface change and we do apologize!"))))
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
-           (instance? InputStream dataset)
-           (ds-impl/parse-dataset dataset options)
            (instance? DataFrame dataset)
            (smile-data/dataframe->dataset dataset options)
            (map? dataset)
@@ -844,8 +842,6 @@ This is an interface change and we do apologize!"))))
                   #(-> (apply io/get-json % (apply clojure.core/concat
                                                    options))
                        (ds-parse-mapseq/mapseq->dataset options))))
-
-
                (or (= file-type :xls) (= file-type :xlsx))
                (let [parse-fn (parallel-require/require-resolve
                                'tech.libs.poi/workbook->datasets)
@@ -876,7 +872,7 @@ This is an interface change and we do apologize!"))))
                :else
                (wrap-stream-fn
                 dataset gzipped?
-                #(ds-impl/parse-dataset
+                #(ds-parse/csv->dataset
                   % (merge {:dataset-name dataset}
                            (when (= file-type :tsv)
                              {:separator \tab})

@@ -15,6 +15,8 @@
              :refer [datetime-can-parse?]
              :as parse-dt]
             [tech.ml.dataset.string-table :as str-table]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
+            [tech.parallel.next-item-fn :refer [create-next-item-fn]]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
@@ -533,8 +535,17 @@ falling back to :string"
   (let [container (make-container datatype)
         missing-val (col-impl/datatype->missing-value datatype)
         missing (bitmap/->bitmap)
-        add-fn (if (casting/numeric-type? datatype)
+        add-fn (cond
+                 (dtype-dt/packed-datatype? datatype)
+                 (let [container (.backing-store (parse-dt/as-typed-buffer container))]
+                   (case (casting/un-alias-datatype datatype)
+                     :int32 (let [container (parse-dt/as-int-list container)]
+                              #(.add container (unchecked-int %)))
+                     :int64 (let [container (parse-dt/as-long-list container)]
+                              #(.add container (unchecked-long %)))))
+                 (casting/numeric-type? datatype)
                  #(.add ^List container (casting/cast % datatype))
+                 :else
                  #(.add ^List container %))
         unparsed-data (str-table/make-string-table)
         unparsed-indexes (bitmap/->bitmap)
@@ -600,19 +611,20 @@ falling back to :string"
                 general-parser)))
 
 
-(defn rows->columns
+(defn rows->dataset
   "Given a sequence of string[] rows, parse into columnar data.
   See csv->columns.
   This method is useful if you have another way of generating sequences of
   string[] row data."
-  [row-seq {:keys [header-row?
-                   parser-fn
-                   parser-scan-len
-                   bad-row-policy
-                   skip-bad-rows?]
-            :or {header-row? true
-                 parser-scan-len 100}
-            :as options}]
+  [{:keys [header-row?
+           parser-fn
+           parser-scan-len
+           bad-row-policy
+           skip-bad-rows?]
+    :or {header-row? true
+         parser-scan-len 100}
+    :as options}
+   row-seq]
   (let [initial-row (first row-seq)
         n-cols (count initial-row)
         header-row (when header-row? initial-row)
@@ -674,18 +686,28 @@ falling back to :string"
                   (parse! parser row-data)
                   (missing! parser))
                 (recur (unchecked-inc col-idx))))))))
-    (mapv (fn [init-row-data parser]
-            (assoc (column-data parser)
-                   :name init-row-data))
-          (if header-row?
-            (concat initial-row
-                    (range (count initial-row)
-                           (.size column-parsers)))
-            (range (.size column-parsers)))
-          column-parsers)))
+    (->> (mapv (fn [init-row-data parser]
+                 (assoc (column-data parser)
+                        :name init-row-data))
+               (if header-row?
+                 (concat initial-row
+                         (range (count initial-row)
+                                (.size column-parsers)))
+                 (range (.size column-parsers)))
+               column-parsers)
+         (ds-impl/new-dataset options))))
 
 
-(defn csv->columns
+(defn csv->rows
+  "Given a csv, produces a sequence of rows"
+  [input options]
+  (let [^Iterable rows (raw-row-iterable
+                        input
+                        (create-csv-parser options))]
+    (iterator-seq (.iterator rows))))
+
+
+(defn csv->dataset
   "Non-lazily and serially parse the columns.  Returns a vector of maps of
   {
    :name column-name
@@ -702,20 +724,31 @@ falling back to :string"
   :separator
   :parser-fn
   :parser-scan-len"
-  ([input {:keys [header-row?
-                  parser-fn
-                  column-whitelist
-                  column-blacklist
-                  num-rows
-                  parser-scan-len]
-           :or {header-row? true
-                parser-scan-len 100}
-           :as options}]
-   (let [^Iterable rows (raw-row-iterable input (create-csv-parser options))
-         data (iterator-seq (.iterator ^Iterable rows))]
-     (rows->columns data options)))
+  ([input options]
+   (->> (csv->rows input options)
+        (rows->dataset options)))
   ([input]
-   (csv->columns input {})))
+   (csv->dataset input {})))
+
+
+(defn rows->n-row-sequences
+  "Used for parallizing loading of a csv.  Returns N sequences
+  that fed from a single sequence of rows."
+  ([{:keys [header-row?]
+     :or {header-row? true}} n row-seq]
+   (let [[header-row row-seq] (if header-row?
+                                [(first row-seq) (rest row-seq)]
+                                [nil row-seq])
+         row-fn (create-next-item-fn row-seq)]
+     (repeatedly
+      n
+      #(concat [header-row]
+               (->> (repeatedly row-fn)
+                    (take-while identity))))))
+  ([options row-seq]
+   (rows->n-row-sequences options (.availableProcessors (Runtime/getRuntime)) row-seq))
+  ([row-seq]
+   (rows->n-row-sequences {}  row-seq)))
 
 
 (defn write!

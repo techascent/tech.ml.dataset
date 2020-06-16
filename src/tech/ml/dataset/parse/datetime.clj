@@ -17,9 +17,9 @@
 
 ;;Assumping is that the string will have /,-. replaced with /space
 (def date-parser-patterns
-  ["yyyyMMdd"
+  ["yyyy MM dd"
+   "yyyyMMdd"
    "MM dd yyyy"
-   "yyyy MM dd"
    "dd MMM yyyy"
    "M d yyyy"
    "M d yy"

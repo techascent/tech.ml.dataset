@@ -1,6 +1,6 @@
 (ns tech.ml.dataset.print
   (:require [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.dataset.column :as ds-col]
+            [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.dataset.format-sequence :as format-sequence]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
@@ -117,7 +117,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                            (ds-proto/column-names print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (dtype-pp/reader-converter)
-                                  (reader->string-lines (ds-col/missing %)
+                                  (reader->string-lines (ds-col-proto/missing %)
                                                         line-policy
                                                         column-width
                                                         false)

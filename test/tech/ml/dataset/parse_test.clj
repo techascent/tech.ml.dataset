@@ -36,7 +36,6 @@
        (map (juxt :column-name :missing-count))
        (sort-by first)))
 
-
 (def datatype-answers
   [["1stFlrSF" :int16]
    ["2ndFlrSF" :int16]
@@ -122,10 +121,11 @@
 
 
 (deftest base-ames-parser-test
-  (let [result (ds-parse/csv->columns test-file)
+  (let [result (ds-parse/csv->dataset test-file)
         dtypes (->> result
+                    (map meta)
                     (sort-by :name)
-                    (mapv (juxt :name (comp dtype/get-datatype :data))))]
+                    (mapv (juxt :name :datatype)))]
     (is (= (set (map first datatype-answers))
            (set (map first dtypes))))
 
@@ -143,23 +143,24 @@
       (is (nil? differences)
           (str differences)))
     (let [result-missing-data (->> result
-                                   (map (juxt :name (comp dtype/ecount :missing)))
+                                   (map (juxt ds-col/column-name
+                                              (comp dtype/ecount ds-col/missing)))
                                    (remove #(= 0 (second %)))
                                    (sort-by first))]
       (is (= (set (map first missing-data))
              (set (map first result-missing-data))))))
 
-  (let [result (ds-parse/csv->columns
+  (let [result (ds-parse/csv->dataset
                 test-file
                 {:n-records 100
                  :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
     (is (= 3 (count result)))
     ;;Header row accounts for one.
-    (is (= 100 (dtype/ecount (:data (first result))))))
-  (let [result (ds-parse/csv->columns test-file {:n-records 100
+    (is (= 100 (ds-base/row-count result))))
+  (let [result (ds-parse/csv->dataset test-file {:n-records 100
                                                  :column-blacklist (range 70)})]
     (is (= 11 (count result)))
-    (is (= 100 (dtype/ecount (:data (first result)))))))
+    (is (= 100 (ds-base/row-count result)))))
 
 
 (deftest base-ames-load-test

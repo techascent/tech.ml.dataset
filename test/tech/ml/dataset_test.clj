@@ -210,8 +210,8 @@
   (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
                (ds/select :all (range 10)))
         updated (ds/update-column ds :width #(->> %
-                                                       (map (fn [data]
-                                                              (* 10 data)))))
+                                                  (map (fn [data]
+                                                         (* 10 data)))))
         add-or-updated (ds/add-or-update-column
                         ds :width (->> (ds :width)
                                        (map (fn [data]
@@ -636,9 +636,15 @@
     (is (= (ds/column-count ds) (ds/column-count save-ds)))
     (is (= (set (map dtype/get-datatype ds))
            (set (map dtype/get-datatype save-ds))))
-    ;; (when (.exists fdata)
-    ;;   (.delete fdata))
-    ))
+    (when (.exists fdata)
+      (.delete fdata))))
+
+
+(deftest custom-packed-local-date-parser
+  (let [ds (ds/->dataset "test/data/stocks.csv"
+                         {:parser-fn {"date" [:packed-local-date
+                                              "MMM d yyyy"]}})]
+    (is (= 560 (ds/row-count ds)))))
 
 
 (comment

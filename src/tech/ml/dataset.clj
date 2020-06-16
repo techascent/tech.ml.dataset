@@ -17,7 +17,7 @@
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
             [tech.ml.dataset.dynamic-int-list :as int-list]
-            [tech.ml.dataset.parse :as dt-parse]
+            [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.parse.name-values-seq :as parse-nvs]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base :as ds-base]
@@ -105,6 +105,24 @@
                         from-prototype
                         ensure-array-backed
                         write-csv!)
+
+
+(defn parallelized-load-csv
+  "In load a csv distributing rows between N different datasets.  Concat them at the
+  end and return the final dataset.  Loads data into an out-of-order dataset."
+  ([input options]
+   (let [{:keys [gzipped? file-type]}
+         (when (string? input)
+           (ds-base/str->file-info input))]
+     (ds-base/wrap-stream-fn
+      input gzipped?
+      (fn [input]
+        (->> (ds-parse/csv->rows input options)
+             (ds-parse/rows->n-row-sequences options)
+             (pmap #(ds-parse/rows->dataset options %))
+             (apply ds-base/concat))))))
+  ([input]
+   (parallelized-load-csv input {})))
 
 
 (defn select-columns-by-index

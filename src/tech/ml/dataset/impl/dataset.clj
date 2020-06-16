@@ -1,14 +1,11 @@
 (ns tech.ml.dataset.impl.dataset
-  (:require [tech.ml.dataset.column :as ds-col]
+  (:require [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.print :as ds-print]
             [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [clojure.set :as c-set])
+            [tech.v2.datatype.bitmap :as bitmap])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
            [java.util Map List]))
@@ -37,8 +34,8 @@
   (columns [dataset] columns)
 
   (add-column [dataset col]
-    (let [existing-names (set (map ds-col/column-name columns))
-          new-col-name (ds-col/column-name col)]
+    (let [existing-names (set (map ds-col-proto/column-name columns))
+          new-col-name (ds-col-proto/column-name col)]
       (when (existing-names new-col-name)
         (throw (ex-info (format "Column of same name (%s) already exists in columns"
                                 new-col-name)
@@ -51,7 +48,7 @@
 
   (remove-column [dataset col-name]
     (->> columns
-         (remove #(= (ds-col/column-name %) col-name))
+         (remove #(= (ds-col-proto/column-name %) col-name))
          (new-dataset (ds-proto/dataset-name dataset) metadata)))
 
   (update-column [dataset col-name col-fn]
@@ -64,16 +61,19 @@
           new-col-data (col-fn col)]
       (Dataset.
        (assoc columns col-idx
-              (if (ds-col/is-column? new-col-data)
-                (ds-col/set-name new-col-data col-name)
-                (ds-col/new-column (ds-col/column-name col) new-col-data)))
+              (if (ds-col-proto/is-column? new-col-data)
+                (ds-col-proto/set-name new-col-data col-name)
+                (col-impl/new-column (ds-col-proto/column-name col)
+                                     (col-impl/ensure-column-reader new-col-data))))
        colmap
        metadata)))
 
   (add-or-update-column [dataset col-name new-col-data]
-    (let [col-data (if (ds-col/is-column? new-col-data)
-                     (ds-col/set-name new-col-data col-name)
-                     (ds-col/new-column col-name new-col-data))]
+    (let [col-data (if (ds-col-proto/is-column? new-col-data)
+                     (ds-col-proto/set-name new-col-data col-name)
+                     (col-impl/new-column col-name
+                                          (col-impl/ensure-column-reader
+                                           new-col-data)))]
       (if (contains? colmap col-name)
         (ds-proto/update-column dataset col-name (constantly col-data))
         (ds-proto/add-column dataset col-data))))
@@ -102,7 +102,7 @@
                  (map (fn [[old-name new-name]]
                         (if-let [col-idx (get colmap old-name)]
                           (let [col (.get columns (unchecked-int col-idx))]
-                            (ds-col/set-name col new-name))
+                            (ds-col-proto/set-name col new-name))
                           (throw (Exception.
                                   (format "Failed to find column %s" old-name)))))))
             :else
@@ -116,7 +116,7 @@
            ;;select may be slow if we have to recalculate missing values.
            (map (fn [col]
                   (if indexes
-                    (ds-col/select col indexes)
+                    (ds-col-proto/select col indexes)
                     col)))
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
@@ -132,7 +132,7 @@
 
 
   (supported-column-stats [dataset]
-    (ds-col/supported-stats (first columns)))
+    (ds-col-proto/supported-stats (first columns)))
 
 
   (from-prototype [dataset dataset-name column-seq]
@@ -161,7 +161,7 @@
   (invoke [item col-name]
     (ds-proto/column item col-name))
   (invoke [item col-name new-col]
-    (ds-proto/add-column item (ds-col/set-name new-col col-name)))
+    (ds-proto/add-column item (ds-col-proto/set-name new-col col-name)))
   (applyTo [this arg-seq]
     (case (count arg-seq)
       1 (.invoke this (first arg-seq))
@@ -182,7 +182,7 @@
 
 (defn new-dataset
   "Create a new dataset from a sequence of columns.  Data will be converted
-  into columns using ds-col/ensure-column-seq.  If the column seq is simply a
+  into columns using ds-col-proto/ensure-column-seq.  If the column seq is simply a
   collection of vectors, for instance, columns will be named ordinally.
   options map -
     :dataset-name - Name of the dataset.  Defaults to \"_unnamed\".
@@ -200,13 +200,13 @@
                  (assoc (col-impl/->persistent-map ds-metadata)
                         :name
                         dataset-name))
-       (let [column-seq (->> (ds-col/ensure-column-seq column-seq)
+       (let [column-seq (->> (col-impl/ensure-column-seq column-seq)
                              (map-indexed (fn [idx column]
-                                            (let [cname (ds-col/column-name
+                                            (let [cname (ds-col-proto/column-name
                                                          column)]
                                               (if (and (string? cname)
                                                        (empty? cname))
-                                                (ds-col/set-name column idx)
+                                                (ds-col-proto/set-name column idx)
                                                 column)))))
              sizes (->> (map dtype/ecount column-seq)
                         distinct)
@@ -214,21 +214,21 @@
                           column-seq
                           (let [max-size (long (apply max 0 sizes))]
                             (->> column-seq
-                                 (map #(ds-col/extend-column-with-empty
+                                 (map #(col-impl/extend-column-with-empty
                                         % (- max-size (count %)))))))
              column-seq (if (and (map? options)
                                  (:key-fn options))
                           (let [key-fn (:key-fn options)]
                             (->> column-seq
-                                 (map #(ds-col/set-name
+                                 (map #(ds-col-proto/set-name
                                         %
-                                        (key-fn (ds-col/column-name %))))))
+                                        (key-fn (ds-col-proto/column-name %))))))
                           column-seq)]
          (Dataset. (vec column-seq)
                    (->> column-seq
                         (map-indexed
                          (fn [idx col]
-                           [(ds-col/column-name col) idx]))
+                           [(ds-col-proto/column-name col) idx]))
                         (into {}))
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
@@ -252,11 +252,3 @@
     (symbol? item-val) item-val
     :else
     (str item-val)))
-
-
-(defn parse-dataset
-  ([input options]
-   (->> (ds-parse/csv->columns input options)
-        (new-dataset options {})))
-  ([input]
-   (parse-dataset input {})))
