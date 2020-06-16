@@ -1,8 +1,11 @@
 (ns tech.ml.dataset.print
   (:require [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.column :as ds-col]
+            [tech.ml.dataset.format-sequence :as format-sequence]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.pprint :as dtype-pp]
+            [tech.v2.datatype.datetime :as dtype-dt]
             [clojure.string :as str]
             [clojure.pprint :as pp])
   (:import [tech.v2.datatype ObjectReader]
@@ -36,26 +39,30 @@
 
 
 (defn- reader->string-lines
-  [reader-data ^RoaringBitmap missing line-policy column-max-width]
-  (dtype/object-reader
-   (dtype/ecount reader-data)
-   #(if (.contains missing (int %))
-      nil
-      (let [lines (str/split-lines (print-stringify (reader-data %)))
-            lines (if (number? column-max-width)
-                    (let [width (long column-max-width)]
-                      (->> lines (map (fn [^String line]
-                                        (if (> (count line) width)
-                                          (.substring line 0 width)
-                                          line)))))
-                    lines)]
-        (case line-policy
-          :single
-          [(first lines)]
-          :markdown
-          [(str/join "<br>" lines)]
-          :repl
-          lines)))))
+  [reader-data ^RoaringBitmap missing line-policy column-max-width new-number-format?]
+  (let [reader-data (if (and new-number-format?
+                             (#{:float32 :float64} (dtype/get-datatype reader-data)))
+                      (vec (format-sequence/format-sequence reader-data))
+                      reader-data)]
+    (dtype/object-reader
+     (dtype/ecount reader-data)
+     #(if (.contains missing (int %))
+        nil
+        (let [lines (str/split-lines (print-stringify (reader-data %)))
+              lines (if (number? column-max-width)
+                      (let [width (long column-max-width)]
+                        (->> lines (map (fn [^String line]
+                                          (if (> (count line) width)
+                                            (.substring line 0 width)
+                                            line)))))
+                      lines)]
+          (case line-policy
+            :single
+            [(first lines)]
+            :markdown
+            [(str/join "<br>" lines)]
+            :repl
+            lines))))))
 
 
 (defn- append-line!
@@ -112,7 +119,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   (dtype-pp/reader-converter)
                                   (reader->string-lines (ds-col/missing %)
                                                         line-policy
-                                                        column-width)
+                                                        column-width
+                                                        false)
                                   ;;Do the conversion to string once.
                                   (dtype/clone)
                                   (dtype/->reader))
@@ -144,7 +152,22 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                         trailer))
          builder (StringBuilder.)]
      (append-line! builder (fmt-row "| " " | " " |" column-names))
-     (append-line! builder (fmt-row "|-" "-|-" "-|" spacers))
+     (append-line!
+      builder
+      (apply str
+             (concat (mapcat (fn [spacer dtype]
+                               (let [numeric? (and
+                                               (casting/numeric-type? dtype)
+                                               (not (dtype-dt/datetime-datatype?
+                                                     dtype)))]
+                                 (concat ["|-"]
+                                         spacer
+                                         (if numeric?
+                                           ":"
+                                           "-"))))
+                             spacers (map dtype/get-datatype
+                                          print-ds))
+                     ["|"])))
      (dotimes [idx n-rows]
        (let [row-height (long (.get row-heights idx))]
          (dotimes [inner-idx row-height]
