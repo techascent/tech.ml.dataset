@@ -37,15 +37,16 @@
                 vec)))))
 
 (deftest datetime-test
-  (let [ds (first (xlsx-parse/workbook->datasets stocks-file))]
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   stocks-file
+                   {:parser-fn {"date" :packed-local-date}}))]
     (is (= :packed-local-date (dtype/get-datatype (ds "date"))))))
 
 
 (deftest bad-datetime-test
   (let [ds (first (xlsx-parse/workbook->datasets stocks-bad-date-file))]
-    (is (= :object (dtype/get-datatype (ds "date"))))
-    (is (= {java.lang.String 2
-            java.time.LocalDate 27}
+    (is (= :string (dtype/get-datatype (ds "date"))))
+    (is (= {java.lang.String 29}
            (->> (ds "date")
                 (map type)
                 frequencies)))))

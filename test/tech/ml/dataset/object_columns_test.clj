@@ -26,7 +26,7 @@
                  :durations (repeat 5 (dtype-dt/duration))
                  :doubles (map double (range 5))
                  :tensors (repeat 5 (dtt/->tensor (partition 2 (range 4))))})]
-    (is (= #{:float64 :packed-local-date :int64 :object
+    (is (= #{:float64 :string :int64 :object
              :packed-duration}
            (->> (map dtype/get-datatype src-ds)
                 set)))))

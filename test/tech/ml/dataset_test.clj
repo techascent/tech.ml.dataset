@@ -523,7 +523,7 @@
             (->> uuids
                  (map-indexed (fn [idx uuid]
                                 {:a uuid
-                                 :b (str uuid)
+                                 :b uuid
                                  :c idx}))))]
     (is (= :uuid (dtype/get-datatype (ds :a))))
     (is (= :uuid (dtype/get-datatype (ds :b))))

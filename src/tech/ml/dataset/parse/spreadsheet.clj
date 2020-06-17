@@ -138,16 +138,15 @@
                                                (dtype/ecount @container*))
                                     (dtype/get-datatype @container*))
                   original-cell-dtype (dtype/get-datatype cell)
+                  ;;Used to be an if statement here to automate
+                  ;;parsing but that tends to cause very slow parse times
+                  ;;so we defer and unless the user specifies the cell dataytpe
+                  ;;we will just have strings in the dataset.
                   [cell-dtype cell-value]
-                  (if (= :string original-cell-dtype)
-                    (try
-                      [:uuid (parse/dtype->parse-fn :uuid (.value cell))]
-                      (catch Throwable e
-                        (parse-dt/try-parse-datetimes (.value cell))))
-                    [original-cell-dtype (case original-cell-dtype
-                                           :boolean (.boolValue cell)
-                                           :float64 (.doubleValue cell)
-                                           (.value cell))])
+                  [original-cell-dtype (case original-cell-dtype
+                                         :boolean (.boolValue cell)
+                                         :float64 (.doubleValue cell)
+                                         (.value cell))]
                   container (unify-container-type-cell-type
                              container*
                              container-dtype

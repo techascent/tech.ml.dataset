@@ -43,7 +43,9 @@
 
 
 (deftest datetime-test
-  (let [ds (first (xlsx-parse/workbook->datasets stocks-file))]
+  (let [ds (first (xlsx-parse/workbook->datasets
+                   stocks-file
+                   {:parser-fn {"date" :packed-local-date}}))]
     (is (= :packed-local-date (dtype/get-datatype (ds "date"))))))
 
 
