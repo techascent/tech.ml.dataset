@@ -25,7 +25,7 @@ user> (take 10 rows)
 ```
 
 Note that the header row is included in these rows.  Now you can filter/sample/etc. in
-`CSV` space meaning transformations from sequences of string arrays to sequences of
+CSV space meaning transformations from sequences of string arrays to sequences of
 string arrays.
 
 
