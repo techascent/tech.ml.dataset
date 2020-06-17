@@ -138,10 +138,10 @@
                                                (dtype/ecount @container*))
                                     (dtype/get-datatype @container*))
                   original-cell-dtype (dtype/get-datatype cell)
-                  ;;Used to be an if statement here to automate
-                  ;;parsing but that tends to cause very slow parse times
-                  ;;so we defer and unless the user specifies the cell dataytpe
-                  ;;we will just have strings in the dataset.
+                  ;;Used to be an if statement here to automate parsing but that tends
+                  ;;to cause very slow parse times so we defer and unless the user
+                  ;;specifies the cell dataytpe we will just have strings in the
+                  ;;dataset.
                   [cell-dtype cell-value]
                   [original-cell-dtype (case original-cell-dtype
                                          :boolean (.boolValue cell)
