@@ -699,12 +699,28 @@ falling back to :string"
 
 
 (defn csv->rows
-  "Given a csv, produces a sequence of rows"
-  [input options]
-  (let [^Iterable rows (raw-row-iterable
-                        input
-                        (create-csv-parser options))]
-    (iterator-seq (.iterator rows))))
+  "Given a csv, produces a sequence of rows.  The csv options from ->dataset
+  apply here.
+
+  options:
+  :column-whitelist - either sequence of string column names or sequence of column
+     indices of columns to whitelist.
+  :column-blacklist - either sequence of string column names or sequence of column
+     indices of columns to blacklist.
+  :num-rows - Number of rows to read
+  :separator - Add a character separator to the list of separators to auto-detect.
+  :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
+     will result in an exception.
+  :max-num-columns - Defaults to 8192.  CSV,TSV files with more columns than this
+     will fail to parse.  For more information on this option, please visit:
+     https://github.com/uniVocity/univocity-parsers/issues/301"
+  ([input options]
+   (let [^Iterable rows (raw-row-iterable
+                         input
+                         (create-csv-parser options))]
+     (iterator-seq (.iterator rows))))
+  ([input]
+   (csv->rows input {})))
 
 
 (defn csv->dataset
@@ -732,8 +748,16 @@ falling back to :string"
 
 
 (defn rows->n-row-sequences
-  "Used for parallizing loading of a csv.  Returns N sequences
-  that fed from a single sequence of rows."
+  "Used for parallizing loading of a csv.  Returns N sequences that fed from a single
+  sequence of rows.  Experimental - Not the most effectively way of speeding up
+  loading.
+
+  Type-hinting your columns and providing specific parsers for datetime types like:
+  (ds/->dataset input {:parser-fn {\"date\" [:packed-local-date \"yyyy-MM-dd\"]}})
+  may have a larger effect than parallelization in most cases.
+
+  Loading multiple files in parallel will also have a larger effect than
+  single-file parallelization in most cases."
   ([{:keys [header-row?]
      :or {header-row? true}} n row-seq]
    (let [[header-row row-seq] (if header-row?
@@ -742,9 +766,12 @@ falling back to :string"
          row-fn (create-next-item-fn row-seq)]
      (repeatedly
       n
-      #(concat [header-row]
-               (->> (repeatedly row-fn)
-                    (take-while identity))))))
+      (if header-row
+        #(concat [header-row]
+                 (->> (repeatedly row-fn)
+                      (take-while identity)))
+        #(->> (repeatedly row-fn)
+              (take-while identity))))))
   ([options row-seq]
    (rows->n-row-sequences options (.availableProcessors (Runtime/getRuntime)) row-seq))
   ([row-seq]

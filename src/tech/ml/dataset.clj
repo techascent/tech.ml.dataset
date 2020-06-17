@@ -109,7 +109,14 @@
 
 (defn parallelized-load-csv
   "In load a csv distributing rows between N different datasets.  Concat them at the
-  end and return the final dataset.  Loads data into an out-of-order dataset."
+  end and return the final dataset.  Loads data into an out-of-order dataset.
+
+  Type-hinting your columns and providing specific parsers for datetime types like:
+  (ds/->dataset input {:parser-fn {\"date\" [:packed-local-date \"yyyy-MM-dd\"]}})
+  may have a larger effect than parallelization in most cases.
+
+  Loading multiple files in parallel will also have a larger effect than
+  single-file parallelization in most cases."
   ([input options]
    (let [{:keys [gzipped? file-type]}
          (when (string? input)
