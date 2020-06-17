@@ -2,8 +2,8 @@
 
 For really large datasets it may be useful to filter/manipulate/sample data in CSV
 space before parsing the data into columnar format.  We provide a bit of support for
-that type of operation in the form of separating transforming a csv into a sequence
-of string-array and then parsing those string-array rows.
+that type of operation in the form of separating the transformation of csv into a sequence
+of string arrays and the parsing step of those string-array rows.
 
 
 ### Input Data -> String Array
@@ -25,7 +25,7 @@ user> (take 10 rows)
 ```
 
 Note that the header row is included in these rows.  Now you can filter/sample/etc. in
-`CSV` space meaning transformations from sequences of string arrays to sequences of
+CSV space meaning transformations from sequences of string arrays to sequences of
 string arrays.
 
 
