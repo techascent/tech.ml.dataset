@@ -144,7 +144,7 @@ drwxr-xr-x 13 chrisn chrisn 4.0K Jun 18 13:36 ..
 -rw-rw-r--  1 chrisn chrisn  44M Jun 18 13:27 2010.tsv.gz
 ```
 
-And now it takes a small bit more time to load:
+And now it takes twice the time to load:
 
 ```clojure
 user> (def loaded-gzipped-2010 (time (io/get-nippy (io/gzip-input-stream "nippy-demo/2010.nippy.gz"))))
