@@ -25,6 +25,8 @@ For a simple all-in-one data exploration pathway please checkout [simpledata](ht
 
 An alternative cutting-edge api is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
+We now have support for [nippy serialization](docs/nippy-serialization-rocks.md).
+
 ## Mini Walkthrough
 
 ```clojure
