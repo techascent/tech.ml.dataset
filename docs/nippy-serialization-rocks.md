@@ -1,7 +1,7 @@
 # Nippy Rocks!
 
 
-We are big fans of the [nippy](git@github.com:ptaoussanis/nippy.git) system for
+We are big fans of the [nippy system](https://github.com/ptaoussanis/nippy) for
 freezing/thawing data.  So we were pleasantly surprized with how well it performs
 with dataset and how easy it was to extend the dataset object to support nippy
 natively.
