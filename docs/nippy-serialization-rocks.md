@@ -109,8 +109,8 @@ That is great :-).
 
 
 The resulting dataset is somewhat smaller in memory.  This is because when we
-parse a dataset we uses fastutil lists and append elements to them and then return a
-dataset that uses those lists as the column storage mechanism.  Those lists have a bit
+parse a dataset we use fastutil lists and append elements to them and then return a
+dataset that sits directly on top of those lists as the column storage mechanism.  Those lists have a bit
 more capacity than absolutely necessary.
 
 When we save the data, we convert the data into base java/clojure datastructures
