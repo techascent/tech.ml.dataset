@@ -33,8 +33,7 @@ user> (def ds-2010
                                        [oldname (.replace ^String oldname "_" "-")]))
                                 (into {}))))
 user> ds-2010
-```
-`nippy-demo/2010.tsv.gz [2769708 12]:`
+nippy-demo/2010.tsv.gz [2769708 12]:
 
 |    low | comp-name-2 |   high | currency-code |  comp-name | m-ticker | ticker |  close |         volume | exchange |       date |   open |
 |-------:|-------------|-------:|---------------|------------|----------|--------|-------:|---------------:|----------|------------|-------:|
@@ -47,6 +46,7 @@ user> ds-2010
 | 39.574 |             | 40.264 |           USD | ALCOA CORP |      AA2 |     AA | 39.844 | 1.53728400E+07 |     NYSE | 2010-02-12 | 39.994 |
 | 40.324 |             | 41.104 |           USD | ALCOA CORP |      AA2 |     AA | 40.624 | 7.72947100E+06 |     NYSE | 2010-02-22 | 41.044 |
 | 39.664 |             | 40.564 |           USD | ALCOA CORP |      AA2 |     AA | 39.724 | 1.08365810E+07 |     NYSE | 2010-03-02 | 40.234 |
+```
 
 
 Our 44MB gzipped tsv produced 2.7 million rows and 12 columns.
@@ -89,8 +89,7 @@ user> (def loaded-2010 (time (io/get-nippy "nippy-demo/2010.nippy")))
 user> (mm/measure loaded-2010)
 "93.9 MB"
 user> loaded-2010
-```
-`nippy-demo/2010.tsv.gz [2769708 12]:`
+nippy-demo/2010.tsv.gz [2769708 12]:
 
 |    low | comp-name-2 |   high | currency-code |  comp-name | m-ticker | ticker |  close |         volume | exchange |       date |   open |
 |-------:|-------------|-------:|---------------|------------|----------|--------|-------:|---------------:|----------|------------|-------:|
@@ -101,6 +100,7 @@ user> loaded-2010
 | 40.294 |             | 41.674 |           USD | ALCOA CORP |      AA2 |     AA | 40.474 | 1.20107520E+07 |     NYSE | 2010-02-03 | 40.804 |
 | 39.304 |             | 40.504 |           USD | ALCOA CORP |      AA2 |     AA | 39.844 | 1.46702890E+07 |     NYSE | 2010-02-09 | 40.084 |
 | 39.574 |             | 40.264 |           USD | ALCOA CORP |      AA2 |     AA | 39.844 | 1.53728400E+07 |     NYSE | 2010-02-12 | 39.994 |
+```
 
 It takes 8 seconds to load the tsv.  It takes 311 milliseconds to load the nippy!
 That is great :-).
