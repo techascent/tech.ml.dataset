@@ -13,6 +13,7 @@
             [tech.v2.datatype.pprint :as dtype-pp]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.string-table :as str-table]
+            [tech.ml.dataset.dynamic-int-list :as dyn-int-list]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.categorical :as categorical]
             [tech.ml.dataset.pipeline.column-filters :as col-filters]
@@ -24,14 +25,20 @@
             [tech.v2.datatype.casting :as casting]
             [tech.parallel.for :as parallel-for]
             [tech.libs.smile.data :as smile-data]
+            [taoensso.nippy :as nippy]
             [clojure.math.combinatorics :as comb]
             [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [java.util HashSet Map List Iterator Collection ArrayList]
+           [java.util HashSet Map List Iterator Collection ArrayList HashMap
+            Map$Entry]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList]
-           [org.roaringbitmap RoaringBitmap])
+           [org.roaringbitmap RoaringBitmap]
+           [tech.ml.dataset.impl.column Column]
+           [tech.ml.dataset.impl.dataset Dataset]
+           [tech.ml.dataset.string_table StringTable]
+           [tech.ml.dataset.dynamic_int_list DynamicIntList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth assoc dissoc]))
 
@@ -846,3 +853,80 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ^smile.data.DataFrame [ds]
   (-> (ensure-array-backed ds)
       (smile-data/dataset->dataframe)))
+
+
+(defn- column->string-data
+  [str-col]
+  (let [coldata (.data ^Column str-col)
+        ^StringTable str-table
+        (if (instance? StringTable coldata)
+          coldata
+          (dtype/copy! coldata (str-table/make-string-table
+                                (dtype/ecount coldata))))
+        str->int-data (.str->int str-table)
+        strt-data (-> (.data str-table)
+                      (dyn-int-list/int-list->data))
+        data-ary (or (dtype/->array strt-data)
+                     (dtype/->array-copy strt-data))]
+    {:string-table str->int-data
+     :entries data-ary}))
+
+
+(defn- string-data->column-data
+  [{:keys [string-table entries]}]
+  (let [int-data (DynamicIntList. (dtype/->list-backing-store entries)
+                                  nil)
+        ;;force int read creation when possible
+        _ (when-not (== 0 (dtype/ecount entries))
+            (.getInt int-data 0))
+        str->int string-table
+        int->str (HashMap.)
+        _ (doseq [[k v] str->int]
+            (.put int->str (unchecked-int v) k))]
+    (StringTable. int->str str->int int-data)))
+
+
+(defn dataset->data
+  "Convert a dataset to a pure clojure datastructure.  Returns a map with two keys:
+  {:metadata :columns}.
+
+  :columns is a vector of column definitions appropriate for passing directly back
+  into new-dataset.
+
+  A column definition in this case is a map of {:name :missing :data :metadata}."
+  [ds]
+  {:metadata (meta ds)
+   :columns (->> ds
+                 (mapv (fn [col]
+                         {:metadata (meta col)
+                          :missing (ds-col/missing col)
+                          :name (:name (meta col))
+                          :data (if (= :string (dtype/get-datatype col))
+                                  (column->string-data col)
+                                  (or (dtype/->array col)
+                                      (dtype/->array-copy col)))})))})
+
+
+(nippy/extend-freeze
+ Dataset :tech.ml/dataset
+ [ds out]
+ (nippy/-freeze-without-meta! (dataset->data ds) out))
+
+
+(defn data->dataset
+  "Convert a data-ized dataset created via dataset->data back into a
+  full dataset"
+  [{:keys [metadata columns]}]
+  (->> columns
+       (map (fn [{:keys [metadata] :as coldata}]
+              (if (= :string (:datatype metadata))
+                (update coldata :data string-data->column-data)
+                (update coldata :data dtype/set-datatype (:datatype metadata)))))
+       (new-dataset {:dataset-name (:name metadata)} metadata)))
+
+
+(nippy/extend-thaw
+ :tech.ml/dataset
+ [in]
+ (-> (nippy/thaw-from-in! in)
+     (data->dataset)))

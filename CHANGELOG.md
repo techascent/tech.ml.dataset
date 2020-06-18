@@ -1,5 +1,11 @@
 # Changelog
 
+##2.02
+ * **breaking change** - Remove date/uuid inference pathway for strings from
+   mapseq/spreadsheet pathways.
+ * nippy freeze/thaw is efficiently supported :-).
+
+
 ## 2.01
  * Issue-94 - Ragged csv data loads automatically now.
  * Issue-87 - Printing double numbers is much better.
@@ -16,11 +22,11 @@
  * `tech.datatype` now supports persistent vectors made via `clojure.core.vector-of`.
    `vector-of` is a nice middle ground between raw persistent vectors and java arrays
    and may be a simple path for many users into typed storage and datasets.
-   
-   
-## 2.0-beta-58 
+
+
+## 2.0-beta-58
  - mistake release...nothing to see here....
-   
+
 
 ## 2.0-beta-57
  * Issue-92 - ->dataset failed for map-style datasets

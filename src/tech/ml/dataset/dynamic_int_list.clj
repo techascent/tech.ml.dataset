@@ -63,9 +63,15 @@
        (set! ~'reader nil))))
 
 
+(defprotocol IntListData
+  (int-list->data [int-list]))
+
+
 
 (deftype DynamicIntList [^:unsynchronized-mutable ^List backing-store
                          ^:unsynchronized-mutable ^IntReader reader]
+  IntListData
+  (int-list->data [this] backing-store)
   dtype-proto/PDatatype
   (get-datatype [item] :int32)
   dtype-proto/PCountable
