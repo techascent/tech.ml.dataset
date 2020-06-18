@@ -1,7 +1,12 @@
 # Nippy Rocks!
 
 We are big fans of the nippy system for freezing/thawing data.  So we were pleasantly
-surprized with how well it performs!
+surprized with how well it performs with dataset and how easy it was to extend the
+dataset object to support nippy natively.
+
+
+## Nippy Hits One Out Of the Park
+
 
 We start with a decent size gzipped tabbed-delimited file.
 
@@ -113,8 +118,11 @@ operation is optimized and hits System/arraycopy under the covers (fastutil list
 arrays as the backing store).
 
 
-We can do a bit better.  If you are really concerned about dataset size on disk, we can
-safe out a gzipped nippy:
+## Gzipping The Nippy
+
+
+We can do a bit better.  If you are really concerned about dataset size on disk, we
+can save out a gzipped nippy:
 
 
 ```clojure
@@ -146,4 +154,20 @@ user> (mm/measure loaded-gzipped-2010)
 
 So that is it.  Nippy is truly a great library :-).
 
+
+## Simple Implementation
+
+
 Our implementation of save/load for this pathway goes through two public functions:
+
+
+* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L889) - Convert a dataset into a pure 
+clojure/java datastructure suitable for serialization.  Data is in arrays and string
+tables have been slightly deconstructed.
+
+* [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L916) - Given a data-description of a
+dataset create a new dataset.  This is mainly a zero copy operation so it should be
+quite quick.
+
+Near those functions you can see how easy it was to implement direct nippy support for
+the dataset object itself.  Really nice!
