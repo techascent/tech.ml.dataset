@@ -1,8 +1,10 @@
 # Nippy Rocks!
 
-We are big fans of the nippy system for freezing/thawing data.  So we were pleasantly
-surprized with how well it performs with dataset and how easy it was to extend the
-dataset object to support nippy natively.
+
+We are big fans of the [nippy](git@github.com:ptaoussanis/nippy.git) system for
+freezing/thawing data.  So we were pleasantly surprized with how well it performs
+with dataset and how easy it was to extend the dataset object to support nippy
+natively.
 
 
 ## Nippy Hits One Out Of the Park
@@ -106,16 +108,16 @@ It takes 8 seconds to load the tsv.  It takes 315 milliseconds to load the nippy
 That is great :-).
 
 
-The resulting dataset in memory is somewhat smaller.  This is because when we
-parse a dataset we uses fastutil lists and append elements to them, then return a
-dataset that uses those lists and the storage mechanism.  Those list append extra
-capacity than absolutely necessary during the add operation.
+The resulting dataset is somewhat smaller in memory.  This is because when we
+parse a dataset we uses fastutil lists and append elements to them and then return a
+dataset that uses those lists as the column storage mechanism.  Those lists have a bit
+more capacity than absolutely necessary.
 
 When we save the data, we convert the data into base java/clojure datastructures
-such as primitive arrays.  This is what makes things smaller, converting from a list
-with a small bit of extra capacity allocated to an array with no extra capacity.  This
-operation is optimized and hits System/arraycopy under the covers (fastutil lists use
-arrays as the backing store).
+such as primitive arrays.  This is what makes things smaller: converting from a list
+with a bit of extra capacity allocated to an exact sized array.  This operation is
+optimized and hits System/arraycopy under the covers as fastutil lists use arrays as
+the backing store and we make sure of the rest with `tech.datatype`.
 
 
 ## Gzipping The Nippy
@@ -152,7 +154,8 @@ user> (mm/measure loaded-gzipped-2010)
 "93.9 MB"
 ```
 
-So that is it.  Nippy is truly a great library :-).
+You can probably handle load times in the 700ms range if you have a strong reason to 
+have data compressed on disc.
 
 
 ## Simple Implementation
@@ -170,4 +173,4 @@ dataset create a new dataset.  This is mainly a zero copy operation so it should
 quite quick.
 
 Near those functions you can see how easy it was to implement direct nippy support for
-the dataset object itself.  Really nice!
+the dataset object itself.  Really nice, Nippy is truly a great library :-).
