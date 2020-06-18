@@ -6,6 +6,7 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
+            [tech.io :as tech-io]
             [clojure.test :refer :all]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.unary-op :as unary-op]
@@ -645,6 +646,19 @@
                          {:parser-fn {"date" [:packed-local-date
                                               "MMM d yyyy"]}})]
     (is (= 560 (ds/row-count ds)))))
+
+
+(deftest stocks-to-from-nippy
+  (let [fname (format "%s.nippy" (java.util.UUID/randomUUID))
+        stocks (ds/->dataset "test/data/stocks.csv")
+        _ (tech-io/put-nippy! fname stocks)
+        nip-stocks (tech-io/get-nippy fname)]
+    (is (= (ds/row-count stocks) (ds/row-count nip-stocks)))
+    (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
+    (is (= (vec (stocks "date"))
+           (vec (nip-stocks "date"))))
+    (is (= (mapv meta stocks)
+           (mapv meta nip-stocks)))))
 
 
 (comment
