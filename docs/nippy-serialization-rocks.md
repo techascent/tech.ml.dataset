@@ -102,7 +102,7 @@ nippy-demo/2010.tsv.gz [2769708 12]:
 | 39.574 |             | 40.264 |           USD | ALCOA CORP |      AA2 |     AA | 39.844 | 1.53728400E+07 |     NYSE | 2010-02-12 | 39.994 |
 ```
 
-It takes 8 seconds to load the tsv.  It takes 311 milliseconds to load the nippy!
+It takes 8 seconds to load the tsv.  It takes 315 milliseconds to load the nippy!
 That is great :-).
 
 
