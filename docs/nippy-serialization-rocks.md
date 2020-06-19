@@ -160,6 +160,54 @@ You can probably handle load times in the 700ms range if you have a strong reaso
 have data compressed on disc.
 
 
+## Intermix With Clojure Data
+
+Another aspect of nippy that is really valuable is that it can save/load datasets that
+are parts of arbitrary datastructures.  So for example you can save
+the result of `group-by-column`:
+
+```clojure
+
+user> (def tickers (ds/group-by-column "ticker" ds-2010))
+#'user/tickers
+user> (count tickers)
+11532
+user> (first tickers)
+["RBYCF" RBYCF [261 12]:
+
+|     low | comp_name_2 |    high | currency_code |     comp_name | m_ticker | ticker |   close |   volume | exchange |       date |    open |
+|--------:|-------------|--------:|---------------|---------------|----------|--------|--------:|---------:|----------|------------|--------:|
+|         |             |         |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 759.677 |          |      OTC | 2010-01-01 |         |
+| 795.161 |             | 827.419 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 800.000 | 3596.775 |      OTC | 2010-01-12 | 816.129 |
+| 741.935 |             | 779.032 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 758.064 | 5490.292 |      OTC | 2010-01-20 | 779.032 |
+| 645.161 |             | 688.710 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 682.258 | 6201.953 |      OTC | 2010-01-28 | 669.355 |
+| 685.484 |             | 725.806 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 687.097 | 3491.220 |      OTC | 2010-02-08 | 714.516 |
+| 750.000 |             | 783.871 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 770.968 | 2927.057 |      OTC | 2010-02-17 | 780.645 |
+...
+
+user> (tech.io/put-nippy! "ticker-sorted.nippy" tickers)
+nil
+user> (def loaded-tickers (tech.io/get-nippy "ticker-sorted.nippy"))
+#'user/loaded-tickers
+user> (count loaded-tickers)
+11532
+user> (first loaded-tickers)
+["RBYCF" RBYCF [261 12]:
+
+|     low | comp_name_2 |    high | currency_code |     comp_name | m_ticker | ticker |   close |   volume | exchange |       date |    open |
+|--------:|-------------|--------:|---------------|---------------|----------|--------|--------:|---------:|----------|------------|--------:|
+|         |             |         |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 759.677 |          |      OTC | 2010-01-01 |         |
+| 795.161 |             | 827.419 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 800.000 | 3596.775 |      OTC | 2010-01-12 | 816.129 |
+| 741.935 |             | 779.032 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 758.064 | 5490.292 |      OTC | 2010-01-20 | 779.032 |
+| 645.161 |             | 688.710 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 682.258 | 6201.953 |      OTC | 2010-01-28 | 669.355 |
+| 685.484 |             | 725.806 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 687.097 | 3491.220 |      OTC | 2010-02-08 | 714.516 |
+| 750.000 |             | 783.871 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 770.968 | 2927.057 |      OTC | 2010-02-17 | 780.645 |
+```
+
+Thus datasets can be used in maps, vectors, you name it and you can load/save those
+really complex datastructures.  That can be a big help for complex dataflows.
+
+
 ## Simple Implementation
 
 
