@@ -1,7 +1,9 @@
 (ns tech.ml.dataset.string-table
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.ml.dataset.dynamic-int-list :as int-list])
+            [tech.ml.dataset.dynamic-int-list :as int-list]
+            [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
+            [tech.parallel.for :as parallel-for])
   (:import [java.util List HashMap Map RandomAccess Iterator]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]))
 
@@ -92,3 +94,49 @@
    (make-string-table n-elems "" (HashMap.) (HashMap.)))
   (^List []
    (make-string-table 0 "" (HashMap.) (HashMap.))))
+
+
+(defn string-table-from-strings
+  [str-data]
+  (if-let [str-reader (dtype/->reader str-data)]
+    (let [unique-set (parallel-unique str-reader)
+          _ (.remove unique-set "")
+          set-iter (.iterator unique-set)
+          n-unique-elems (inc (.size unique-set))
+          n-elems (dtype/ecount str-reader)
+          str->int (HashMap. n-unique-elems)
+          int->str (HashMap. n-unique-elems)
+          ]
+      (.put str->int "" (unchecked-int 0))
+      (.put int->str (unchecked-int 0) "")
+      (loop [continue? (.hasNext set-iter)
+             idx (int 0)]
+        (when continue?
+          (let [str-entry (.next set-iter)
+                idx (unchecked-int idx)]
+            (.put str->int str-entry (unchecked-int idx))
+            (.put int->str (unchecked-int idx) str-entry))
+          (recur (.hasNext set-iter) (unchecked-inc idx))))
+      (cond
+        (< n-unique-elems Byte/MAX_VALUE)
+        (let [data (byte-array n-elems)]
+          (parallel-for/parallel-for
+           idx n-elems
+           (aset data idx (unchecked-byte (.get str->int (str-reader idx)))))
+          (StringTable. int->str str->int (int-list/make-from-container data)))
+        (< n-unique-elems Short/MAX_VALUE)
+        (let [data (short-array n-elems)]
+          (parallel-for/parallel-for
+           idx n-elems
+           (aset data idx (unchecked-short (.get str->int (str-reader idx)))))
+          (StringTable. int->str str->int (int-list/make-from-container data)))
+        :else
+        (let [data (int-array n-elems)]
+          (parallel-for/parallel-for
+           idx n-elems
+           (aset data idx (unchecked-short (.get str->int (str-reader idx)))))
+          (StringTable. int->str str->int (int-list/make-from-container data)))))
+    (let [str-table (make-string-table 0)]
+      (doseq [data str-data]
+        (.add str-table data))
+      str-table)))

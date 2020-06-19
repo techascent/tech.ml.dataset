@@ -653,12 +653,17 @@
         stocks (ds/->dataset "test/data/stocks.csv")
         _ (tech-io/put-nippy! fname stocks)
         nip-stocks (tech-io/get-nippy fname)]
-    (is (= (ds/row-count stocks) (ds/row-count nip-stocks)))
-    (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
-    (is (= (vec (stocks "date"))
-           (vec (nip-stocks "date"))))
-    (is (= (mapv meta stocks)
-           (mapv meta nip-stocks)))))
+    (try
+      (is (= (ds/row-count stocks) (ds/row-count nip-stocks)))
+      (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
+      (is (= (vec (stocks "date"))
+             (vec (nip-stocks "date"))))
+      (is (= (mapv meta stocks)
+             (mapv meta nip-stocks)))
+      (finally
+        (let [file (java.io.File. fname)]
+          (when (.exists file)
+            (.delete file)))))))
 
 
 (comment

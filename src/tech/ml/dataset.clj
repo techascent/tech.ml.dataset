@@ -861,8 +861,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
         ^StringTable str-table
         (if (instance? StringTable coldata)
           coldata
-          (dtype/copy! coldata (str-table/make-string-table
-                                (dtype/ecount coldata))))
+          (str-table/string-table-from-strings coldata))
         str->int-data (.str->int str-table)
         strt-data (-> (.data str-table)
                       (dyn-int-list/int-list->data))

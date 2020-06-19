@@ -244,8 +244,7 @@
                 :data
                 (if (and unify-strings?
                          (= :string (dtype/get-datatype smile-vec)))
-                  (let [str-t (str-table/make-string-table (dtype/ecount smile-vec))
-                        col-rdr (dtype/->reader smile-vec)
+                  (let [col-rdr (dtype/->reader smile-vec)
                         str-rdr (dtype/object-reader
                                  (dtype/ecount col-rdr)
                                  #(let [read-val (col-rdr %)]
@@ -258,8 +257,7 @@
                                       (throw (Exception.
                                               (format "Value not a string: %s"
                                                       read-val))))))]
-                    (dtype/copy! str-rdr str-t)
-                    str-t)
+                    (str-table/string-table-from-strings str-rdr))
                   smile-vec)}))
         (ds-impl/new-dataset options  {:name "_unnamed"})))
   ([df]

@@ -1,6 +1,7 @@
 (ns tech.ml.dataset.impl.column
   (:require [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.dataset.string-table :refer [make-string-table]]
+            [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
@@ -293,18 +294,8 @@
                data
                metadata)))
   (unique [this]
-    (let [rdr (dtype/->reader this)]
-      (->> (parallel-for/indexed-map-reduce
-            (dtype/ecount rdr)
-            (fn [^long start-idx ^long len]
-              (let [data (HashSet.)]
-                (dotimes [iter len]
-                  (.add data (rdr (unchecked-add iter start-idx))))
-                data))
-            (partial reduce (fn [^Set lhs ^Set rhs]
-                              (.addAll lhs rhs)
-                              lhs)))
-           (into #{}))))
+    (->> (parallel-unique this)
+         (into #{})))
   (stats [col stats-set]
     (when-not (casting/numeric-type? (dtype-proto/get-datatype col))
       (throw (ex-info "Stats aren't available on non-numeric columns"

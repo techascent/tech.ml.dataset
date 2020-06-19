@@ -62,15 +62,17 @@ user> (mm/measure ds-2010)
 ```
 
 Now, let's save to an uncompressed nippy file:
+
 ```clojure
 user> (require '[tech.io :as io])
 nil
-user> (time (io/put-nippy! "nippy-demo/2010.nippy" ds-2010))
-"Elapsed time: 14500.585386 msecs"
+user> (time (tech.io/put-nippy! "test.nippy" ds-2010))
+"Elapsed time: 1069.781703 msecs"
 nil
 ```
 
-That took a bit.  It could probably be optimized or parallelized if necessary.
+One second, pretty nice :-).
+
 What is the file size?
 ```console
 chrisn@chrisn-lt-01:~/dev/tech.all/tech.ml.dataset/nippy-demo$ ls -alh
@@ -154,7 +156,7 @@ user> (mm/measure loaded-gzipped-2010)
 "93.9 MB"
 ```
 
-You can probably handle load times in the 700ms range if you have a strong reason to 
+You can probably handle load times in the 700ms range if you have a strong reason to
 have data compressed on disc.
 
 
@@ -164,7 +166,7 @@ have data compressed on disc.
 Our implementation of save/load for this pathway goes through two public functions:
 
 
-* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L889) - Convert a dataset into a pure 
+* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L889) - Convert a dataset into a pure
 clojure/java datastructure suitable for serialization.  Data is in arrays and string
 tables have been slightly deconstructed.
 

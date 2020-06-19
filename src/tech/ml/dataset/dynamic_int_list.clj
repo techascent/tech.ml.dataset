@@ -3,6 +3,7 @@
   wider data."
   (:require [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
+            [tech.v2.datatype :as dtype]
             [primitive-math :as pmath]
             [tech.v2.datatype.list]
             [tech.parallel.for :as parallel-for])
@@ -211,4 +212,13 @@
        next-val
        num-or-item-seq
        (.add retval (pmath/int next-val)))
+      retval)))
+
+
+(defn make-from-container
+  ^IntList [container]
+  (if-let [list-data (dtype/->list-backing-store container)]
+    (let [retval (DynamicIntList. list-data nil)]
+      (when-not (== 0 (dtype/ecount list-data))
+        (.getInt retval 0))
       retval)))
