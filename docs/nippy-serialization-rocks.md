@@ -1,7 +1,7 @@
 # Nippy Rocks!
 
 
-We are big fans of the [nippy](git@github.com:ptaoussanis/nippy.git) system for
+We are big fans of the [nippy system](https://github.com/ptaoussanis/nippy) for
 freezing/thawing data.  So we were pleasantly surprized with how well it performs
 with dataset and how easy it was to extend the dataset object to support nippy
 natively.
@@ -111,8 +111,8 @@ That is great :-).
 
 
 The resulting dataset is somewhat smaller in memory.  This is because when we
-parse a dataset we uses fastutil lists and append elements to them and then return a
-dataset that uses those lists as the column storage mechanism.  Those lists have a bit
+parse a dataset we use fastutil lists and append elements to them and then return a
+dataset that sits directly on top of those lists as the column storage mechanism.  Those lists have a bit
 more capacity than absolutely necessary.
 
 When we save the data, we convert the data into base java/clojure datastructures
