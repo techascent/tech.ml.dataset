@@ -131,7 +131,7 @@ can save out a gzipped nippy:
 
 ```clojure
 user> (time (io/put-nippy! (io/gzip-output-stream! "nippy-demo/2010.nippy.gz") ds-2010))
-"Elapsed time: 18147.093349 msecs"
+"Elapsed time: 7026.500505 msecs"
 nil
 ```
 
@@ -170,6 +170,8 @@ the result of `group-by-column`:
 
 user> (def tickers (ds/group-by-column "ticker" ds-2010))
 #'user/tickers
+user> (type tickers)
+clojure.lang.PersistentHashMap
 user> (count tickers)
 11532
 user> (first tickers)
@@ -184,7 +186,11 @@ user> (first tickers)
 | 685.484 |             | 725.806 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 687.097 | 3491.220 |      OTC | 2010-02-08 | 714.516 |
 | 750.000 |             | 783.871 |           USD | RUBICON MNRLS |     RUBI |  RBYCF | 770.968 | 2927.057 |      OTC | 2010-02-17 | 780.645 |
 ...
+```
 
+`group-by and `group-by-column` both return persistent maps of key->dataset.
+
+```clojure
 user> (tech.io/put-nippy! "ticker-sorted.nippy" tickers)
 nil
 user> (def loaded-tickers (tech.io/get-nippy "ticker-sorted.nippy"))
