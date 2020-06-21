@@ -102,6 +102,8 @@
                         aggregate-by-column
                         ds-concat
                         concat
+                        concat-copying
+                        concat-inplace
                         ds-take-nth
                         take-nth
                         ->dataset

@@ -490,10 +490,8 @@ This is an interface change and we do apologize!"))))
    (sort-by-column colname dataset)))
 
 
-(defn concat
-  "Concatenate datasets.  Respects missing values.  Datasets must all have the same
-  columns.  Result column datatypes will be a widening cast of the datatypes."
-  [dataset & other-datasets]
+(defn- do-concat
+  [reader-concat-fn dataset other-datasets]
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
                       (remove nil?)
                       seq)]
@@ -516,31 +514,64 @@ This is an interface change and we do apologize!"))))
                                    distinct)))
           (throw (ex-info "Dataset is missing a column" {})))
         (->> column-list
-             (map (fn [[colname columns]]
-                    (let [columns (map :column columns)
-                          final-dtype (if (== 1 (count columns))
-                                        (dtype/get-datatype (first columns))
-                                        (reduce builtin-op-providers/widest-datatype
-                                                (map dtype/get-datatype columns)))
-                          column-values (reader-concat/concat-readers
-                                         {:datatype final-dtype} columns)
-                          missing
-                          (->> (reduce
-                                (fn [[missing offset] col]
-                                  [(dtype/set-or missing
-                                                 (dtype/set-offset (ds-col/missing col)
-                                                                   offset))
-                                   (+ offset (dtype/ecount col))])
-                                [(->bitmap) 0]
-                                columns)
-                               (first))
-                          first-col (first columns)]
-                      (ds-col/new-column colname
-                                         column-values
-                                         (ds-col/metadata first-col)
-                                         missing))))
+             (pmap (fn [[colname columns]]
+                     (let [columns (map :column columns)
+                           final-dtype (if (== 1 (count columns))
+                                         (dtype/get-datatype (first columns))
+                                         (reduce builtin-op-providers/widest-datatype
+                                                 (map dtype/get-datatype columns)))
+                           column-values (reader-concat-fn final-dtype columns)
+                           missing
+                           (->> (reduce
+                                 (fn [[missing offset] col]
+                                   [(dtype/set-or
+                                     missing
+                                     (dtype/set-offset (ds-col/missing col)
+                                                       offset))
+                                    (+ offset (dtype/ecount col))])
+                                 [(->bitmap) 0]
+                                 columns)
+                                (first))
+                           first-col (first columns)]
+                       (ds-col/new-column colname
+                                          column-values
+                                          (ds-col/metadata first-col)
+                                          missing))))
              (ds-proto/from-prototype dataset (dataset-name dataset))
              (#(set-metadata % {:label-map label-map})))))))
+
+
+(defn concat-inplace
+  "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
+  same columns.  Result column datatypes will be a widening cast of the datatypes."
+  [dataset & datasets]
+  (do-concat #(reader-concat/concat-readers
+               {:datatype %1} %2)
+             dataset datasets))
+
+
+(defn concat-copying
+  "Concatenate datasets into a new dataset copying data.  Respects missing values.
+  Datasets must all have the same columns.  Result column datatypes will be a widening
+  cast of the datatypes."
+  [dataset & datasets]
+  (let [datasets (->> (clojure.core/concat [dataset] (remove nil? datasets))
+                      (remove nil?)
+                      seq)
+        n-rows (long (reduce + (map row-count datasets)))]
+    (do-concat #(-> (dtype/copy-raw->item! %2
+                                          (dtype/make-container
+                                           :typed-buffer %1 n-rows))
+                    (first))
+               (first datasets) (rest datasets))))
+
+
+(defn concat
+  "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
+  same columns.  Result column datatypes will be a widening cast of the datatypes.
+  Also see concat-copying as this may be faster in many situations."
+  [dataset & datasets]
+  (apply concat-inplace dataset datasets))
 
 
 (defn ds-concat

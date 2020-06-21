@@ -194,11 +194,37 @@
     (is (nil? nothing))))
 
 
+(deftest ds-concat-copying-nil-pun
+  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+               (ds/select :all (range 10)))
+        d1 (ds/concat-copying nil ds)
+        d2 (ds/concat-copying ds nil nil)
+        nothing (ds/ds-concat nil nil nil)]
+    (is (= (vec (ds :fruit-name))
+           (vec (d1 :fruit-name))))
+    (is (= (vec (ds :fruit-name))
+           (vec (d2 :fruit-name))))
+    (is (nil? nothing))))
+
+
 (deftest ds-concat-missing
   (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
                (ds/select [:fruit-name] (range 10))
                (ds/update-column :fruit-name #(ds-col/set-missing % [3 6])))
         d1 (ds/ds-concat ds ds)]
+    (is (= (set [3 6 13 16]) (set (ds-col/missing (d1 :fruit-name)))))
+    (is (= [:apple :apple :apple nil :mandarin
+            :mandarin nil :mandarin :apple :apple
+            :apple :apple :apple nil :mandarin
+            :mandarin nil :mandarin :apple :apple ]
+           (vec (d1 :fruit-name))))))
+
+
+(deftest concat-copying-missing
+  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+               (ds/select [:fruit-name] (range 10))
+               (ds/update-column :fruit-name #(ds-col/set-missing % [3 6])))
+        d1 (ds/concat-copying ds ds)]
     (is (= (set [3 6 13 16]) (set (ds-col/missing (d1 :fruit-name)))))
     (is (= [:apple :apple :apple nil :mandarin
             :mandarin nil :mandarin :apple :apple
@@ -401,6 +427,28 @@
            (vec (cds1 :a))))))
 
 
+(deftest concat-copying-columns-widening
+  (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}])
+        ds2 (ds/->dataset [{:a (byte 2) :b 2}])
+        cds1 (ds/concat ds ds2)
+        cds2 (ds/concat ds2 ds)]
+    (is (= #{:int32 :float64}
+           (set (map dtype/get-datatype cds1))))
+    (is (= #{:int32 :float64}
+           (set (map dtype/get-datatype cds2)))))
+  (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
+                          {:b (float 2)}])
+        ds2 (ds/->dataset [{:a (byte 2) :b 2}])
+        cds1 (ds/concat-copying ds ds2)
+        cds2 (ds/concat-copying ds2 ds)]
+    (is (= #{:int32 :float64}
+           (set (map dtype/get-datatype cds1))))
+    (is (= #{:int32 :float64}
+           (set (map dtype/get-datatype cds2))))
+    (is (= [1 nil 2]
+           (vec (cds1 :a))))))
+
+
 (deftest concat-columns-various-datatypes
   (let [stocks (ds/->dataset "test/data/stocks.csv")
         ds1 (ds/select-rows stocks (range 10))
@@ -410,6 +458,18 @@
            (dtype/get-datatype (res "date")))))
   (let [ds (ds/->dataset [{:a "a" :b 0}])
         res (ds/concat ds ds)]
+    (is (= :string (dtype/get-datatype (res :a))))))
+
+
+(deftest concat-copying-columns-various-datatypes
+  (let [stocks (ds/->dataset "test/data/stocks.csv")
+        ds1 (ds/select-rows stocks (range 10))
+        ds2 (ds/select-rows stocks (range 10 20))
+        res (ds/concat ds1 ds2)]
+    (is (= :packed-local-date
+           (dtype/get-datatype (res "date")))))
+  (let [ds (ds/->dataset [{:a "a" :b 0}])
+        res (ds/concat-copying ds ds)]
     (is (= :string (dtype/get-datatype (res :a))))))
 
 
