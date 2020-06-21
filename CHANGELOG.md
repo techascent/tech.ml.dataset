@@ -1,6 +1,17 @@
 # Changelog
 
-##2.02
+## 2.04
+ * Added `concat-copying`.  This is much faster when you want to concatenate many
+   things at the cost of copying the data and thus potentially increasing the working
+   set size in memory.
+
+
+## 2.03
+ * Saving to nippy is much faster because there is a new function to efficiently
+   construct a string table from a reader of strings:
+   `tech.ml.dataset.string-table/string-table-from-strings`.
+
+## 2.02
  * **breaking change** - Remove date/uuid inference pathway for strings from
    mapseq/spreadsheet pathways.
  * nippy freeze/thaw is efficiently supported :-).
