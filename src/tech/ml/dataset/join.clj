@@ -6,10 +6,15 @@
              :as builtin-op-providers]
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.parallel.for :as parallel-for]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.base :as ds-base])
+            [tech.ml.dataset.base :as ds-base]
+            [primitive-math :as pmath])
   (:import [tech.v2.datatype ObjectReader]
+           [tech.v2.datatype BooleanOp$DoubleBinary BooleanOp$LongBinary
+            BinaryOperators$DoubleBinary BinaryOperators$LongBinary]
            [tech.ml.dataset.impl.column Column]
            [java.util List HashSet]
            [it.unimi.dsi.fastutil.longs LongArrayList]))
@@ -345,3 +350,125 @@
   ([colname lhs rhs options]
    (-> (hash-join colname lhs rhs (assoc options :lhs-missing? options))
        :left-outer)))
+
+
+(defn- ensure-numeric-reader
+  "Column is either a float or integer reader."
+  [col]
+  (let [col-dtype (casting/un-alias-datatype (dtype/get-datatype col))]
+    (if (dtype-dt/datetime-datatype? col-dtype)
+      (if (= :duration col-dtype)
+        (-> (dtype-dt-ops/get-milliseconds col)
+            (dtype/->reader))
+        (-> (dtype-dt-ops/get-epoch-milliseconds col)
+            (dtype/->reader)))
+      (cond
+        (casting/float-type? col-dtype)
+        (dtype/->reader col :float64)
+        (casting/integer-type? col-dtype)
+        (dtype/->reader col :int64)
+        :else
+        (throw (Exception. (format "Datatype is not a numeric type: %s"
+                                   col-dtype)))))))
+
+
+(defn- make-float64-comp-op
+  ^BooleanOp$DoubleBinary [op-kwd]
+  (case op-kwd
+    :< (reify BooleanOp$DoubleBinary
+         (op [this lhs rhs]
+           (pmath/< lhs rhs)))
+    :<= (reify BooleanOp$DoubleBinary
+         (op [this lhs rhs]
+           (pmath/<= lhs rhs)))
+    :>= (reify BooleanOp$DoubleBinary
+          (op [this lhs rhs]
+            (pmath/>= lhs rhs)))
+    :> (reify BooleanOp$DoubleBinary
+         (op [this lhs rhs]
+           (pmath/> lhs rhs)))))
+
+
+(defn- make-int64-comp-op
+  ^BooleanOp$LongBinary [op-kwd]
+  (case op-kwd
+    :< (reify BooleanOp$LongBinary
+         (op [this lhs rhs]
+           (pmath/< lhs rhs)))
+    :<= (reify BooleanOp$LongBinary
+         (op [this lhs rhs]
+           (pmath/<= lhs rhs)))
+    :>= (reify BooleanOp$LongBinary
+          (op [this lhs rhs]
+            (pmath/>= lhs rhs)))
+    :> (reify BooleanOp$LongBinary
+         (op [this lhs rhs]
+           (pmath/> lhs rhs)))))
+
+
+(defn- make-float64-diff-op
+  ^BinaryOperators$DoubleBinary []
+  (reify BinaryOperators$DoubleBinary
+    (op [this lhs rhs]
+      (Math/abs (- rhs lhs)))))
+
+
+(defn- make-int64-diff-op
+  ^BinaryOperators$LongBinary []
+  (reify BinaryOperators$LongBinary
+    (op [this lhs rhs]
+      (Math/abs (- rhs lhs)))))
+
+
+
+(defn left-join-asof
+  "Perform a left join asof.  Similar to left join except this will join on nearest
+  value.  lhs and rhs must be sorted by join-column.
+  join columns must be either datetime columns in which
+  the join happens in millisecond space or they must be numeric - integer or floating
+  point datatypes.
+
+  options:
+  - `asof-op`- may be [:< :<= :nearest :>= :>] - type of join operation."
+  ([colname lhs rhs {:keys [asof-op]
+                      :or {asof-op :<=}
+                     :as options}]
+   (when-not (#{:< :<= :nearest :>= :>} asof-op)
+     (throw (Exception. (format "Unrecognized asof op: %s" asof-op))))
+   (let [[lhs-colname rhs-colname] (colname->lhs-rhs-colnames colname)
+         lhs-col (lhs lhs-colname)
+         rhs-col (rhs rhs-colname)
+         lhs-table-name (default-table-name lhs "left")
+         rhs-table-name (default-table-name rhs "right")
+         lhs-reader (ensure-numeric-reader lhs-col)
+         rhs-reader (ensure-numeric-reader rhs-col)
+         op-dtype (builtin-op-providers/widest-datatype
+                   (dtype/get-datatype lhs-reader)
+                   (dtype/get-datatype rhs-reader))
+         [rhs-offset rhs-indexes]
+         (case op-dtype
+           :float64 (do-left-join-asof :float64 lhs-reader rhs-reader asof-op)
+           :int64 (do-left-join-asof :int64 lhs-reader rhs-reader asof-op))
+         rhs-offset (long rhs-offset)
+         n-indexes (dtype/ecount rhs-indexes)
+         n-empty (- (ds-base/row-count lhs) (+ rhs-offset n-indexes))]
+     {:asof
+      (let [lhs-columns (ds-base/columns lhs)
+            rhs-columns
+            (->> (ds-base/columns rhs)
+                 (map (fn [old-col]
+                        (if (== 0 rhs-offset)
+                          (ds-col/extend-column-with-empty
+                           (ds-col/select old-col rhs-indexes)
+                           n-empty)
+                          (ds-col/prepend-column-with-empty
+                           (ds-col/select old-col rhs-indexes)
+                           rhs-offset)))))]
+        (-> (ds-base/from-prototype
+             lhs (format "asof-%s" (name asof-op))
+             (nice-column-names
+              [lhs-table-name lhs-columns]
+              [rhs-table-name rhs-columns]))
+            (update-join-metadata lhs-table-name rhs-table-name)))}))
+  ([colname lhs rhs]
+   (left-join-asof colname lhs rhs)))

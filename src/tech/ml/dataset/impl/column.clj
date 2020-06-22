@@ -570,3 +570,24 @@
        (dtype/set-add-range! (dtype/clone (.missing column))
              (unchecked-int n-elems)
              (unchecked-int (+ n-elems n-empty)))))))
+
+
+(defn prepend-column-with-empty
+  [column ^long n-empty]
+  (if (== 0 (long n-empty))
+    column
+    (let [^Column column column
+          col-dtype (dtype/get-datatype column)]
+      (new-column
+       (ds-col-proto/column-name column)
+       (concat-rdr/concat-readers
+        [(const-rdr/make-const-reader
+          (get @dtype->missing-val-map col-dtype)
+          col-dtype
+          n-empty)
+         (.data column)])
+       (.metadata column)
+       (dtype/set-add-range!
+        (dtype/set-offset (.missing column) n-empty)
+        (unchecked-int 0)
+        (unchecked-int n-empty))))))
