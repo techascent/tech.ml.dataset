@@ -305,7 +305,6 @@
         :int16 (simple-col-parser :int16)
         :int32 (simple-col-parser :int32)
         :int64 (simple-col-parser :int64)
-        :float32 (simple-col-parser :float32)
         :float64 (simple-col-parser :float64)
         :uuid (simple-col-parser :uuid)
         :packed-duration (make-datetime-simple-parser :packed-duration)
@@ -320,6 +319,7 @@
 
 (def all-parsers
   (assoc (into {} default-parser-seq)
+         :float32 (simple-col-parser :float32)
          :keyword (simple-col-parser :keyword)
          :symbol (simple-col-parser :symbol)
          :instant (make-datetime-simple-parser :instant)
