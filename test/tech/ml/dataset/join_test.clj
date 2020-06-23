@@ -2,7 +2,10 @@
   (:require [tech.ml.dataset :as ds]
             [tech.ml.dataset.join :as ds-join]
             [tech.ml.dataset.column :as ds-col]
+            [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [clojure.test :refer [deftest is]]))
 
 
@@ -170,9 +173,49 @@
     ;;no nil column names
     (is (every? identity (ds/column-names lj)))
     (is (every? identity (ds/column-names rj)))
-    (is (every? identity (ds/column-names ljt)))
-    ))
+    (is (every? identity (ds/column-names ljt)))))
 
+
+(defn- drop-missing
+  [ds]
+  (ds/drop-rows ds (ds/missing ds)))
+
+
+(deftest asof-lt
+  (let [ds-a (ds/->dataset {:a (range 10)})
+        ds-b (ds/->dataset {:a (dfn/* 2 (range 10))})
+        ds-bm (ds/->dataset {:a (dfn/- (dfn/* 2 (range 10)) 5)})
+        ds-bmm (ds/->dataset {:a (dfn/- (dfn/* 2 (range 10)) 14)})]
+    (is (= [2 2 4 4 6 6 8 8 10 10]
+           (vec ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<}) :right.a))))
+    (is (= [0 2 2 4 4 6 6 8 8 10]
+           (vec ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<=}) :right.a))))
+    (is (= [1 3 3 5 5 7 7 9 9 11]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bm {:asof-op :<}) :right.a))))
+    (is (= [2 2 4 4 nil nil nil nil nil nil]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bmm {:asof-op :<}) :right.a)))))
+
+  (let [cur-date (dtype-dt/local-date)
+        date-fn #(when %
+                   (dtype-dt-ops/plus-days cur-date %))
+        ds-a (ds/->dataset {:a (date-fn (range 10))})
+        ds-b (ds/->dataset {:a (date-fn (dfn/* 2 (range 10)))})
+        ds-bm (ds/->dataset {:a (date-fn (dfn/- (dfn/* 2 (range 10)) 5))})
+        ds-bmm (ds/->dataset {:a (date-fn (dfn/- (dfn/* 2 (range 10)) 14))})]
+    (is (= (vec (date-fn [2 2 4 4 6 6 8 8 10 10]))
+           (vec (dtype-dt/unpack
+                 ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<}) :right.a)))))
+    (is (= (date-fn [0 2 2 4 4 6 6 8 8 10])
+           (vec (dtype-dt/unpack
+                 ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<=}) :right.a)))))
+    (is (= (date-fn [1 3 3 5 5 7 7 9 9 11])
+           (vec (dtype-dt/unpack
+                 ((ds-join/left-join-asof :a ds-a ds-bm {:asof-op :<}) :right.a)))))
+    (is (= (date-fn [2 2 4 4])
+           (vec (dtype-dt/unpack
+                 ((drop-missing (ds-join/left-join-asof
+                                 :a ds-a ds-bmm {:asof-op :<}))
+                  :right.a)))))))
 
 
 (comment

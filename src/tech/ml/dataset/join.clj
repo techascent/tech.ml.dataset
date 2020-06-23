@@ -17,7 +17,11 @@
             BinaryOperators$DoubleBinary BinaryOperators$LongBinary]
            [tech.ml.dataset.impl.column Column]
            [java.util List HashSet]
-           [it.unimi.dsi.fastutil.longs LongArrayList]))
+           [it.unimi.dsi.fastutil.longs LongArrayList]
+           [it.unimi.dsi.fastutil.ints IntArrayList IntList]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (defmacro datatype->group-by
@@ -420,6 +424,74 @@
       (Math/abs (- rhs lhs)))))
 
 
+(defmacro asof-lt
+  [datatype asof-op lhs rhs]
+  `(let [lhs-rdr# (typecast/datatype->reader ~datatype ~lhs)
+         rhs-rdr# (typecast/datatype->reader ~datatype ~rhs)
+         comp-op# ~(case datatype
+                     :int64 `(make-int64-comp-op ~asof-op)
+                     :float64 `(make-float64-comp-op ~asof-op))
+         n-elems# (.lsize lhs-rdr#)
+         n-right# (.lsize rhs-rdr#)
+         n-right-dec# (dec n-right#)
+         retval# (IntArrayList. n-elems#)]
+     (loop [lhs-idx# 0
+            rhs-idx# 0]
+       (when-not (or (== lhs-idx# n-elems#)
+                     (== rhs-idx# n-right#))
+         (let [lhs-val# (.read lhs-rdr# lhs-idx#)
+               rhs-val# (.read rhs-rdr# rhs-idx#)
+               found?# (.op comp-op# lhs-val# rhs-val#)
+               new-lhs-idx# (if found?#
+                              (unchecked-inc lhs-idx#)
+                              lhs-idx#)
+               new-rhs-idx# (if found?#
+                              rhs-idx#
+                              (unchecked-inc rhs-idx#))]
+           (when found?#
+             (.add retval# (unchecked-int rhs-idx#)))
+           (recur new-lhs-idx# new-rhs-idx#))))
+     [0 retval#]))
+
+
+(defmacro asof-gt
+  [datatype asof-op lhs rhs]
+  `(let [lhs-rdr# (typecast/datatype->reader ~datatype ~lhs)
+         rhs-rdr# (typecast/datatype->reader ~datatype ~rhs)
+         comp-op# ~(case datatype
+                     :int64 `(make-int64-comp-op ~asof-op)
+                     :float64 `(make-float64-comp-op ~asof-op))
+         n-elems# (.lsize lhs-rdr#)
+         n-right# (.lsize rhs-rdr#)
+         n-right-dec# (dec n-right#)
+         retval# (IntArrayList. n-elems#)]
+     (loop [lhs-idx# (unchecked-dec n-elems#)
+            rhs-idx# n-right-dec#]
+       (when-not (or (== lhs-idx# -1)
+                     (== rhs-idx# -1))
+         (let [lhs-val# (.read lhs-rdr# lhs-idx#)
+               rhs-val# (.read rhs-rdr# rhs-idx#)
+               found?# (.op comp-op# lhs-val# rhs-val#)
+               new-lhs-idx# (if found?#
+                              (unchecked-dec lhs-idx#)
+                              lhs-idx#)
+               new-rhs-idx# (if found?#
+                              rhs-idx#
+                              (unchecked-dec rhs-idx#))]
+           (when found?#
+             (.add retval# (unchecked-int rhs-idx#)))
+           (recur new-lhs-idx# new-rhs-idx#))))
+     ;;Now we have to reverse retval#
+     (let [rev-retval# (IntArrayList. n-elems#)
+           n-retval# (.size retval#)
+           n-retval-dec# (unchecked-dec n-retval#)]
+       (dotimes [iter# n-retval#]
+         (.add rev-retval# (.get retval# (- n-retval-dec# iter#))))
+
+       [(if-not (== 0 n-retval#)
+          (max 0 (unchecked-dec (.get rev-retval# 0)))
+          rev-retval#)])))
+
 
 (defn left-join-asof
   "Perform a left join asof.  Similar to left join except this will join on nearest
@@ -447,28 +519,39 @@
                    (dtype/get-datatype rhs-reader))
          [rhs-offset rhs-indexes]
          (case op-dtype
-           :float64 (do-left-join-asof :float64 lhs-reader rhs-reader asof-op)
-           :int64 (do-left-join-asof :int64 lhs-reader rhs-reader asof-op))
+           :float64 (cond
+                      (#{:< :<=} asof-op)
+                      (asof-lt :float64 asof-op lhs-reader rhs-reader)
+                      (#{:> :>=} asof-op)
+                      (asof-gt :float64 asof-op lhs-reader rhs-reader)
+                      :else
+                      (throw (Exception. "Unsupported")))
+           :int64 (cond
+                    (#{:< :<=} asof-op)
+                    (asof-lt :int64 asof-op lhs-reader rhs-reader)
+                    (#{:> :>=} asof-op)
+                    (asof-gt :int64 asof-op lhs-reader rhs-reader)
+                    :else
+                    (throw (Exception. "Unsupported"))))
          rhs-offset (long rhs-offset)
          n-indexes (dtype/ecount rhs-indexes)
          n-empty (- (ds-base/row-count lhs) (+ rhs-offset n-indexes))]
-     {:asof
-      (let [lhs-columns (ds-base/columns lhs)
-            rhs-columns
-            (->> (ds-base/columns rhs)
-                 (map (fn [old-col]
-                        (if (== 0 rhs-offset)
-                          (ds-col/extend-column-with-empty
-                           (ds-col/select old-col rhs-indexes)
-                           n-empty)
-                          (ds-col/prepend-column-with-empty
-                           (ds-col/select old-col rhs-indexes)
-                           rhs-offset)))))]
-        (-> (ds-base/from-prototype
-             lhs (format "asof-%s" (name asof-op))
-             (nice-column-names
-              [lhs-table-name lhs-columns]
-              [rhs-table-name rhs-columns]))
-            (update-join-metadata lhs-table-name rhs-table-name)))}))
+     (let [lhs-columns (ds-base/columns lhs)
+           rhs-columns
+           (->> (ds-base/columns rhs)
+                (map (fn [old-col]
+                       (if (== 0 rhs-offset)
+                         (ds-col/extend-column-with-empty
+                          (ds-col/select old-col rhs-indexes)
+                          n-empty)
+                         (ds-col/prepend-column-with-empty
+                          (ds-col/select old-col rhs-indexes)
+                          rhs-offset)))))]
+       (-> (ds-base/from-prototype
+            lhs (format "asof-%s" (name asof-op))
+            (nice-column-names
+             [lhs-table-name lhs-columns]
+             [rhs-table-name rhs-columns]))
+           (update-join-metadata lhs-table-name rhs-table-name)))))
   ([colname lhs rhs]
-   (left-join-asof colname lhs rhs)))
+   (left-join-asof colname lhs rhs {})))
