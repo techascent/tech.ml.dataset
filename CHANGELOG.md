@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.06-SNAPSHOT
+## 2.06
  * `left-join-asof` - Implementation of algorithms from pandas' 
     [`merge_asof'](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.merge_asof.html).
 
