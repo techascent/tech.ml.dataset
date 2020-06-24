@@ -180,6 +180,11 @@ Implementations should check their metadata before doing calculations."
   (col-impl/extend-column-with-empty column n-empty))
 
 
+(defn prepend-column-with-empty
+  [column n-empty]
+  (col-impl/prepend-column-with-empty column n-empty))
+
+
 (defn to-double-array
   "Convert to a java primitive array of a given datatype.  For strings,
   an implicit string->double mapping is expected.  For booleans, true=1 false=0.

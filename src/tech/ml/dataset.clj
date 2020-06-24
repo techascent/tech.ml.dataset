@@ -161,7 +161,8 @@
                          hash-join
                          inner-join
                          right-join
-                         left-join)
+                         left-join
+                         left-join-asof)
 
 
 (par-util/export-symbols tech.ml.dataset.impl.dataset

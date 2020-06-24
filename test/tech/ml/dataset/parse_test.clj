@@ -352,7 +352,12 @@
            (vec ((ds-base/value-reader ds) 10))))))
 
 
-;; Failing due to apprently invalid iris.feather file
+(deftest parse-small-doubles
+  (let [ds (ds-base/->dataset "test/data/double_parse_test.csv")]
+    (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))))
+
+
+;; Failing due to apparently invalid iris.feather file
 ;; (deftest parse-arrow
 ;;   (let [ds (ds-base/->dataset arrow-file)]
 ;;     (is (= 13 (ds-base/column-count ds)))
