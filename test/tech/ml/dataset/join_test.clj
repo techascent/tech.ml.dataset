@@ -218,6 +218,37 @@
                   :right.a)))))))
 
 
+(deftest asof-gt
+  (let [ds-a (ds/->dataset {:a (range 10)})
+        ds-b (ds/->dataset {:a (dfn/* 2 (range 10))})
+        ds-bm (ds/->dataset {:a (dfn/- (dfn/* 2 (range 10)) 5)})
+        ds-bmm (ds/->dataset {:a (dfn/- (dfn/* 2 (range 10)) 14)})]
+    (is (= [nil 0 0 2 2 4 4 6 6 8]
+           (vec ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :>}) :right.a))))
+    (is (= [0 0 2 2 4 4 6 6 8 8]
+           (vec ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :>=}) :right.a))))
+    (is (= [-1 -1 1 1 3 3 5 5 7 7]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bm {:asof-op :>}) :right.a))))
+    (is (= [-2 0 0 2 2 4 4 4 4 4]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bmm {:asof-op :>}) :right.a))))))
+
+
+(deftest asof-nearest
+  (let [ds-a (ds/->dataset {:a (range 10)})
+        ds-b (ds/->dataset {:a (dfn/* 3 (range 10))})
+        ds-bm (ds/->dataset {:a (dfn/- (dfn/* 3 (range 10)) 5)})
+        ds-bmm (ds/->dataset {:a (dfn/- (dfn/* 3 (range 10)) 20)})]
+    (is (= [0 0 3 3 3 6 6 6 9 9]
+           (vec ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :nearest})
+                 :right.a))))
+    (is (= [1 1 1 4 4 4 7 7 7 10]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bm {:asof-op :nearest})
+                 :right.a))))
+    (is (= [1 1 1 4 4 4 7 7 7 7]
+           (vec ((ds-join/left-join-asof :a ds-a ds-bmm {:asof-op :nearest})
+                 :right.a))))))
+
+
 (comment
 
   (def lhs-fields

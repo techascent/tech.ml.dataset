@@ -487,10 +487,43 @@
            n-retval-dec# (unchecked-dec n-retval#)]
        (dotimes [iter# n-retval#]
          (.add rev-retval# (.get retval# (- n-retval-dec# iter#))))
+       [(- n-elems# (.size rev-retval#))
+        rev-retval#])))
 
-       [(if-not (== 0 n-retval#)
-          (max 0 (unchecked-dec (.get rev-retval# 0)))
-          rev-retval#)])))
+
+(defmacro asof-nearest
+  [datatype lhs rhs]
+  `(let [lhs-rdr# (typecast/datatype->reader ~datatype ~lhs)
+         rhs-rdr# (typecast/datatype->reader ~datatype ~rhs)
+         comp-op# ~(case datatype
+                     :int64 `(make-int64-diff-op)
+                     :float64 `(make-float64-diff-op))
+         n-elems# (.lsize lhs-rdr#)
+         n-right# (.lsize rhs-rdr#)
+         n-right-dec# (dec n-right#)
+         retval# (IntArrayList. n-elems#)]
+     (loop [lhs-idx# 0
+            rhs-idx# 0]
+       (when-not (or (== lhs-idx# n-elems#)
+                     (== rhs-idx# n-right-dec#))
+         (let [lhs-val# (.read lhs-rdr# lhs-idx#)
+               rhs-val# (.read rhs-rdr# rhs-idx#)
+               rhs-next-val# (.read rhs-rdr# (unchecked-inc rhs-idx#))
+               asof-diff# (pmath/- (.op comp-op# lhs-val# rhs-val#)
+                                   (.op comp-op# lhs-val# rhs-next-val#))
+               found?# (<= asof-diff# 0)
+               new-lhs-idx# (if found?#
+                              (unchecked-inc lhs-idx#)
+                              lhs-idx#)
+               new-rhs-idx# (if found?#
+                              rhs-idx#
+                              (unchecked-inc rhs-idx#))]
+           (when found?#
+             (.add retval# (unchecked-int rhs-idx#)))
+           (recur new-lhs-idx# new-rhs-idx#))))
+     (dotimes [iter# (- n-elems# (.size retval#))]
+       (.add retval# n-right-dec#))
+     [0 retval#]))
 
 
 (defn left-join-asof
@@ -501,7 +534,8 @@
   point datatypes.
 
   options:
-  - `asof-op`- may be [:< :<= :nearest :>= :>] - type of join operation."
+  - `asof-op`- may be [:< :<= :nearest :>= :>] - type of join operation.  Defaults to
+     <=."
   ([colname lhs rhs {:keys [asof-op]
                       :or {asof-op :<=}
                      :as options}]
@@ -524,6 +558,8 @@
                       (asof-lt :float64 asof-op lhs-reader rhs-reader)
                       (#{:> :>=} asof-op)
                       (asof-gt :float64 asof-op lhs-reader rhs-reader)
+                      (= asof-op :nearest)
+                      (asof-nearest :float64 lhs-reader rhs-reader)
                       :else
                       (throw (Exception. "Unsupported")))
            :int64 (cond
@@ -531,6 +567,8 @@
                     (asof-lt :int64 asof-op lhs-reader rhs-reader)
                     (#{:> :>=} asof-op)
                     (asof-gt :int64 asof-op lhs-reader rhs-reader)
+                    (= asof-op :nearest)
+                    (asof-nearest :int64 lhs-reader rhs-reader)
                     :else
                     (throw (Exception. "Unsupported"))))
          rhs-offset (long rhs-offset)
