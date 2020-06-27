@@ -23,7 +23,7 @@ writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
 For a simple all-in-one data exploration pathway please checkout [simpledata](https://github.com/cnuernber/simpledata).
 
-An alternative cutting-edge api is available via [tablecloth](https://github.com/scicloj/tablecloth).
+An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
 We now have support for [nippy serialization](docs/nippy-serialization-rocks.md).
 
