@@ -134,7 +134,7 @@
         (let [data (int-array n-elems)]
           (parallel-for/parallel-for
            idx n-elems
-           (aset data idx (unchecked-short (.get str->int (str-reader idx)))))
+           (aset data idx (unchecked-int (.get str->int (str-reader idx)))))
           (StringTable. int->str str->int (int-list/make-from-container data)))))
     (let [str-table (make-string-table 0)]
       (doseq [data str-data]

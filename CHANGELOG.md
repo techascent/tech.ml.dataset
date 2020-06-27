@@ -1,4 +1,7 @@
 # Changelog
+## 2.07
+ * Bugfix - string tables that required integer storage were written out
+   incorrectly to nippy files.
 
 ## 2.06
  * `left-join-asof` - Implementation of algorithms from pandas' 
