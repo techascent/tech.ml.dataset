@@ -1,17 +1,22 @@
 # Changelog
+## 2.08
+ * Major datatype datetime upgrade - [Issue 31](https://github.com/techascent/tech.datatype/issues/31)
+
+
 ## 2.07
  * Bugfix - string tables that required integer storage were written out
    incorrectly to nippy files.
 
+
 ## 2.06
- * `left-join-asof` - Implementation of algorithms from pandas' 
+ * `left-join-asof` - Implementation of algorithms from pandas'
     [`merge_asof'](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.merge_asof.html).
 
 
 ## 2.05
  * Bugfix release - We now do not ever parse to float32 numbers by default.  This was
    silently causing data loss.  The cost of this is that files are somewhat larger and
-   potentially we need to have an option to set the default sequence of datatypes 
+   potentially we need to have an option to set the default sequence of datatypes
    attempted during data parsing.
 
 
