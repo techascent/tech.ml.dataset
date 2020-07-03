@@ -2,6 +2,7 @@
   (:require [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.dataset.string-table :refer [make-string-table]]
             [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
+            [tech.ml.dataset.text :as ds-text]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
@@ -72,10 +73,14 @@
   ([dtype n-elems]
    (case dtype
      :string (make-string-table n-elems "")
-     :text (let [list-data (ArrayList.)]
+     :text (let [^List list-data (dtype/make-container :list :string 0)]
              (dotimes [iter n-elems]
                (.add list-data ""))
              list-data)
+     :encoded-text (let [^List list-data (ds-text/encoded-text-builder n-elems)]
+                     (dotimes [iter n-elems]
+                       (.set list-data iter ""))
+                     list-data)
      (dtype/make-container :list dtype n-elems)))
   ([dtype]
    (make-container dtype 0)))

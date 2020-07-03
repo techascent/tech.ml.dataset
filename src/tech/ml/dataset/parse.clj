@@ -257,8 +257,6 @@
     (make-parser-container [this] (make-container :string))
     (can-parse? [this# item#] (< (count item#) 1024))
     (simple-parse! [parser# container# str-val#]
-      (when (> (count str-val#) 1024)
-        (throw (Exception. "Text data not string data")))
       (.add ^List container# str-val#))
     (simple-missing! [parser# container#]
       (.add ^List container# ""))))
@@ -271,6 +269,20 @@
     (get-datatype [item#] :text)
     PSimpleColumnParser
     (make-parser-container [this] (make-container :text))
+    (can-parse? [this# item#] true)
+    (simple-parse! [parser# container# str-val#]
+      (.add ^List container# str-val#))
+    (simple-missing! [parser# container#]
+      (.add ^List container# ""))))
+
+
+(defn simple-encoded-text-parser
+  []
+  (reify
+    dtype-proto/PDatatype
+    (get-datatype [item#] :encoded-text)
+    PSimpleColumnParser
+    (make-parser-container [this] (make-container :encoded-text))
     (can-parse? [this# item#] true)
     (simple-parse! [parser# container# str-val#]
       (.add ^List container# str-val#))
@@ -322,6 +334,7 @@
          :float32 (simple-col-parser :float32)
          :keyword (simple-col-parser :keyword)
          :symbol (simple-col-parser :symbol)
+         :encoded-text (simple-encoded-text-parser)
          :instant (make-datetime-simple-parser :instant)
          :offset-date-time (make-datetime-simple-parser :offset-date-time)
          :local-time (make-datetime-simple-parser :local-time)
@@ -449,7 +462,8 @@ falling back to :string"
                           @container*))
       (column-data [parser]
         {:missing missing
-         :data @container*}))))
+         :data @container*
+         :force-datatype? true}))))
 
 
 (defn on-parse-failure!
@@ -476,7 +490,8 @@ falling back to :string"
 (defn return-parse-data
   ([container missing unparsed-data unparsed-indexes]
    (merge {:data container
-           :missing missing}
+           :missing missing
+           :force-datatype? true}
           (when-not (== 0 (count unparsed-data))
             {:metadata {:unparsed-data unparsed-data
                         :unparsed-indexes unparsed-indexes}}))))
@@ -487,6 +502,9 @@ falling back to :string"
    (let [simple-parser (if (keyword? parser-kwd-or-simple-parser)
                          (get all-parsers parser-kwd-or-simple-parser)
                          parser-kwd-or-simple-parser)
+         _ (when-not simple-parser
+             (throw (Exception. (format "Unsure how to parse datatype %s"
+                                        parser-kwd-or-simple-parser))))
          parser-dtype (dtype/get-datatype simple-parser)
          container (make-parser-container simple-parser)
          ^RoaringBitmap missing (bitmap/->bitmap)
