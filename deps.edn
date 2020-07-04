@@ -10,7 +10,8 @@
         com.github.haifengl/smile-netlib {:mvn/version "2.4.0"}
         com.github.haifengl/smile-io     {:mvn/version "2.4.0"}
         ch.qos.logback/logback-classic   {:mvn/version "1.1.3"}
-        com.github.haifengl/smile-nlp    {:mvn/version "2.4.0"}}
+        com.github.haifengl/smile-nlp    {:mvn/version "2.4.0"}
+        http-kit                         {:mvn/version "2.3.0"}}
  :aliases {:test
            {:extra-deps
             {criterium {:mvn/version "0.4.5"}
