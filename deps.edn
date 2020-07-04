@@ -20,4 +20,5 @@
              org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
              org.apache.arrow/arrow-memory {:mvn/version "0.16.0"}
              org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
+             com.github.haifengl/smile-nlp {:mvn/version "2.4.0"}
              }}}}
