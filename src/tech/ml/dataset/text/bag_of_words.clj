@@ -84,3 +84,27 @@
         (ds-base/->>dataset)))
   ([path bag-of-words-colname token->idx-map]
    (path-token-map->bag-of-words path bag-of-words-colname token->idx-map {})))
+
+
+(comment
+
+  (def dataset-and-tokens (path->dataset-master-token-table
+                           "test/data/medical-text.csv"
+                           "abstract"))
+
+  (def most-common-tokens
+    (->> (:token-table dataset-and-tokens)
+         (sort-by second >)
+         (take 1000)
+         (mapv first)))
+
+  (def token->idx-map (->> most-common-tokens
+                           (map-indexed (fn [idx tkn] [tkn idx]))
+                           (into {})))
+
+  (def bow-ds (path-token-map->bag-of-words
+               "test/data/medical-text.csv"
+               "abstract"
+               token->idx-map))
+
+  )
