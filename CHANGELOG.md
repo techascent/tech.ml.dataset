@@ -1,4 +1,8 @@
 # Changelog
+## 2.11
+ * After several tries got docs up on cljdoc.  Need to have provided deps cleaned 
+   up a bit better.
+
 ## 2.09
  - Include logback-classic as a dependency as smile.math brings in slf4j and this causes
    an error if some implementation of slf4j isn't included thus breaking things like
