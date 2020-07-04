@@ -1,4 +1,4 @@
-(ns tech.libs.nettoolkit
+(ns ^:no-doc tech.libs.nettoolkit
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]
             [clojure.pprint :as pp])
