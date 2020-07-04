@@ -1,4 +1,12 @@
 # Changelog
+## 2.09
+ - Include logback-classic as a dependency as smile.math brings in slf4j and this causes
+   an error if some implementation of slf4j isn't included thus breaking things like
+   cljdoc.
+ - Experimental options options for parsing text (:encoded-text) when dealing with
+   large text fields.
+
+
 ## 2.08
  * Major datatype datetime upgrade - [Issue 31](https://github.com/techascent/tech.datatype/issues/31)
 

@@ -8,16 +8,20 @@
         org.dhatim/fastexcel-reader      {:mvn/version "0.10.12"}
         com.github.haifengl/smile-core   {:mvn/version "2.4.0"}
         com.github.haifengl/smile-netlib {:mvn/version "2.4.0"}
-        com.github.haifengl/smile-io     {:mvn/version "2.4.0"}}
+        com.github.haifengl/smile-io     {:mvn/version "2.4.0"}
+        ch.qos.logback/logback-classic   {:mvn/version "1.1.3"}}
  :aliases {:test
            {:extra-deps
             {criterium {:mvn/version "0.4.5"}
-             ch.qos.logback/logback-classic {:mvn/version "1.1.3"}
              http-kit {:mvn/version "2.3.0"}
              techascent/tech.viz {:mvn/version "0.3"}
              com.clojure-goes-fast/clj-memory-meter {:mvn/version "0.1.0"}
              org.apache.parquet/parquet-hadoop {:mvn/version "1.10.1"}
-             org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
+             org.apache.hadoop/hadoop-common
+             {:mvn/version "3.1.1"
+              ;;We use logback-classic.
+              :exclusions [org.slf4j/slf4j-log4j12
+                           log4j]}
              org.apache.arrow/arrow-memory {:mvn/version "0.16.0"}
              org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
              com.github.haifengl/smile-nlp {:mvn/version "2.4.0"}
