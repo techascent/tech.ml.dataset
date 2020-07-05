@@ -1,13 +1,10 @@
 # Quick Reference - Core API
 
-`tech.ml.dataset` has a an organically growing api.  This document is a sort of quick
-reference card by category that hopefully helps you find the things you want faster.
-Functions are linked to their source however if no namespace is specified they are
+Functions are linked to their source but if no namespace is specified they are
 also accessible via the `tech.ml.dataset` namespace.
 
-
 This is not an exhaustive listing of all functionality; just a quick brief way to find
-functions that are probably useful.
+functions that are we find most useful.
 
 
 ## Loading/Saving
@@ -116,7 +113,7 @@ so these are faster yet.
  drop-columns.
 * [new-dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/impl/dataset.clj#L183) - Create a new dataset from a sequence of columns.  Columns may be actual columns created via `tech.ml.dataset.column/new-column` or they could be maps containing at least keys `{:name :data}` but also potentially `{:metadata :missing}` in order to create a column with a specific set of missing values and metadata.  `:force-datatype true` will disable the system
 from attempting to scan the data for missing values and e.g. create a float column
-from a vector ofo Float objects.
+from a vector of Float objects.
 * [group-by-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L404), [group-by](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L378) - Create a persistent map of value->dataset.  Sub-datasets are created via indexing into the original dataset so data is not copied.
 * [sort-by-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L466), [sort-by](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L427) - Return a sorted dataset.
 * [filter-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L350), [filter](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L330) - Return a new dataset with only rows that pass the predicate.
@@ -167,7 +164,7 @@ arithmetic operations to a column lazily returning a new column.
  dataset by a bit - sometimes 20%.  This is because lists that have allocated extra 
  capacity are copied into arrays that have no extra capacity.
 
- * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and where copying the data into java arrays.  Will clone datsets or columns.
+ * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and where copying the data into java arrays.  Will clone datasets or columns.
 
 
 
