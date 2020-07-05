@@ -1,4 +1,4 @@
-# API
+# Quick Reference - Core API
 
 `tech.ml.dataset` has a an organically growing api.  This document is a sort of quick
 reference card by category that hopefully helps you find the things you want faster.
