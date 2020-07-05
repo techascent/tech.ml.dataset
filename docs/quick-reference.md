@@ -58,8 +58,8 @@ functions that are we find most useful.
 * [missing](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L281) - Return the union of all missing
   indexes.  Useful in combination with drop-rows to quickly eliminate missing values
   from the dataset.
-* [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement IObj and so you can get/set
-  metadata on them freely - `:name` has meaning in the system and setting it
+* [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement 
+  `clojure.lang.IObj` so you can get/set metadata on them freely. `:name` has meaning in the system and setting it
   directly on a column is not recommended.  Metadata is generally carried forward through most of the operations below.
 
 
