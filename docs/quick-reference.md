@@ -59,8 +59,8 @@ functions that are we find most useful.
   indexes.  Useful in combination with drop-rows to quickly eliminate missing values
   from the dataset.
 * [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement IObj and so you can get/set
-  metadata on them mosly freely - `:name` has meaning in the system and setting it
-  directly on a column is not recommended.
+  metadata on them freely - `:name` has meaning in the system and setting it
+  directly on a column is not recommended.  Metadata is generally carried forward through most of the operations below.
 
 
 `mapseq-reader` and `value-reader` are lazy and thus `(rand-nth (mapseq-reader ds))` is
