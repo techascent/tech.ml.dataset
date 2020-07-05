@@ -158,17 +158,17 @@ arithmetic operations to a column lazily returning a new column.
  The dataset system relies on index indirection and laziness quite often.  This allows
  you to aggregate up operations and pay relatively little for them however sometimes
  it increases the accessing costs of the data by an undesirable amount.  Because
- of this we use `clone` quite often to either force a calculations to complete before
+ of this we use `clone` quite often to force calculations to complete before
  beginning a new stage of data processing.  Clone is multithreaded and very efficient
  often boiling down into either parallelized iteration over the data or
  `System/arraycopy` calls.
 
- Additionally after loading calling 'clone' will reduce the in-memory size of the
- dataset by a bit; sometimes 20% as lists that have allocated extra capacity are
- copied into arrays that have no extra capacity.
+ Additionally calling 'clone' after loading will reduce the in-memory size of the
+ dataset by a bit - sometimes 20%.  This is because lists that have allocated extra 
+ capacity are copied into arrays that have no extra capacity.
 
- * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and where
- copying the data into java arrays.
+ * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) 
+ - Clones the dataset realizing lazy operation and where copying the data into java arrays.  Will clone datsets or columns.
 
 
 
