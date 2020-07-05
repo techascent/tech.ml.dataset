@@ -209,7 +209,7 @@ org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
 
 ## More Documentation
 
-* Quick code-oriented [walkthrough](docs/walkthrough.md)
+* Code-oriented [walkthrough](docs/walkthrough.md) and [quick reference](docs/quick-reference.md).
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
 * [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 * [Simple Data Exploration Example](https://github.com/cnuernber/simpledata)
