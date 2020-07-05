@@ -19,9 +19,8 @@ functions that are we find most useful.
  roaring bitmaps, data is probably in primitive arrays.  String tables receive special
  treatment.
 * [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L918) - Inverse of data->dataset.
-* [tech.ml.dataset.parse/csv->rows](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/parse.clj#L719) - Parse a
- csv or tsv but just return a sequence of rows.  This uses a subset of the ->dataset
- options.
+* [tech.ml.dataset.parse/csv->rows](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/parse.clj#L719) - Lazily parse a
+ csv or tsv returning a sequence of string[] rows.  This uses a subset of the ->dataset options.
 * [tech.ml.dataset.parse/rows->dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/parse.clj#L632) - Given
  a sequence of string[] rows, parse data into a dataset.  Uses subset of the ->dataset
  options.
