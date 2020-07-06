@@ -3,6 +3,8 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
+[![cljdoc badge](https://cljdoc.org/badge/techascent/tech.ml.dataset)](https://cljdoc.org/d/techascent/tech.ml.dataset/CURRENT)
+
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
