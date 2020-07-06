@@ -148,17 +148,24 @@
     :else
     (long-array item)))
 
+(defmacro generic-reader! []
+  `(or ~'generic-reader
+       (do (set! ~'generic-reader
+                 (typecast/datatype->reader :object ~'this))
+           ~'generic-reader)))
 
 (deftype Column
     [^RoaringBitmap missing
      data
-     ^IPersistentMap metadata]
+     ^IPersistentMap metadata
+     ^:unsynchronized-mutable ^ObjectReader generic-reader]
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-proto/get-datatype data))
   dtype-proto/PSetDatatype
   (set-datatype [this new-dtype]
     (Column. missing (dtype-proto/set-datatype data new-dtype)
-             metadata))
+             metadata
+             generic-reader))
   dtype-proto/PCountable
   (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToReader
@@ -240,7 +247,7 @@
                              (map #(+ (long %) offset))
                              (->bitmap))
             new-data (dtype-proto/sub-buffer data offset len)]
-        (Column. new-missing new-data metadata))))
+        (Column. new-missing new-data metadata generic-reader))))
   dtype-proto/PToNioBuffer
   (convertible-to-nio-buffer? [item]
     (and (== 0 (dtype/ecount missing))
@@ -258,13 +265,15 @@
                                            (dtype/get-datatype data) data))]
       (Column. (dtype/clone missing)
                new-data
-               metadata)))
+               metadata
+               nil)))
   dtype-proto/PPrototype
   (from-prototype [col datatype shape]
     (let [n-elems (long (apply * shape))]
       (Column. (->bitmap)
                (make-container datatype n-elems)
-               {})))
+               {}
+               nil)))
   dtype-proto/PToArray
   (->sub-array [col]
     (when-let [data-ary (when (== 0 (dtype/ecount missing))
@@ -272,20 +281,22 @@
       data-ary))
   (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
-  (iterator [col]
-    (.iterator ^Iterable (dtype/->reader col :object)))
+  (iterator [this]
+    (.iterator ^Iterable (generic-reader!)))
 
   ds-col-proto/PIsColumn
   (is-column? [this] true)
   ds-col-proto/PColumn
   (column-name [col] (:name metadata))
-  (set-name [col name] (Column. missing data (assoc metadata :name name)))
+  (set-name [col name] (Column. missing data (assoc metadata :name name)
+                                generic-reader))
   (supported-stats [col] dtype-fn/supported-descriptive-stats)
   (metadata [col]
     (merge metadata
            {:size (dtype/ecount col)
             :datatype (dtype/get-datatype col)}))
-  (set-metadata [col data-map] (Column. missing data (->persistent-map data-map)))
+  (set-metadata [col data-map] (Column. missing data (->persistent-map data-map)
+                                        generic-reader))
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
@@ -297,7 +308,8 @@
       (.runOptimize bitmap)
       (Column. bitmap
                data
-               metadata)))
+               metadata
+               nil)))
   (unique [this]
     (->> (parallel-unique this)
          (into #{})))
@@ -321,7 +333,8 @@
       (if (== 0 (dtype/ecount missing))
         ;;common case
         (Column. (->bitmap) (dtype/indexed-reader idx-rdr data)
-                 metadata)
+                 metadata
+                 nil)
         ;;Uggh.  Construct a new missing set
         (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
               n-idx-elems (.lsize idx-rdr)
@@ -333,7 +346,8 @@
              (.add result-set idx)))
           (Column. result-set
                    (dtype/indexed-reader idx-rdr data)
-                   metadata)))))
+                   metadata
+                   nil)))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
@@ -346,20 +360,20 @@
       (dtype/make-container :java-array :float64 col)))
   IObj
   (meta [this] (ds-col-proto/metadata this))
-  (withMeta [this new-meta] (Column. missing data new-meta))
+  (withMeta [this new-meta] (Column. missing data new-meta generic-reader))
   Counted
   (count [this] (int (dtype/ecount data)))
   Indexed
   (nth [this idx]
-    (.read (typecast/datatype->reader :object this) (long idx)))
+    (.read (generic-reader!) (long idx)))
   (nth [this idx def-val]
     (if (< (long idx) (dtype/ecount this))
-      (.read (typecast/datatype->reader :object this) (long idx))
+      (.read (generic-reader!) (long idx))
       def-val))
   ;;Not efficient but it will work.
   IFn
   (invoke [this idx]
-    (.read (typecast/datatype->reader :object this) idx))
+    (.read (generic-reader!) idx))
   (applyTo [this args]
     (when-not (= 1 (count args))
       (throw (Exception. "Too many arguments to column")))
@@ -549,7 +563,7 @@
                     (assoc metadata :categorical? true)
                     metadata)]
      (.runOptimize missing)
-     (Column. missing data (assoc metadata :name name))))
+     (Column. missing data (assoc metadata :name name) nil)))
   ([name data metadata]
    (new-column name data metadata (->bitmap)))
   ([name data]

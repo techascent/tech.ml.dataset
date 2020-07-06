@@ -65,7 +65,7 @@
   ([path bag-of-words-colname token->idx-map
      {:keys [tokenizer]
       :or {tokenizer (simple-tokenizer-fn)}}]
-   (->> (ds-parse/csv->rows path {:column-whitelist ["abstract"]})
+   (->> (ds-parse/csv->rows path {:column-whitelist [bag-of-words-colname]})
         ;;Drop column name.
         (drop 1)
         ;;Now we have a sequence of string arrays which with 1 entry
