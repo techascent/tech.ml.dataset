@@ -1,4 +1,6 @@
-(ns tech.ml.dataset.modelling
+(ns ^:no-doc tech.ml.dataset.modelling
+  "Methods related specifically to machine learning such as setting
+  the inference target."
   (:require [tech.v2.datatype :as dtype]
             [tech.ml.dataset.base
              :refer [column-names update-columns

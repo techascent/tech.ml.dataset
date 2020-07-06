@@ -1,4 +1,6 @@
-(ns tech.ml.dataset.base
+(ns ^:no-doc tech.ml.dataset.base
+  "Base dataset bare bones implementation.  Methods here are used in further
+  implementations and they are exposed to users."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]

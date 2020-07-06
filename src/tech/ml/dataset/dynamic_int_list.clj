@@ -19,7 +19,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 
-(defmacro byte-range?
+(defmacro ^:private byte-range?
   [number]
   `(and (<= ~number Byte/MAX_VALUE)
         (>= ~number Byte/MIN_VALUE)))
@@ -31,7 +31,7 @@
         (>= ~number Short/MIN_VALUE)))
 
 
-(defmacro promote-short!
+(defmacro ^:private promote-short!
   []
   `(when (instance? ByteList ~'backing-store)
      (set! ~'backing-store (let [new-list# (ShortArrayList. )]
@@ -43,7 +43,7 @@
      (set! ~'reader nil)))
 
 
-(defmacro promote-int!
+(defmacro ^:private promote-int!
   []
   `(do
      (when (instance? ByteList ~'backing-store)
@@ -203,6 +203,8 @@
 
 
 (defn dynamic-int-list
+  "Create a dynamic int list from a sequence of numbers or from a
+  single integer n-elems argument."
   [num-or-item-seq]
   (if (number? num-or-item-seq)
     (DynamicIntList. (ByteArrayList/wrap (byte-array (long num-or-item-seq)))
@@ -216,6 +218,8 @@
 
 
 (defn make-from-container
+  "Make a dynamic int list from something convertible to a byte, short,
+  or integer list."
   ^IntList [container]
   (if-let [list-data (dtype/->list-backing-store container)]
     (let [retval (DynamicIntList. list-data nil)]

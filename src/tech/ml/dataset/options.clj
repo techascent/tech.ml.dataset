@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.options
+(ns ^:no-doc tech.ml.dataset.options
   "The etl pipeline and dataset operators are built to produce a metadata options map.
   Their API access to the options is centralized in this file."
   (:require [tech.ml.dataset.categorical :as categorical]

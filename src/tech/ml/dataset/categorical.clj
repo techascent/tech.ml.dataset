@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.categorical
+(ns  ^:no-doc tech.ml.dataset.categorical
   "Dealing with categorical dataset data involves having two mapping systems.
   The first is a map of category to integer within the same column.
   The second is a 'one-hot' encoding where you generate more columns but those have

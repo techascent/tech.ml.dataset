@@ -58,6 +58,7 @@
 
 
 (defn create-csv-parser
+  "Create an implementation of univocity csv parser."
   ^AbstractParser [{:keys [header-row?
                            num-rows
                            column-whitelist
@@ -312,7 +313,7 @@
           missing-val#)))))
 
 
-(def default-parser-seq
+(def ^:private default-parser-seq
   (->> [:boolean (simple-boolean-parser)
         :int16 (simple-col-parser :int16)
         :int32 (simple-col-parser :int32)
@@ -329,7 +330,7 @@
        (mapv vec)))
 
 
-(def all-parsers
+(def ^:no-doc all-parsers
   (assoc (into {} default-parser-seq)
          :float32 (simple-col-parser :float32)
          :keyword (simple-col-parser :keyword)
@@ -353,7 +354,7 @@ will stop the parsing system.")
 {:data - convertible-to-reader column data.
  :missing - convertible-to-reader array of missing values."))
 
-(defn convert-reader-to-strings
+(defn ^:no-doc convert-reader-to-strings
   "This function has to take into account bad data and just return
   missing values in the case where a reader conversion fails."
   [input-rdr]
@@ -372,7 +373,7 @@ will stop the parsing system.")
                    ""))))))))
 
 
-(defn cheap-missing-value-map
+(defn- cheap-missing-value-map
   [^RoaringBitmap keys missing-value]
   (let [n-elems (int (dtype/ecount keys))]
     (reify
@@ -411,7 +412,7 @@ will stop the parsing system.")
         new-container))))
 
 
-(defn default-column-parser
+(defn- default-column-parser
   []
   (let [initial-parser (first default-parser-seq)
         item-seq* (atom (rest default-parser-seq))
@@ -466,14 +467,14 @@ falling back to :string"
          :force-datatype? true}))))
 
 
-(defn on-parse-failure!
+(defn- on-parse-failure!
   [str-val cur-idx add-missing-fn ^List unparsed-data ^RoaringBitmap unparsed-indexes]
   (add-missing-fn)
   (.add unparsed-data str-val)
   (.add unparsed-indexes (unchecked-int cur-idx)))
 
 
-(defn attempt-simple-parse!
+(defn ^:no-doc attempt-simple-parse!
   [parse-add-fn! simple-parser container
    add-missing-fn ^List unparsed-data ^List unparsed-indexes relaxed?
    str-val]
@@ -487,7 +488,7 @@ falling back to :string"
     (parse-add-fn! simple-parser container str-val)))
 
 
-(defn return-parse-data
+(defn ^:no-doc return-parse-data
   ([container missing unparsed-data unparsed-indexes]
    (merge {:data container
            :missing missing
@@ -497,7 +498,7 @@ falling back to :string"
                         :unparsed-indexes unparsed-indexes}}))))
 
 
-(defn simple-parser->parser
+(defn ^:no-doc simple-parser->parser
   ([parser-kwd-or-simple-parser relaxed?]
    (let [simple-parser (if (keyword? parser-kwd-or-simple-parser)
                          (get all-parsers parser-kwd-or-simple-parser)
@@ -529,7 +530,7 @@ falling back to :string"
    (simple-parser->parser parser-kwd-or-simple-parser false)))
 
 
-(defn attempt-general-parse!
+(defn ^:no-doc attempt-general-parse!
   [add-fn! parse-fn container add-missing-fn ^List unparsed-data ^RoaringBitmap unparsed-indexes
    str-val]
   (let [parse-val (parse-fn str-val)]
@@ -545,7 +546,7 @@ falling back to :string"
       (add-fn! parse-val))))
 
 
-(defn general-parser
+(defn ^:no-doc general-parser
   [datatype parse-fn]
   (when-not (fn? parse-fn)
     (throw (Exception. (format "parse-fn doesn't appear to be a function: %s"
@@ -584,14 +585,14 @@ falling back to :string"
         (return-parse-data container missing unparsed-data unparsed-indexes)))))
 
 
-(defn datetime-formatter-parser
+(defn ^:no-doc datetime-formatter-parser
   [datatype format-string-or-formatter]
   (let [parse-fn (parse-dt/datetime-formatter-or-str->parser-fn
                   datatype format-string-or-formatter)]
     (general-parser datatype parse-fn)))
 
 
-(defn make-parser
+(defn ^:no-doc make-parser
   ([parser-fn header-row-name scan-rows
     default-column-parser-fn
     simple-parser->parser-fn

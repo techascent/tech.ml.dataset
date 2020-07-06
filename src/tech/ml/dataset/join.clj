@@ -1,4 +1,5 @@
-(ns tech.ml.dataset.join
+(ns ^:no-doc tech.ml.dataset.join
+  "implementation of join algorithms, both exact (hash-join) and near."
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.builtin-op-providers
