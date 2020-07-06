@@ -1,4 +1,13 @@
 # Changelog
+## 2.12
+ * Better support of `nth`.  Columns cache the generic reader used for nth queries
+   and all tech.v2.datatype readers support nth and count natively in base java
+   interface implementations.
+ * New namespace - `tech.ml.dataset.text.bag-of-words` that contains code to convert
+  a dataset with a text field into a dataset with document ids and  and a 
+  document-id->token-idx dataset.
+ * [Quick Reference](docs/quick-reference.md)
+
 ## 2.11
  * After several tries got docs up on cljdoc.  Need to have provided deps cleaned 
    up a bit better.

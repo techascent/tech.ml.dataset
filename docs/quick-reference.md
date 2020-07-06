@@ -32,8 +32,9 @@ functions that are we find most useful.
   return the column named `:colname`.  Datasets are sequence of columns so
   `(map meta ds)` will return a sequence of column metadata.
 * Columns are iterable and implement indexed so you can use them with `map`, `count`
-  and `nth`.  `nth` allows relatively inefficient random access.
-* Efficient random access is supported the `(tech.v2.datatype/->reader col)`
+  and `nth` and overload IFn such that they are functions of their indexes similar
+  to persistent vectors.
+* Typed random access is supported the `(tech.v2.datatype/->reader col)`
   transformation.  This is guaranteed to return an implementation of `java.util.List`
   and also overloads `IFn` such that like a persistent vector passing in the index
   will return the value - e.g. `(col 0)` returns the value at index 0.  Direct access
@@ -57,7 +58,7 @@ functions that are we find most useful.
 * [missing](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L281) - Return the union of all missing
   indexes.  Useful in combination with drop-rows to quickly eliminate missing values
   from the dataset.
-* [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement 
+* [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement
   `clojure.lang.IObj` so you can get/set metadata on them freely. `:name` has meaning in the system and setting it
   directly on a column is not recommended.  Metadata is generally carried forward through most of the operations below.
 
@@ -160,7 +161,7 @@ arithmetic operations to a column lazily returning a new column.
  `System/arraycopy` calls.
 
  Additionally calling 'clone' after loading will reduce the in-memory size of the
- dataset by a bit - sometimes 20%.  This is because lists that have allocated extra 
+ dataset by a bit - sometimes 20%.  This is because lists that have allocated extra
  capacity are copied into arrays that have no extra capacity.
 
  * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and where copying the data into java arrays.  Will clone datasets or columns.

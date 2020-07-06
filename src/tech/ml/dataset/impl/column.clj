@@ -370,7 +370,6 @@
     (if (< (long idx) (dtype/ecount this))
       (.read (generic-reader!) (long idx))
       def-val))
-  ;;Not efficient but it will work.
   IFn
   (invoke [this idx]
     (.read (generic-reader!) idx))
