@@ -772,63 +772,63 @@ This is an interface change and we do apologize!"))))
    be overridden.
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
    order to derive the column datatypes before the actual columns are created.
+
   Options:
-  :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
-  :dataset-name - set the name of the dataset.
-  :file-type - Override filetype discovery mechanism for strings or force a particular
-     parser for an input stream.  Note that arrow and parquet must have paths on disk
-     and cannot currently load from input stream.  Acceptible file types are:
-     #{:csv :tsv :xlsx :xls :arrow :parquet}.
-  :gzipped? - for file formats that support it, override autodetection and force
+  - `:dataset-name` - set the name of the dataset.
+  - `:file-type` - Override filetype discovery mechanism for strings or force a particular
+      parser for an input stream.  Note that arrow and parquet must have paths on disk
+      and cannot currently load from input stream.  Acceptible file types are:
+      #{:csv :tsv :xlsx :xls :arrow :parquet}.
+  - `:gzipped?` - for file formats that support it, override autodetection and force
      creation of a gzipped input stream as opposed to a normal input stream.
-  :column-whitelist - either sequence of string column names or sequence of column
+  - `:column-whitelist` - either sequence of string column names or sequence of column
      indices of columns to whitelist.
-  :column-blacklist - either sequence of string column names or sequence of column
+  - `:column-blacklist` - either sequence of string column names or sequence of column
      indices of columns to blacklist.
-  :num-rows - Number of rows to read
-  :header-row? - Defaults to true, indicates the first row is a header.
-  :key-fn - function to be applied to column names.  Typical use is:
+  - `:num-rows` - Number of rows to read
+  - `:header-row?` - Defaults to true, indicates the first row is a header.
+  - `:key-fn` - function to be applied to column names.  Typical use is:
      `:key-fn keyword`.
-  :separator - Add a character separator to the list of separators to auto-detect.
-  :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
+  - `:separator` - Add a character separator to the list of separators to auto-detect.
+  - `:csv-parser` - Implementation of univocity's AbstractParser to use.  If not provided
      a default permissive parser is used.  This way you parse anything that univocity
      supports (so flat files and such).
-  :bad-row-policy - One of three options: :skip, :error, :carry-on.  Defaults to
-     :carry-on.  Some csv data has ragged rows and in this case we have several options
-     .  If the option is :carry-on then we either create a new column or add missing
+  - `:bad-row-policy` - One of three options: :skip, :error, :carry-on.  Defaults to
+     :carry-on.  Some csv data has ragged rows and in this case we have several options.
+     If the option is :carry-on then we either create a new column or add missing
      values for columns that had no data for that row.
-  :skip-bad-rows? - Legacy option.  Use :bad-row-policy.
-  :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
-     will result in an exception.
-  :max-num-columns - Defaults to 8192.  CSV,TSV files with more columns than this
+  - `:skip-bad-rows?` - Legacy option.  Use :bad-row-policy.
+  - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
+      will result in an exception.
+  - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301
-  :parser-fn -
-   - keyword - all columns parsed to this datatype
-   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
+  - `:parser-fn` -
+    - `keyword?` - all columns parsed to this datatype
+    - `ifn?` - called with two arguments: (parser-fn column-name-or-idx column-data)
           - Return value must be implement tech.ml.dataset.parser.PColumnParser in
             which case that is used or can return nil in which case the default
             column parser is used.
-   - tuple - pair of [datatype parse-fn] in which case container of type [datatype]
-           will be created.
-           parse-fn can be one of:
-        :relaxed? - data will be parsed such that parse failures of the standard
+    - tuple - pair of [datatype parse-fn] in which case container of type [datatype]
+            will be created.
+            parse-fn can be one of:
+        - `:relaxed?` - data will be parsed such that parse failures of the standard
            parse functions do not stop the parsing process.  :unparsed-values and
            :unparsed-indexes are available in the metadata of the column that tell
            you the values that failed to parse and their respective indexes.
-        fn? - function from str-> one of #{:missing :parse-failure value}.
+        - `fn?` - function from str-> one of #{:missing :parse-failure value}.
            Exceptions here always kill the parse process.  :missing will get marked
            in the missing indexes, and :parse-failure will result in the index being
            added to missing, the unparsed the column's :unparsed-values and
            :unparsed-indexes will be updated.
-        string? - for datetime types, this will turned into a DateTimeFormatter via
+        - `string?` - for datetime types, this will turned into a DateTimeFormatter via
            DateTimeFormatter/ofPattern.
-        DateTimeFormatter - use with the appropriate temporal parse static function
+        - `DateTimeFormatter` - use with the appropriate temporal parse static function
            to parse the value.
-   - map - the header-name-or-idx is used to lookup value.  If not nil, then
+   - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.
-  :parser-scan-len - Length of initial column data used for parser-fn's datatype
+  - `:parser-scan-len` - Length of initial column data used for parser-fn's datatype
        detection routine. Defaults to 100.
 
   Returns a new dataset"
