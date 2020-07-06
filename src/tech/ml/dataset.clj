@@ -431,6 +431,7 @@
   list of columns are duplicated.
 
   Example:
+```clojure
 user> (-> [{:a 1 :b 2 :c 3 :d 1} {:a 4 :b 5 :c 6 :d 2}]
           (ds/->dataset)
           (ds/columnwise-concat [:c :a :b]))
@@ -444,6 +445,7 @@ null [6 3]:
 |      :a |      4 |  2 |
 |      :b |      2 |  1 |
 |      :b |      5 |  2 |
+  ```
 
   Options:
 
@@ -488,10 +490,12 @@ null [6 3]:
   See also `columnwise-concat`
 
   Return a sequence of maps with
+```clojure
   {... - columns not in colname-seq
    :value - value from one of the value columns
    :label - name of the column the value came from
-  }"
+  }
+```"
   [dataset value-colname-seq]
   (->> (columnwise-concat dataset value-colname-seq
                           {:value-column-name :value
@@ -506,6 +510,7 @@ null [6 3]:
 
   Any missing indexes are dropped.
 
+```clojure
 user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                               {:a 2 :b [4 5]}
                               {:a 3 :b :a}])
@@ -519,6 +524,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 |  2 |  4 |        0 |
 |  2 |  5 |        1 |
 |  3 | :a |        0 |
+```
 
   Options -
   :datatype - datatype of the resulting column if one aside from :object is desired.

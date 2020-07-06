@@ -109,9 +109,11 @@
 
 (defn columns-with-missing-seq
   "Return a sequence of:
+```clojure
   {:column-name column-name
    :missing-count missing-count
   }
+```
   or nil of no columns are missing data."
   [dataset]
   (->> (columns dataset)
