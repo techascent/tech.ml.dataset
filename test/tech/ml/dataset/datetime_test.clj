@@ -68,3 +68,10 @@
            (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 01 01 11 22 33)
                                (java.time.LocalDateTime/of 2020 10 01 01 01 01)]})
            :dt) 0))))
+
+
+(deftest packed-local-time-millis
+  (let [times (dtype-dt/pack
+               (into-array (for [idx (range 5)] (dtype-dt/local-time idx))))]
+    (is (= (vec (range 5))
+           (vec (dtype-dt-ops/->milliseconds times))))))
