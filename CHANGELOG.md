@@ -1,4 +1,9 @@
 # Changelog
+## 2.13
+ * `nth`, `map` on packed datetime columns (or using them as functions) 
+   returns datetime objects as opposed to their packed values.  This means that if you
+   ask a packed datetime column for an object reader you get back an unpacked value.
+
 ## 2.12
  * Better support of `nth`.  Columns cache the generic reader used for nth queries
    and all tech.v2.datatype readers support nth and count natively in base java

@@ -178,6 +178,9 @@
                             :include
                             missing-policy)
           n-elems (dtype/ecount data)
+          data (if (= :object (:datatype options))
+                 (dtype-dt/unpack data)
+                 data)
           col-reader
           (if (or (= :elide missing-policy)
                   (not any-missing?))

@@ -43,7 +43,6 @@
                                               (dtype/ecount %)
                                               (fn [idx]
                                                 (-> (% idx)
-                                                    (dtype-dt/unpack-local-date)
                                                     (dtype-dt/local-date->instant)))
                                               :instant)))
         desc-stats (ds/descriptive-stats stocks {:stat-names (ds/all-descriptive-stats-names)})
@@ -54,3 +53,18 @@
                 (map dtype/get-datatype
                      (vals (select-keys date-only [:min :mean :max
                                                    :quartile-1 :quartile-3])))))))
+
+
+(deftest datetime-shenanigans-1
+  (is (= (java.time.LocalDateTime/of 2020 01 01 11 22 33)
+         (nth (ds/column
+               (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 01 01 11 22 33)
+                                   (java.time.LocalDateTime/of 2020 10 01 01 01 01)]})
+               :dt) 0)))
+
+  (is (= (java.time.LocalDateTime/of 2020 01 01 11 22 33)
+         (dtype/get-value
+          (ds/column
+           (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 01 01 11 22 33)
+                               (java.time.LocalDateTime/of 2020 10 01 01 01 01)]})
+           :dt) 0))))
