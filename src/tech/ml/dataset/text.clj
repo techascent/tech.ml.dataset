@@ -3,16 +3,20 @@
             [clojure.string :as str]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.object-datatypes :as obj-dtypes])
   (:import [java.util List ArrayList Collection]
            [java.nio.charset StandardCharsets Charset]
-           [java.util Arrays]))
+           [java.util Arrays]
+           [it.unimi.dsi.fastutil.bytes ByteBigArrayBigList ByteArrayList]
+           [it.unimi.dsi.fastutil.longs LongArrayList]))
 
 
 (set! *warn-on-reflection* true)
 
 
 (def default-tokenizer #(str/split % #"[ ]+"))
+(def default-charset StandardCharsets/UTF_8)
 
 
 (deftype TokenizedText [str-table options ^long offset ^long len]
@@ -132,99 +136,94 @@
    (make-tokenized-text-builder (str-table/make-string-table) {})))
 
 
-(deftype EncodedText [^Charset encoding ^bytes data
-                      ^{:volatile-mutable true} hashcode]
-  Object
-  (hashCode [this]
-    (let [retval (unchecked-int hashcode)]
-      (if (== retval -1)
-        (do
-          (set! hashcode (.hashCode (.toString this)))
-          (unchecked-int hashcode))
-        retval)))
-  (toString [this]
-    (.toString (.decode encoding data)))
-  (equals [this other]
-    (if-not (instance? EncodedText other)
-      false
-      (let [^EncodedText other other]
-        (and (= encoding (.encoding other))
-             (Arrays/equals data ^bytes (.data other)))))))
-
-
-(def default-charset StandardCharsets/UTF_8)
-
-
-(defn encode-text
-  (^EncodedText []
-   (encode-text "" default-charset))
-  (^EncodedText [item]
-   (cond
-     (instance? EncodedText item)
-     item
-     (string? item)
-     (encode-text item default-charset)
-     (nil? item)
-     nil
-     :else
-     (throw (Exception.
-             (format "Unable to encode text type: %s"
-                     (type item))))))
-  (^EncodedText [data encoding]
-   (let [data (or data "")]
-     (when-not (instance? Charset encoding)
-       (throw (Exception. "Encoding is not a charset: %s"
-                          encoding)))
-     (when-not (string? data)
-       (throw (Exception. (format "data must be a string: %s"
-                                  data))))
-     (let [^Charset encoding encoding]
-       (EncodedText. encoding (.encode encoding ^String data) (int -1))))))
-
-
-(obj-dtypes/add-object-datatype EncodedText :encoded-text encode-text)
-
-
-(defn- as-collection ^Collection [item] item)
-
-
-(deftype EncodedTextBuilder [encoding ^List data-list]
+(deftype EncodedTextBuilder [encode-fn
+                             decode-fn
+                             ^ByteBigArrayBigList backing-store
+                             ^LongArrayList offsets]
   List
-  (size [this] (.size data-list))
+  (size [this] (.size offsets))
   (add [this item] (.add this (.size this) item) true)
-  (add [this idx item] (.add data-list idx (encode-text item encoding)))
+  (add [this idx item]
+    (.add offsets (.size64 backing-store))
+    (let [^bytes data (encode-fn item)]
+      (.addAll backing-store (ByteArrayList. data))))
   (addAll [this coll]
-    (->> coll
-         (map #(encode-text encoding %))
-         (as-collection)
-         (.addAll data-list)))
-  (get [this idx] (.get data-list idx))
-  (set [this idx value] (.set data-list idx (encode-text value encoding)))
-  (toArray [this] (.toArray data-list))
+    (doseq [item coll]
+      (.add this item)))
+  (get [this idx]
+    (let [offset (.get offsets idx)
+          next-idx (unchecked-inc idx)
+          end-off (long (if (< next-idx (.size offsets))
+                          (.get offsets next-idx)
+                          (.size64 backing-store)))]
+      (decode-fn (-> (.subList backing-store offset end-off)
+                     (.toByteArray)))))
+  (set [this idx value]
+    (throw (Exception. "Cannot set string value in encoded text builder")))
+  (toArray [this]
+    (dtype/make-container :java-array :object this))
   (subList [this start-idx end-idx]
-    (EncodedTextBuilder. encoding (.subList data-list start-idx end-idx)))
+    (let [n-elems (int (- end-idx start-idx))]
+      (reify
+        dtype-proto/PDatatype
+        (get-datatype [subl] :encoded-text)
+        List
+        (size [subl] n-elems)
+        (get [subl idx]
+          (.get this (+ start-idx idx)))
+        (toArray [this]
+          (dtype/make-container :java-array :object this))
+        dtype-proto/PDatatype
+        (get-datatype [this] :string)
+        dtype-proto/PToReader
+        (convertible-to-reader? [this] true)
+        (->reader [this options]
+          (->
+           (reify tech.v2.datatype.ObjectReader
+             (getDatatype [rdr] :string)
+             (lsize [rdr] n-elems)
+             (read [rdr idx] (.get this (+ start-idx idx))))
+           (dtype-proto/->reader options)))
+        dtype-proto/PClone
+        (clone [this] this))))
+  (iterator [this]
+    (.iterator ^Iterable (dtype-proto/->reader this {})))
   dtype-proto/PDatatype
   (get-datatype [this] :encoded-text)
   dtype-proto/PToReader
   (convertible-to-reader? [this] true)
   (->reader [this options]
-    (dtype-proto/->reader data-list options))
+    (-> (reify tech.v2.datatype.ObjectReader
+          (getDatatype [rdr] :string)
+          (lsize [rdr] (long (.size offsets)))
+          (read [rdr idx]
+            (.get this idx)))
+        (dtype-proto/->reader options)))
   dtype-proto/PClone
   (clone [this]
-    (.toArray this)))
+    ;;Clone to exactly the size we need
+    (EncodedTextBuilder. encode-fn decode-fn
+                         (.clone backing-store)
+                         (.clone offsets))))
+
+
+(casting/alias-datatype! :encoded-text :string)
+
+
+(defn ^:no-doc charset->encode-decode
+  [^Charset charset]
+  (when-not (instance? Charset charset)
+    (throw (Exception. (format "charset arg %s must be instance of Charset"
+                               charset))))
+  [#(.getBytes ^String % charset) #(String. ^bytes % charset)])
 
 
 (defn encoded-text-builder
+  (^List [encode-fn decode-fn]
+   (EncodedTextBuilder. encode-fn decode-fn
+                        (ByteBigArrayBigList.)
+                        (LongArrayList.)))
+  (^List [^Charset charset]
+   (apply encoded-text-builder (charset->encode-decode charset)))
   (^List []
-   (EncodedTextBuilder. default-charset
-                        (dtype/make-container :list :encoded-text 0)))
-  (^List [n-elems]
-   (EncodedTextBuilder. default-charset
-                        (dtype/make-container :list :encoded-text n-elems)))
-  (^List [charset n-elems]
-   (when-not (instance? Charset charset)
-     (throw (Exception.
-             (format "charset must be an instance of java.nio.charsets.Charset: %s")
-             (type charset))))
-   (EncodedTextBuilder. charset
-                        (dtype/make-container :list :encoded-text n-elems))))
+   (encoded-text-builder default-charset)))

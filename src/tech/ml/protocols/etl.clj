@@ -1,5 +1,4 @@
-(ns tech.ml.protocols.etl
-  (:require [tech.ml.protocols.column :as col-proto]))
+(ns ^:no-doc tech.ml.protocols.etl)
 
 
 (defprotocol PETLSingleColumnOperator

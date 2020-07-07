@@ -77,9 +77,9 @@
              (dotimes [iter n-elems]
                (.add list-data ""))
              list-data)
-     :encoded-text (let [^List list-data (ds-text/encoded-text-builder n-elems)]
+     :encoded-text (let [^List list-data (ds-text/encoded-text-builder)]
                      (dotimes [iter n-elems]
-                       (.set list-data iter ""))
+                       (.add list-data iter ""))
                      list-data)
      (dtype/make-container :list dtype n-elems)))
   ([dtype]
@@ -261,8 +261,15 @@
   ;;store the result realized.
   dtype-proto/PClone
   (clone [col]
-    (let [new-data (if (dtype/writer? data)
+    (let [new-data (cond
+                     (dtype/writer? data)
                      (dtype/clone data)
+                     ;;Strings are dangerous, defer to the data definition
+                     ;;for cloning.
+                     (or (= :string (dtype/get-datatype data))
+                         (= :encoded-text (dtype/get-datatype data)))
+                     (dtype/clone data)
+                     :else
                      ;;It is important that the result of this operation be writeable.
                      (dtype/make-container :java-array
                                            (dtype/get-datatype data) data))]

@@ -1,4 +1,10 @@
 # Changelog
+## 2.14
+ * There is a new parse type: `:encoded-text`.  When read, this will appear to be a
+   string column however the user has a choice of encodings and utf-8 is the default.
+   This is useful when you need a particular encoding for a column.  It is roughly
+   twice as efficient be default as a normal string encoding (utf-8 vs. utf-16).
+
 ## 2.13
  * `nth`, `map` on packed datetime columns (or using them as functions) 
    returns datetime objects as opposed to their packed values.  This means that if you

@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.readers
+(ns ^:no-doc tech.ml.dataset.readers
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.typecast :as typecast]

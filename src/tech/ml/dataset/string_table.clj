@@ -4,7 +4,7 @@
             [tech.ml.dataset.dynamic-int-list :as int-list]
             [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
             [tech.parallel.for :as parallel-for])
-  (:import [java.util List HashMap Map RandomAccess Iterator]
+  (:import [java.util List HashMap Map RandomAccess Iterator ArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]))
 
 
@@ -16,14 +16,16 @@
 
 
 (deftype StringTable
-    [^Map int->str
+    [^List int->str
      ^Map str->int
      ^IntList data]
   dtype-proto/PDatatype
   (get-datatype [this] :string)
   dtype-proto/PClone
   (clone [this]
-    (StringTable. int->str str->int (dtype/clone data)))
+    ;;We do not need to dedup any more; a java array is a more efficient
+    ;;storage mechanism
+    (dtype/make-container :java-array :string this))
   dtype-proto/PPrototype
   (from-prototype [this new-datatype new-shape]
     (let [n-elems (long (apply * new-shape))]
@@ -47,7 +49,7 @@
                           idx-val
                           (let [idx-val (.size str->int)]
                             (.put str->int str-val idx-val)
-                            (.put int->str idx-val str-val)
+                            (.add int->str idx-val str-val)
                             idx-val)))]
       (.add data idx item-idx)
       true))
@@ -63,7 +65,7 @@
                             idx-val
                             (let [idx-val (.size str->int)]
                               (.put str->int str-val idx-val)
-                              (.put int->str idx-val str-val)
+                              (.add int->str idx-val str-val)
                               idx-val)))
             old-value (int (.set data idx item-idx))]
         (.get int->str old-value))))
@@ -81,19 +83,19 @@
 
 
 (defn make-string-table
-  (^List [n-elems missing-val ^HashMap int->str ^HashMap str->int]
+  (^List [n-elems missing-val ^List int->str ^HashMap str->int]
    (let [^IntList data (int-list/dynamic-int-list (long n-elems))
          missing-val (str missing-val)]
-     (.put int->str (int 0) missing-val)
+     (.add int->str (int 0) missing-val)
      (.put str->int missing-val (int 0))
      (.size data (int n-elems))
      (StringTable. int->str str->int data)))
   (^List [n-elems missing-val]
-   (make-string-table n-elems missing-val (HashMap.) (HashMap.)))
+   (make-string-table n-elems missing-val (ArrayList.) (HashMap.)))
   (^List [n-elems]
-   (make-string-table n-elems "" (HashMap.) (HashMap.)))
+   (make-string-table n-elems "" (ArrayList.) (HashMap.)))
   (^List []
-   (make-string-table 0 "" (HashMap.) (HashMap.))))
+   (make-string-table 0 "" (ArrayList.) (HashMap.))))
 
 
 (defn string-table-from-strings
@@ -105,17 +107,16 @@
           n-unique-elems (inc (.size unique-set))
           n-elems (dtype/ecount str-reader)
           str->int (HashMap. n-unique-elems)
-          int->str (HashMap. n-unique-elems)
-          ]
+          int->str (ArrayList. n-unique-elems)]
       (.put str->int "" (unchecked-int 0))
-      (.put int->str (unchecked-int 0) "")
+      (.add int->str (unchecked-int 0) "")
       (loop [continue? (.hasNext set-iter)
              idx (int 0)]
         (when continue?
           (let [str-entry (.next set-iter)
                 idx (unchecked-int idx)]
             (.put str->int str-entry (unchecked-int idx))
-            (.put int->str (unchecked-int idx) str-entry))
+            (.add int->str (unchecked-int idx) str-entry))
           (recur (.hasNext set-iter) (unchecked-inc idx))))
       (cond
         (< n-unique-elems Byte/MAX_VALUE)

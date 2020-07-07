@@ -1,4 +1,4 @@
-(ns tech.ml.protocols.column)
+(ns ^:no-doc tech.ml.protocols.column)
 
 (defprotocol PIsColumn
   (is-column? [item]))

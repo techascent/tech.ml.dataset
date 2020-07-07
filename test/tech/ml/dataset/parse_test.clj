@@ -6,7 +6,8 @@
             [tech.ml.dataset.base :as ds-base]
             [tech.ml.dataset.column :as ds-col]
             [clojure.set :as set])
-  (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]))
+  (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
+            [java.nio.charset StandardCharsets]))
 
 
 (def test-file "data/ames-house-prices/train.csv")
@@ -355,6 +356,27 @@
 (deftest parse-small-doubles
   (let [ds (ds-base/->dataset "test/data/double_parse_test.csv")]
     (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))))
+
+
+(deftest encoded-text
+  (let [tf "test/data/medical-text.csv"
+        base-ds (ds-base/->dataset tf)
+        first-abstract (first (base-ds "abstract"))]
+    ;;As encoded text
+    (let [default-ds (ds-base/->dataset
+                      tf {:parser-fn {"abstract" :encoded-text}})]
+      (is (= first-abstract (first (default-ds "abstract")))))
+    (let [charset-ds (ds-base/->dataset
+                      tf {:parser-fn {"abstract" [:encoded-text
+                                                  StandardCharsets/ISO_8859_1]}})]
+      (is (= first-abstract (first (charset-ds "abstract")))))
+    (let [encdec-ds (ds-base/->dataset
+                     tf {:parser-fn {"abstract"
+                                     [:encoded-text
+                                      {:encode-fn #(.getBytes ^String %
+                                                              "UTF-8")
+                                       :decode-fn #(String. ^bytes % "UTF-8")}]}})]
+      (is (= first-abstract (first (encdec-ds "abstract")))))))
 
 
 ;; Failing due to apparently invalid iris.feather file

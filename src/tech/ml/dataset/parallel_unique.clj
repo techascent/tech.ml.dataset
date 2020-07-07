@@ -5,7 +5,8 @@
 
 
 (defn parallel-unique
-  "Returns a java set.  Input must be convertible to a reader"
+  "Scan the data in parallel and geneate a set of unique items.
+  Input must be convertible to a reader"
   ^Set [data]
   (if-let [rdr (dtype/->reader data)]
     (parallel-for/indexed-map-reduce

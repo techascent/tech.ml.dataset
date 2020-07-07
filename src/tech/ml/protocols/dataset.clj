@@ -1,4 +1,4 @@
-(ns tech.ml.protocols.dataset
+(ns ^:no-doc tech.ml.protocols.dataset
   (:require [clojure.set :as c-set]
             [tech.ml.protocols.column :as col-proto]
             [tech.v2.datatype :as dtype]))

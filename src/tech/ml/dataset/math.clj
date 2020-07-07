@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.math
+(ns ^:no-doc tech.ml.dataset.math
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.typecast :as typecast]

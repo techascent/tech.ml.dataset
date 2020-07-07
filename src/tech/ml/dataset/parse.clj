@@ -16,6 +16,7 @@
              :as parse-dt]
             [tech.ml.dataset.string-table :as str-table]
             [tech.ml.dataset.impl.dataset :as ds-impl]
+            [tech.ml.dataset.text :as ds-text]
             [tech.parallel.next-item-fn :refer [create-next-item-fn]]
             [clojure.tools.logging :as log])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
@@ -35,6 +36,7 @@
            [tech.v2.datatype.typed_buffer TypedBuffer]
            [tech.v2.datatype ObjectReader]
            [java.util Iterator HashMap ArrayList List Map RandomAccess UUID]
+           [java.nio.charset StandardCharsets Charset]
            [it.unimi.dsi.fastutil.booleans BooleanArrayList]
            [it.unimi.dsi.fastutil.shorts ShortArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]
@@ -278,18 +280,23 @@
 
 
 (defn simple-encoded-text-parser
-  []
-  (reify
-    dtype-proto/PDatatype
-    (get-datatype [item#] :encoded-text)
-    PSimpleColumnParser
-    (make-parser-container [this] (make-container :encoded-text))
-    (can-parse? [this# item#] true)
-    (simple-parse! [parser# container# str-val#]
-      (.add ^List container# str-val#))
-    (simple-missing! [parser# container#]
-      (.add ^List container# ""))))
-
+  ([encode-fn decode-fn]
+   (reify
+     dtype-proto/PDatatype
+     (get-datatype [item#] :encoded-text)
+     PSimpleColumnParser
+     (make-parser-container [this] (ds-text/encoded-text-builder
+                                    encode-fn decode-fn))
+     (can-parse? [this# item#] true)
+     (simple-parse! [parser# container# str-val#]
+       (.add ^List container# str-val#))
+     (simple-missing! [parser# container#]
+       (.add ^List container# ""))))
+  ([charset]
+   (apply simple-encoded-text-parser
+          (ds-text/charset->encode-decode charset)))
+  ([]
+   (simple-encoded-text-parser ds-text/default-charset)))
 
 
 (defmacro make-datetime-simple-parser
@@ -313,34 +320,39 @@
           missing-val#)))))
 
 
-(def ^:private default-parser-seq
-  (->> [:boolean (simple-boolean-parser)
-        :int16 (simple-col-parser :int16)
-        :int32 (simple-col-parser :int32)
-        :int64 (simple-col-parser :int64)
-        :float64 (simple-col-parser :float64)
-        :uuid (simple-col-parser :uuid)
-        :packed-duration (make-datetime-simple-parser :packed-duration)
-        :packed-local-date (make-datetime-simple-parser :packed-local-date)
-        :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)
-        :zoned-date-time (make-datetime-simple-parser :zoned-date-time)
-        :string (simple-string-parser)
-        :text (simple-text-parser)]
-       (partition 2)
-       (mapv vec)))
-
-
 (def ^:no-doc all-parsers
-  (assoc (into {} default-parser-seq)
-         :float32 (simple-col-parser :float32)
-         :keyword (simple-col-parser :keyword)
-         :symbol (simple-col-parser :symbol)
-         :encoded-text (simple-encoded-text-parser)
-         :instant (make-datetime-simple-parser :instant)
-         :offset-date-time (make-datetime-simple-parser :offset-date-time)
-         :local-time (make-datetime-simple-parser :local-time)
-         :local-date (make-datetime-simple-parser :local-date)
-         :local-date-time (make-datetime-simple-parser :local-date-time)))
+  {:boolean (simple-boolean-parser)
+   :int16 (simple-col-parser :int16)
+   :int32 (simple-col-parser :int32)
+   :int64 (simple-col-parser :int64)
+   :float64 (simple-col-parser :float64)
+   :uuid (simple-col-parser :uuid)
+   :packed-duration (make-datetime-simple-parser :packed-duration)
+   :packed-local-date (make-datetime-simple-parser :packed-local-date)
+   :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)
+   :zoned-date-time (make-datetime-simple-parser :zoned-date-time)
+   :string (simple-string-parser)
+   :encoded-text (simple-encoded-text-parser)
+   :float32 (simple-col-parser :float32)
+   :keyword (simple-col-parser :keyword)
+   :symbol (simple-col-parser :symbol)
+   :text (simple-text-parser)
+   :instant (make-datetime-simple-parser :instant)
+   :offset-date-time (make-datetime-simple-parser :offset-date-time)
+   :local-time (make-datetime-simple-parser :local-time)
+   :local-date (make-datetime-simple-parser :local-date)
+   :local-date-time (make-datetime-simple-parser :local-date-time)})
+
+
+(def default-parsers
+  [:boolean :int16 :int32 :int64 :float64 :uuid
+   :packed-duration :packed-local-date :packed-local-date-time
+   :zoned-date-time :string :text])
+
+
+(def ^:private default-parser-seq
+  (->> default-parsers
+       (mapv (juxt identity #(get all-parsers %)))))
 
 
 (defprotocol PColumnParser
@@ -607,11 +619,26 @@ falling back to :string"
      (simple-parser->parser-fn parser-fn)
      (vector? parser-fn)
      (let [[datatype parser-info] parser-fn]
-       (if (= parser-info :relaxed?)
+       (cond
+         (= parser-info :relaxed?)
          (simple-parser->parser-fn datatype true)
-         (if (parse-dt/datetime-datatype? datatype)
-           (datetime-formatter-fn datatype parser-info)
-           (general-parser-fn datatype parser-info))))
+         (parse-dt/datetime-datatype? datatype)
+         (datetime-formatter-fn datatype parser-info)
+         (= datatype :encoded-text)
+         (-> (cond
+               (instance? Charset parser-info)
+               (simple-encoded-text-parser parser-info)
+               (and (:encode-fn parser-info)
+                    (:decode-fn parser-info))
+               (simple-encoded-text-parser (:encode-fn parser-info)
+                                           (:decode-fn parser-info))
+               :else
+               (throw (Exception.
+                       (format "Unrecognized argument to :encoded-text: %s"
+                               parser-info))))
+             (simple-parser->parser-fn false))
+         :else
+         (general-parser-fn datatype parser-info)))
      (map? parser-fn)
      (if-let [entry (get parser-fn header-row-name)]
        (make-parser entry header-row-name scan-rows

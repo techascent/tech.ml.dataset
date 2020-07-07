@@ -1,4 +1,4 @@
-(ns tech.ml.utils
+(ns ^:no-doc tech.ml.utils
   (:require [tech.parallel.require :as parallel-req]
             [tech.parallel.next-item-fn :as parallel-nfn]
             [tech.v2.datatype.casting :as casting])
