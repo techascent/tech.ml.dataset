@@ -22,6 +22,7 @@
             [tech.ml.dataset.modelling]
             [tech.ml.dataset.math]
             [tech.ml.protocols.dataset :as ds-proto]
+            [tech.ml.dataset.text :as ds-text]
             [tech.v2.datatype.casting :as casting]
             [tech.parallel.for :as parallel-for]
             [tech.libs.smile.data :as smile-data]
@@ -871,27 +872,56 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
         (if (instance? StringTable coldata)
           coldata
           (str-table/string-table-from-strings coldata))
-        str->int-data (.str->int str-table)
+        int->str-data (dtype/make-container
+                       :java-array :string (.int->str str-table))
         strt-data (-> (.data str-table)
                       (dyn-int-list/int-list->data))
         data-ary (or (dtype/->array strt-data)
                      (dtype/->array-copy strt-data))]
-    {:string-table str->int-data
+    {:string-table int->str-data
+     ;;Between version 1 and two we changed the string table to be just
+     ;;an array of strings intead of a hashmap.
+     :version 2
      :entries data-ary}))
 
 
 (defn- string-data->column-data
-  [{:keys [string-table entries]}]
+  [{:keys [string-table entries version]}]
   (let [int-data (DynamicIntList. (dtype/->list-backing-store entries)
                                   nil)
         ;;force int read creation when possible
         _ (when-not (== 0 (dtype/ecount entries))
-            (.getInt int-data 0))
-        str->int string-table
-        int->str (HashMap.)
-        _ (doseq [[k v] str->int]
-            (.put int->str (unchecked-int v) k))]
-    (StringTable. int->str str->int int-data)))
+            (.getInt int-data 0))]
+    (if (= version 2)
+      (let [^List int->str (dtype/make-container :list :string string-table)
+            str->int (HashMap. (dtype/ecount int->str))
+            n-elems (.size int->str)]
+        (dotimes [idx n-elems]
+          (.put str->int (.get int->str idx) idx))
+        (StringTable. int->str str->int int-data))
+      (let [str->int string-table
+            int->str (HashMap.)
+            _ (doseq [[k v] str->int]
+                (.put int->str (unchecked-int v) k))
+            int->str-ary-list (ArrayList. (count str->int))
+            _ (doseq [idx (range (count str->int))]
+                (.add int->str-ary-list (get int->str idx "")))]
+        (StringTable. int->str-ary-list str->int int-data)))))
+
+
+(defn- column->encoded-text-data
+  [enc-data-col]
+  (if-let [^tech.ml.dataset.text.EncodedTextBuilder coldata
+           (.data ^Column enc-data-col)]
+    (ds-text/enc-builder->data coldata)
+    (dtype/->array-copy enc-data-col)))
+
+
+(defn encoded-text-data->column-data
+  [enc-text-data]
+  (if (.isArray (.getClass ^Object enc-text-data))
+    enc-text-data
+    (ds-text/data->enc-builder enc-text-data)))
 
 
 (defn dataset->data
@@ -906,13 +936,18 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   {:metadata (meta ds)
    :columns (->> ds
                  (mapv (fn [col]
-                         {:metadata (meta col)
-                          :missing (ds-col/missing col)
-                          :name (:name (meta col))
-                          :data (if (= :string (dtype/get-datatype col))
-                                  (column->string-data col)
-                                  (or (dtype/->array col)
-                                      (dtype/->array-copy col)))})))})
+                         (let [dtype (dtype/get-datatype col)]
+                           {:metadata (meta col)
+                            :missing (ds-col/missing col)
+                            :name (:name (meta col))
+                            :data (cond
+                                    (= :string (dtype/get-datatype col))
+                                    (column->string-data col)
+                                    (= :encoded-text dtype)
+                                    (column->encoded-text-data col)
+                                    :else
+                                    (or (dtype/->array col)
+                                        (dtype/->array-copy col)))}))))})
 
 
 (nippy/extend-freeze
@@ -927,8 +962,12 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   [{:keys [metadata columns]}]
   (->> columns
        (map (fn [{:keys [metadata] :as coldata}]
-              (if (= :string (:datatype metadata))
+              (cond
+                (= :string (:datatype metadata))
                 (update coldata :data string-data->column-data)
+                (= :encoded-text (:datatype metadata))
+                (update coldata :data encoded-text-data->column-data)
+                :else
                 (update coldata :data dtype/set-datatype (:datatype metadata)))))
        (new-dataset {:dataset-name (:name metadata)} metadata)))
 

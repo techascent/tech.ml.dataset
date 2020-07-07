@@ -1,5 +1,10 @@
 # Changelog
-## 2.14
+## 2.15 
+* fix nippy save/load for string tables.
+* string tables now have arraylists for their int->str mapping.
+* saving encoded-text columns is now possible with their encoding object.
+
+## 2.14 - BAD RELEASE, NIPPY SAVE/LOAD BROKEN
  * There is a new parse type: `:encoded-text`.  When read, this will appear to be a
    string column however the user has a choice of encodings and utf-8 is the default.
    This is useful when you need a particular encoding for a column.  It is roughly

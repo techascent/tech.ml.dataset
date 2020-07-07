@@ -280,21 +280,17 @@
 
 
 (defn simple-encoded-text-parser
-  ([encode-fn decode-fn]
+  ([encoder]
    (reify
      dtype-proto/PDatatype
      (get-datatype [item#] :encoded-text)
      PSimpleColumnParser
-     (make-parser-container [this] (ds-text/encoded-text-builder
-                                    encode-fn decode-fn))
+     (make-parser-container [this] (ds-text/encoded-text-builder encoder))
      (can-parse? [this# item#] true)
      (simple-parse! [parser# container# str-val#]
        (.add ^List container# str-val#))
      (simple-missing! [parser# container#]
        (.add ^List container# ""))))
-  ([charset]
-   (apply simple-encoded-text-parser
-          (ds-text/charset->encode-decode charset)))
   ([]
    (simple-encoded-text-parser ds-text/default-charset)))
 
@@ -625,14 +621,10 @@ falling back to :string"
          (parse-dt/datetime-datatype? datatype)
          (datetime-formatter-fn datatype parser-info)
          (= datatype :encoded-text)
-         (-> (cond
-               (instance? Charset parser-info)
+         (-> (if (or (instance? Charset parser-info)
+                     (string? parser-info)
+                     (satisfies? ds-text/PEncodingToFn parser-info))
                (simple-encoded-text-parser parser-info)
-               (and (:encode-fn parser-info)
-                    (:decode-fn parser-info))
-               (simple-encoded-text-parser (:encode-fn parser-info)
-                                           (:decode-fn parser-info))
-               :else
                (throw (Exception.
                        (format "Unrecognized argument to :encoded-text: %s"
                                parser-info))))

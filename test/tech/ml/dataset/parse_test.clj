@@ -4,6 +4,7 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.base :as ds-base]
+            [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]
             [clojure.set :as set])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
@@ -372,10 +373,7 @@
       (is (= first-abstract (first (charset-ds "abstract")))))
     (let [encdec-ds (ds-base/->dataset
                      tf {:parser-fn {"abstract"
-                                     [:encoded-text
-                                      {:encode-fn #(.getBytes ^String %
-                                                              "UTF-8")
-                                       :decode-fn #(String. ^bytes % "UTF-8")}]}})]
+                                     [:encoded-text "UTF-16LE"]}})]
       (is (= first-abstract (first (encdec-ds "abstract")))))))
 
 

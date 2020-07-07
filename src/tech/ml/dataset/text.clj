@@ -4,7 +4,8 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.object-datatypes :as obj-dtypes])
+            [tech.v2.datatype.object-datatypes :as obj-dtypes]
+            [taoensso.nippy :as nippy])
   (:import [java.util List ArrayList Collection]
            [java.nio.charset StandardCharsets Charset]
            [java.util Arrays]
@@ -139,7 +140,8 @@
 (deftype EncodedTextBuilder [encode-fn
                              decode-fn
                              ^ByteBigArrayBigList backing-store
-                             ^LongArrayList offsets]
+                             ^LongArrayList offsets
+                             encoding]
   List
   (size [this] (.size offsets))
   (add [this item] (.add this (.size this) item) true)
@@ -204,26 +206,80 @@
     ;;Clone to exactly the size we need
     (EncodedTextBuilder. encode-fn decode-fn
                          (.clone backing-store)
-                         (.clone offsets))))
+                         (.clone offsets)
+                         encoding)))
 
 
 (casting/alias-datatype! :encoded-text :string)
 
 
-(defn ^:no-doc charset->encode-decode
-  [^Charset charset]
-  (when-not (instance? Charset charset)
-    (throw (Exception. (format "charset arg %s must be instance of Charset"
-                               charset))))
-  [#(.getBytes ^String % charset) #(String. ^bytes % charset)])
+(defprotocol PEncodingToFn
+  (encoding->encode-fn [encoding])
+  (encoding->decode-fn [encoding]))
+
+
+(defrecord Encoding [encoding-name]
+  PEncodingToFn
+  (encoding->encode-fn [enc]
+    (let [charset (Charset/forName encoding-name)]
+      #(.getBytes ^String % charset)))
+  (encoding->decode-fn [enc]
+    (let [charset (Charset/forName encoding-name)]
+      #(String. ^bytes % charset))))
+
+
+(defn- check-encoding
+  [str-enc]
+  (boolean (Charset/forName str-enc)))
 
 
 (defn encoded-text-builder
-  (^List [encode-fn decode-fn]
-   (EncodedTextBuilder. encode-fn decode-fn
-                        (ByteBigArrayBigList.)
-                        (LongArrayList.)))
-  (^List [^Charset charset]
-   (apply encoded-text-builder (charset->encode-decode charset)))
+  (^List [encoding]
+   (let [encoding (cond
+                    (instance? Charset encoding)
+                    (->Encoding (.toString ^Object encoding))
+                    (string? encoding)
+                    (do
+                      (check-encoding encoding)
+                      (->Encoding encoding))
+                    :else
+                    encoding)]
+     (EncodedTextBuilder. (encoding->encode-fn encoding)
+                          (encoding->decode-fn encoding)
+                          (ByteBigArrayBigList.)
+                          (LongArrayList.)
+                          encoding)))
   (^List []
    (encoded-text-builder default-charset)))
+
+(defn enc-builder->data
+  [^EncodedTextBuilder enc]
+  {:backing-store (.elements
+                   ^ByteBigArrayBigList
+                   (dtype/clone
+                    (.backing-store enc)))
+   :offsets (dtype/->array-copy (.offsets enc))
+   :encoding (.encoding enc)})
+
+
+(defn data->enc-builder
+  [data]
+  (let [{:keys [backing-store offsets encoding]} data]
+    (EncodedTextBuilder. (encoding->encode-fn encoding)
+                        (encoding->decode-fn encoding)
+                        (ByteBigArrayBigList/wrap backing-store)
+                        (LongArrayList/wrap offsets)
+                        encoding)))
+
+
+(nippy/extend-freeze
+ EncodedTextBuilder :tech.ml.dataset.text/encoded-text
+ [^EncodedTextBuilder enc out]
+ (nippy/-freeze-without-meta! (enc-builder->data enc) out))
+
+
+(nippy/extend-thaw
+ :tech.ml.dataset.text/encoded-text
+ [in]
+ (-> (nippy/thaw-from-in! in)
+     (data->enc-builder)))

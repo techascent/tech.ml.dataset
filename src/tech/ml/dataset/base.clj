@@ -824,12 +824,15 @@ This is an interface change and we do apologize!"))))
            added to missing, the unparsed the column's :unparsed-values and
            :unparsed-indexes will be updated.
         - `string?` - for datetime types, this will turned into a DateTimeFormatter via
-           DateTimeFormatter/ofPattern.
+           DateTimeFormatter/ofPattern.  For encoded-text, this has to be a valid
+           argument to Charset/forName.
         - `DateTimeFormatter` - use with the appropriate temporal parse static function
            to parse the value.
-        -  map of `{:encode-fn decode-fn} for use only with `:encoded-text` datatype.
-           `encode-fn` must be a transformation from a string to a byte array while
-           `decode-fn` must be a transformation from a byte array to a string.
+        -  :encoded-text datatype - `parse-data` can be a string, a
+           java.nio.charset.Charset, or an implementation of
+           tech.ml.dataset.text/PEncodingToFn.  If you want to serialize this format
+           to nippy your encoding had better be nippy serializable (defrecords
+           always are).
    - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.
