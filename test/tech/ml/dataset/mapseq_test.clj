@@ -92,6 +92,7 @@
       (is (= [apple-v apple-v apple-v mand-v mand-v]
              ;;Order columns
              (->> (ds/select dataset [:mass :fruit-name :width] :all)
+                  (vals)
                   (take 2)
                   (drop 1)
                   (ds/from-prototype dataset "new-table")
@@ -295,7 +296,7 @@
   (let [ds (ds/->dataset [{:a 1 :b {:a 1 :b 2}}
                           {:a 2}])]
     (is (= #{:int64 :object}
-           (set (map dtype/get-datatype ds))))))
+           (set (map dtype/get-datatype (vals ds)))))))
 
 
 (deftest tensors-in-mapseq
@@ -304,7 +305,7 @@
                           {:a (dtt/->tensor (partition 3 (range 9)))
                            :b "goodbye"}])]
     (is (= #{:object :string}
-           (set (map dtype/get-datatype ds))))))
+           (set (map dtype/get-datatype (vals ds)))))))
 
 
 (deftest datetime-missing

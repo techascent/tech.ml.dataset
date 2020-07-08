@@ -124,7 +124,7 @@
 
 (deftest base-ames-parser-test
   (let [result (ds-parse/csv->dataset test-file)
-        dtypes (->> result
+        dtypes (->> (vals result)
                     (map meta)
                     (sort-by :name)
                     (mapv (juxt :name :datatype)))]
@@ -144,7 +144,7 @@
 
       (is (nil? differences)
           (str differences)))
-    (let [result-missing-data (->> result
+    (let [result-missing-data (->> (vals result)
                                    (map (juxt ds-col/column-name
                                               (comp dtype/ecount ds-col/missing)))
                                    (remove #(= 0 (second %)))
@@ -190,7 +190,7 @@
                  :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
                  :parser-fn :float32})]
     (is (= #{:float32}
-           (set (map dtype/get-datatype result))))
+           (set (map dtype/get-datatype (vals result)))))
     (is (= 3 (ds-base/column-count result))))
 
   ;;Next up is a map of colname->datatype
@@ -201,7 +201,7 @@
                  :parser-fn {"1stFlrSF" :float32
                              "2ndFlrSF" :int32}})]
     (is (= #{:float32 :int32 :int16}
-           (set (map dtype/get-datatype result)))))
+           (set (map dtype/get-datatype (vals result))))))
 
   ;;Or you can implement a function from colname,first-n-strings->parser
   (let [parser-fn (fn [_colname _coldata-n-strings]
@@ -213,7 +213,7 @@
                  :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]
                  :parser-fn parser-fn})]
     (is (= #{:float32}
-           (set (map dtype/get-datatype result))))))
+           (set (map dtype/get-datatype (vals result)))))))
 
 
 (deftest semi-colon-delimited-file
@@ -340,7 +340,7 @@
     (is (= 13 (ds-base/column-count ds)))
     (is (= 1000 (ds-base/row-count ds)))
     (is (= #{:local-date-time :float64 :int32 :string}
-           (->> (map dtype/get-datatype ds)
+           (->> (map dtype/get-datatype (vals ds))
                 set)))))
 
 

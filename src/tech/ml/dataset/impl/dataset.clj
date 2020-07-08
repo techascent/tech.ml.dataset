@@ -8,20 +8,123 @@
             [tech.v2.datatype.bitmap :as bitmap])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
-           [java.util Map List]))
+           [java.util Map List LinkedHashSet]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (declare new-dataset)
 
+;;ported from clojure.lang.APersistentMap
+(defn map-equiv [this o]
+  (cond (not (instance? java.util.Map o)) false
+        (and (instance? clojure.lang.IPersistentMap o)
+             (not (instance? clojure.lang.MapEquivalence o))) false
+        :else (let [^java.util.Map m o]
+                (and (= (.size m) (count this))
+                     (every? (fn [k]
+                               (.containsKey m k)) (keys this))))))
 
 (deftype Dataset [^List columns
                   colmap
-                  ^IPersistentMap metadata]
+                  ^IPersistentMap metadata
+                  ^{:unsynchronized-mutable true :tag 'int}  _hash
+                  ^{:unsynchronized-mutable true :tag 'int}  _hasheq]
+  java.util.Map
+  (size [this]    (.count this))
+  (isEmpty [this] (pos? (.count this)))
+  (containsValue [this v] (some #(= % v) columns))
+  (get [this k] (.valAt this k))
+  (put [this k v]  (throw (UnsupportedOperationException.)))
+  (remove [this k] (throw (UnsupportedOperationException.)))
+  (putAll [this m] (throw (UnsupportedOperationException.)))
+  (clear [this]    (throw (UnsupportedOperationException.)))
+  (keySet [this] (set (keys colmap)))
+  (values [this]    columns)
+  (entrySet [this]
+    (let [retval (LinkedHashSet.)]
+      (doseq [col columns]
+        (.add retval (clojure.lang.MapEntry. (:name (meta col)) col)))
+      retval))
+
+  clojure.lang.ILookup
+  (valAt [this k]
+    (when-let [idx (colmap k)]
+      (.get columns idx)))
+  (valAt [this k not-found]
+    (if-let [res (.valAt this k)]
+      res
+      not-found))
+
+  clojure.lang.MapEquivalence
+
+  clojure.lang.IPersistentMap
+  (assoc   [this k v] (.add-or-update-column this k v))
+  (assocEx [this k v]
+    (if-not (colmap k)
+      (.add-or-update-column this k v)
+      (throw (ex-info "Key already present" {:k k}))))
+  ;;without implements (dissoc pm k) behavior
+  (without [this k] (.remove-column this k))
+  (entryAt [this k]
+    (when-let [v (.valAt this k)]
+      (clojure.lang.MapEntry. k v)))
+  ;;No idea if this is correct behavior....
+  (empty [this] (new-dataset
+                 "_unnamed"
+                 {:name "_unnamed"}
+                 []))
+  ;;ported from clojure java impl.
+  (cons [this e]
+    (cond (instance? java.util.Map$Entry e)
+            (.assoc this (key e) (val e))
+          (vector? e)
+            (let [^clojure.lang.PersistentVector e e
+                  _  (when-not (== (.count e) 2)
+                       (throw (ex-info "Vector arg to map conj must be a pair")))]
+              (.assoc this (.nth e 0) (.nth e 1)))
+          :else
+            (reduce (fn [^clojure.lang.Associative acc entry]
+                      (.assoc acc (key entry) (val entry))) this e)))
+  (containsKey [this k]  (and (colmap k) true))
+
+  ;;MAJOR DEVIATION
+  ;;This conforms to clojure's idiom and projects the dataset onto a
+  ;;seq of [column-name column] entries.  Legacy implementation defaulted
+  ;;to using iterable, which was a seq of column.
+  (seq [this]
+    ;;Do not reorder column data if possible.
+    (map #(clojure.lang.MapEntry. (:name (meta %)) %) columns))
+
+  ;;Equality is likely a rat's nest, although we should be able to do it
+  ;;if we wanted to!
+  (hashCode [this]
+    (when (zero? _hash)
+      (set! _hash (clojure.lang.APersistentMap/mapHash this)))
+    _hash)
+
+  clojure.lang.IHashEq
+  ;;intentionally using seq instead of iterator for now.
+  (hasheq [this]
+    (when (zero? _hasheq)
+      (set! _hasheq (hash-unordered-coll (.seq this))))
+    _hasheq)
+
+  ;;DOUBLE CHECK equals/equiv semantics...
+  (equals [this o] (or (identical? this o)
+                       (instance? clojure.lang.IHashEq o) (== (hash this) (hash o))
+                       (clojure.lang.APersistentMap/mapEquals this o)))
+
+  (equiv [this o] (or (identical? this o)
+                      (and (instance? clojure.lang.IHashEq o) (== (hash this) (hash o)))
+                      (map-equiv this o)))
+
   ds-proto/PColumnarDataset
   (dataset-name [dataset] (:name metadata))
   (set-dataset-name [dataset new-name]
     (Dataset. columns colmap
-     (assoc metadata :name new-name)))
+     (assoc metadata :name new-name) _hash _hasheq))
   (maybe-column [dataset column-name]
     (when-let [idx (get colmap column-name)]
       (.get columns (int idx))))
@@ -29,7 +132,8 @@
   (metadata [dataset] metadata)
   (set-metadata [dataset meta-map]
     (Dataset. columns colmap
-              (col-impl/->persistent-map meta-map)))
+              (col-impl/->persistent-map meta-map)
+              _hash _hasheq))
 
   (columns [dataset] columns)
 
@@ -66,7 +170,9 @@
                 (col-impl/new-column (ds-col-proto/column-name col)
                                      (col-impl/ensure-column-reader new-col-data))))
        colmap
-       metadata)))
+       metadata
+       0
+       0)))
 
   (add-or-update-column [dataset col-name new-col-data]
     (let [col-data (if (ds-col-proto/is-column? new-col-data)
@@ -154,14 +260,22 @@
     (new-dataset (ds-proto/dataset-name item)
                  metadata
                  (mapv dtype/clone columns)))
+
   Counted
   (count [this] (count columns))
 
   IFn
-  (invoke [item col-name]
-    (ds-proto/column item col-name))
-  (invoke [item col-name new-col]
-    (ds-proto/add-column item (ds-col-proto/set-name new-col col-name)))
+  ;;NON-OBVIOUS SEMANTICS
+  ;;Legacy implementation of invoke differs from clojure idioms for maps,
+  ;;and instead of performing a lookup, we have effectively an assoc.
+  ;;Is this necessary, or can we better conform to clojure idioms?
+  ;; (invoke [item col-name new-col]
+  ;;   (ds-proto/add-column item (ds-col-proto/set-name new-col col-name)))
+
+  (invoke [this k]
+    (.valAt this k))
+  (invoke [this k not-found]
+    (.valAt this k not-found))
   (applyTo [this arg-seq]
     (case (count arg-seq)
       1 (.invoke this (first arg-seq))
@@ -169,11 +283,12 @@
 
   IObj
   (meta [this] metadata)
-  (withMeta [this metadata] (Dataset. columns colmap metadata))
+  (withMeta [this metadata] (Dataset. columns colmap metadata _hash _hasheq))
 
   Iterable
   (iterator [item]
-    (->> (ds-proto/columns item)
+    (->> ^java.lang.Iterable
+         (ds-proto/columns item)
          (.iterator)))
   Object
   (toString [item]
@@ -199,7 +314,7 @@
        (Dataset. [] {}
                  (assoc (col-impl/->persistent-map ds-metadata)
                         :name
-                        dataset-name))
+                        dataset-name) 0 0)
        (let [column-seq (->> (col-impl/ensure-column-seq column-seq)
                              (map-indexed (fn [idx column]
                                             (let [cname (ds-col-proto/column-name
@@ -232,7 +347,8 @@
                         (into {}))
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
-                          dataset-name))))))
+                          dataset-name)
+                   0 0)))))
   ([options column-seq]
    (new-dataset options {} column-seq))
   ([column-seq]
@@ -240,8 +356,8 @@
 
 
 (defmethod print-method Dataset
-  [dataset w]
-  (.write ^Writer w (.toString dataset)))
+  [^Dataset dataset w]
+  (.write ^Writer w ^String (.toString dataset)))
 
 
 (defn item-val->string

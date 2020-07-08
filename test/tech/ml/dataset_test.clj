@@ -114,7 +114,7 @@
 (deftest iterable
   (let [ds (ds/->dataset (mapseq-fruit-dataset))]
     (is (= (ds/column-names ds)
-           (map ds-col/column-name ds)))))
+           (map ds-col/column-name (vals ds))))))
 
 
 (deftest string-column-add-or-update
@@ -264,7 +264,7 @@
                                               :b (list 1 nil 2 nil 3)})
         rec (ds-pipe/replace-missing ds :all 5)]
     (is (= #{:int64}
-           (set (map dtype/get-datatype ds))))
+           (set (map dtype/get-datatype (vals ds)))))
     (is (= [1 5 2 5 3]
            (vec (rec :a))))
     (is (= [1 5 2 5 3]
@@ -328,6 +328,7 @@
 (deftest long-double-promotion
   (is (= #{:float64}
          (->> (ds/->dataset [{:a 1 :b (float 2.2)} {:a 1.2 :b 2}])
+              (vals)
               (map dtype/get-datatype)
               set))))
 
@@ -411,18 +412,18 @@
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds1))))
+           (set (map dtype/get-datatype (vals cds1)))))
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds2)))))
+           (set (map dtype/get-datatype (vals cds2))))))
   (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
                           {:b (float 2)}])
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds1))))
+           (set (map dtype/get-datatype (vals cds1)))))
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds2))))
+           (set (map dtype/get-datatype (vals cds2)))))
     (is (= [1 nil 2]
            (vec (cds1 :a))))))
 
@@ -433,18 +434,18 @@
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds1))))
+           (set (map dtype/get-datatype (vals cds1)))))
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds2)))))
+           (set (map dtype/get-datatype (vals cds2))))))
   (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
                           {:b (float 2)}])
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat-copying ds ds2)
         cds2 (ds/concat-copying ds2 ds)]
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds1))))
+           (set (map dtype/get-datatype (vals cds1)))))
     (is (= #{:int32 :float64}
-           (set (map dtype/get-datatype cds2))))
+           (set (map dtype/get-datatype (vals cds2)))))
     (is (= [1 nil 2]
            (vec (cds1 :a))))))
 
@@ -609,7 +610,7 @@
     (is (= 0 (ds/row-count result)))
     (is (= (ds/column-count ds)
            (ds/column-count result)))
-    (is (string? (.toString result)))))
+    (is (string? (.toString ^Object result)))))
 
 
 (deftest nil-mapseq-values
@@ -682,10 +683,10 @@
   (let [ds (ds/->dataset {:a (vector-of :float 1 2 3 4)
                           :b (vector-of :short 1 2 3 4)})]
     (is (= #{:float32 :int16}
-           (set (map dtype/get-datatype ds))))
+           (set (map dtype/get-datatype (vals ds)))))
     (let [cds (dtype/clone ds)]
       (is (every? #(not (nil? %))
-                  (map dtype/->array cds))))))
+                  (map dtype/->array (vals cds)))))))
 
 
 (deftest serialize-datetime
