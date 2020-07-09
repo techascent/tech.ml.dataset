@@ -49,9 +49,7 @@
 (par-util/export-symbols tech.ml.dataset.base
                         dataset-name
                         set-dataset-name
-                        ds-row-count
                         row-count
-                        ds-column-count
                         column-count
                         metadata
                         set-metadata
@@ -81,22 +79,16 @@
                         add-or-update-column
                         value-reader
                         mapseq-reader
-                        ds-group-by
-                        ds-group-by-column
                         group-by->indexes
                         group-by-column->indexes
                         group-by
                         group-by-column
                         sort-by
                         sort-by-column
-                        ds-sort-by
-                        ds-sort-by-column
                         ->sort-by
                         ->sort-by-column
                         filter
                         filter-column
-                        ds-filter
-                        ds-filter-column
                         unique-by
                         unique-by-column
                         aggregate-by
@@ -386,7 +378,7 @@
                             missing))))))
 
 
-(defn columnwise-reduce
+(defn ^:no-doc columnwise-reduce
   "In parallel, run function over each column and produce a new dataset with a
   single row of the result.  Returns a new dataset with the same columns as the
   original.  Exceptions are logged with 'warn' and a missing value for that column
@@ -599,7 +591,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
              %))))))
 
 
-(defn ->distinct-by-column
+(defn ^:no-doc ->distinct-by-column
   "Drop successive rows where we already have a given key."
   [ds colname]
   (let [coldata (ds colname)
@@ -918,7 +910,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
     (dtype/->array-copy enc-data-col)))
 
 
-(defn encoded-text-data->column-data
+(defn- encoded-text-data->column-data
   [enc-text-data]
   (if (.isArray (.getClass ^Object enc-text-data))
     enc-text-data
