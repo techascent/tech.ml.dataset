@@ -4,6 +4,7 @@
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.print :as ds-print]
             [tech.v2.datatype :as dtype]
+            [tech.v2.datatype.argtypes :as argtypes]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.bitmap :as bitmap]
             [clojure.pprint :as pprint])
@@ -18,7 +19,7 @@
 (declare new-dataset)
 
 ;;ported from clojure.lang.APersistentMap
-(defn map-equiv [this o]
+(defn- map-equiv [this o]
   (cond (not (instance? java.util.Map o)) false
         (and (instance? clojure.lang.IPersistentMap o)
              (not (instance? clojure.lang.MapEquivalence o))) false
@@ -26,6 +27,25 @@
                 (and (= (.size m) (count this))
                      (every? (fn [k]
                                (.containsKey m k)) (keys this))))))
+
+
+(defn- coldata->column
+  [n-rows col-name new-col-data]
+  (let [argtype (argtypes/arg->arg-type new-col-data)]
+    (cond
+      (ds-col-proto/is-column? new-col-data)
+      (ds-col-proto/set-name new-col-data col-name)
+      (= argtype :scalar)
+      (col-impl/new-column col-name
+                           (dtype/const-reader new-col-data n-rows))
+      (= argtype :iterable)
+      (col-impl/new-column col-name
+                           (col-impl/ensure-column-reader
+                            (take n-rows new-col-data)))
+      :else
+      (col-impl/new-column col-name
+                           (col-impl/ensure-column-reader
+                            new-col-data)))))
 
 (deftype Dataset [^List columns
                   colmap
@@ -121,7 +141,8 @@
                        (clojure.lang.APersistentMap/mapEquals this o)))
 
   (equiv [this o] (or (identical? this o)
-                      (and (instance? clojure.lang.IHashEq o) (== (hash this) (hash o)))
+                      (and (instance? clojure.lang.IHashEq o)
+                           (== (hash this) (hash o)))
                       (map-equiv this o)))
 
   ds-proto/PColumnarDataset
@@ -166,24 +187,18 @@
                        :col-names (keys colmap)})))
     (let [col-idx (get colmap col-name)
           col (.get columns (int col-idx))
-          new-col-data (col-fn col)]
+          n-rows (long (second (dtype/shape dataset)))
+          new-col-data (coldata->column n-rows col-name (col-fn col))]
       (Dataset.
-       (assoc columns col-idx
-              (if (ds-col-proto/is-column? new-col-data)
-                (ds-col-proto/set-name new-col-data col-name)
-                (col-impl/new-column (ds-col-proto/column-name col)
-                                     (col-impl/ensure-column-reader new-col-data))))
+       (assoc columns col-idx new-col-data)
        colmap
        metadata
        0
        0)))
 
   (add-or-update-column [dataset col-name new-col-data]
-    (let [col-data (if (ds-col-proto/is-column? new-col-data)
-                     (ds-col-proto/set-name new-col-data col-name)
-                     (col-impl/new-column col-name
-                                          (col-impl/ensure-column-reader
-                                           new-col-data)))]
+    (let [n-rows (long (second (dtype/shape dataset)))
+          col-data (coldata->column n-rows col-name new-col-data)]
       (if (contains? colmap col-name)
         (ds-proto/update-column dataset col-name (constantly col-data))
         (ds-proto/add-column dataset col-data))))
@@ -291,9 +306,8 @@
 
   Iterable
   (iterator [item]
-    (->> ^java.lang.Iterable
-         (ds-proto/columns item)
-         (.iterator)))
+    (.iterator (.entrySet item)))
+
   Object
   (toString [item]
     (ds-print/dataset->str item)))

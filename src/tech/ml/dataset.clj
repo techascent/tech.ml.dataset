@@ -935,7 +935,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
-   :columns (->> ds
+   :columns (->> (columns ds)
                  (mapv (fn [col]
                          (let [dtype (dtype/get-datatype col)]
                            {:metadata (meta col)

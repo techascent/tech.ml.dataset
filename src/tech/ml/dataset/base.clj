@@ -286,7 +286,7 @@
   [dataset]
   (reduce #(dtype-proto/set-or %1 (ds-col/missing %2))
           (->bitmap)
-          dataset))
+          (vals dataset)))
 
 
 (defn index-value-seq

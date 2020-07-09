@@ -719,8 +719,8 @@
       (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
       (is (= (vec (stocks "date"))
              (vec (nip-stocks "date"))))
-      (is (= (mapv meta stocks)
-             (mapv meta nip-stocks)))
+      (is (= (mapv meta (vals stocks))
+             (mapv meta (vals nip-stocks))))
       (finally
         (let [file (java.io.File. fname)]
           (when (.exists file)
