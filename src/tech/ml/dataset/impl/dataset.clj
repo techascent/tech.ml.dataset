@@ -5,7 +5,8 @@
             [tech.ml.dataset.print :as ds-print]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.bitmap :as bitmap])
+            [tech.v2.datatype.bitmap :as bitmap]
+            [clojure.pprint :as pprint])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
            [java.util Map List LinkedHashSet]))
@@ -33,19 +34,22 @@
                   ^{:unsynchronized-mutable true :tag 'int}  _hasheq]
   java.util.Map
   (size [this]    (.count this))
-  (isEmpty [this] (pos? (.count this)))
+  (isEmpty [this] (not (pos? (.count this))))
   (containsValue [this v] (some #(= % v) columns))
   (get [this k] (.valAt this k))
   (put [this k v]  (throw (UnsupportedOperationException.)))
   (remove [this k] (throw (UnsupportedOperationException.)))
   (putAll [this m] (throw (UnsupportedOperationException.)))
   (clear [this]    (throw (UnsupportedOperationException.)))
-  (keySet [this] (set (keys colmap)))
+  (keySet [this]
+    (let [retval (LinkedHashSet.)]
+      (.addAll retval (map #(:name (meta %)) columns))
+      retval))
   (values [this]    columns)
   (entrySet [this]
     (let [retval (LinkedHashSet.)]
-      (doseq [col columns]
-        (.add retval (clojure.lang.MapEntry. (:name (meta col)) col)))
+      (.addAll retval (map #(clojure.lang.MapEntry. (:name (meta %)) %)
+                           columns))
       retval))
 
   clojure.lang.ILookup
@@ -87,7 +91,7 @@
           :else
             (reduce (fn [^clojure.lang.Associative acc entry]
                       (.assoc acc (key entry) (val entry))) this e)))
-  (containsKey [this k]  (and (colmap k) true))
+  (containsKey [this k]  (.containsKey ^Map colmap k))
 
   ;;MAJOR DEVIATION
   ;;This conforms to clojure's idiom and projects the dataset onto a
@@ -358,6 +362,10 @@
 (defmethod print-method Dataset
   [^Dataset dataset w]
   (.write ^Writer w ^String (.toString dataset)))
+
+
+(defmethod pprint/simple-dispatch
+  tech.ml.dataset.impl.dataset.Dataset [f] (pr f))
 
 
 (defn item-val->string
