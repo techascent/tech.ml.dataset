@@ -143,7 +143,8 @@
   (if (instance? DataFrame ds)
     ds
     (DataFrameFactory/construct ^"[Lsmile.data.vector.BaseVector;"
-                                (into-array BaseVector (map column->smile ds)))))
+                                (into-array BaseVector (map column->smile
+                                                            (vals ds))))))
 
 
 (defmacro construct-primitive-smile-vec

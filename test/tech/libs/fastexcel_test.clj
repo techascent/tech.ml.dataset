@@ -58,7 +58,7 @@
                           :parser-fn {"Identifier" :string
                                       "Weight" :float64}})]
     (is (= #{:float64 :string}
-           (set (map dtype/get-datatype ds))))
+           (set (map dtype/get-datatype (vals ds)))))
     (is (= ["Name"
 	   "Ticker"
 	   "Identifier"

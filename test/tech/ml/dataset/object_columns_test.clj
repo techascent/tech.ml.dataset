@@ -28,5 +28,5 @@
                  :tensors (repeat 5 (dtt/->tensor (partition 2 (range 4))))})]
     (is (= #{:float64 :string :int64 :object
              :packed-duration}
-           (->> (map dtype/get-datatype src-ds)
+           (->> (map dtype/get-datatype (vals src-ds))
                 set)))))

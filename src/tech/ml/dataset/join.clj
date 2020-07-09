@@ -190,7 +190,7 @@
 
 (defn- update-join-metadata
   [result-table lhs-table-name rhs-table-name]
-  (let [name-data (->> (map meta result-table)
+  (let [name-data (->> (map meta (vals result-table))
                        (group-by :src-table-name))]
     (with-meta result-table
       (assoc (meta result-table)

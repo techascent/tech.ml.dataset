@@ -124,7 +124,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   ;;Do the conversion to string once.
                                   (dtype/clone)
                                   (dtype/->reader))
-                             print-ds)
+                             (vals print-ds))
          n-rows (long (second (dtype/shape print-ds)))
          row-heights (ArrayList.)
          _ (.addAll row-heights (repeat n-rows 1))
