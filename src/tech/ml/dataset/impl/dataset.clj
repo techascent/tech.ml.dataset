@@ -109,7 +109,7 @@
           (vector? e)
             (let [^clojure.lang.PersistentVector e e
                   _  (when-not (== (.count e) 2)
-                       (throw (ex-info "Vector arg to map conj must be a pair")))]
+                       (throw (Exception. "Vector arg to map conj must be a pair")))]
               (.assoc this (.nth e 0) (.nth e 1)))
           :else
             (reduce (fn [^clojure.lang.Associative acc entry]
