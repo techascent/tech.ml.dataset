@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.impl.dataset
+(ns ^:no-doc tech.ml.dataset.impl.dataset
   (:require [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.column :as col-impl]

@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.impl.column
+(ns ^:no-doc tech.ml.dataset.impl.column
   (:require [tech.ml.protocols.column :as ds-col-proto]
             [tech.ml.dataset.string-table :refer [make-string-table]]
             [tech.ml.dataset.parallel-unique :refer [parallel-unique]]

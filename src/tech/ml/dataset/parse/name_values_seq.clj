@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.parse.name-values-seq
+(ns ^:no-doc tech.ml.dataset.parse.name-values-seq
   (:require [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]

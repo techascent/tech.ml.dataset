@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.pipeline.pipeline-operators
+(ns ^:no-doc tech.ml.dataset.pipeline.pipeline-operators
   (:require [tech.ml.protocols.etl :as etl-proto]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.pca :as ds-pca]

@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.pipeline.base
+(ns ^:no-doc tech.ml.dataset.pipeline.base
   (:require [tech.ml.protocols.dataset :as ds-proto]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.unary-op :as unary]))

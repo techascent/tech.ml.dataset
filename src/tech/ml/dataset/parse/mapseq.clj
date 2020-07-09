@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.parse.mapseq
+(ns ^:no-doc tech.ml.dataset.parse.mapseq
   "Sequences of maps are maybe the most basic pure datastructure for data.
   Converting them into a more structured form (and back) is a key component of
   dealing with datatets"

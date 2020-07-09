@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.parse.spreadsheet
+(ns ^:no-doc tech.ml.dataset.parse.spreadsheet
   "Spreadsheets in general are stored in a cell-based format.  This means that any cell
   could have data of any type.  Commonalities around parsing spreadsheet-type systems
   are captured here."

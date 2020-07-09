@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.text
+(ns ^:no-doc tech.ml.dataset.text
   (:require [tech.ml.dataset.string-table :as str-table]
             [clojure.string :as str]
             [tech.v2.datatype.protocols :as dtype-proto]

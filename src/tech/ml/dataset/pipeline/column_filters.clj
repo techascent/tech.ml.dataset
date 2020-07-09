@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.pipeline.column-filters
+(ns ^:no-doc tech.ml.dataset.pipeline.column-filters
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.casting :as casting]
             [tech.ml.dataset.base :as ds]

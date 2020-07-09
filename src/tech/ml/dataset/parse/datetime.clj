@@ -1,4 +1,4 @@
-(ns tech.ml.dataset.parse.datetime
+(ns ^:no-doc tech.ml.dataset.parse.datetime
   (:require [clojure.string :as s]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.casting :as casting]
