@@ -288,9 +288,9 @@
         missing-set (if (== 1 (count all-colnames))
                       (ds-col/missing (src-ds (first all-colnames)))
                       (reduce dtype-proto/set-or
-                              (map ds-col/missing src-ds)))
+                              (map ds-col/missing (vals src-ds))))
         result-reader (apply dtype/typed-reader-map
-                             map-fn (columns src-ds))]
+                             map-fn (vals src-ds))]
     (add-or-update-column
      dataset result-colname
      (ds-col/new-column result-colname result-reader {} missing-set))))
@@ -460,9 +460,9 @@ null [6 3]:
                       :as _options}]
    (let [row-count (row-count dataset)
          colname-set (set colnames)
-         leftover-columns (remove (comp colname-set
-                                        ds-col/column-name)
-                                  dataset)]
+         leftover-columns (->> (vals dataset)
+                               (remove (comp colname-set
+                                             ds-col/column-name)))]
      ;;Note this is calling dataset's concat, not clojure.core's concat
      ;;Use apply instead of reduce so that the concat function can see the
      ;;entire dataset list at once.  This makes a more efficient reader implementation
@@ -703,6 +703,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                              (remove #{:values :n-values :quartile-1 :quartile-3 :histogram})))
          stats-ds
          (->> (->dataset dataset)
+              (columns)
               (pmap (fn [ds-col]
                       (let [n-missing (dtype/ecount (ds-col/missing ds-col))
                             n-valid (- (dtype/ecount ds-col)
@@ -825,7 +826,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                  dataset {:column-name-seq
                           original-label-column-names})]
     (if (= 1 (column-count dataset))
-      (dtype/->reader (first dataset))
+      (dtype/->reader (first (vals dataset)))
       dataset)))
 
 
@@ -934,7 +935,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
-   :columns (->> ds
+   :columns (->> (columns ds)
                  (mapv (fn [col]
                          (let [dtype (dtype/get-datatype col)]
                            {:metadata (meta col)
