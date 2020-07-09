@@ -1,5 +1,14 @@
 # Changelog
-## 2.15 
+## 3.00
+ * Datasets implement IPersistentMap.  This changes the meaning of `(seq dataset)`
+   whereas it used to return columns it now returns sequences of map entries.
+   It does mean, however, that you can destructure datasets in let statements to
+   get the columns back and use clojure.core/[assoc,dissoc], contains? etc.
+   Some of the core Clojure functions, such as select-keys, will change your dataset
+   into a normal clojure persistent map so beware.
+
+
+## 2.15
 * fix nippy save/load for string tables.
 * string tables now have arraylists for their int->str mapping.
 * saving encoded-text columns is now possible with their encoding object.
@@ -11,7 +20,7 @@
    twice as efficient be default as a normal string encoding (utf-8 vs. utf-16).
 
 ## 2.13
- * `nth`, `map` on packed datetime columns (or using them as functions) 
+ * `nth`, `map` on packed datetime columns (or using them as functions)
    returns datetime objects as opposed to their packed values.  This means that if you
    ask a packed datetime column for an object reader you get back an unpacked value.
 
@@ -20,12 +29,12 @@
    and all tech.v2.datatype readers support nth and count natively in base java
    interface implementations.
  * New namespace - `tech.ml.dataset.text.bag-of-words` that contains code to convert
-  a dataset with a text field into a dataset with document ids and  and a 
+  a dataset with a text field into a dataset with document ids and  and a
   document-id->token-idx dataset.
  * [Quick Reference](docs/quick-reference.md)
 
 ## 2.11
- * After several tries got docs up on cljdoc.  Need to have provided deps cleaned 
+ * After several tries got docs up on cljdoc.  Need to have provided deps cleaned
    up a bit better.
 
 ## 2.09
