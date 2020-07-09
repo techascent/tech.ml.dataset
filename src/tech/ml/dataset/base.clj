@@ -801,10 +801,12 @@ This is an interface change and we do apologize!"))))
      missing values for columns that had no data for that row.
   - `:skip-bad-rows?` - Legacy option.  Use :bad-row-policy.
   - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
-      will result in an exception.
+     will result in an exception.
   - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301
+  - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the header
+     row.  Works across both csv and spreadsheet datasets.
   - `:parser-fn` -
     - `keyword?` - all columns parsed to this datatype
     - `ifn?` - called with two arguments: (parser-fn column-name-or-idx column-data)
