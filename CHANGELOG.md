@@ -1,5 +1,5 @@
 # Changelog
-## 3.00
+## 3.01
  * Datasets implement IPersistentMap.  This changes the meaning of `(seq dataset)`
    whereas it used to return columns it now returns sequences of map entries.
    It does mean, however, that you can destructure datasets in let statements to
