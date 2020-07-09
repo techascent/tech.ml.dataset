@@ -31,7 +31,10 @@
 
 (defn- coldata->column
   [n-rows col-name new-col-data]
-  (let [argtype (argtypes/arg->arg-type new-col-data)]
+  (let [argtype (argtypes/arg->arg-type new-col-data)
+        n-rows (if (= 0 n-rows)
+                 Integer/MAX_VALUE
+                 n-rows)]
     (cond
       (ds-col-proto/is-column? new-col-data)
       (ds-col-proto/set-name new-col-data col-name)
