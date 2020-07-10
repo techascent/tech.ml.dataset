@@ -16,7 +16,7 @@
 
 (deftest happy-path-parse-test
   (let [ds (first (xlsx-parse/workbook->datasets xlsx-file))]
-    (is (= #{0 "Age" "Country" "First Name" "Gender" "Date" "Last Name" "Id"}
+    (is (= #{"column-0" "Age" "Country" "First Name" "Gender" "Date" "Last Name" "Id"}
            (set (ds/column-names ds))))
     (is (= #{:float64 :string}
            (set (map dtype/get-datatype (ds/columns ds)))))
@@ -30,7 +30,7 @@
     (is (= 8 (ds/row-count ds)))
     (is (= 8 (ds/column-count ds)))
     (is (every? #(= (set (range 8)) %)
-                (map (comp set ds-col/missing ds) [0 "a" 6])))
+                (map (comp set ds-col/missing ds) ["column-0" "a" "column-6"])))
     (is (= [1.0 1.0 1.0 "a" 2.0 23.0]
            (->> (ds/columns ds)
                 (mapcat #(dtype/->reader % :object {:missing-policy :elide}))
@@ -66,6 +66,6 @@
 	   "Weight"
 	   "Sector"
 	   "Shares Held"
-	   "Local Currency"
-	   8]
+            "Local Currency"
+            "column-8"]
            (vec (ds/column-names ds))))))

@@ -732,7 +732,6 @@ falling back to :string"
                   (missing! parser))
                 (recur (unchecked-inc col-idx))))))))
     (->> (mapv (fn [init-row-data parser]
-                 (println "init row data" init-row-data)
                  (assoc (column-data parser)
                         :name (make-colname init-row-data)))
                (if header-row?
