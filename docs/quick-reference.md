@@ -29,8 +29,10 @@ functions that are we find most useful.
 ## Accessing Values
 
 * Datasets overload Ifn so are functions of their column names.  `(ds :colname)` will
-  return the column named `:colname`.  Datasets are sequence of columns so
-  `(map meta ds)` will return a sequence of column metadata.
+  return the column named `:colname`.  Datasets implement `IPersistentMap` so
+  `(map (comp second meta) ds)` or `(map meta (vals ds))`  will return a sequence of column 
+  metadata.  `keys`, `vals`, `contains?` and map-style destructuring all work on 
+  datasets.
 * Columns are iterable and implement indexed so you can use them with `map`, `count`
   and `nth` and overload IFn such that they are functions of their indexes similar
   to persistent vectors.
