@@ -51,7 +51,7 @@ functions that are we find most useful.
  store and lazily reads it so you will have relatively more expensive reading of the
  data but will not increase your memory working-set size.
 * [value-reader](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/readers.clj#L44) - Get the rows of the
- dataset as a 'java.util.List' of readers.  These readers behave like persistent maps
+ dataset as a 'java.util.List' of rows.  These rows behave like persistent vectors
  but are not safe to use as keys in maps - use `vec` and get real persistent vectors if
  you intend to call equals or hashCode on these.
 * [tech.ml.dataset.column/missing](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/column.clj#L65) - return
@@ -72,7 +72,8 @@ pretty good for quick scans.
 ## Print Options
 
 We use these options frequently during exploration to get more/less printing
-output.  These are used like `(vary-meta ds assoc :print-column-max-width 10).
+output.  These are used like `(vary-meta ds assoc :print-column-max-width 10)`.
+Often it is useful to print the entire table: `(vary-meta ds assoc :print-index-range :all)`.
 
 * [`:print-column-max-width`](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/print.clj#L97).
 * [`:print-index-range`](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/print.clj#L97).
