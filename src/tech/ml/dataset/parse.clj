@@ -649,6 +649,13 @@ falling back to :string"
                 general-parser)))
 
 
+(defn- make-colname
+  [rd]
+  (if (number? rd)
+    (str "column-" rd)
+    rd))
+
+
 (defn rows->dataset
   "Given a sequence of string[] rows, parse into columnar data.
   See csv->columns.
@@ -725,8 +732,9 @@ falling back to :string"
                   (missing! parser))
                 (recur (unchecked-inc col-idx))))))))
     (->> (mapv (fn [init-row-data parser]
+                 (println "init row data" init-row-data)
                  (assoc (column-data parser)
-                        :name init-row-data))
+                        :name (make-colname init-row-data)))
                (if header-row?
                  (concat initial-row
                          (range (count initial-row)

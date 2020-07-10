@@ -346,7 +346,11 @@
 
 (deftest parse-ragged
   (let [ds (ds-base/->dataset "test/data/ragged.csv"
-                              {:header-row? false})]
+                              {:header-row? false
+                               :key-fn keyword})]
+    (is (= [:column-0 :column-1 :column-2 :column-3 :column-4 :column-5
+            :column-6 :column-7 :column-8 :column-9 :column-10 :column-11]
+           (vec (ds/column-names ds))))
     (is (= 12 (ds-base/column-count ds)))
     (is (= [4 24 31 33 65 67 68 71 75 76 93 97]
            (vec ((ds-base/value-reader ds) 4))))

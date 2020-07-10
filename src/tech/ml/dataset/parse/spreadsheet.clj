@@ -370,6 +370,6 @@
                                              (scan-rows column-number)))
                               (default-column-parser))))]
      (process-spreadsheet-rows rows header-row? col-parser-gen
-                               #(get header-row % %)
+                               #(get header-row % (str "column-" %))
                                (merge {:dataset-name (.name worksheet)}
                                       options)))))

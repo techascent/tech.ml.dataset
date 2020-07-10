@@ -72,3 +72,11 @@
     ;;This is also a good example in that the system produces keywords with spaces
     ;;in them...that definitely isn't ideal.
     (is (every? keyword? (rest (ds/column-names ds))))))
+
+
+(deftest key-fn-number-columns
+  (let [ds (ds/->dataset xlsx-file {:key-fn keyword})]
+    (is (= 0 (count (filter nil? (ds/column-names ds)))))
+    (is (= #{:column-0 :Age :Country (keyword "First Name") :Gender :Date
+             (keyword "Last Name") (keyword "Id")}
+           (set (ds/column-names ds))))))
