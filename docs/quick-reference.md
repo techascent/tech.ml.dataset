@@ -167,7 +167,7 @@ arithmetic operations to a column lazily returning a new column.
  dataset by a bit - sometimes 20%.  This is because lists that have allocated extra
  capacity are copied into arrays that have no extra capacity.
 
- * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and where copying the data into java arrays.  Will clone datasets or columns.
+ * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and copying the data into java arrays.  Will clone datasets or columns.
 
 
 
