@@ -20,7 +20,8 @@
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
-           [tech.v2.datatype ObjectReader DoubleReader ObjectWriter]))
+           [tech.v2.datatype ObjectReader DoubleReader ObjectWriter
+            ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -148,24 +149,25 @@
     :else
     (long-array item)))
 
-(defmacro generic-reader! []
-  `(or ~'generic-reader
-       (do (set! ~'generic-reader
-                 (typecast/datatype->reader :object ~'this))
-           ~'generic-reader)))
+(defmacro cached-vector! []
+  `(or ~'cached-vector
+       (do (set! ~'cached-vector
+                 (ListPersistentVector.
+                  (typecast/datatype->reader :object ~'this)))
+           ~'cached-vector)))
 
 (deftype Column
     [^RoaringBitmap missing
      data
      ^IPersistentMap metadata
-     ^:unsynchronized-mutable ^ObjectReader generic-reader]
+     ^:unsynchronized-mutable ^ListPersistentVector cached-vector]
   dtype-proto/PDatatype
   (get-datatype [this] (dtype-proto/get-datatype data))
   dtype-proto/PSetDatatype
   (set-datatype [this new-dtype]
     (Column. missing (dtype-proto/set-datatype data new-dtype)
              metadata
-             generic-reader))
+             cached-vector))
   dtype-proto/PCountable
   (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToReader
@@ -250,7 +252,7 @@
                              (map #(+ (long %) offset))
                              (->bitmap))
             new-data (dtype-proto/sub-buffer data offset len)]
-        (Column. new-missing new-data metadata generic-reader))))
+        (Column. new-missing new-data metadata cached-vector))))
   dtype-proto/PToNioBuffer
   (convertible-to-nio-buffer? [item]
     (and (== 0 (dtype/ecount missing))
@@ -292,21 +294,21 @@
   (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
   (iterator [this]
-    (.iterator ^Iterable (generic-reader!)))
+    (.iterator ^Iterable (cached-vector!)))
 
   ds-col-proto/PIsColumn
   (is-column? [this] true)
   ds-col-proto/PColumn
   (column-name [col] (:name metadata))
   (set-name [col name] (Column. missing data (assoc metadata :name name)
-                                generic-reader))
+                                cached-vector))
   (supported-stats [col] dtype-fn/supported-descriptive-stats)
   (metadata [col]
     (merge metadata
            {:size (dtype/ecount col)
             :datatype (dtype/get-datatype col)}))
   (set-metadata [col data-map] (Column. missing data (->persistent-map data-map)
-                                        generic-reader))
+                                        cached-vector))
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
@@ -370,19 +372,18 @@
       (dtype/make-container :java-array :float64 col)))
   IObj
   (meta [this] (ds-col-proto/metadata this))
-  (withMeta [this new-meta] (Column. missing data new-meta generic-reader))
+  (withMeta [this new-meta] (Column. missing data new-meta cached-vector))
   Counted
   (count [this] (int (dtype/ecount data)))
   Indexed
   (nth [this idx]
-    (.read (generic-reader!) (long idx)))
+    #_(.nth (cached-vector!) idx)
+    (.get (.data (cached-vector!)) (long idx)))
   (nth [this idx def-val]
-    (if (< (long idx) (dtype/ecount this))
-      (.read (generic-reader!) (long idx))
-      def-val))
+    (.nth (cached-vector!) idx def-val))
   IFn
   (invoke [this idx]
-    (.read (generic-reader!) idx))
+    ((cached-vector!) idx))
   (applyTo [this args]
     (when-not (= 1 (count args))
       (throw (Exception. "Too many arguments to column")))
@@ -406,7 +407,32 @@
               [n-elems]
               (ds-col-proto/column-name item)
               (-> (dtype-proto/sub-buffer data-rdr 0 (min 20 n-elems))
-                  (dtype-pp/print-reader-data))))))
+                  (dtype-pp/print-reader-data)))))
+
+  ;;Delegates to ListPersistentVector, which caches results for us.
+  (hashCode [this] (.hashCode (cached-vector!)))
+
+  clojure.lang.IHashEq
+  ;;should be the same as using hash-unorded-coll, effectively.
+  (hasheq [this]   (.hasheq (cached-vector!)))
+
+  (equals [this o] (or (identical? this o)
+                       (.equals (cached-vector!) o)))
+
+  clojure.lang.Sequential
+  clojure.lang.IPersistentCollection
+  (seq   [this]
+    (.seq (cached-vector!)))
+  (cons  [this o]
+    ;;can revisit this later if it makes sense.  For now, read only.
+    (throw (ex-info "conj/.cons is not supported on columns" {})))
+  (empty [this]
+    (Column. (->bitmap)
+             (make-container (.get-datatype this) 0)
+             {}
+             nil))
+  (equiv [this o] (or (identical? this o)
+                      (.equiv (cached-vector!) o))))
 
 
 (defmethod print-method Column

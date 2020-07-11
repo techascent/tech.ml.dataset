@@ -727,6 +727,19 @@
             (.delete file)))))))
 
 
+(deftest empty-dataset-hasheq
+  (let [ds (ds/->dataset [])]
+    (is (== 0 (.hashCode ds)))))
+
+
+(deftest columns-are-persistent-vectors
+  (let [ds (-> (ds/->dataset "test/data/stocks.csv")
+               (ds/head))
+        sym-vec (vec (ds "symbol"))]
+    ;;We use a clever impl of APersistentVector for the columns
+    (is (= sym-vec (ds "symbol")))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

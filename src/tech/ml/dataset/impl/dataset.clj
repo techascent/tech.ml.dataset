@@ -107,14 +107,15 @@
     (cond (instance? java.util.Map$Entry e)
             (.assoc this (key e) (val e))
           (vector? e)
-            (let [^clojure.lang.PersistentVector e e
-                  _  (when-not (== (.count e) 2)
-                       (throw (Exception. "Vector arg to map conj must be a pair")))]
+            (let [^clojure.lang.PersistentVector e e]
+              (when-not (== (.count e) 2)
+                (throw (ex-info "Vector arg to map conj must be a pair" {})))
               (.assoc this (.nth e 0) (.nth e 1)))
           :else
             (reduce (fn [^clojure.lang.Associative acc entry]
                       (.assoc acc (key entry) (val entry))) this e)))
-  (containsKey [this k]  (.containsKey ^Map colmap k))
+  
+  (containsKey [this k] (.containsKey ^Map colmap k))
 
   ;;MAJOR DEVIATION
   ;;This conforms to clojure's idiom and projects the dataset onto a
@@ -122,25 +123,26 @@
   ;;to using iterable, which was a seq of column.
   (seq [this]
     ;;Do not reorder column data if possible.
-    (map #(clojure.lang.MapEntry. (:name (meta %)) %) columns))
+    (when (pos? (count columns))
+      (map #(clojure.lang.MapEntry. (:name (meta %)) %)  columns)))
 
   ;;Equality is likely a rat's nest, although we should be able to do it
   ;;if we wanted to!
   (hashCode [this]
-    (when (zero? _hash)
-      (set! _hash (clojure.lang.APersistentMap/mapHash this)))
+    (when (== _hash (int -1))
+      (set! _hash (clojure.lang.APersistentMap/mapHash  this)))
     _hash)
 
   clojure.lang.IHashEq
   ;;intentionally using seq instead of iterator for now.
   (hasheq [this]
-    (when (zero? _hasheq)
-      (set! _hasheq (hash-unordered-coll (.seq this))))
+    (when (== _hasheq (int -1))
+      (set! _hasheq (hash-unordered-coll (or (.seq this)
+                                             []))))
     _hasheq)
 
   ;;DOUBLE CHECK equals/equiv semantics...
   (equals [this o] (or (identical? this o)
-                       (instance? clojure.lang.IHashEq o) (== (hash this) (hash o))
                        (clojure.lang.APersistentMap/mapEquals this o)))
 
   (equiv [this o] (or (identical? this o)
@@ -196,8 +198,8 @@
        (assoc columns col-idx new-col-data)
        colmap
        metadata
-       0
-       0)))
+       -1
+       -1)))
 
   (add-or-update-column [dataset col-name new-col-data]
     (let [n-rows (long (second (dtype/shape dataset)))
@@ -335,7 +337,7 @@
        (Dataset. [] {}
                  (assoc (col-impl/->persistent-map ds-metadata)
                         :name
-                        dataset-name) 0 0)
+                        dataset-name) -1 -1)
        (let [column-seq (->> (col-impl/ensure-column-seq column-seq)
                              (map-indexed (fn [idx column]
                                             (let [cname (ds-col-proto/column-name
@@ -369,7 +371,7 @@
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
                           dataset-name)
-                   0 0)))))
+                   -1 -1)))))
   ([options column-seq]
    (new-dataset options {} column-seq))
   ([column-seq]
