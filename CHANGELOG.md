@@ -1,4 +1,11 @@
 # Changelog
+## 3.02
+ * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting c
+   olnames to keywords.
+ * Issue 113 - NPE when doing hasheq on empty datatset
+ * Issue 114 - Columns now have full hasheq implementation - They are 
+   `IPersisentCollections`.
+
 ## 3.01
  * Datasets implement IPersistentMap.  This changes the meaning of `(seq dataset)`
    whereas it used to return columns it now returns sequences of map entries.
