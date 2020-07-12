@@ -892,13 +892,14 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
         (dotimes [idx n-elems]
           (.put str->int (.get int->str idx) idx))
         (StringTable. int->str str->int int-data))
-      (let [str->int string-table
-            int->str (HashMap.)
-            _ (doseq [[k v] str->int]
-                (.put int->str (unchecked-int v) k))
+      (let [^Map str->int string-table
             int->str-ary-list (ArrayList. (count str->int))
-            _ (doseq [idx (range (count str->int))]
-                (.add int->str-ary-list (get int->str idx "")))]
+            _ (doseq [[k v] str->int]
+                (let [v (unchecked-int v)
+                      list-size (.size int->str-ary-list)]
+                  (dotimes [idx (max 0 (- (inc v) list-size))]
+                    (.add int->str-ary-list 0))
+                  (.set int->str-ary-list v k)))]
         (StringTable. int->str-ary-list str->int int-data)))))
 
 
@@ -955,13 +956,15 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   [{:keys [metadata columns]}]
   (->> columns
        (map (fn [{:keys [metadata] :as coldata}]
-              (cond
-                (= :string (:datatype metadata))
-                (update coldata :data string-data->column-data)
-                (= :encoded-text (:datatype metadata))
-                (update coldata :data encoded-text-data->column-data)
-                :else
-                (update coldata :data dtype/set-datatype (:datatype metadata)))))
+              (->
+               (cond
+                 (= :string (:datatype metadata))
+                 (update coldata :data string-data->column-data)
+                 (= :encoded-text (:datatype metadata))
+                 (update coldata :data encoded-text-data->column-data)
+                 :else
+                 (update coldata :data dtype/set-datatype (:datatype metadata)))
+               (clojure.core/assoc :force-datatype? true))))
        (new-dataset {:dataset-name (:name metadata)} metadata)))
 
 
