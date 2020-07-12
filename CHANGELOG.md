@@ -1,7 +1,10 @@
 # Changelog
+## 3.03
+ * Bugfix - Some string tables saved out with version 2.X would not load correctly.
+
 ## 3.02
- * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting c
-   olnames to keywords.
+ * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting 
+   colnames to keywords.
  * Issue 113 - NPE when doing hasheq on empty datatset
  * Issue 114 - Columns now have full hasheq implementation - They are 
    `IPersisentCollections`.
