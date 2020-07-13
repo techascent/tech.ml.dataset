@@ -150,7 +150,7 @@
          missing-replace (reduce (partial find-lerp-values cnt col lerp) {} ranges)]
      (replace-missing-with-value col missing missing-replace))))
 
-(defn- replace-missing-with-strategy
+(defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
                 (value (dtype/->reader col (dtype/get-datatype col)

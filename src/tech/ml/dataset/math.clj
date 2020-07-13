@@ -2,19 +2,26 @@
   (:require [tech.v2.datatype :as dtype]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.typecast :as typecast]
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
+            [tech.v2.datatype.bitmap :as bitmap]
+            [tech.v2.datatype.writers.indexed :as indexed-wtr]
             [tech.ml.utils :as ml-utils]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.base
              :refer [columns-with-missing-seq
                      columns select update-column]
              :as base]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
+            [tech.ml.dataset.missing :as ds-missing]
             [tech.parallel.for :as parallel-for]
             [tech.parallel.require :as parallel-req]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
-           [tech.v2.datatype DoubleReader]))
+           [tech.v2.datatype DoubleReader]
+           [org.roaringbitmap RoaringBitmap]))
 
 
 (defn correlation-table
@@ -385,3 +392,76 @@
                                                   :interpolator spline))))))
   ([ds x-colname y-colname]
    (interpolate-loess ds x-colname y-colname {})))
+
+
+(defn- scatter-missing
+  [index-rdr ^RoaringBitmap missing]
+  (let [retval (RoaringBitmap.)
+        iter (.getIntIterator missing)]
+    (loop [continue? (.hasNext iter)]
+      (when continue?
+        (.add retval (int (index-rdr (.next iter))))
+        (recur (.hasNext iter))))
+    retval))
+
+
+(defn fill-range-replace
+  "Given an in-order column of a numeric or datetime type, fill in spans that are
+  larger than the given max-span.  The source column must not have missing values.
+  For more documentation on fill-range, see tech.v2.datatype.function.fill-range.
+
+  If the column is a datetime type the operation happens in millisecond space and
+  max-span may be a datetime type convertible to milliseconds.
+
+  The result column has the same datatype as the input column.
+
+  After the operation, if missing strategy is not nil the newly produced missing
+  values along with the existing missing values will be replaced using the given
+  missing strategy for all other columns.  See
+  `tech.ml.dataset.missing/replace-missing` for documentation on missing strategies.
+  The missing strategy defaults to :mid unless explicity set.
+
+  Returns a new dataset."
+  ([ds colname max-span]
+   (fill-range-replace ds colname max-span :mid nil))
+  ([ds colname max-span missing-strategy missing-value]
+   (let [target-col (ds colname)
+         _ (when-not (== 0 (dtype/ecount (ds-col/missing target-col)))
+             (throw (Exception. "Fill-range column must not have missing values")))
+         target-dtype (dtype/get-datatype target-col)
+         target-col (if (dtype-dt/datetime-datatype? target-dtype)
+                      (dtype-dt-ops/->milliseconds target-col)
+                      target-col)
+         max-span (if (dtype-dt/datetime-datatype? max-span)
+                    (dtype-dt/to-milliseconds max-span (dtype/get-datatype max-span))
+                    max-span)
+         {:keys [result missing]} (dfn/fill-range target-col max-span)
+         ;;This is the set of values that have not changed.  Iterating through it and
+         ;;and a source vector in parallel allow us to scatter the original data into
+         ;;a new storage container.
+         original-indexes (-> (.andNot ^RoaringBitmap
+                                       (dtype/->bitmap-set
+                                        (range (dtype/ecount result)))
+                                       missing)
+                              (bitmap/bitmap->efficient-random-access-reader))
+         result (if (dtype-dt/datetime-datatype? target-dtype)
+                  (dtype-dt-ops/milliseconds->datetime target-dtype result)
+                  result)]
+     (->> (base/columns ds)
+          (map
+           (fn [col]
+             (if (= colname (ds-col/column-name col))
+               (ds-col/new-column colname result)
+               (let [new-data (dtype/make-container
+                               :java-array
+                               (dtype/get-datatype col)
+                               (dtype/ecount result))
+                     ^RoaringBitmap col-missing (ds-col/missing col)
+                     any-missing? (.isEmpty col-missing)
+                     updated-missing (if any-missing?
+                                       (scatter-missing original-indexes col-missing)
+                                       (bitmap/->bitmap))
+                     total-missing (dtype/set-or (ds-col/missing col))]
+                 (dtype/copy! col
+                              (indexed-wtr/make-indexed-writer
+                               original-indexes new-data))))))))))

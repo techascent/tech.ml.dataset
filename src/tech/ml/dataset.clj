@@ -784,9 +784,9 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 (defn ->flyweight
   "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown
-  on missing values or if nil should be inserted in the map.  IF a label map is passed
-  in then for the columns that are present in the label map a reverse mapping is done
-  such that the flyweight maps contain the labels and not their encoded values."
+  on missing values or if nil should be inserted in the map.  If the dataset has a label
+  and number->string? is true then columns that have been converted from categorical to
+  numeric will be reverse-mapped back to string columns."
   [dataset & {:keys [column-name-seq
                      error-on-missing-values?
                      number->string?]
@@ -875,7 +875,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
         data-ary (or (dtype/->array strt-data)
                      (dtype/->array-copy strt-data))]
     {:string-table int->str-data
-     ;;Between version 1 and two we changed the string table to be just
+     ;;Between version 1 and 2 we changed the string table to be just
      ;;an array of strings intead of a hashmap.
      :version 2
      :entries data-ary}))
