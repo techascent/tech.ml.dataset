@@ -164,6 +164,9 @@
 (par-util/export-symbols tech.ml.dataset.parse.name-values-seq
                          name-values-seq->dataset)
 
+(par-util/export-symbols tech.ml.dataset.missing
+                         select-missing drop-missing replace-missing)
+
 
 (defn assoc
   "If column exists, replace.  Else append new column.  The datatype of the new column

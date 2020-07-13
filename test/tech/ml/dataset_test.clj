@@ -740,6 +740,21 @@
     (is (= sym-vec (ds "symbol")))))
 
 
+(deftest replace-missing-test
+  (let [ds (ds/->dataset {:a [nil nil nil 1.0 2  nil nil nil
+                              nil  nil 4   nil  11 nil nil]
+                          :b [2   2   2 nil nil nil nil nil
+                              nil 13   nil   3  4  5 5]})]
+    (is (= [1.0 1.0 1.0 1.0 2.0 2.0 2.0 2.0 2.0 2.0 4.0 4.0 11.0 11.0 11.0]
+           (vec ((ds/replace-missing ds :down) :a))))
+    (is (= [1.0 1.0 1.0 1.0 2.0 4.0 4.0 4.0 4.0 4.0 4.0 11.0 11.0 11.0 11.0]
+           (vec ((ds/replace-missing ds :up) :a))))
+    (is (= [1.0 1.0 1.0 1.0 2.0 2.0 2.0 2.0 4.0 4.0 4.0 4.0 11.0 11.0 11.0]
+           (vec ((ds/replace-missing ds :mid) :a))))
+    (is (= [5.0 5.0 5.0 1.0 2.0 5.0 5.0 5.0 5.0 5.0 4.0 5.0 11.0 5.0 5.0]
+           (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
