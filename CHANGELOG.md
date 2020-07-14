@@ -1,4 +1,12 @@
 # Changelog
+## 3.04
+ * Issue 116 - `tech.ml.dataset/fill-range-replace` - Given a numeric or date column,
+   interpolate column such that differences between successive vaules are smaller
+   than a given cutoff.  Use replace-missing functionality on all other columns
+   to fill in values for generated rows.
+ * Issue 115 - `tech.ml.dataset/replace-missing` Subset of replace-missing from 
+   tablecloth implemented.
+
 ## 3.03
  * Bugfix - Some string tables saved out with version 2.X would not load correctly.
 

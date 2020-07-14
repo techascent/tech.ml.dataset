@@ -445,11 +445,9 @@
                                       (range (dtype/ecount result)))
                                 (.andNot ^RoaringBitmap missing))
                               (bitmap/bitmap->efficient-random-access-reader))
-         _ (println (dtype/get-datatype result))
          result (if (dtype-dt/datetime-datatype? target-dtype)
                   (dtype-dt-ops/milliseconds->datetime target-dtype result)
                   result)]
-     (println "RESULT DTYPE" target-dtype (dtype/get-datatype result))
      (->> (base/columns ds)
           (pmap
            (fn [col]

@@ -666,7 +666,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                         x-means
                         compute-centroid-and-global-means
                         impute-missing-by-centroid-averages
-                        interpolate-loess)
+                        interpolate-loess
+                        fill-range-replace)
 
 
 (defn all-descriptive-stats-names
