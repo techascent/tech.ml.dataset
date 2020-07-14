@@ -1,5 +1,8 @@
 # Changelog
-## 3.04
+## 3.05
+ * Rebuilt with java8 so class files are java8 compatible.
+
+## 3.04 - Bad release, built with java 11
  * Issue 116 - `tech.ml.dataset/fill-range-replace` - Given a numeric or date column,
    interpolate column such that differences between successive vaules are smaller
    than a given cutoff.  Use replace-missing functionality on all other columns
