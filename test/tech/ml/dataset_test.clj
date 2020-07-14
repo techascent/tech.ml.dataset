@@ -6,10 +6,13 @@
             [tech.v2.datatype.functional :as dfn]
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
+            [tech.ml.dataset.math :as ds-math]
             [tech.io :as tech-io]
             [clojure.test :refer :all]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.unary-op :as unary-op]
+            [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [clojure.java.io :as io]
             [clojure.string :as s]
             [clojure.tools.logging :as log]
@@ -753,6 +756,38 @@
            (vec ((ds/replace-missing ds :mid) :a))))
     (is (= [5.0 5.0 5.0 1.0 2.0 5.0 5.0 5.0 5.0 5.0 4.0 5.0 11.0 5.0 5.0]
            (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
+
+
+(deftest fill-range-replace
+  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+                              :b [2 2 nil  4  8]})
+               (ds-math/fill-range-replace :a 2))]
+    (is (dfn/equals
+         [1.0 3.0 5.0 6.66 8.33 10.0
+          11.66 13.33 15.0 16.66 18.33 20.0]
+         (vec (ds :a))
+         0.1))
+    (is (= [2 2 2 2 2 2 2 2 4 4 4 8]
+           (vec (ds :b)))))
+  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+                              :b [2 2 nil  4  8]})
+               (ds-math/fill-range-replace :a 2 nil))]
+    (is (= [2 nil 2 nil nil nil nil nil 4 nil nil 8]
+           (vec (ds :b)))))
+  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+                              :b [2 2 nil  4  8]})
+               (ds-math/fill-range-replace :a 2 :value 20))]
+    (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
+           (vec (ds :b)))))
+  (let [ds (-> (ds/->dataset {:a (->> [1 5  10 15 20]
+                                      (dtype-dt-ops/plus-days
+                                       (dtype-dt/local-date)))
+                              :b [2 2 nil  4  8]})
+               (ds-math/fill-range-replace :a (* 2
+                                                 (dtype-dt/milliseconds-in-day))
+                                           :value 20))]
+    (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
+           (vec (ds :b))))))
 
 
 (comment

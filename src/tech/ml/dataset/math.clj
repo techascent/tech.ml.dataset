@@ -419,11 +419,13 @@
   values along with the existing missing values will be replaced using the given
   missing strategy for all other columns.  See
   `tech.ml.dataset.missing/replace-missing` for documentation on missing strategies.
-  The missing strategy defaults to :mid unless explicity set.
+  The missing strategy defaults to :down unless explicity set.
 
   Returns a new dataset."
   ([ds colname max-span]
-   (fill-range-replace ds colname max-span :mid nil))
+   (fill-range-replace ds colname max-span :down nil))
+    ([ds colname max-span missing-strategy]
+   (fill-range-replace ds colname max-span missing-strategy nil))
   ([ds colname max-span missing-strategy missing-value]
    (let [target-col (ds colname)
          _ (when-not (== 0 (dtype/ecount (ds-col/missing target-col)))
@@ -439,29 +441,40 @@
          ;;This is the set of values that have not changed.  Iterating through it and
          ;;and a source vector in parallel allow us to scatter the original data into
          ;;a new storage container.
-         original-indexes (-> (.andNot ^RoaringBitmap
-                                       (dtype/->bitmap-set
-                                        (range (dtype/ecount result)))
-                                       missing)
+         original-indexes (-> (doto  (dtype/->bitmap-set
+                                      (range (dtype/ecount result)))
+                                (.andNot ^RoaringBitmap missing))
                               (bitmap/bitmap->efficient-random-access-reader))
+         _ (println (dtype/get-datatype result))
          result (if (dtype-dt/datetime-datatype? target-dtype)
                   (dtype-dt-ops/milliseconds->datetime target-dtype result)
                   result)]
+     (println "RESULT DTYPE" target-dtype (dtype/get-datatype result))
      (->> (base/columns ds)
-          (map
+          (pmap
            (fn [col]
              (if (= colname (ds-col/column-name col))
                (ds-col/new-column colname result)
-               (let [new-data (dtype/make-container
+               (let [new-colname (ds-col/column-name col)
+                     new-data (dtype/make-container
                                :java-array
                                (dtype/get-datatype col)
                                (dtype/ecount result))
                      ^RoaringBitmap col-missing (ds-col/missing col)
-                     any-missing? (.isEmpty col-missing)
+                     any-missing? (not (.isEmpty col-missing))
                      updated-missing (if any-missing?
                                        (scatter-missing original-indexes col-missing)
                                        (bitmap/->bitmap))
-                     total-missing (dtype/set-or (ds-col/missing col))]
-                 (dtype/copy! col
-                              (indexed-wtr/make-indexed-writer
-                               original-indexes new-data))))))))))
+                     total-missing (dtype/set-or updated-missing missing)
+                     ;;Scatter original data into new locations
+                     _ (dtype/copy! col
+                                    (indexed-wtr/make-indexed-writer
+                                     original-indexes new-data {}))
+                     new-col (ds-col/new-column new-colname new-data
+                                                (meta col)
+                                                total-missing)]
+                 (if-not (nil? missing-strategy)
+                   (ds-missing/replace-missing-with-strategy
+                    new-col total-missing missing-strategy missing-value)
+                   new-col)))))
+          (ds-impl/new-dataset (meta ds))))))
