@@ -60,84 +60,25 @@ user> (require '[tech.ml.dataset :as ds])
 nil
 user> (require '[tech.ml.dataset.column :as ds-col])
 nil
+user> (require '[tech.v2.datatype :as dtype])
+nil
 user> (ds/->dataset [{:a 1 :b 2} {:a 2 :c 3}])
 _unnamed [2 3]:
 
-| :a |     :b |     :c |
-|----+--------+--------|
-|  1 |      2 | -32768 |
-|  2 | -32768 |      3 |
+| :a | :b | :c |
+|----|----|----|
+|  1 |  2 |    |
+|  2 |    |  3 |
 ```
 
 #### CSV/TSV/MAPSEQ/XLS/XLSX Parsing Options
-It is important to note that there are several options for parsing files.
+It is important to note that there are many options for parsing files.
 A few important ones are column whitelist/blacklists, num records,
 and ways to specify exactly how to parse the string data:
 
+* https://cljdoc.org/d/techascent/tech.ml.dataset/3.04/api/tech.ml.dataset#-%3Edataset
+
 ```clojure
-
-
-user> (doc ds/->dataset)
-
--------------------------
-tech.ml.dataset/->dataset
-([dataset {:keys [table-name dataset-name], :as options}] [dataset])
-  Create a dataset from either csv/tsv or a sequence of maps.
-   *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
-   ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
-   is csv or tsv and then engineering around detecting datatypes all of which can
-   be overridden.
-   *  A sequence of maps may be passed in in which case the first N maps are scanned in
-   order to derive the column datatypes before the actual columns are created.
-  Options:
-  :table-name - set the name of the dataset (deprecated in favor of :dataset-name).
-  :dataset-name - set the name of the dataset.
-  :column-whitelist - either sequence of string column names or sequence of column
-     indices of columns to whitelist.
-  :column-blacklist - either sequence of string column names or sequence of column
-     indices of columns to blacklist.
-  :num-rows - Number of rows to read
-  :header-row? - Defaults to true, indicates the first row is a header.
-  :key-fn - function to be applied to column names.  Typical use is:
-     `:key-fn keyword`.
-  :separator - Add a character separator to the list of separators to auto-detect.
-  :csv-parser - Implementation of univocity's AbstractParser to use.  If not provided
-     a default permissive parser is used.  This way you parse anything that univocity
-     supports (so flat files and such).
-  :skip-bad-rows? - For really bad files, some rows will not have the right column
-     counts for all rows.  This skips rows that fail this test.
-  :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
-     will result in an exception.
-  :parser-fn -
-   - keyword - all columns parsed to this datatype
-   - ifn? - called with two arguments: (parser-fn column-name-or-idx column-data)
-          - Return value must be implement tech.ml.dataset.parser.PColumnParser in
-            which case that is used or can return nil in which case the default
-            column parser is used.
-   - tuple - pair of [datatype parse-fn] in which case container of type [datatype]
-           will be created.
-           parse-fn can be one of:
-        :relaxed? - data will be parsed such that parse failures of the standard
-           parse functions do not stop the parsing process.  :unparsed-values and
-           :unparsed-indexes are available in the metadata of the column that tell
-           you the values that failed to parse and their respective indexes.
-        fn? - function from str-> one of #{:missing :parse-failure value}.
-           Exceptions here always kill the parse process.  :missing will get marked
-           in the missing indexes, and :parse-failure will result in the index being
-           added to missing, the unparsed the column's :unparsed-values and
-           :unparsed-indexes will be updated.
-        string? - for datetime types, this will turned into a DateTimeFormatter via
-           DateTimeFormatter/ofPattern.
-        DateTimeFormatter - use with the appropriate temporal parse static function
-           to parse the value.
-   - map - the header-name-or-idx is used to lookup value.  If not nil, then
-           value can be any of the above options.  Else the default column parser
-           is used.
-  :parser-scan-len - Length of initial column data used for parser-fn's datatype
-       detection routine. Defaults to 100.
-
-  Returns a new dataset
-nil
 
 user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
@@ -145,35 +86,39 @@ user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/te
 data/ames-house-prices/train.csv [4 3]:
 
 | SalePrice | 1stFlrSF | 2ndFlrSF |
-|-----------+----------+----------|
+|-----------|----------|----------|
 |    208500 |      856 |      854 |
 |    181500 |     1262 |        0 |
 |    223500 |      920 |      866 |
 |    140000 |      961 |      756 |
+|    250000 |     1145 |     1053 |
 user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5
                      :parser-fn :float32})
 data/ames-house-prices/train.csv [4 3]:
 
-|  SalePrice | 1stFlrSF | 2ndFlrSF |
-|------------+----------+----------|
-| 208500.000 |  856.000 |  854.000 |
-| 181500.000 | 1262.000 |    0.000 |
-| 223500.000 |  920.000 |  866.000 |
-| 140000.000 |  961.000 |  756.000 |
+| SalePrice | 1stFlrSF | 2ndFlrSF |
+|-----------|----------|----------|
+|  208500.0 |    856.0 |    854.0 |
+|  181500.0 |   1262.0 |      0.0 |
+|  223500.0 |    920.0 |    866.0 |
+|  140000.0 |    961.0 |    756.0 |
+|  250000.0 |   1145.0 |   1053.0 |
+
 user> (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz"
                     {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                      :n-records 5
                      :parser-fn {"SalePrice" :float32}})
 https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [4 3]:
 
-|  SalePrice | 1stFlrSF | 2ndFlrSF |
-|------------+----------+----------|
-| 208500.000 |      856 |      854 |
-| 181500.000 |     1262 |        0 |
-| 223500.000 |      920 |      866 |
-| 140000.000 |      961 |      756 |
+| SalePrice | 1stFlrSF | 2ndFlrSF |
+|-----------|----------|----------|
+|  208500.0 |      856 |      854 |
+|  181500.0 |     1262 |        0 |
+|  223500.0 |      920 |      866 |
+|  140000.0 |      961 |      756 |
+|  250000.0 |     1145 |     1053 |
 ```
 
 You can also supply a tuple of `[datatype parse-fn]` if you have a specific
@@ -181,59 +126,58 @@ datatype and parse function you want to use.  For datetime types `parse-fn`
 can additionally be a DateTimeFormat format string or a DateTimeFormat object:
 
 ```clojure
-nil
-user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx")
-                           :all (range 5)))
-
+user> (def data (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx")))
 #'user/data
 user> data
-Sheet1 [5 8]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx [5 8]:
 
-|     0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
-|-------+------------+-----------+--------+---------------+--------+------------+----------|
-| 1.000 |      Dulce |     Abril | Female | United States | 32.000 | 15/10/2017 | 1562.000 |
-| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 16/08/2016 | 1582.000 |
-| 3.000 |     Philip |      Gent |   Male |        France | 36.000 | 21/05/2015 | 2587.000 |
-| 4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 15/10/2017 | 3549.000 |
-| 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 16/08/2016 | 2468.000 |
+| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
+|----------|------------|-----------|--------|---------------|------|------------|--------|
+|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 15/10/2017 | 1562.0 |
+|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 16/08/2016 | 1582.0 |
+|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 21/05/2015 | 2587.0 |
+|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 15/10/2017 | 3549.0 |
+|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 16/08/2016 | 2468.0 |
+nil
 user> ;; Note the Date actually didn't parse out because it is dd/MM/yyyy format:
 user> (dtype/get-datatype (data "Date"))
 :string
-user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
-                                         {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}})
-                           :all (range 5)))
+
+user> (def data (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
+                                       {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}})))
 
 #'user/data
 user> data
-Sheet1 [5 8]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx [5 8]:
 
-|     0 | First Name | Last Name | Gender |       Country |    Age |       Date |       Id |
-|-------+------------+-----------+--------+---------------+--------+------------+----------|
-| 1.000 |      Dulce |     Abril | Female | United States | 32.000 | 2017-10-15 | 1562.000 |
-| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.000 | 2016-08-16 | 1582.000 |
-| 3.000 |     Philip |      Gent |   Male |        France | 36.000 | 2015-05-21 | 2587.000 |
-| 4.000 |   Kathleen |    Hanner | Female | United States | 25.000 | 2017-10-15 | 3549.000 |
-| 5.000 |    Nereida |   Magwood | Female | United States | 58.000 | 2016-08-16 | 2468.000 |
+| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
+|----------|------------|-----------|--------|---------------|------|------------|--------|
+|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 2017-10-15 | 1562.0 |
+|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 2016-08-16 | 1582.0 |
+|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 2015-05-21 | 2587.0 |
+|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 2017-10-15 | 3549.0 |
+|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 2016-08-16 | 2468.0 |
 user> (dtype/get-datatype (data "Date"))
 :local-date
 
-user> (def data (ds/select (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
-                                         {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]
-                                                      "Id" :int32
-                                                      0 :int32
-                                                      "Age" :int16}})
-                           :all (range 5)))
+
+user> (def data (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx"
+                                       {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]
+                                                    "Id" :int32
+                                                    0 :int32
+                                                    "Age" :int16}})))
 #'user/data
 user> data
-Sheet1 [5 8]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLSX_1000.xlsx [5 8]:
 
-| 0 | First Name | Last Name | Gender |       Country | Age |       Date |   Id |
-|---+------------+-----------+--------+---------------+-----+------------+------|
-| 1 |      Dulce |     Abril | Female | United States |  32 | 2017-10-15 | 1562 |
-| 2 |       Mara | Hashimoto | Female | Great Britain |  25 | 2016-08-16 | 1582 |
-| 3 |     Philip |      Gent |   Male |        France |  36 | 2015-05-21 | 2587 |
-| 4 |   Kathleen |    Hanner | Female | United States |  25 | 2017-10-15 | 3549 |
-| 5 |    Nereida |   Magwood | Female | United States |  58 | 2016-08-16 | 2468 |
+| column-0 | First Name | Last Name | Gender |       Country | Age |       Date |   Id |
+|----------|------------|-----------|--------|---------------|-----|------------|------|
+|        1 |      Dulce |     Abril | Female | United States |  32 | 2017-10-15 | 1562 |
+|        2 |       Mara | Hashimoto | Female | Great Britain |  25 | 2016-08-16 | 1582 |
+|        3 |     Philip |      Gent |   Male |        France |  36 | 2015-05-21 | 2587 |
+|        4 |   Kathleen |    Hanner | Female | United States |  25 | 2017-10-15 | 3549 |
+|        5 |    Nereida |   Magwood | Female | United States |  58 | 2016-08-16 | 2468 |
+
 ```
 
 A reference to what is possible is in
@@ -256,13 +200,13 @@ user> (ds/name-values-seq->dataset {:age [1 2 3 4 5]
                                     :name ["a" "b" "c" "d" "e"]})
 _unnamed [5 2]:
 
-|  :age | :name |
-|-------+-------|
-| 1.000 |     a |
-| 2.000 |     b |
-| 3.000 |     c |
-| 4.000 |     d |
-| 5.000 |     e |
+| :age | :name |
+|------|-------|
+|    1 |     a |
+|    2 |     b |
+|    3 |     c |
+|    4 |     d |
+|    5 |     e |
 ```
 
 ## Printing
@@ -330,29 +274,24 @@ The full list of possible options is provided in the documentation for [dataset-
 
 ## Basic Dataset Manipulation
 
-Dataset are logically maps when treated like functions and sequences of columns when
-treated like sequences.
+Dataset are implementations of `clojure.lang.IPersistentMap`.  They strictly
+respect column ordering, however, unliked persistent maps.
 
 ```clojure
 user> (def new-ds (ds/->dataset [{:a 1 :b 2} {:a 2 :c 3}]))
 #'user/new-ds
 user> (first new-ds)
-#tech.ml.dataset.column<int16>[2]
+[:a #tech.ml.dataset.column<int64>[2]
 :a
-[1, 2, ]
+[1, 2, ]]
 user> (new-ds :c)
-#tech.ml.dataset.column<int16>[2]
+#tech.ml.dataset.column<int64>[2]
 :c
-[-32768, 3, ]
-[]
+[, 3, ]
 user> (ds-col/missing (new-ds :b))
-[1]
+#{1}
 user> (ds-col/missing (new-ds :c))
-[0]
-user> (first new-ds)
-#tech.ml.dataset.column<int16>[2]
-:a
-[1, 2, ]
+#{0}
 ```
 
 It is safe to print out very large columns.  The system will only print out the first
@@ -363,42 +302,41 @@ column.
 ## Access To Column Values
 
 
-Columns are convertible (at least) to tech.datatype readers. These derive from
-java.util.List and as such allow efficient iteration and bulk copy to other
-datastructures.
+Columns implement `clojure.lang.Indexed` (provides nth) and also implement
+`clojure.lang.IFn` in the same manner as persistent vectors.
 
 ```clojure
-user> (ds/name-values-seq->dataset {:age [1 2 3 4 5]
-                                    :name ["a" "b" "c" "d" "e"]})
+user> (ds/->dataset {:age [1 2 3 4 5]
+                     :name ["a" "b" "c" "d" "e"]})
 _unnamed [5 2]:
 
-|  :age | :name |
-|-------+-------|
-| 1.000 |     a |
-| 2.000 |     b |
-| 3.000 |     c |
-| 4.000 |     d |
-| 5.000 |     e |
+| :age | :name |
+|------|-------|
+|    1 |     a |
+|    2 |     b |
+|    3 |     c |
+|    4 |     d |
+|    5 |     e |
 user> (def nameage *1)
 #'user/nameage
 user> (require '[tech.v2.datatype :as dtype])
 nil
-user> (dtype/->reader (nameage :age))
-[1.0 2.0 3.0 4.0 5.0]
+user> (nth (nameage :age) 0)
+1
+user> (dtype/->reader (:age nameage))
+[1 2 3 4 5]
 user> (dtype/->reader (nameage :name))
 ["a" "b" "c" "d" "e"]
 user> (dtype/->array-copy (nameage :age))
-[1.0, 2.0, 3.0, 4.0, 5.0]
+[1, 2, 3, 4, 5]
 user> (type *1)
-[D
-user> (def col-reader (dtype/->reader (nameage :age)))
-#'user/col-reader
-user> (col-reader 0)
-1.0
-user> (col-reader 1)
-2.0
-user> (col-reader 2)
-3.0
+[J
+user> (def name-col (nameage :age))
+#'user/name-col
+user> (name-col 0)
+1
+user> (name-col 1)
+2
 ```
 
 In the same vein, you can access entire rows of the dataset as a reader that converts
@@ -471,41 +409,52 @@ user> (ds/select-columns ames-ds ["KitchenQual" "SalePrice"])
 ```clojure
 user> (require '[tech.v2.datatype.functional :as dfn])
 nil
-;;Log doesn't work if the incoming value isn't a float32 or a float64.  SalePrice is
-;;of datatype :int32 so we convert it before going into log.
-user> (ds/update-column small-ames "SalePrice" #(-> (dtype/->reader % :float64)
-                                                    dfn/log))
- [5 2]:
+user> (def small-ames (ds/head (ds/select-columns ames-ds ["KitchenQual" "SalePrice"])))
+#'user/small-ames
+user> small-ames
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 2]:
 
 | KitchenQual | SalePrice |
-|-------------+-----------|
-|          TA |    12.109 |
-|          Gd |    11.849 |
-|          TA |    11.871 |
-|          TA |    12.206 |
-|          TA |    11.678 |
+|-------------|-----------|
+|          Gd |    208500 |
+|          TA |    181500 |
+|          Gd |    223500 |
+|          Gd |    140000 |
+|          Gd |    250000 |
 
-user> (ds/add-or-update-column small-ames "Range" (float-array (range 5)))
- [5 3]:
+user> (assoc small-ames "SalePriceLog" (dfn/log (small-ames "SalePrice")))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 3]:
 
-| KitchenQual | SalePrice | Range |
-|-------------+-----------+-------|
-|          TA |    181500 | 0.000 |
-|          Gd |    140000 | 1.000 |
-|          TA |    143000 | 2.000 |
-|          TA |    200000 | 3.000 |
-|          TA |    118000 | 4.000 |
+| KitchenQual | SalePrice | SalePriceLog |
+|-------------|-----------|--------------|
+|          Gd |    208500 |  12.24769432 |
+|          TA |    181500 |  12.10901093 |
+|          Gd |    223500 |  12.31716669 |
+|          Gd |    140000 |  11.84939770 |
+|          Gd |    250000 |  12.42921620 |
 
-user> (ds/remove-column small-ames "KitchenQual")
- [5 1]:
+
+user> (assoc small-ames "Range" (range) "Constant-Col" :a)
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 4]:
+
+| KitchenQual | SalePrice | Range | Constant-Col |
+|-------------|-----------|-------|--------------|
+|          Gd |    208500 |     0 |           :a |
+|          TA |    181500 |     1 |           :a |
+|          Gd |    223500 |     2 |           :a |
+|          Gd |    140000 |     3 |           :a |
+|          Gd |    250000 |     4 |           :a |
+
+user> (dissoc small-ames "KitchenQual")
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 1]:
 
 | SalePrice |
 |-----------|
+|    208500 |
 |    181500 |
+|    223500 |
 |    140000 |
-|    143000 |
-|    200000 |
-|    118000 |
+|    250000 |
 ```
 
 ## Sort-by, Filter, Group-by
@@ -532,12 +481,13 @@ user> (-> (ds/filter #(< 30000 (get % "SalePrice")) ames-ds)
 |    223500 |          Gd |
 |    140000 |          Gd |
 |    250000 |          Gd |
-user> (-> (ds/sort-by #(get % "SalePrice") ames-ds)
+
+user> (-> (ds/sort-by-column "SalePrice" ames-ds)
           (ds/select ["SalePrice" "KitchenQual"] (range 5)))
- [5 2]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 2]:
 
 | SalePrice | KitchenQual |
-|-----------+-------------|
+|-----------|-------------|
 |     34900 |          TA |
 |     35311 |          TA |
 |     37900 |          TA |
@@ -592,38 +542,38 @@ user> (->> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "G
            (map (fn [[k v-ds]]
                   (-> (ds/descriptive-stats v-ds)
                       (ds/set-dataset-name k)))))
-(Gd [4 10]:
+(Ex [4 10]:
 
-|   :col-name | :datatype | :n-valid | :n-missing |      :mean | :mode |      :min |       :max | :standard-deviation | :skew |
-|-------------+-----------+----------+------------+------------+-------+-----------+------------+---------------------+-------|
-|  BsmtFinSF1 |     int32 |      586 |          0 |    456.469 |       |     0.000 |   1810.000 |             455.209 | 0.597 |
-|  GarageArea |     int32 |      586 |          0 |    549.101 |       |     0.000 |   1069.000 |             174.387 | 0.227 |
-| KitchenQual |    string |      586 |          0 |        NaN |    Gd |       NaN |        NaN |                 NaN |   NaN |
-|   SalePrice |     int32 |      586 |          0 | 212116.031 |       | 79000.000 | 625000.000 |           64020.176 | 1.189 |
- TA [4 10]:
-
-|   :col-name | :datatype | :n-valid | :n-missing |      :mean | :mode |      :min |       :max | :standard-deviation | :skew |
-|-------------+-----------+----------+------------+------------+-------+-----------+------------+---------------------+-------|
-|  BsmtFinSF1 |     int32 |      735 |          0 |    394.337 |       |     0.000 |   1880.000 |             360.215 | 0.628 |
-|  GarageArea |     int32 |      735 |          0 |    394.241 |       |     0.000 |   1356.000 |             187.557 | 0.175 |
-| KitchenQual |    string |      735 |          0 |        NaN |    TA |       NaN |        NaN |                 NaN |   NaN |
-|   SalePrice |     int32 |      735 |          0 | 139962.516 |       | 34900.000 | 375000.000 |           38896.281 | 0.999 |
- Ex [4 10]:
-
-|   :col-name | :datatype | :n-valid | :n-missing |      :mean | :mode |      :min |       :max | :standard-deviation |  :skew |
-|-------------+-----------+----------+------------+------------+-------+-----------+------------+---------------------+--------|
-|  BsmtFinSF1 |     int32 |      100 |          0 |    850.610 |       |     0.000 |   5644.000 |             799.383 |  2.144 |
-|  GarageArea |     int32 |      100 |          0 |    706.430 |       |     0.000 |   1418.000 |             236.293 | -0.187 |
-| KitchenQual |    string |      100 |          0 |        NaN |    Ex |       NaN |        NaN |                 NaN |    NaN |
-|   SalePrice |     int32 |      100 |          0 | 328554.656 |       | 86000.000 | 755000.000 |          120862.945 |  0.937 |
+|   :col-name | :datatype | :n-valid | :n-missing |    :min |     :mean | :mode |     :max | :standard-deviation |       :skew |
+|-------------|-----------|----------|------------|---------|-----------|-------|----------|---------------------|-------------|
+|  BsmtFinSF1 |    :int16 |      100 |          0 |     0.0 |    850.61 |       |   5644.0 |         799.3833216 |  2.14350280 |
+|  GarageArea |    :int16 |      100 |          0 |     0.0 |    706.43 |       |   1418.0 |         236.2931861 | -0.18707598 |
+| KitchenQual |   :string |      100 |          0 |         |           |    Ex |          |                     |             |
+|   SalePrice |    :int32 |      100 |          0 | 86000.0 | 328554.67 |       | 755000.0 |      120862.9425733 |  0.93681387 |
  Fa [4 10]:
 
-|   :col-name | :datatype | :n-valid | :n-missing |      :mean | :mode |      :min |       :max | :standard-deviation | :skew |
-|-------------+-----------+----------+------------+------------+-------+-----------+------------+---------------------+-------|
-|  BsmtFinSF1 |     int32 |       39 |          0 |    136.513 |       |     0.000 |    932.000 |             209.117 | 1.975 |
-|  GarageArea |     int32 |       39 |          0 |    214.564 |       |     0.000 |    672.000 |             201.934 | 0.423 |
-| KitchenQual |    string |       39 |          0 |        NaN |    Fa |       NaN |        NaN |                 NaN |   NaN |
-|   SalePrice |     int32 |       39 |          0 | 105565.203 |       | 39300.000 | 200000.000 |           36004.254 | 0.242 |
+|   :col-name | :datatype | :n-valid | :n-missing |    :min |           :mean | :mode |     :max | :standard-deviation |      :skew |
+|-------------|-----------|----------|------------|---------|-----------------|-------|----------|---------------------|------------|
+|  BsmtFinSF1 |    :int16 |       39 |          0 |     0.0 |    136.51282051 |       |    932.0 |        209.11654668 | 1.97463203 |
+|  GarageArea |    :int16 |       39 |          0 |     0.0 |    214.56410256 |       |    672.0 |        201.93443371 | 0.42348196 |
+| KitchenQual |   :string |       39 |          0 |         |                 |    Fa |          |                     |            |
+|   SalePrice |    :int32 |       39 |          0 | 39300.0 | 105565.20512821 |       | 200000.0 |      36004.25403680 | 0.24228279 |
+ TA [4 10]:
+
+|   :col-name | :datatype | :n-valid | :n-missing |    :min |           :mean | :mode |     :max | :standard-deviation |      :skew |
+|-------------|-----------|----------|------------|---------|-----------------|-------|----------|---------------------|------------|
+|  BsmtFinSF1 |    :int16 |      735 |          0 |     0.0 |    394.33741497 |       |   1880.0 |        360.21459000 | 0.62751158 |
+|  GarageArea |    :int16 |      735 |          0 |     0.0 |    394.24081633 |       |   1356.0 |        187.55679385 | 0.17455203 |
+| KitchenQual |   :string |      735 |          0 |         |                 |    TA |          |                     |            |
+|   SalePrice |    :int32 |      735 |          0 | 34900.0 | 139962.51156463 |       | 375000.0 |      38896.28033636 | 0.99865115 |
+ Gd [4 10]:
+
+|   :col-name | :datatype | :n-valid | :n-missing |    :min |           :mean | :mode |     :max | :standard-deviation |      :skew |
+|-------------|-----------|----------|------------|---------|-----------------|-------|----------|---------------------|------------|
+|  BsmtFinSF1 |    :int16 |      586 |          0 |     0.0 |    456.46928328 |       |   1810.0 |        455.20910936 | 0.59724411 |
+|  GarageArea |    :int16 |      586 |          0 |     0.0 |    549.10068259 |       |   1069.0 |        174.38742143 | 0.22683853 |
+| KitchenQual |   :string |      586 |          0 |         |                 |    Gd |          |                     |            |
+|   SalePrice |    :int32 |      586 |          0 | 79000.0 | 212116.02389079 |       | 625000.0 |      64020.17670212 | 1.18880409 |
 )
 ```
 
@@ -692,8 +642,6 @@ any datatype.  Columns are exactly this so we can add a new column to the datase
 that is a linear combination of other columns using add-or-update-column:
 
 ```clojure
-user> (require '[tech.v2.datatype.functional :as dfn])
-nil
 user> (def updated-ames
         (ds/add-or-update-column ames-ds
                                  "TotalBath"
@@ -703,33 +651,36 @@ user> (def updated-ames
                                         (dfn/* 0.5 (ames-ds "HalfBath")))))
 
 #'user/updated-ames
-user> (updated-ames "TotalBath")
-#tech.ml.dataset.column<float64>[1460]
-TotalBath
-[3.500, 2.500, 3.500, 2.000, 3.500, 2.500, 3.000, 3.500, 2.000, 2.000, 2.000, 4.000, 2.000, 2.000, 2.500, 1.000, 2.000, 2.000, 2.500, 1.000, ...]
+
+user> (ds/head 10 (ds/select-columns updated-ames ["BsmtFullBath" "BsmtHalfBath" "FullBath" "HalfBath" "TotalBath"]))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [10 5]:
+
+| BsmtFullBath | BsmtHalfBath | FullBath | HalfBath | TotalBath |
+|--------------|--------------|----------|----------|-----------|
+|            1 |            0 |        2 |        1 |       3.5 |
+|            0 |            1 |        2 |        0 |       2.5 |
+|            1 |            0 |        2 |        1 |       3.5 |
+|            1 |            0 |        1 |        0 |       2.0 |
+|            1 |            0 |        2 |        1 |       3.5 |
+|            1 |            0 |        1 |        1 |       2.5 |
+|            1 |            0 |        2 |        0 |       3.0 |
+|            1 |            0 |        2 |        1 |       3.5 |
+|            0 |            0 |        2 |        0 |       2.0 |
+|            1 |            0 |        1 |        0 |       2.0 |
 ```
 
 We can also implement a completely dynamic operation to create a new column by
 implementing the appropriate reader interface from the datatype library:
 ```clojure
-user> (import '[tech.v2.datatype ObjectReader])
-tech.v2.datatype.ObjectReader
-user> (require '[tech.v2.datatype.typecast :as typecast])
-nil
 user> (def named-baths
-        (ds/add-or-update-column
+        (assoc
          updated-ames
-         "NamedBaths"
-         ;;Type out total baths so we know the datatype we are dealing with
-         (let [total-baths (typecast/datatype->reader
-                            :float64 (updated-ames "TotalBath"))]
-           (reify ObjectReader
-		     ;;Since this is an object reader, we have to specify
-			 ;;string as the datatype.
-             (getDatatype [rdr] :string)
-             (lsize [rdr] (.lsize total-baths))
-             (read [rdr idx]
-               (let [tbaths (.read total-baths idx)]
+         "NamedBath"
+         (let [total-baths (updated-ames "TotalBath")]
+           (dtype/object-reader
+            (count total-baths)
+            (fn [idx]
+               (let [tbaths (double (total-baths idx))]
                  (cond
                    (< tbaths 1.0)
                    "almost none"
@@ -738,56 +689,58 @@ user> (def named-baths
                    (< tbaths 3.0)
                    "getting somewhere"
                    :else
-                   "living in style")))))))
-
+                   "living in style")))
+            :string))))
 
 #'user/named-baths
-user> (named-baths "NamedBaths")
-#tech.ml.dataset.column<string>[1460]
-NamedBaths
-[living in style, getting somewhere, living in style, getting somewhere, living in style, getting somewhere, living in style, living in style, getting somewhere, getting somewhere, getting somewhere, living in style, getting somewhere, getting somewhere, getting somewhere, somewhat doable, getting somewhere, getting somewhere, getting somewhere, somewhat doable, ...]
+user> (ds/head (ds/select-columns named-baths ["TotalBath" "NamedBath"]))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 2]:
 
+| TotalBath |         NamedBath |
+|-----------|-------------------|
+|       3.5 |   living in style |
+|       2.5 | getting somewhere |
+|       3.5 |   living in style |
+|       2.0 | getting somewhere |
+|       3.5 |   living in style |
 ;; Here we see that the higher level houses all have more bathrooms
 
-user> (def sorted-named-baths (ds/ds-sort-by-column "SalePrice" >  named-baths))
-#'user/sorted-named-baths
-user> (sorted-named-baths "NamedBaths")
-#tech.ml.dataset.column<string>[1460]
-NamedBaths
-[living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, getting somewhere, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, living in style, ...]
+user> (ds/head (ds/select-columns sorted-named-baths ["TotalBath" "NamedBath" "SalePrice"]))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 3]:
 
-user> (->> (sorted-named-baths "NamedBaths")
-           (dtype/->reader)
-           (take-last 10))
-("somewhat doable"
- "getting somewhere"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable"
- "somewhat doable")
+| TotalBath |       NamedBath | SalePrice |
+|-----------|-----------------|-----------|
+|       4.0 | living in style |    755000 |
+|       4.5 | living in style |    745000 |
+|       4.5 | living in style |    625000 |
+|       3.5 | living in style |    611657 |
+|       3.5 | living in style |    582933 |
+user> (ds/tail (ds/select-columns sorted-named-baths ["TotalBath" "NamedBath" "SalePrice"]))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 3]:
+
+| TotalBath |       NamedBath | SalePrice |
+|-----------|-----------------|-----------|
+|       1.0 | somewhat doable |     40000 |
+|       1.0 | somewhat doable |     39300 |
+|       1.0 | somewhat doable |     37900 |
+|       1.0 | somewhat doable |     35311 |
+|       1.0 | somewhat doable |     34900 |
 ```
 
 ## DateTime Types
-
-Brand new.  Experimental.  all that stuff.
 
 Support for reading datetime types and manipulating them.  Please checkout the
 `tech.datatype` [datetime documentation](https://github.com/techascent/tech.datatype/blob/master/docs/datetime.md) for using this feature.
 
 
 ```clojure
-user> (def stocks (ds/->dataset "test/data/stocks.csv"))
+(def stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword}))
 #'user/stocks
-
 user> (ds/head stocks)
 test/data/stocks.csv [5 3]:
 
 | :symbol |      :date | :price |
-|---------+------------+--------|
+|---------|------------|--------|
 |    MSFT | 2000-01-01 |  39.81 |
 |    MSFT | 2000-02-01 |  36.35 |
 |    MSFT | 2000-03-01 |  43.22 |
@@ -828,18 +781,18 @@ user> (->> (ds/add-or-update-column stocks :years (dtype-dt-ops/get-years (stock
            (ds/head 10))
 _unnamed [10 3]:
 
-| :symbol | :years | :avg-price |
-|---------+--------+------------|
-|    AAPL |   2000 |      21.75 |
-|    AAPL |   2001 |      10.18 |
-|    AAPL |   2002 |      9.408 |
-|    AAPL |   2003 |      9.347 |
-|    AAPL |   2004 |      18.72 |
-|    AAPL |   2005 |      48.17 |
-|    AAPL |   2006 |      72.04 |
-|    AAPL |   2007 |      133.4 |
-|    AAPL |   2008 |      138.5 |
-|    AAPL |   2009 |      150.4 |
+| :symbol | :years |   :avg-price |
+|---------|--------|--------------|
+|    AAPL |   2000 |  21.74833333 |
+|    AAPL |   2001 |  10.17583333 |
+|    AAPL |   2002 |   9.40833333 |
+|    AAPL |   2003 |   9.34750000 |
+|    AAPL |   2004 |  18.72333333 |
+|    AAPL |   2005 |  48.17166667 |
+|    AAPL |   2006 |  72.04333333 |
+|    AAPL |   2007 | 133.35333333 |
+|    AAPL |   2008 | 138.48083333 |
+|    AAPL |   2009 | 150.39333333 |
 ```
 
 ## Joins
@@ -883,29 +836,33 @@ inner-join [4 5]:
 |     1262 |    181500 |        0 |          181500 |              0 |
 |      920 |    223500 |      866 |          223500 |            866 |
 |      961 |    140000 |      756 |          140000 |            756 |
-(ds-join/right-join ["1stFlrSF" "2ndFlrSF"]
-                         (ds/set-dataset-name test-ds "left")
-                         (ds/set-dataset-name test-ds "right"))
-right-outer-join [4 5]:
 
-| 2ndFlrSF | SalePrice | 1stFlrSF | left.SalePrice | left.2ndFlrSF |
-|----------+-----------+----------+----------------+---------------|
-|      854 |    208500 |      856 |    -2147483648 |        -32768 |
-|        0 |    181500 |     1262 |    -2147483648 |        -32768 |
-|      866 |    223500 |      920 |    -2147483648 |        -32768 |
-|      756 |    140000 |      961 |    -2147483648 |        -32768 |
-
-user> (ds-join/left-join ["1stFlrSF" "2ndFlrSF"]
-(ds/set-dataset-name test-ds "left")
-(ds/set-dataset-name test-ds "right"))
-left-outer-join [4 6]:
+user> (ds/right-join ["1stFlrSF" "2ndFlrSF"]
+                     (ds/set-dataset-name test-ds "left")
+                     (ds/set-dataset-name test-ds "right"))
+right-outer-join [5 6]:
 
 | 1stFlrSF | SalePrice | 2ndFlrSF | right.2ndFlrSF | right.SalePrice | right.1stFlrSF |
-|----------+-----------+----------+----------------+-----------------+----------------|
-|      961 |    140000 |      756 |         -32768 |     -2147483648 |         -32768 |
-|      920 |    223500 |      866 |         -32768 |     -2147483648 |         -32768 |
-|      856 |    208500 |      854 |         -32768 |     -2147483648 |         -32768 |
-|     1262 |    181500 |        0 |         -32768 |     -2147483648 |         -32768 |
+|----------|-----------|----------|----------------|-----------------|----------------|
+|          |           |          |            854 |          208500 |            856 |
+|          |           |          |              0 |          181500 |           1262 |
+|          |           |          |            866 |          223500 |            920 |
+|          |           |          |            756 |          140000 |            961 |
+|          |           |          |           1053 |          250000 |           1145 |
+
+
+user> (ds/left-join ["1stFlrSF" "2ndFlrSF"]
+                     (ds/set-dataset-name test-ds "left")
+                     (ds/set-dataset-name test-ds "right"))
+left-outer-join [5 6]:
+
+| 1stFlrSF | SalePrice | 2ndFlrSF | right.2ndFlrSF | right.SalePrice | right.1stFlrSF |
+|----------|-----------|----------|----------------|-----------------|----------------|
+|      961 |    140000 |      756 |                |                 |                |
+|      920 |    223500 |      866 |                |                 |                |
+|      856 |    208500 |      854 |                |                 |                |
+|     1145 |    250000 |     1053 |                |                 |                |
+|     1262 |    181500 |        0 |                |                 |                |
 ```
 
 
@@ -999,4 +956,27 @@ user> (with-open [outs (io/gzip-output-stream! "file://test.tsv.gz")]
         (io/mapseq->csv!
          (dataset/mapseq-reader test-ds )
          :separator \tab))
+```
+
+We also have support for [nippy](nippy-serialization-rocks.md) in which case
+datasets work just like any other datastructure.  This format allows some level of
+compression but about 10X-100X the loading performance of anything else.
+
+```clojure
+user> (require '[taoensso.nippy :as nippy])
+nil
+user> (def stocks-data (nippy/freeze stocks))
+#'user/stocks-data
+user> (type stocks-data)
+[B
+user> (ds/head (nippy/thaw stocks-data))
+test/data/stocks.csv [5 3]:
+
+| :symbol |      :date | :price |
+|---------|------------|--------|
+|    MSFT | 2000-01-01 |  39.81 |
+|    MSFT | 2000-02-01 |  36.35 |
+|    MSFT | 2000-03-01 |  43.22 |
+|    MSFT | 2000-04-01 |  28.37 |
+|    MSFT | 2000-05-01 |  25.45 |
 ```
