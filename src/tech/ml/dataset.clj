@@ -678,7 +678,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                           (remove #{:values :num-distinct-values}))})"
   []
   [:col-name :datatype :n-valid :n-missing
-   :min :quartile-1 :mean :mode :quartile-3 :max
+   :min :quartile-1 :mean :mode :median :quartile-3 :max
    :standard-deviation :skew :n-values :values :histogram])
 
 
@@ -696,7 +696,13 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
    (let [stat-names (or (:stat-names options)
                         (->> (all-descriptive-stats-names)
                              ;;This just is too much information for small repls.
-                             (remove #{:values :n-values :quartile-1 :quartile-3 :histogram})))
+                             (remove #{:median :values :n-values
+                                       :quartile-1 :quartile-3 :histogram})))
+         numeric-stats (set/intersection
+                        #{:min :quartile-1 :mean :median
+                          :quartile-3
+                          :max :standard-deviation :skew}
+                        (set stat-names))
          stats-ds
          (->> (->dataset dataset)
               (columns)
@@ -715,16 +721,16 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                           :n-missing n-missing}
                          (cond
                            (dtype-dt/datetime-datatype? col-dtype)
-                           (dtype-dt-ops/millisecond-descriptive-stats col-reader)
+                           (dtype-dt-ops/millisecond-descriptive-stats col-reader
+                                                                       numeric-stats)
                            (and (not (:categorical? (ds-col/metadata ds-col)))
                                 (casting/numeric-type? col-dtype))
-                           (dfn/descriptive-stats col-reader
-                                                  #{:min :quartile-1 :mean :quartile-3
-                                                    :max :standard-deviation :skew})
+                           (dfn/descriptive-stats col-reader numeric-stats)
                            :else
                            (let [histogram (->> (frequencies col-reader)
                                                 (clojure.core/sort-by second >))
-                                 max-categorical-values (or (:n-categorical-values options) 21)]
+                                 max-categorical-values (or (:n-categorical-values
+                                                             options) 21)]
                              (merge
                               {:mode (ffirst histogram)
                                :n-values (count histogram)}
