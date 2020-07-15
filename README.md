@@ -103,11 +103,18 @@ user> (take 2 (ds/mapseq-reader csv-data))
   "symbol" "MSFT",
   "price" 36.35})
 
+;;Datasets are comprised of named columns, and provide a Clojure hashmap-compatible
+;;collection.  Datasets allow reading and updating column data associated with a column name, 
+;;and provide a sequential view of [column-name column] entries.
 
-;;Data is stored in primitive arrays (even most datetimes!) and strings are stored
+;;You can look up columns via `get`, keyword lookup, and invoking the dataset as a function on
+;;a key (a column name). `keys` and `vals` retrieve respective sequences of column names and columns.
+;;The functions `assoc` and `dissoc` work to define new associations to conveniently 
+;;add, update, or remove columns, with add/update semantics defined by`tech.ml.dataset/add-or-update-column`.
+
+;;Column data is stored in primitive arrays (even most datetimes!) and strings are stored
 ;;in string tables.  You can load really large datasets with this thing!
 
-;;Datasets are sequence of columns.
 ;;Columns themselves are sequences of their entries.
 user> (csv-data "symbol")
 #tech.ml.dataset.column<string>[560]
@@ -121,11 +128,9 @@ user> (take 5 (xls-data "Gender"))
 ("Female" "Female" "Male" "Female" "Female")
 
 
-;;datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
-;;datasets implement clojure's IPersistentMap, and like maps, associate
-;;column names to columns.
+;;Datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
 
-;;You can access the columns of a dataset with `ds/columns`, or `vals` like a map, and
+;;You can access a sequence of columns of a dataset with `ds/columns`, or `vals` like a map,
 ;;and access the metadata with `meta`:
 
 user> (->> csv-data 
