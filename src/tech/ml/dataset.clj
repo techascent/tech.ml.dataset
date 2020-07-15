@@ -208,7 +208,8 @@
   `(select-rows ds (range n)).  Arguments are reversed, however, so this can
   be used in ->> operators."
   ([n dataset]
-   (select-rows dataset (range n)))
+   (-> (select-rows dataset (range n))
+       (vary-meta clojure.core/assoc :print-index-range (range n))))
   ([dataset]
    (head 5 dataset)))
 
@@ -220,7 +221,8 @@
   ([n dataset]
    (let [n-rows (row-count dataset)
          start-idx (max 0 (- n-rows (long n)))]
-     (select-rows dataset (range start-idx n-rows))))
+     (-> (select-rows dataset (range start-idx n-rows))
+         (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([dataset]
    (tail 5 dataset)))
 
@@ -235,10 +237,11 @@
   ([n replacement? dataset]
    (let [row-count (row-count dataset)
          n (long n)]
-     (if replacement?
-       (select-rows dataset (repeatedly n #(rand-int row-count)))
-       (select-rows dataset (take (min n row-count)
-                                  (clojure.core/shuffle (range row-count)))))))
+     (-> (if replacement?
+           (select-rows dataset (repeatedly n #(rand-int row-count)))
+           (select-rows dataset (take (min n row-count)
+                                      (clojure.core/shuffle (range row-count)))))
+         (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([n dataset]
    (sample n false dataset))
   ([dataset]
