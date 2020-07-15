@@ -790,6 +790,18 @@
            (vec (ds :b))))))
 
 
+(deftest replace-missing-ldt
+  (let [dtds (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 1 1 1 1 1)
+                                 nil nil nil
+                                 (java.time.LocalDateTime/of 2020 10 1 1 1 1)]})]
+    (is (= (seq ((ds/replace-missing dtds :lerp) :dt))
+           [(java.time.LocalDateTime/of 2020 1 1 1 1 1)
+            (java.time.LocalDateTime/of 2020 3 9 13 1 1)
+            (java.time.LocalDateTime/of 2020 5 17 1 1 1)
+            (java.time.LocalDateTime/of 2020 7 24 13 1 1)
+            (java.time.LocalDateTime/of 2020 10 1 1 1 1)]))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

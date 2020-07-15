@@ -92,7 +92,10 @@
 (defn- lerp
   [coerce-type-fn mn mx steps]
   (let [steps+ (inc steps)]
-    (map #(+ mn (coerce-type-fn (* % (/ (- mx mn) steps+)))) (range 1 steps+))))
+    (dtype/object-reader
+     steps
+     #(+ mn (coerce-type-fn (* (unchecked-inc (long %))
+                               (/ (- mx mn) steps+)))))))
 
 (def ^:private lerp-double (partial lerp double))
 (def ^:private lerp-float (partial lerp float))
@@ -103,8 +106,9 @@
 
 (defn- lerp-time
   [datatype mn mx steps]
-  (let [vs (lerp-long (dto/->milliseconds mn) (dto/->milliseconds mx) steps)]
-    (seq (dto/milliseconds->datetime datatype vs))))
+  (let [vs (lerp-long (dto/->milliseconds mn) (dto/->milliseconds mx) steps)
+        retval (dto/milliseconds->datetime datatype vs)]
+    retval))
 
 (defn- lerp-object
   [f l steps]
@@ -126,7 +130,7 @@
                   :else lerp-object)
         nil)
       (cond
-        (dtype-dt/datetime-datatype? :datetime datatype) (partial lerp-time datatype)
+        (dtype-dt/datetime-datatype? datatype) (partial lerp-time datatype)
         :else lerp-object)))
 
 (defn- find-lerp-values
