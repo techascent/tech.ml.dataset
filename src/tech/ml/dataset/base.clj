@@ -5,7 +5,6 @@
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.functional :as dfn]
             [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
@@ -19,8 +18,6 @@
             [tech.libs.smile.data :as smile-data]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
-            [tech.parallel.for :as parallel-for]
-            [tech.parallel.require :as parallel-require]
             [tech.parallel.utils :as par-util]
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
@@ -28,6 +25,7 @@
            [tech.ml.dataset.impl.dataset Dataset]
            [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
+           [clojure.lang IFn]
            [smile.data DataFrame]
            [smile.io Read]
            [it.unimi.dsi.fastutil.longs LongArrayList])
@@ -353,19 +351,31 @@ This is an interface change and we do apologize!"))))
 
 (defn filter-column
   "Filter a given column by a predicate.  Predicate is passed column values.
-  truthy values are kept.  Returns a dataset."
+  If predicate is *not* an instance of Ifn it is treated as a value and will
+  be used as if the predicate is #(= value %).
+  Returns a dataset."
   [predicate colname dataset]
-  (->> (column dataset colname)
-       (dfn/argfilter predicate)
-       (select dataset :all)))
+  (let [predicate (if (instance? IFn predicate)
+                    predicate
+                    (let [pred-dtype (dtype/get-datatype predicate)]
+                      (cond
+                        (casting/integer-type? pred-dtype)
+                        (let [predicate (long predicate)]
+                          (fn [^long arg] (== arg predicate)))
+                        (casting/float-type? pred-dtype)
+                        (let [predicate (double predicate)]
+                          (fn [^double arg] (== arg predicate)))
+                        :else
+                        #(= predicate %))))]
+    (->> (column dataset colname)
+         (dfn/argfilter predicate)
+         (select dataset :all))))
 
 
 (defn ds-filter-column
   "Legacy method.  Please see filter-column"
   [predicate colname dataset]
-  (->> (column dataset colname)
-       (dfn/argfilter predicate)
-       (select dataset :all)))
+  (filter-column predicate colname dataset))
 
 
 (defn group-by->indexes
@@ -886,7 +896,7 @@ This is an interface change and we do apologize!"))))
                                                    options))
                        (ds-parse-mapseq/mapseq->dataset options))))
                (or (= file-type :xls) (= file-type :xlsx))
-               (let [parse-fn (parallel-require/require-resolve
+               (let [parse-fn (parallel-req/require-resolve
                                'tech.libs.poi/workbook->datasets)
                      options (if (= file-type :xls)
                                (assoc options :poi-file-type :xls)
