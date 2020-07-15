@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.06
+ * Issue 118 - sample, head, tail, all set :print-index-range so the entire ds prints.
+ * Issue 119 - median in descriptive stats
+ * Issue 117 - filter-column allows you to pass in a value for exact matches.
+ * Updated README thanks to joinr.
+ * Updated walkthrough.
+
 ## 3.05
  * Rebuilt with java8 so class files are java8 compatible.
 
