@@ -41,7 +41,7 @@ user> (ds/head csv-data)
 test/data/stocks.csv [5 3]:
 
 | symbol |       date | price |
-|--------+------------+-------|
+|--------|------------|-------|
 |   MSFT | 2000-01-01 | 39.81 |
 |   MSFT | 2000-02-01 | 36.35 |
 |   MSFT | 2000-03-01 | 43.22 |
@@ -50,29 +50,29 @@ test/data/stocks.csv [5 3]:
 user> (def xls-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
 #'user/xls-data
 user> (ds/head xls-data)
-Sheet1 [5 8]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
 
-|     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
-|-------+------------+-----------+--------+---------------+-------+------------+------|
-| 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 15/10/2017 | 1562 |
-| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 16/08/2016 | 1582 |
-| 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 21/05/2015 | 2587 |
-| 4.000 |   Kathleen |    Hanner | Female | United States | 25.00 | 15/10/2017 | 3549 |
-| 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 16/08/2016 | 2468 |
+| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
+|----------|------------|-----------|--------|---------------|------|------------|--------|
+|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 15/10/2017 | 1562.0 |
+|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 16/08/2016 | 1582.0 |
+|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 21/05/2015 | 2587.0 |
+|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 15/10/2017 | 3549.0 |
+|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 16/08/2016 | 2468.0 |
 
 ;;And you can have fine grained control over parsing
 
 user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"
                              {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}}))
-Sheet1 [5 8]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
 
-|     0 | First Name | Last Name | Gender |       Country |   Age |       Date |   Id |
-|-------+------------+-----------+--------+---------------+-------+------------+------|
-| 1.000 |      Dulce |     Abril | Female | United States | 32.00 | 2017-10-15 | 1562 |
-| 2.000 |       Mara | Hashimoto | Female | Great Britain | 25.00 | 2016-08-16 | 1582 |
-| 3.000 |     Philip |      Gent |   Male |        France | 36.00 | 2015-05-21 | 2587 |
-| 4.000 |   Kathleen |    Hanner | Female | United States | 25.00 | 2017-10-15 | 3549 |
-| 5.000 |    Nereida |   Magwood | Female | United States | 58.00 | 2016-08-16 | 2468 |
+| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
+|----------|------------|-----------|--------|---------------|------|------------|--------|
+|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 2017-10-15 | 1562.0 |
+|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 2016-08-16 | 1582.0 |
+|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 2015-05-21 | 2587.0 |
+|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 2017-10-15 | 3549.0 |
+|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 2016-08-16 | 2468.0 |
 user>
 
 
@@ -83,13 +83,13 @@ user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/op
 user> (ds/head airports)
 https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
 
-| 0 |                                           1 |            2 |                3 |   4 |    5 |      6 |     7 |    8 |    9 | 10 |                   11 |      12 |          13 |
-|---+---------------------------------------------+--------------+------------------+-----+------+--------+-------+------+------+----+----------------------+---------+-------------|
-| 1 |                              Goroka Airport |       Goroka | Papua New Guinea | GKA | AYGA | -6.082 | 145.4 | 5282 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
-| 2 |                              Madang Airport |       Madang | Papua New Guinea | MAG | AYMD | -5.207 | 145.8 |   20 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
-| 3 |                Mount Hagen Kagamuga Airport |  Mount Hagen | Papua New Guinea | HGU | AYMH | -5.827 | 144.3 | 5388 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
-| 4 |                              Nadzab Airport |       Nadzab | Papua New Guinea | LAE | AYNZ | -6.570 | 146.7 |  239 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
-| 5 | Port Moresby Jacksons International Airport | Port Moresby | Papua New Guinea | POM | AYPY | -9.443 | 147.2 |  146 | 10.0 |  U | Pacific/Port_Moresby | airport | OurAirports |
+| column-0 |                                    column-1 |     column-2 |         column-3 | column-4 | column-5 |    column-6 |     column-7 | column-8 | column-9 | column-10 |            column-11 | column-12 |   column-13 |
+|----------|---------------------------------------------|--------------|------------------|----------|----------|-------------|--------------|----------|----------|-----------|----------------------|-----------|-------------|
+|        1 |                              Goroka Airport |       Goroka | Papua New Guinea |      GKA |     AYGA | -6.08168983 | 145.39199829 |     5282 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
+|        2 |                              Madang Airport |       Madang | Papua New Guinea |      MAG |     AYMD | -5.20707989 | 145.78900147 |       20 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
+|        3 |                Mount Hagen Kagamuga Airport |  Mount Hagen | Papua New Guinea |      HGU |     AYMH | -5.82678986 | 144.29600525 |     5388 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
+|        4 |                              Nadzab Airport |       Nadzab | Papua New Guinea |      LAE |     AYNZ | -6.56980300 | 146.72597700 |      239 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
+|        5 | Port Moresby Jacksons International Airport | Port Moresby | Papua New Guinea |      POM |     AYPY | -9.44338036 | 147.22000122 |      146 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
 
 ;;At any point you can get a sequence of maps back.  We implement a special version
 ;;of Clojure's APersistentMap that is much more efficient than even records and shares
@@ -122,59 +122,130 @@ user> (take 5 (xls-data "Gender"))
 
 
 ;;datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+;;datasets implement clojure's IPersistentMap, and like maps, associate
+;;column names to columns.
 
-user> (->> csv-data
+;;You can access the columns of a dataset with `ds/columns`, or `vals` like a map, and
+;;and access the metadata with `meta`:
+
+user> (->> csv-data 
+           vals  ;synonymous with ds/columns
            (map (fn [column]
                   (meta column))))
 ({:categorical? true, :name "symbol", :size 560, :datatype :string}
  {:name "date", :size 560, :datatype :packed-local-date}
  {:name "price", :size 560, :datatype :float32})
 
+;;We can similarly destructure datasets like normal clojure
+;;maps:
 
+user> (for [[k column] csv-data]
+        [k (meta column)])
+(["symbol" {:categorical? true, :name "symbol", :size 560, :datatype :string}]
+ ["date" {:name "date", :size 560, :datatype :packed-local-date}]
+ ["price" {:name "price", :size 560, :datatype :float64}])
+
+user> (let [{:strs [symbol date]} csv-data]
+        [symbol (meta date)])
+[#tech.ml.dataset.column<string>[560]
+symbol
+[MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
+ {:name "date", :size 560, :datatype :packed-local-date}]
+  
 ;;We can get a brief description of the dataset:
 
 user> (ds/brief csv-data)
-({:min #object[java.time.LocalDate 0x60dcad01 "2000-01-01"],
-  :col-name "date",
-  :max #object[java.time.LocalDate 0x5fbc8662 "2010-03-01"],
+({:min #object[java.time.LocalDate 0x5b2ea1d5 "2000-01-01"],
   :n-missing 0,
-  :mean #object[java.time.LocalDate 0x3d13058c "2005-05-12"],
+  :col-name "date",
+  :mean #object[java.time.LocalDate 0x729b7395 "2005-05-12"],
   :datatype :packed-local-date,
-  :n-valid 560}
- {:min 5.96999979019165,
+  :quartile-3 #object[java.time.LocalDate 0x6c75fa43 "2007-11-23"],
+  :n-valid 560,
+  :quartile-1 #object[java.time.LocalDate 0x13d9aabe "2002-11-08"],
+  :max #object[java.time.LocalDate 0x493bf7ef "2010-03-01"]}
+ {:min 5.97,
   :n-missing 0,
   :col-name "price",
-  :mean 100.73428564752851,
-  :datatype :float32,
-  :skew 2.4130946312809254,
-  :standard-deviation 132.55477064785,
+  :mean 100.7342857142857,
+  :datatype :float64,
+  :skew 2.4130946430619233,
+  :standard-deviation 132.55477114107083,
+  :quartile-3 100.88,
   :n-valid 560,
+  :quartile-1 24.169999999999998,
   :max 707.0}
- {:col-name "symbol",
-  :mode "MSFT",
-  :n-missing 0,
+ {:mode "MSFT",
   :values ["MSFT" "AMZN" "IBM" "AAPL" "GOOG"],
   :n-values 5,
+  :n-valid 560,
+  :col-name "symbol",
+  :n-missing 0,
   :datatype :string,
-  :n-valid 560})
+  :histogram (["MSFT" 123] ["AMZN" 123] ["IBM" 123] ["AAPL" 123] ["GOOG" 68])})
 
 ;;Another view of that brief:
 
-
 user> (ds/descriptive-stats csv-data)
-test/data/stocks.csv: descriptive-stats [3 10]:
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv: descriptive-stats [3 10]:
 
-| :col-name |          :datatype | :n-valid | :n-missing |      :mean | :mode |       :min |       :max | :standard-deviation | :skew |
-|-----------+--------------------+----------+------------+------------+-------+------------+------------+---------------------+-------|
-|      date | :packed-local-date |      560 |          0 | 2005-05-12 |       | 2000-01-01 | 2010-03-01 |                     |       |
-|     price |           :float32 |      560 |          0 |      100.7 |       |      5.970 |      707.0 |               132.6 | 2.413 |
-|    symbol |            :string |      560 |          0 |            |  MSFT |            |            |                     |       |
+| :col-name |          :datatype | :n-valid | :n-missing |       :min |      :mean | :mode |       :max | :standard-deviation |      :skew |
+|-----------|--------------------|----------|------------|------------|------------|-------|------------|---------------------|------------|
+|      date | :packed-local-date |      560 |          0 | 2000-01-01 | 2005-05-12 |       | 2010-03-01 |                     |            |
+|     price |           :float64 |      560 |          0 |      5.970 |      100.7 |       |      707.0 |        132.55477114 | 2.41309464 |
+|    symbol |            :string |      560 |          0 |            |            |  MSFT |            |                     |            |
 
 
 ;;There are analogues of the clojure.core functions that apply to dataset:
 ;;filter, group-by, sort-by.  These are all implemented efficiently.
 
-;;You can add/remove/update columns
+;;You can add/remove/update columns, or use the map idioms of `assoc` and `dissoc`
+
+user> (-> csv-data 
+          (assoc "always-ten" 10) ;scalar values are expanded as needed
+          (assoc "random"   (repeatedly (ds/row-count csv-data) #(rand-int 100)))
+          ds/head)
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 5]:
+
+| symbol |       date | price | always-ten | random |
+|--------|------------|-------|------------|--------|
+|   MSFT | 2000-01-01 | 39.81 |         10 |     47 |
+|   MSFT | 2000-02-01 | 36.35 |         10 |     35 |
+|   MSFT | 2000-03-01 | 43.22 |         10 |     54 |
+|   MSFT | 2000-04-01 | 28.37 |         10 |      6 |
+|   MSFT | 2000-05-01 | 25.45 |         10 |     52 |
+
+user> (-> csv-data 
+          (dissoc "price")
+          ds/head)
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 2]:
+
+| symbol |       date |
+|--------|------------|
+|   MSFT | 2000-01-01 |
+|   MSFT | 2000-02-01 |
+|   MSFT | 2000-03-01 |
+|   MSFT | 2000-04-01 |
+|   MSFT | 2000-05-01 |
+
+
+;;since `conj` works as with clojure maps and sequences of map-entries or pairs, 
+;;you can use idioms like `reduce conj` or `into` to construct new datasets on the 
+;;fly with familiar clojure idioms:
+
+user> (let [new-cols [["always-ten" 10] ["new-price" (map inc (csv-data "price"))]]
+            new-data (into (dissoc csv-data "price") new-cols)]
+            (ds/head new-data))
+https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 4]:
+
+| symbol |       date | always-ten | new-price |
+|--------|------------|------------|-----------|
+|   MSFT | 2000-01-01 |         10 |     40.81 |
+|   MSFT | 2000-02-01 |         10 |     37.35 |
+|   MSFT | 2000-03-01 |         10 |     44.22 |
+|   MSFT | 2000-04-01 |         10 |     29.37 |
+|   MSFT | 2000-05-01 |         10 |     26.45 |
+
 ;;You can write out the result back to csv, tsv, and gzipped variations of those.
 
 ;;Joins (left, right, inner) are all implemented.
