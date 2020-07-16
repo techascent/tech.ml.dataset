@@ -1,4 +1,6 @@
 # Changelog
+## 3.07
+ * Issue 122 - Datasets with columns of datasets did not serialize to nippy.
 
 ## 3.06
  * Issue 118 - sample, head, tail, all set :print-index-range so the entire ds prints.
