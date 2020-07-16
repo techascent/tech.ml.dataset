@@ -13,6 +13,7 @@
             [tech.v2.datatype.unary-op :as unary-op]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
+            [taoensso.nippy :as nippy]
             [clojure.java.io :as io]
             [clojure.string :as s]
             [clojure.tools.logging :as log]
@@ -800,6 +801,17 @@
             (java.time.LocalDateTime/of 2020 5 17 1 1 1)
             (java.time.LocalDateTime/of 2020 7 24 13 1 1)
             (java.time.LocalDateTime/of 2020 10 1 1 1 1)]))))
+
+
+(deftest dataset-column-nippy
+  (let [ds (ds/->dataset {:a [1 2]
+                          :datasets [(ds/->dataset [{:a 1}])
+                                     (ds/->dataset [{:b 2}])]})
+        nippy-data (nippy/freeze ds)
+        thawed-ds (nippy/thaw nippy-data)]
+    (is (= (map meta (vals ds))
+           (map meta (vals thawed-ds))))
+    (is (= ds thawed-ds))))
 
 
 (comment

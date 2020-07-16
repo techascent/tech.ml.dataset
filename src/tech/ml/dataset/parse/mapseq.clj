@@ -32,7 +32,10 @@
                   (get-datatype [this]
                     (if (= :scalar (argtypes/arg->arg-type v))
                       (dtype-proto/get-datatype v)
-                      :object))
+                      (let [v-dtype (dtype-proto/get-datatype v)]
+                        (if (= v-dtype :dataset)
+                          v-dtype
+                          :object))))
                   Spreadsheet$Cell
                   (missing [this] (or (nil? v)
                                       (= "" v)

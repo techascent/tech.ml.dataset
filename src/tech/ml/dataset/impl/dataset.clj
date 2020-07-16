@@ -114,7 +114,7 @@
           :else
             (reduce (fn [^clojure.lang.Associative acc entry]
                       (.assoc acc (key entry) (val entry))) this e)))
-  
+
   (containsKey [this k] (.containsKey ^Map colmap k))
 
   ;;MAJOR DEVIATION
@@ -316,6 +316,7 @@
   Object
   (toString [item]
     (ds-print/dataset->str item)))
+
 
 
 (defn new-dataset

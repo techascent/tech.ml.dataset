@@ -9,6 +9,7 @@
             [tech.v2.datatype.readers.concat :as reader-concat]
             [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v2.datatype.datetime :as dtype-dt]
+            [tech.v2.datatype.object-datatypes :as obj-dtypes]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.impl.dataset :as ds-impl]
@@ -945,6 +946,14 @@ This is an interface change and we do apologize!"))))
    (->dataset dataset options))
   ([dataset]
    (->dataset dataset)))
+
+
+(defn- ds-cons-fn
+  ([] nil)
+  ([item] (->dataset item)))
+
+
+(obj-dtypes/add-object-datatype Dataset :dataset ds-cons-fn)
 
 
 (defn dataset->string

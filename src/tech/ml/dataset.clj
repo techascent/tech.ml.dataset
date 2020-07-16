@@ -952,6 +952,10 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                     (column->string-data col)
                                     (= :encoded-text dtype)
                                     (column->encoded-text-data col)
+                                    ;;Nippy doesn't handle object arrays or arraylists
+                                    ;;very well.
+                                    (= :object (casting/flatten-datatype dtype))
+                                    (vec col)
                                     :else
                                     (or (dtype/->array col)
                                         (dtype/->array-copy col)))}))))})
