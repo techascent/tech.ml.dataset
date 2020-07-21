@@ -24,6 +24,6 @@
               ;;We use logback-classic.
               :exclusions [org.slf4j/slf4j-log4j12
                            log4j]}
-             org.apache.arrow/arrow-memory {:mvn/version "0.16.0"}
-             org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
+             org.apache.arrow/arrow-memory {:mvn/version "0.17.1"}
+             org.apache.arrow/arrow-vector {:mvn/version "0.17.1"}
              }}}}
