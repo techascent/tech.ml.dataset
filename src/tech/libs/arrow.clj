@@ -11,7 +11,9 @@
             ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
             ArrowType$Duration DictionaryEncoding]
+           [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
+           [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map]
            [tech.ml.dataset.impl.column Column]
@@ -83,6 +85,21 @@
     :datatype))
 
 
+(defn string-col->dict-id-table-width
+  "Given a string column return a map of :dict-id :table-width.  The dictionary
+  id is the hashcode of the column mame."
+  [col]
+  (let [^StringTable str-table (.data ^Column col)]
+    (when-not (instance? StringTable str-table)
+      (throw (Exception.
+              "string column types must have string tables")))
+    {:dict-id (.hashCode ^Object (:name (meta col)))
+     :str-table-width (-> (.data str-table)
+                          (int-list/int-list->data)
+                          (dtype/get-datatype)
+                          (casting/int-width))}))
+
+
 (defn idx-col->field
   ^Field [^long idx col]
   (let [colmeta (meta col)
@@ -93,17 +110,8 @@
                              (col-proto/missing col)))))
         col-dtype (:datatype colmeta)
         colname (:name colmeta)
-        extra-data
-        (when (= :string col-dtype)
-          (let [^StringTable str-table (.data ^Column col)]
-            (when-not (instance? StringTable str-table)
-              (throw (Exception.
-                      "string column types must have string tables")))
-            {:dict-id (.hashCode ^Object (:name colmeta))
-             :str-table-width (-> (.data str-table)
-                                  (int-list/int-list->data)
-                                  (dtype/get-datatype)
-                                  (casting/int-width))}))]
+        extra-data (when (= :string col-dtype)
+                     (string-col->dict-id-table-width col))]
     (try
       (make-field
        (ml-utils/column-safe-name colname)
@@ -119,3 +127,14 @@
   (Schema. ^Iterable
            (->> (ds-base/columns ds)
                 (map-indexed idx-col->field))))
+
+
+(def ^:dynamic *allocator* (RootAllocator.))
+
+
+(defn string-column->dict-indices
+  "Given a string column, return a map of :dictionary, :indices which
+  will be encoded according to the data in string-col->dict-id-table-width"
+  []
+
+  )

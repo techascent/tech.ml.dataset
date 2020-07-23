@@ -16,6 +16,7 @@
             [tech.ml.dataset.parse :as ds-parse]
             [tech.ml.dataset.parse.mapseq :as ds-parse-mapseq]
             [tech.ml.dataset.parse.name-values-seq :as nvs-parse]
+            [tech.ml.dataset.string-table :as str-table]
             [tech.libs.smile.data :as smile-data]
             [tech.io :as io]
             [tech.parallel.require :as parallel-req]
@@ -24,6 +25,8 @@
   (:import [java.io InputStream File]
            [tech.v2.datatype ObjectReader]
            [tech.ml.dataset.impl.dataset Dataset]
+           [tech.ml.dataset.impl.column Column]
+           [tech.ml.dataset.string_table StringTable]
            [java.util List HashSet LinkedHashMap Map Arrays]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
@@ -1015,6 +1018,23 @@ This is an interface change and we do apologize!"))))
                                     nil
                                     (-> (reader %)
                                         data->string)))))
+
+
+(defn ensure-string-tables
+  "Given a dataset, ensure every string column is backed by a string table."
+  [ds]
+  (reduce
+   (fn [ds col]
+     (if (and (= :string (dtype/get-datatype col))
+              (not (instance? StringTable (.data ^Column col))))
+       (let [missing (ds-col/missing col)
+             metadata (meta col)
+             colname (:name metadata)
+             str-t (str-table/string-table-from-strings col)]
+         (ds-col/new-column colname str-t metadata missing))
+       ds))
+   ds
+   (vals ds)))
 
 
 (defn write-csv!
