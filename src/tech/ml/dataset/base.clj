@@ -1019,19 +1019,41 @@ This is an interface change and we do apologize!"))))
                                     (-> (reader %)
                                         data->string)))))
 
+(defn column->string-table
+  ^StringTable [^Column col]
+  (if-let [retval (when (instance? StringTable (.data col))
+                    (.data col))]
+    retval
+    (throw (Exception. (format "Column %s does not contain a string table"
+                               (ds-col/column-name col))))))
 
-(defn ensure-string-tables
+
+(defn ensure-column-string-table
+  "Ensure this column is backed by a string table.
+  If not, return a new column that is.
+  Column must be :string datatype."
+  ^StringTable [col]
+  (when-not (= :string (dtype/get-datatype col))
+    (throw (Exception.
+            (format "Column %s does not have :string datatype"
+                    (ds-col/column-name col)))))
+  (if (not (instance? StringTable (.data ^Column col)))
+    (str-table/string-table-from-strings col)
+    (.data ^Column col)))
+
+
+(defn ensure-dataset-string-tables
   "Given a dataset, ensure every string column is backed by a string table."
   [ds]
   (reduce
    (fn [ds col]
-     (if (and (= :string (dtype/get-datatype col))
-              (not (instance? StringTable (.data ^Column col))))
+     (if (= :string (dtype/get-datatype col))
        (let [missing (ds-col/missing col)
              metadata (meta col)
              colname (:name metadata)
-             str-t (str-table/string-table-from-strings col)]
-         (ds-col/new-column colname str-t metadata missing))
+             str-t (ensure-column-string-table col)]
+         (assoc ds (ds-col/column-name col)
+                (ds-col/new-column colname str-t metadata missing)))
        ds))
    ds
    (vals ds)))

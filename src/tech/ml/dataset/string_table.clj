@@ -4,7 +4,8 @@
             [tech.ml.dataset.dynamic-int-list :as int-list]
             [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
             [tech.parallel.for :as parallel-for])
-  (:import [java.util List HashMap Map RandomAccess Iterator ArrayList]
+  (:import [java.util List HashMap Map RandomAccess Iterator ArrayList
+            Collections]
            [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]))
 
 
@@ -141,3 +142,25 @@
       (doseq [data str-data]
         (.add str-table data))
       str-table)))
+
+(defn ->string-table
+  ^StringTable [str-t]
+  (when-not (instance? StringTable str-t)
+    (throw (Exception. (format "string table is wrong type: %s"
+                               str-t))))
+  str-t)
+
+(defn indices
+  "Get the string table backing index data."
+  [^StringTable str-t]
+  (-> (->string-table str-t)
+      (.data str-t)
+      (int-list/int-list->data)))
+
+(defn int->string
+  "Returns an unmodifiable list of strings from a string table.  This serves as the
+  index->string lookup table.  Returned value also implements 'nth' efficiently."
+  ^List [^StringTable str-t]
+  (-> (->string-table str-t)
+      (.int->str)
+      (dtype/->reader)))

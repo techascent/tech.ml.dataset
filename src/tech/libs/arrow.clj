@@ -11,12 +11,15 @@
             ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
             ArrowType$Duration DictionaryEncoding]
-           [org.apache.arrow.memory RootAllocator]
+           [org.apache.arrow.memory RootAllocator BaseAllocator BufferAllocator]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary]
+           [org.apache.arrow.vector VarCharVector]
+           [org.apache.arrow.vector.types Types]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map]
            [tech.ml.dataset.impl.column Column]
+           [tech.v2.datatype ObjectWriter]
            [tech.ml.dataset.string_table StringTable]
            [tech.ml.dataset.dynamic_int_list DynamicIntList]))
 
@@ -89,15 +92,11 @@
   "Given a string column return a map of :dict-id :table-width.  The dictionary
   id is the hashcode of the column mame."
   [col]
-  (let [^StringTable str-table (.data ^Column col)]
-    (when-not (instance? StringTable str-table)
-      (throw (Exception.
-              "string column types must have string tables")))
-    {:dict-id (.hashCode ^Object (:name (meta col)))
-     :str-table-width (-> (.data str-table)
-                          (int-list/int-list->data)
-                          (dtype/get-datatype)
-                          (casting/int-width))}))
+  {:dict-id (.hashCode ^Object (:name (meta col)))
+   :str-table-width (-> (ds-base/column->string-table col)
+                        (str-table/indices)
+                        (dtype/get-datatype)
+                        (casting/int-width))})
 
 
 (defn idx-col->field
@@ -129,12 +128,77 @@
                 (map-indexed idx-col->field))))
 
 
-(def ^:dynamic *allocator* (RootAllocator.))
+(defonce ^:dynamic *allocator* (delay (RootAllocator. Long/MAX_VALUE)))
+
+
+(defn allocator
+  (^BufferAllocator []
+   (let [alloc-deref @*allocator*]
+     (cond
+       (instance? clojure.lang.IDeref alloc-deref)
+       @alloc-deref
+       (instance? BaseAllocator alloc-deref)
+       alloc-deref
+       :else
+       (throw (Exception. "No allocator provided.  See ")))))
+  (^BufferAllocator [options]
+   (or (:allocator options) (allocator))))
+
+
+(defmacro with-allocator
+  "Bind a new allocator.  alloc* must be either an instance of
+  org.apache.arrow.memory.BaseAllocator or an instance of IDeref that resolves to an
+  instance of BaseAllocator."
+  [alloc* & body]
+  `(with-bindings {#'*allocator* alloc*}
+     ~@body))
+
+
+(defn arrow-varchar
+  (^VarCharVector [& [{:keys [name minor-type nullable?]}]]
+   (VarCharVector. ^String (or name "unnamed")
+                   ^FieldType (or minor-type
+                                  (datatype->field-type :text nullable?))
+                   (allocator))))
+
+
+(defn strings->arrow-varchar
+  "take a reader of strings and produce an arrow varchar."
+  ^VarCharVector [rdr & [missing-bitmap]]
+  (let [n-elems (dtype/ecount rdr)
+        rdr (dtype/->reader rdr)
+        vec (doto (arrow-varchar)
+              (.setInitialCapacity (dtype/ecount rdr))
+              (.setValueCount (dtype/ecount rdr)))
+        ^RoaringBitmap missing (or missing-bitmap (dtype/->bitmap-set))]
+    (dotimes [idx n-elems]
+      (if (.contains missing idx)
+        (.setNull vec idx)
+        (do
+          (.setIndexDefined vec idx)
+          (.setSafe vec idx (.getBytes ^String (rdr idx) "UTF-8")))))
+    vec))
+
+
+(defn reader->arrow
+  "Copy a reader into an arrow vector type"
+  [rdr & [missing]]
+  (let [^RoaringBitmap missing (or missing (dtype/->bitmap-set))
+        rdr (dtype/->reader (dtype-dt/unpack rdr))
+        n-elems (dtype/ecount rdr)]
+    (case (dtype/get-datatype rdr)
+
+      )))
 
 
 (defn string-column->dict-indices
-  "Given a string column, return a map of :dictionary, :indices which
+  "Given a string column, return a map of {:dictionary :indices} which
   will be encoded according to the data in string-col->dict-id-table-width"
-  []
+  [col]
+  (let [str-t (ds-base/ensure-column-string-table col)
+        indices (str-table/indices str-t)
+        int->str (str-table/int->string str-t)
+        arrow-int->str (strings->arrow-varchar int->str)]
 
-  )
+
+    ))
