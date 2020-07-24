@@ -1,7 +1,7 @@
 (ns tech.libs.arrow
   (:require [tech.ml.dataset.base :as ds-base]
             [tech.ml.protocols.column :as col-proto]
-            [tech.ml.dataset.dynamic-int-list :as int-list]
+            [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.string-table :as str-table]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.datetime :as dtype-dt]
@@ -82,15 +82,12 @@
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :zoned-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :offset-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
-       :string (let [{:keys [dict-id ordered? str-table-width]
-                      :or {ordered? true
-                           str-table-width 32}} extra-data
-                     int-type (ArrowType$Int. (int str-table-width) true)]
-                 (when-not dict-id
-                   (throw (Exception. "String tables must have a dictionary id")))
-                 (ft-fn int-type
-                        (DictionaryEncoding. (int dict-id) (boolean ordered?)
-                                             int-type)))
+       :string (let [^DictionaryEncoding encoding (:encoding extra-data)
+                     int-type (.getIndexType encoding)]
+                 (when-not encoding
+                   (throw (Exception.
+                           "String tables must have a dictionary encoding")))
+                 (ft-fn int-type encoding))
        :text (ft-fn (ArrowType$Utf8.))))))
 
 
@@ -100,19 +97,38 @@
     :datatype))
 
 
-(defn string-col->dict-id-table-width
+(declare data->arrow-vector)
+
+
+(defn string-column->dict
+  "Given a string column, return a map of {:dictionary :indices} which
+  will be encoded according to the data in string-col->dict-id-table-width"
+  ^Dictionary [col]
+  (let [str-t (ds-base/ensure-column-string-table col)
+        indices (str-table/indices str-t)
+        int->str (str-table/int->string str-t)
+        bit-width (casting/int-width (dtype/get-datatype indices))
+        metadata (meta col)
+        colname (:name metadata)
+        dict-id (.hashCode ^Object colname)
+        arrow-indices-type (ArrowType$Int. bit-width true)
+        encoding (DictionaryEncoding. dict-id false arrow-indices-type)
+        ftype (datatype->field-type :text true)
+        varchar-vec (data->arrow-vector (dtype/->reader int->str :string)
+                                        "unnamed" ftype nil)]
+    (Dictionary. varchar-vec encoding)))
+
+
+(defn string-col->encoding
   "Given a string column return a map of :dict-id :table-width.  The dictionary
   id is the hashcode of the column mame."
-  [col]
-  {:dict-id (.hashCode ^Object (:name (meta col)))
-   :str-table-width (-> (ds-base/column->string-table col)
-                        (str-table/indices)
-                        (dtype/get-datatype)
-                        (casting/int-width))})
-
+  [^DictionaryProvider$MapDictionaryProvider dict-provider colname col]
+  (let [dict (string-column->dict col)]
+    (.put dict-provider ^Dictionary dict)
+    {:encoding (.getEncoding dict)}))
 
 (defn idx-col->field
-  ^Field [^long idx col]
+  ^Field [dict-provider ^long idx col]
   (let [colmeta (meta col)
         nullable? (boolean
                    (or (:nullable? colmeta)
@@ -122,7 +138,7 @@
         col-dtype (:datatype colmeta)
         colname (:name colmeta)
         extra-data (when (= :string col-dtype)
-                     (string-col->dict-id-table-width col))]
+                     (string-col->encoding dict-provider colname col))]
     (try
       (make-field
        (ml-utils/column-safe-name colname)
@@ -135,9 +151,13 @@
 
 (defn ds->arrow-schema
   [ds]
-  (Schema. ^Iterable
-           (->> (ds-base/columns ds)
-                (map-indexed idx-col->field))))
+  (let [dict-provider (DictionaryProvider$MapDictionaryProvider.
+                       (make-array Dictionary 0))]
+    {:schema
+     (Schema. ^Iterable
+              (->> (ds-base/columns ds)
+                   (map-indexed (partial idx-col->field dict-provider))))
+     :dict-provider dict-provider}))
 
 
 (defonce ^:dynamic *allocator* (delay (RootAllocator. Long/MAX_VALUE)))
@@ -254,7 +274,7 @@
          n-elems# (dtype/ecount ~'rdr)
          missing# (as-roaring-bitmap (or ~missing (dtype/->bitmap-set)))
          nullable?# (not (.isEmpty missing#))
-         ~'vec (doto (datatype->vec-type ~datatype vec)
+         ~'vec (doto (datatype->vec-type ~datatype ~vec)
                 (.setInitialCapacity (dtype/ecount ~'rdr))
                 (.setValueCount (dtype/ecount ~'rdr)))]
      (dotimes [~'idx n-elems#]
@@ -303,7 +323,7 @@
         convert-fn (get rdr-convert-map datatype)]
     (when-not convert-fn
       (throw (Exception. "Failed to find conversion from reader type to arrow")))
-    (convert-fn data missing (make-arrow-vector datatype name field-type) missing)))
+    (convert-fn data missing (make-arrow-vector datatype name field-type))))
 
 
 (defn copy-to-arrow!
@@ -316,35 +336,15 @@
     (convert-fn data missing field-vec)))
 
 
-(defn string-column->dict-indices
-  "Given a string column, return a map of {:dictionary :indices} which
-  will be encoded according to the data in string-col->dict-id-table-width"
-  ^Dictionary [col]
-  (let [str-t (ds-base/ensure-column-string-table col)
-        indices (str-table/indices str-t)
-        int->str (str-table/int->string str-t)
-        bit-width (casting/int-width (dtype/get-datatype indices))
-        metadata (meta col)
-        colname (:name metadata)
-        dict-id (.hashCode ^Object colname)
-        arrow-indices-type (ArrowType$Int. bit-width true)
-        encoding (DictionaryEncoding. dict-id false arrow-indices-type)
-        ftype (datatype->field-type :text true)
-        varchar-vec (data->arrow-vector (dtype/->reader int->str :string)
-                                        "unnamed" ftype nil)
-        dict (Dictionary. varchar-vec encoding)]
-    {:dictionary dict
-     :indices indices}))
-
-
 (defn write-dataset!
   [ds path]
   (let [ds (ds-base/ensure-dataset-string-tables ds)
-        schema (ds->arrow-schema ds)
-        dict-provider (DictionaryProvider$MapDictionaryProvider.
-                       (make-array Dictionary 0))]
+        {:keys [schema dict-provider]} (ds->arrow-schema ds)
+        ^DictionaryProvider dict-provider dict-provider]
     (with-open [ostream (io/output-stream! path)
-                vec-root (VectorSchemaRoot. schema (allocator))
+                vec-root (VectorSchemaRoot/create
+                          ^Schema schema
+                          ^BufferAllocator (allocator))
                 writer (ArrowStreamWriter. vec-root dict-provider ostream)]
       (.start writer)
       (.setRowCount vec-root (ds-base/row-count ds))
@@ -353,14 +353,29 @@
             (fn [^long idx col]
               (let [field-vec (.getVector vec-root idx)
                     coldata (dtype-dt/unpack col)
-                    col-type (dtype/get-datatype coldata)]
+                    col-type (dtype/get-datatype coldata)
+                    missing (col-proto/missing col)]
                 (cond
                   (= :string col-type)
-                  (let [{:keys [dictionary indices]}
-                        (string-column->dict-indices col)]
-                    (.set dict-provider dictionary)
-                    (copy-to-arrow! indices (col-proto/missing col) field-vec))
+                  (-> (ds-base/column->string-table col)
+                      (str-table/indices)
+                      (copy-to-arrow! missing field-vec))
                   :else
-                  (copy-to-arrow! coldata (col-proto/missing col) field-vec)))))
+                  (copy-to-arrow! coldata missing field-vec)))))
            (dorun))
       (.writeBatch writer))))
+
+
+(defn read-dataset
+  [path]
+  (with-open [istream (io/input-stream path)
+              reader (ArrowStreamReader. istream (allocator))]
+    (.loadNextBatch reader)
+    (let [schema-root (.getVectorSchemaRoot reader)
+          dict-map (.getDictionaryVectors reader)]
+      (->> (.getFieldVectors schema-root)
+           (map (fn [field-vec]
+                  (case (dtype/get-datatype field-vec)
+                    :uint8 )
+                  ))
+           (ds-impl/new-dataset path)))))
