@@ -31,6 +31,9 @@
            [tech.ml.dataset.dynamic_int_list DynamicIntList]))
 
 
+;;TODO - check out gandiva
+
+
 (set! *warn-on-reflection* true)
 
 
