@@ -6,7 +6,8 @@
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype :as dtype]
-            [tech.ml.utils :as ml-utils])
+            [tech.ml.utils :as ml-utils]
+            [tech.io :as io])
   (:import [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
             ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
@@ -14,11 +15,13 @@
            [org.apache.arrow.memory RootAllocator BaseAllocator BufferAllocator]
            [io.netty.buffer ArrowBuf]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
-           [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary]
+           [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
+            DictionaryProvider$MapDictionaryProvider]
+           [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter]
            [org.apache.arrow.vector VarCharVector BitVector TinyIntVector UInt1Vector
             SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
             Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
-            DurationVector TimeStampMicroTZVector FieldVector]
+            DurationVector TimeStampMicroTZVector FieldVector VectorSchemaRoot]
            [org.apache.arrow.vector.types Types]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map]
@@ -72,11 +75,11 @@
        :int64 (ft-fn (ArrowType$Int. 64 true))
        :float32 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/SINGLE))
        :float64 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/DOUBLE))
-       :local-date (ft-fn (ArrowType$Date. DateUnit/DAY))
-       :local-date-time (ft-fn (ArrowType$Date. DateUnit/MILLISECOND))
-       :local-time (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 64)))
+       :local-date (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
+       :local-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
+       :local-time (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 8)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
-       :instance (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
+       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :zoned-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :offset-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :string (let [{:keys [dict-id ordered? str-table-width]
@@ -176,10 +179,43 @@
    :float32 'Float4Vector
    :float64 'Float8Vector
    :string 'VarCharVector
-   :text 'VarCharVector})
+   :text 'VarCharVector
+   :local-date 'DateMilliVector})
+
+(defn as-bit-vector ^BitVector [item] item)
+(defn as-uint8-vector ^UInt1Vector [item] item)
+(defn as-int8-vector ^TinyIntVector [item] item)
+(defn as-uint16-vector ^UInt2Vector [item] item)
+(defn as-int16-vector ^SmallIntVector [item] item)
+(defn as-uint32-vector ^UInt4Vector [item] item)
+(defn as-int32-vector ^IntVector [item] item)
+(defn as-uint64-vector ^UInt8Vector [item] item)
+(defn as-int64-vector ^BigIntVector [item] item)
+(defn as-float32-vector ^Float4Vector [item] item)
+(defn as-float64-vector ^Float8Vector [item] item)
+(defn as-varchar-vector ^VarCharVector [item] item)
+(defn as-date-milli-vector ^DateMilliVector [item] item)
 
 
-(defmacro make-arrow-vector
+(defmacro datatype->vec-type
+  [datatype item]
+  (case datatype
+    :boolean `(as-bit-vector ~item)
+    :uint8 `(as-uint8-vector ~item)
+    :int8 `(as-int8-vector ~item)
+    :uint16 `(as-uint16-vector ~item)
+    :int16 `(as-int16-vector ~item)
+    :uint32 `(as-uint32-vector ~item)
+    :int32 `(as-int32-vector ~item)
+    :uint64 `(as-uint64-vector ~item)
+    :int64 `(as-int64-vector ~item)
+    :float32 `(as-float32-vector ~item)
+    :float64 `(as-float64-vector ~item)
+    :string `(as-varchar-vector ~item)
+    :local-date `(as-date-milli-vector ~item)))
+
+
+(defmacro make-arrow-vector-macro
   [datatype name field-type]
   (if-let [type-sym (datatype->vec-type-map datatype)]
     `(new ~(resolve (datatype->vec-type-map datatype))
@@ -190,17 +226,35 @@
                                datatype)))))
 
 
+(defn make-arrow-vector
+  [datatype name field-type]
+  (case datatype
+    :boolean (make-arrow-vector-macro :boolean name field-type)
+    :uint8 (make-arrow-vector-macro :uint8 name field-type)
+    :int8 (make-arrow-vector-macro :int8 name field-type)
+    :uint16 (make-arrow-vector-macro :uint16 name field-type)
+    :int16 (make-arrow-vector-macro :int16 name field-type)
+    :uint32 (make-arrow-vector-macro :uint32 name field-type)
+    :int32 (make-arrow-vector-macro :int32 name field-type)
+    :uint64 (make-arrow-vector-macro :uint64 name field-type)
+    :int64 (make-arrow-vector-macro :int64 name field-type)
+    :float32 (make-arrow-vector-macro :float32 name field-type)
+    :float64 (make-arrow-vector-macro :float64 name field-type)
+    :string (make-arrow-vector-macro :string name field-type)))
+
+
+
 (defn as-roaring-bitmap
   ^RoaringBitmap [bmp] bmp)
 
 
 (defmacro assign-arrow-vec
-  [datatype rdr name field-type missing]
+  [datatype rdr missing vec]
   `(let [~'rdr (dtype/->reader ~rdr ~datatype)
          n-elems# (dtype/ecount ~'rdr)
          missing# (as-roaring-bitmap (or ~missing (dtype/->bitmap-set)))
          nullable?# (not (.isEmpty missing#))
-         ~'vec (doto (make-arrow-type ~datatype ~name ~field-type)
+         ~'vec (doto (datatype->vec-type ~datatype vec)
                 (.setInitialCapacity (dtype/ecount ~'rdr))
                 (.setValueCount (dtype/ecount ~'rdr)))]
      (dotimes [~'idx n-elems#]
@@ -233,9 +287,9 @@
   []
   (->> base-convertible-datatypes
        (map (fn [datatype]
-              [datatype `(fn [rdr# name# field-type# missing#]
-                           (assign-arrow-vec ~datatype rdr# name#
-                                             field-type# missing#))]))
+              [datatype `(fn
+                           ([rdr# missing# vec#]
+                            (assign-arrow-vec ~datatype rdr# missing# vec#)))]))
        (into {})))
 
 
@@ -249,7 +303,17 @@
         convert-fn (get rdr-convert-map datatype)]
     (when-not convert-fn
       (throw (Exception. "Failed to find conversion from reader type to arrow")))
-    (convert-fn data name field-type missing)))
+    (convert-fn data missing (make-arrow-vector datatype name field-type) missing)))
+
+
+(defn copy-to-arrow!
+  ^FieldVector [data missing field-vec]
+  (let [data (dtype-dt/unpack data)
+        datatype (dtype/get-datatype data)
+        convert-fn (get rdr-convert-map datatype)]
+    (when-not convert-fn
+      (throw (Exception. "Failed to find conversion from reader type to arrow")))
+    (convert-fn data missing field-vec)))
 
 
 (defn string-column->dict-indices
@@ -268,10 +332,35 @@
         ftype (datatype->field-type :text true)
         varchar-vec (data->arrow-vector (dtype/->reader int->str :string)
                                         "unnamed" ftype nil)
-        dict (Dictionary. varchar-vec encoding)
-        indices-ftype (field-type true arrow-indices-type
-                                  encoding (->str-str-meta metadata))]
+        dict (Dictionary. varchar-vec encoding)]
     {:dictionary dict
-     :indices (data->arrow-vector indices
-                                  (ml-utils/column-safe-name colname)
-                                  indices-ftype (col-proto/missing col))}))
+     :indices indices}))
+
+
+(defn write-dataset!
+  [ds path]
+  (let [ds (ds-base/ensure-dataset-string-tables ds)
+        schema (ds->arrow-schema ds)
+        dict-provider (DictionaryProvider$MapDictionaryProvider.
+                       (make-array Dictionary 0))]
+    (with-open [ostream (io/output-stream! path)
+                vec-root (VectorSchemaRoot. schema (allocator))
+                writer (ArrowStreamWriter. vec-root dict-provider ostream)]
+      (.start writer)
+      (.setRowCount vec-root (ds-base/row-count ds))
+      (->> (ds-base/columns ds)
+           (map-indexed
+            (fn [^long idx col]
+              (let [field-vec (.getVector vec-root idx)
+                    coldata (dtype-dt/unpack col)
+                    col-type (dtype/get-datatype coldata)]
+                (cond
+                  (= :string col-type)
+                  (let [{:keys [dictionary indices]}
+                        (string-column->dict-indices col)]
+                    (.set dict-provider dictionary)
+                    (copy-to-arrow! indices (col-proto/missing col) field-vec))
+                  :else
+                  (copy-to-arrow! coldata (col-proto/missing col) field-vec)))))
+           (dorun))
+      (.writeBatch writer))))
