@@ -153,8 +153,7 @@
 (defn indices
   "Get the string table backing index data."
   [^StringTable str-t]
-  (-> (->string-table str-t)
-      (.data str-t)
+  (-> (.data (->string-table str-t))
       (int-list/int-list->data)))
 
 (defn int->string

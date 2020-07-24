@@ -12,9 +12,13 @@
             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
             ArrowType$Duration DictionaryEncoding]
            [org.apache.arrow.memory RootAllocator BaseAllocator BufferAllocator]
+           [io.netty.buffer ArrowBuf]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary]
-           [org.apache.arrow.vector VarCharVector]
+           [org.apache.arrow.vector VarCharVector BitVector TinyIntVector UInt1Vector
+            SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
+            Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
+            DurationVector TimeStampMicroTZVector FieldVector]
            [org.apache.arrow.vector.types Types]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map]
@@ -34,20 +38,25 @@
 
 (defn field-type
   ^FieldType
-  ([nullable? ^FieldType datatype ^DictionaryEncoding dict ^Map str-str-meta]
-   (FieldType. (boolean nullable?) datatype dict str-str-meta))
+  ([nullable? ^FieldType datatype ^DictionaryEncoding dict-encoding ^Map str-str-meta]
+   (FieldType. (boolean nullable?) datatype dict-encoding str-str-meta))
   ([nullable? datatype str-meta]
    (field-type nullable? datatype nil str-meta))
   ([nullable? datatype]
    (field-type nullable? datatype nil)))
 
 
+(defn ->str-str-meta
+  [metadata]
+  (->> metadata
+       (map (fn [[k v]] [(pr-str k) (pr-str v)]))
+       (into {})))
+
+
 (defn datatype->field-type
   (^FieldType [datatype & [nullable? metadata extra-data]]
    (let [nullable? (or nullable? (= :object (casting/flatten-datatype datatype)))
-         metadata (->> metadata
-                       (map (fn [[k v]] [(pr-str k) (pr-str v)]))
-                       (into {}))
+         metadata (->str-str-meta metadata)
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
          datatype (dtype-dt/unpack-datatype datatype)]
@@ -72,13 +81,13 @@
        :offset-date-time (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
        :string (let [{:keys [dict-id ordered? str-table-width]
                       :or {ordered? true
-                           str-table-width 32}} extra-data]
+                           str-table-width 32}} extra-data
+                     int-type (ArrowType$Int. (int str-table-width) true)]
                  (when-not dict-id
                    (throw (Exception. "String tables must have a dictionary id")))
-                 (ft-fn (ArrowType$Utf8.)
+                 (ft-fn int-type
                         (DictionaryEncoding. (int dict-id) (boolean ordered?)
-                                             (ArrowType$Int.
-                                              (int str-table-width) true))))
+                                             int-type)))
        :text (ft-fn (ArrowType$Utf8.))))))
 
 
@@ -140,7 +149,7 @@
        (instance? BaseAllocator alloc-deref)
        alloc-deref
        :else
-       (throw (Exception. "No allocator provided.  See ")))))
+       (throw (Exception. "No allocator provided.  See `with-allocator`")))))
   (^BufferAllocator [options]
    (or (:allocator options) (allocator))))
 
@@ -154,51 +163,115 @@
      ~@body))
 
 
-(defn arrow-varchar
-  (^VarCharVector [& [{:keys [name minor-type nullable?]}]]
-   (VarCharVector. ^String (or name "unnamed")
-                   ^FieldType (or minor-type
-                                  (datatype->field-type :text nullable?))
-                   (allocator))))
+(def datatype->vec-type-map
+  {:boolean 'BitVector
+   :uint8 'UInt1Vector
+   :int8 'TinyIntVector
+   :uint16 'UInt2Vector
+   :int16 'SmallIntVector
+   :uint32 'UInt4Vector
+   :int32 'IntVector
+   :uint64 'UInt8Vector
+   :int64 'BigIntVector
+   :float32 'Float4Vector
+   :float64 'Float8Vector
+   :string 'VarCharVector
+   :text 'VarCharVector})
 
 
-(defn strings->arrow-varchar
-  "take a reader of strings and produce an arrow varchar."
-  ^VarCharVector [rdr & [missing-bitmap]]
-  (let [n-elems (dtype/ecount rdr)
-        rdr (dtype/->reader rdr)
-        vec (doto (arrow-varchar)
-              (.setInitialCapacity (dtype/ecount rdr))
-              (.setValueCount (dtype/ecount rdr)))
-        ^RoaringBitmap missing (or missing-bitmap (dtype/->bitmap-set))]
-    (dotimes [idx n-elems]
-      (if (.contains missing idx)
-        (.setNull vec idx)
-        (do
-          (.setIndexDefined vec idx)
-          (.setSafe vec idx (.getBytes ^String (rdr idx) "UTF-8")))))
-    vec))
+(defmacro make-arrow-vector
+  [datatype name field-type]
+  (if-let [type-sym (datatype->vec-type-map datatype)]
+    `(new ~(resolve (datatype->vec-type-map datatype))
+          (str ~name)
+          ~field-type
+          (allocator))
+    (throw (Exception. (format "Unable to find vec type for datatype %s"
+                               datatype)))))
 
 
-(defn reader->arrow
-  "Copy a reader into an arrow vector type"
-  [rdr & [missing]]
-  (let [^RoaringBitmap missing (or missing (dtype/->bitmap-set))
-        rdr (dtype/->reader (dtype-dt/unpack rdr))
-        n-elems (dtype/ecount rdr)]
-    (case (dtype/get-datatype rdr)
+(defn as-roaring-bitmap
+  ^RoaringBitmap [bmp] bmp)
 
-      )))
+
+(defmacro assign-arrow-vec
+  [datatype rdr name field-type missing]
+  `(let [~'rdr (dtype/->reader ~rdr ~datatype)
+         n-elems# (dtype/ecount ~'rdr)
+         missing# (as-roaring-bitmap (or ~missing (dtype/->bitmap-set)))
+         nullable?# (not (.isEmpty missing#))
+         ~'vec (doto (make-arrow-type ~datatype ~name ~field-type)
+                (.setInitialCapacity (dtype/ecount ~'rdr))
+                (.setValueCount (dtype/ecount ~'rdr)))]
+     (dotimes [~'idx n-elems#]
+       (if (.contains missing# ~'idx)
+         (.setNull ~'vec ~'idx)
+         (do
+           (.setIndexDefined ~'vec ~'idx)
+           ~(cond
+              (= :string datatype)
+              `(.setSafe ~'vec ~'idx (.getBytes ^String (~'rdr ~'idx) "UTF-8"))
+              (= :boolean datatype)
+              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
+                                      :boolean :int8 (~'rdr ~'idx)))
+              (or (= :int8 datatype)
+                  (= :int16 datatype))
+              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
+                                      ::unknown :int32 (~'rdr ~'idx)))
+              :else
+              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
+                                      :unknown ~datatype (~'rdr ~'idx)))))))
+     ~'vec))
+
+
+(def base-convertible-datatypes
+  [:uint8 :int8 :uint16 :int16 :uint32 :int32 :uint64 :int64
+   :float32 :float64 :string])
+
+
+(defmacro rdr-convert-fn-map-macro
+  []
+  (->> base-convertible-datatypes
+       (map (fn [datatype]
+              [datatype `(fn [rdr# name# field-type# missing#]
+                           (assign-arrow-vec ~datatype rdr# name#
+                                             field-type# missing#))]))
+       (into {})))
+
+
+(def rdr-convert-map (rdr-convert-fn-map-macro))
+
+
+(defn data->arrow-vector
+  ^FieldVector [data name field-type missing]
+  (let [data (dtype-dt/unpack data)
+        datatype (dtype/get-datatype data)
+        convert-fn (get rdr-convert-map datatype)]
+    (when-not convert-fn
+      (throw (Exception. "Failed to find conversion from reader type to arrow")))
+    (convert-fn data name field-type missing)))
 
 
 (defn string-column->dict-indices
   "Given a string column, return a map of {:dictionary :indices} which
   will be encoded according to the data in string-col->dict-id-table-width"
-  [col]
+  ^Dictionary [col]
   (let [str-t (ds-base/ensure-column-string-table col)
         indices (str-table/indices str-t)
         int->str (str-table/int->string str-t)
-        arrow-int->str (strings->arrow-varchar int->str)]
-
-
-    ))
+        bit-width (casting/int-width (dtype/get-datatype indices))
+        metadata (meta col)
+        colname (:name metadata)
+        dict-id (.hashCode ^Object colname)
+        arrow-indices-type (ArrowType$Int. bit-width true)
+        encoding (DictionaryEncoding. dict-id false arrow-indices-type)
+        ftype (datatype->field-type :text true)
+        varchar-vec (data->arrow-vector (dtype/->reader int->str :string)
+                                        "unnamed" ftype nil)
+        dict (Dictionary. varchar-vec encoding)
+        indices-ftype (field-type true arrow-indices-type
+                                  encoding (->str-str-meta metadata))]
+    {:dictionary dict
+     :indices (data->arrow-vector indices
+                                  (ml-utils/column-safe-name colname)
+                                  indices-ftype (col-proto/missing col))}))
