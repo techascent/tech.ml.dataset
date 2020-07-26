@@ -729,4 +729,7 @@
   (require '[tech.ml.dataset :as ds])
   (def stocks (ds/->dataset "test/data/stocks.csv"))
   (write-dataset! stocks "test.arrow" {:timezone "US/Eastern"})
+  (def big-stocks (apply ds/concat-copying (repeat 100 stocks)))
+  (write-dataset! big-stocks "big-stocks.feather")
+  (io/put-nippy! "big-stocks.nippy" big-stocks)
   )
