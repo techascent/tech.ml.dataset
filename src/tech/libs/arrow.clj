@@ -4,6 +4,7 @@
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.string-table :as str-table]
+            [tech.ml.dataset.text :as ds-text]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
@@ -25,7 +26,8 @@
             SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
             Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
             DurationVector TimeStampMicroTZVector TimeStampMicroVector TimeStampVector
-            TimeStampMilliVector FieldVector VectorSchemaRoot BaseVariableWidthVector]
+            TimeStampMilliVector TimeStampMilliTZVector FieldVector VectorSchemaRoot
+            BaseVariableWidthVector BaseFixedWidthVector]
            [io.netty.buffer ArrowBuf]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
             DictionaryProvider$MapDictionaryProvider]
@@ -38,8 +40,14 @@
            [tech.ml.dataset.string_table StringTable]
            [tech.ml.dataset.dynamic_int_list DynamicIntList]
            [java.time ZoneId]
-           [java.nio Buffer ByteOrder]
-           [tech.v2.datatype.typed_buffer TypedBuffer]))
+           [java.nio ByteBuffer Buffer ByteOrder]
+           [tech.v2.datatype.typed_buffer TypedBuffer]
+           [tech.v2.datatype BooleanWriter]
+           [it.unimi.dsi.fastutil.bytes ByteArrayList]
+           [it.unimi.dsi.fastutil.ints IntArrayList]
+           [com.sun.jna Pointer]
+           [sun.misc Unsafe]
+           [org.apache.arrow.memory.util MemoryUtil]))
 
 
 ;;TODO - check out gandiva
@@ -48,10 +56,42 @@
 (set! *warn-on-reflection* true)
 
 
+;; Allocator management
+
+(defonce ^:dynamic *allocator* (delay (RootAllocator. Long/MAX_VALUE)))
+
+
+(defn allocator
+  (^BufferAllocator []
+   (let [alloc-deref @*allocator*]
+     (cond
+       (instance? clojure.lang.IDeref alloc-deref)
+       @alloc-deref
+       (instance? BaseAllocator alloc-deref)
+       alloc-deref
+       :else
+       (throw (Exception. "No allocator provided.  See `with-allocator`")))))
+  (^BufferAllocator [options]
+   (or (:allocator options) (allocator))))
+
+
+(defmacro with-allocator
+  "Bind a new allocator.  alloc* must be either an instance of
+  org.apache.arrow.memory.BaseAllocator or an instance of IDeref that resolves to an
+  instance of BaseAllocator."
+  [alloc* & body]
+  `(with-bindings {#'*allocator* alloc*}
+     ~@body))
+
+
+
+;; Base datatype bindings
+
 (defn arrow-buffer->typed-nio
   ^Buffer [datatype ^ArrowBuf buf]
-  (let [nio-buf (-> (.nioBuffer buf)
-                    (.order ByteOrder/LITTLE_ENDIAN))]
+  (let [^ByteBuffer nio-buf (-> (.nioBuffer buf)
+                                (.order ByteOrder/LITTLE_ENDIAN)
+                                (.limit (.capacity buf)))]
     (case datatype
       :int8 nio-buf
       :int16 (.asShortBuffer nio-buf)
@@ -61,31 +101,61 @@
       :float64 (.asDoubleBuffer nio-buf))))
 
 
-(defn varchar->strings
+(defn varchar->string-reader
   "copies the data into a list of strings."
   ^List [^VarCharVector fv]
-  (let [n-elems (.getValueCount fv)
+  (let [n-elems (dtype/ecount fv)
         value-buf (arrow-buffer->typed-nio :int8 (.getDataBuffer fv))
         offset-buf (arrow-buffer->typed-nio :int32 (.getOffsetBuffer fv))
         n-value-elems (dtype/ecount value-buf)
         offset-rdr (dtype/->reader offset-buf)
         retval (ArrayList. n-elems)]
-    (.addAll retval
-             (dtype/object-reader
-              n-elems
-              (fn [^long idx]
-                (let [cur-offset (offset-rdr idx)
-                      next-offset (offset-rdr (inc idx))]
-                  (String. ^bytes (dtype/->array-copy
-                                   (dtype/sub-buffer value-buf cur-offset
-                                                     (- next-offset cur-offset))))))
-              :string))
-    retval))
+    (dtype/object-reader
+     n-elems
+     (fn [^long idx]
+       (let [cur-offset (offset-rdr idx)
+             next-offset (offset-rdr (inc idx))]
+         (String. ^bytes (dtype/->array-copy
+                          (dtype/sub-buffer value-buf cur-offset
+                                            (- next-offset cur-offset))))))
+     :string)))
+
+
+(defn varchar->strings
+  ^List [^VarCharVector fv]
+  (doto (ArrayList.)
+    (.addAll (varchar->string-reader fv))))
 
 
 (defn dictionary->strings
   ^List [^Dictionary dict]
   (varchar->strings (.getVector dict)))
+
+
+(defn strings->varchar!
+  ^VarCharVector [string-reader ^RoaringBitmap missing ^VarCharVector fv]
+  (let [byte-list (ByteArrayList.)
+        offsets (IntArrayList.)
+        ^RoaringBitmap missing (or missing (dtype/->bitmap-set))
+        str-rdr (dtype/->reader string-reader)
+        n-elems (dtype/ecount str-rdr)]
+    (.add offsets 0)
+    (dotimes [idx n-elems]
+      (let [cur-offset (.size byte-list)]
+        (when-not (.contains missing idx)
+          (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
+            (.addAll byte-list (ByteArrayList/wrap byte-data))))
+        (.add offsets (.size byte-list))))
+    (.allocateNew fv (.size byte-list) n-elems)
+    (.setLastSet fv n-elems)
+    (.setValueCount fv n-elems)
+    (let [valid-buf (.getValidityBuffer fv)
+          data-buf (.getDataBuffer fv)
+          offset-buf (.getOffsetBuffer fv)]
+      (missing->valid-buf missing valid-buf n-elems)
+      (dtype/copy! offsets (arrow-buffer->typed-nio :int32 offset-buf))
+      (dtype/copy! byte-list (arrow-buffer->typed-nio :int8 data-buf)))
+    fv))
 
 
 (defn valid-buf->missing
@@ -116,12 +186,49 @@
     missing))
 
 
-(defn bitwise-buf->booleans
-  [^ArrowBuf data n-elems]
+(defn add-bit
+  ^long [^long data ^long bit-idx ^RoaringBitmap bitmap ^long offset]
+  ;;Logic here is reversed as data is an inclusion mask and the bitmap
+  ;;is an exclusion mask
+  (if (.contains bitmap (+ offset bit-idx))
+    data
+    (bit-or data (bit-shift-left 1 bit-idx))))
+
+
+(defn missing->valid-buf
+  ^ArrowBuf [^RoaringBitmap bitmap ^ArrowBuf buffer ^long n-elems]
+  (let [nio-buf (arrow-buffer->typed-nio :int8 buffer)
+        ^RoaringBitmap missing (dtype/->bitmap-set)
+        n-bytes (quot (+ n-elems 7) 8)
+        writer (typecast/datatype->writer :int8 nio-buf)]
+    (if (.isEmpty bitmap)
+      ;;Common case
+      (dtype/set-constant! nio-buf 0 (byte -1) n-bytes)
+      ;;Tedious case.  It may be better here to iterate and find next missing
+      ;;some similar pathway so we have a fastpath when there are no missing
+      ;;elements
+      (dotimes [idx n-bytes]
+        (let [offset (pmath/* 8 idx)
+              data (-> (unchecked-long 0)
+                       (add-bit 0 bitmap offset)
+                       (add-bit 1 bitmap offset)
+                       (add-bit 2 bitmap offset)
+                       (add-bit 3 bitmap offset)
+                       (add-bit 4 bitmap offset)
+                       (add-bit 5 bitmap offset)
+                       (add-bit 6 bitmap offset)
+                       (add-bit 7 bitmap offset))]
+          (.write writer idx (unchecked-byte data)))))
+    buffer))
+
+
+(defn bitwise-vec->boolean-reader
+  [^BitVector data]
   (let [rdr (typecast/datatype->reader
              :int8
-             (arrow-buffer->typed-nio :int8 data))
-        n-elems (long n-elems)]
+             (arrow-buffer->typed-nio
+              :int8 (.getDataBuffer data)))
+        n-elems (dtype/ecount data)]
     (dtype/make-reader
      :boolean n-elems
      ;;idx is the indexing variable that is implicitly defined in scope.
@@ -129,6 +236,33 @@
        (if (pmath/== 1 (pmath/bit-and data (pmath/bit-shift-left 1 (rem idx 8))))
          true
          false)))))
+
+
+(defn bitwise-vec->boolean-writer
+  [^BitVector data]
+  (let [rdr (typecast/datatype->reader
+             :int8
+             (arrow-buffer->typed-nio
+              :int8 (.getDataBuffer data)))
+        src-wtr (typecast/datatype->writer
+                 :int8
+                 (arrow-buffer->typed-nio
+                  :int8 (.getDataBuffer data)))
+        n-elems (dtype/ecount data)]
+    (reify BooleanWriter
+      (lsize [wtr] n-elems)
+      (write [wtr idx value]
+        (locking src-wtr
+          (let [byte-idx (quot idx 8)
+                byte-data (unchecked-int (.read rdr byte-idx))
+                bitmask (unchecked-int (pmath/bit-shift-left 1 (rem idx 8)))
+                byte-data (if value
+                            (pmath/bit-or byte-data bitmask)
+                            (pmath/bit-and byte-data (pmath/bit-not bitmask)))]
+            (.write src-wtr byte-idx (unchecked-byte byte-data))
+            (if (pmath/== 1 (pmath/bit-and data byte-data bitmask))
+              true
+              false)))))))
 
 
 (defn primitive-vec->typed-buffer
@@ -145,8 +279,132 @@
       :int64 (arrow-buffer->typed-nio :int64 data)
       :uint64 (TypedBuffer. :uint64 (arrow-buffer->typed-nio :int64 data))
       :float32 (arrow-buffer->typed-nio :float32 data)
-      :float64 (arrow-buffer->typed-nio :float64 data))))
+      :float64 (arrow-buffer->typed-nio :float64 data)
+      :epoch-milliseconds (arrow-buffer->typed-nio :int64 data))))
 
+
+(def datatype->vec-type-map
+  {:boolean 'BitVector
+   :uint8 'UInt1Vector
+   :int8 'TinyIntVector
+   :uint16 'UInt2Vector
+   :int16 'SmallIntVector
+   :uint32 'UInt4Vector
+   :int32 'IntVector
+   :uint64 'UInt8Vector
+   :int64 'BigIntVector
+   :float32 'Float4Vector
+   :float64 'Float8Vector
+   :string 'VarCharVector
+   :text 'VarCharVector
+   :encoded-text 'VarCharVector
+   :epoch-milliseconds 'TimeStampMilliVector})
+
+
+(defn as-bit-vector ^BitVector [item] item)
+(defn as-uint8-vector ^UInt1Vector [item] item)
+(defn as-int8-vector ^TinyIntVector [item] item)
+(defn as-uint16-vector ^UInt2Vector [item] item)
+(defn as-int16-vector ^SmallIntVector [item] item)
+(defn as-uint32-vector ^UInt4Vector [item] item)
+(defn as-int32-vector ^IntVector [item] item)
+(defn as-uint64-vector ^UInt8Vector [item] item)
+(defn as-int64-vector ^BigIntVector [item] item)
+(defn as-float32-vector ^Float4Vector [item] item)
+(defn as-float64-vector ^Float8Vector [item] item)
+(defn as-varchar-vector ^VarCharVector [item] item)
+(defn as-timestamp-vector ^TimeStampVector [item] item)
+(defn as-timestamp-milli-vector ^TimeStampMilliVector [item] item)
+(defn as-timestamp-micro-vector ^TimeStampMicroVector [item] item)
+(defn as-timestamp-micro-tz-vector ^TimeStampMicroTZVector [item] item)
+
+
+(defmacro datatype->vec-type
+  [datatype item]
+  (case datatype
+    :boolean `(as-bit-vector ~item)
+    :uint8 `(as-uint8-vector ~item)
+    :int8 `(as-int8-vector ~item)
+    :uint16 `(as-uint16-vector ~item)
+    :int16 `(as-int16-vector ~item)
+    :uint32 `(as-uint32-vector ~item)
+    :int32 `(as-int32-vector ~item)
+    :uint64 `(as-uint64-vector ~item)
+    :int64 `(as-int64-vector ~item)
+    :float32 `(as-float32-vector ~item)
+    :float64 `(as-float64-vector ~item)
+    :string `(as-varchar-vector ~item)
+    :epoch-milliseconds `(as-timestamp-milli-vector ~item)))
+
+
+(def extension-datatypes
+  [[:epoch-milliseconds `TimeStampMilliTZVector]
+   [:int64 `TimeStampMilliVector]])
+
+(defn- nio-datatype?
+  [datatype]
+  (boolean #{:int8 :uint8
+             :int16 :uin16
+             :int32 :uint32
+             :int64 :uint64
+             :float32 :float64
+             :epoch-milliseconds}))
+
+
+(defmacro implement-datatype-protos
+  []
+  `(do
+     ~@(->> (concat datatype->vec-type-map
+                    extension-datatypes)
+            (map (fn [[dtype vectype]]
+                   `(extend-type ~vectype
+                      dtype-proto/PDatatype
+                      (get-datatype [item#] ~dtype)
+                      dtype-proto/PCountable
+                      (ecount [item#] (.getValueCount item#))
+                      dtype-proto/PToNioBuffer
+                      (convertible-to-nio-buffer? [item#] ~(nio-datatype? dtype))
+                      (->buffer-backing-store [item#]
+                        (dtype-proto/->buffer-backing-store
+                         (primitive-vec->typed-buffer item#)))
+                      dtype-proto/PToJNAPointer
+                      (convertible-to-data-ptr? [item#] ~(nio-datatype? dtype))
+                      (->jna-ptr [item#]
+                        (let [arrow-buf# (.getDataBuffer item#)]
+                          (Pointer. (.memoryAddress arrow-buf#))))
+                      dtype-proto/PClone
+                      (clone [~'item]
+                        (dtype/make-container
+                         ~(if (or (casting/unsigned-integer-type? dtype)
+                                  (= dtype :epoch-milliseconds))
+                            :typed-buffer
+                            :java-array)
+                         ~dtype
+                         ~'item))
+                      dtype-proto/PToReader
+                      (convertible-to-reader? [item#] true)
+                      (->reader [~'item options#]
+                        (->
+                         ~(case dtype
+                            :boolean `(bitwise-vec->boolean-reader ~'item)
+                            :string `(varchar->string-reader ~'item)
+                            :text `(varchar->string-reader ~'item)
+                            :encoded-text `(varchar->string-reader ~'item)
+                            `(primitive-vec->typed-buffer ~'item))
+                         (dtype-proto/->reader options#)))
+                      dtype-proto/PToWriter
+                      (convertible-to-writer? [item#] ~(if (= dtype :string)
+                                                         `false
+                                                         `true))
+                      (->writer [~'item options#]
+                        (->
+                         ~(if (= dtype :boolean)
+                            `(bitwise-vec->boolean-writer ~'item)
+                            `(primitive-vec->typed-buffer ~'item))
+                         (dtype-proto/->writer options#)))))))))
+
+
+(implement-datatype-protos)
 
 
 (defn make-field
@@ -276,199 +534,33 @@
      :dict-provider dict-provider}))
 
 
-(defonce ^:dynamic *allocator* (delay (RootAllocator. Long/MAX_VALUE)))
-
-
-(defn allocator
-  (^BufferAllocator []
-   (let [alloc-deref @*allocator*]
-     (cond
-       (instance? clojure.lang.IDeref alloc-deref)
-       @alloc-deref
-       (instance? BaseAllocator alloc-deref)
-       alloc-deref
-       :else
-       (throw (Exception. "No allocator provided.  See `with-allocator`")))))
-  (^BufferAllocator [options]
-   (or (:allocator options) (allocator))))
-
-
-(defmacro with-allocator
-  "Bind a new allocator.  alloc* must be either an instance of
-  org.apache.arrow.memory.BaseAllocator or an instance of IDeref that resolves to an
-  instance of BaseAllocator."
-  [alloc* & body]
-  `(with-bindings {#'*allocator* alloc*}
-     ~@body))
-
-
-(def datatype->vec-type-map
-  {:boolean 'BitVector
-   :uint8 'UInt1Vector
-   :int8 'TinyIntVector
-   :uint16 'UInt2Vector
-   :int16 'SmallIntVector
-   :uint32 'UInt4Vector
-   :int32 'IntVector
-   :uint64 'UInt8Vector
-   :int64 'BigIntVector
-   :float32 'Float4Vector
-   :float64 'Float8Vector
-   :string 'VarCharVector
-   :text 'VarCharVector
-   :epoch-milliseconds 'TimeStampMilliVector})
-
-
-(defn as-bit-vector ^BitVector [item] item)
-(defn as-uint8-vector ^UInt1Vector [item] item)
-(defn as-int8-vector ^TinyIntVector [item] item)
-(defn as-uint16-vector ^UInt2Vector [item] item)
-(defn as-int16-vector ^SmallIntVector [item] item)
-(defn as-uint32-vector ^UInt4Vector [item] item)
-(defn as-int32-vector ^IntVector [item] item)
-(defn as-uint64-vector ^UInt8Vector [item] item)
-(defn as-int64-vector ^BigIntVector [item] item)
-(defn as-float32-vector ^Float4Vector [item] item)
-(defn as-float64-vector ^Float8Vector [item] item)
-(defn as-varchar-vector ^VarCharVector [item] item)
-(defn as-timestamp-vector ^TimeStampVector [item] item)
-(defn as-timestamp-micro-vector ^TimeStampMicroVector [item] item)
-(defn as-timestamp-micro-tz-vector ^TimeStampMicroTZVector [item] item)
-
-
-(defmacro datatype->vec-type
-  [datatype item]
-  (case datatype
-    :boolean `(as-bit-vector ~item)
-    :uint8 `(as-uint8-vector ~item)
-    :int8 `(as-int8-vector ~item)
-    :uint16 `(as-uint16-vector ~item)
-    :int16 `(as-int16-vector ~item)
-    :uint32 `(as-uint32-vector ~item)
-    :int32 `(as-int32-vector ~item)
-    :uint64 `(as-uint64-vector ~item)
-    :int64 `(as-int64-vector ~item)
-    :float32 `(as-float32-vector ~item)
-    :float64 `(as-float64-vector ~item)
-    :string `(as-varchar-vector ~item)
-    :epoch-milliseconds `(as-timestamp-vector ~item)))
-
-
-(defmacro make-arrow-vector-macro
-  [datatype name field-type]
-  (if-let [type-sym (datatype->vec-type-map datatype)]
-    `(new ~(resolve (datatype->vec-type-map datatype))
-          (str ~name)
-          ~field-type
-          (allocator))
-    (throw (Exception. (format "Unable to find vec type for datatype %s"
-                               datatype)))))
-
-
-(defn make-arrow-vector
-  [datatype name field-type]
-  (case datatype
-    :boolean (make-arrow-vector-macro :boolean name field-type)
-    :uint8 (make-arrow-vector-macro :uint8 name field-type)
-    :int8 (make-arrow-vector-macro :int8 name field-type)
-    :uint16 (make-arrow-vector-macro :uint16 name field-type)
-    :int16 (make-arrow-vector-macro :int16 name field-type)
-    :uint32 (make-arrow-vector-macro :uint32 name field-type)
-    :int32 (make-arrow-vector-macro :int32 name field-type)
-    :uint64 (make-arrow-vector-macro :uint64 name field-type)
-    :int64 (make-arrow-vector-macro :int64 name field-type)
-    :float32 (make-arrow-vector-macro :float32 name field-type)
-    :float64 (make-arrow-vector-macro :float64 name field-type)
-    :string (make-arrow-vector-macro :string name field-type)
-    :epoch-milliseconds (make-arrow-vector-macro :epoch-milliseconds name field-type)))
-
-
-(defmacro implement-datatype-protos
-  []
-  `(do
-     ~@(->> datatype->vec-type-map
-            (map (fn [[dtype vectype]]
-                   `(extend-type ~vectype
-                      dtype-proto/PDatatype
-                      (get-datatype [item#] ~dtype)
-                      dtype-proto/PCountable
-                      (ecount [item#] (.getValueCount item#))))))))
-
-
-
 (defn as-roaring-bitmap
   ^RoaringBitmap [bmp] bmp)
 
 
-(defmacro assign-arrow-vec
-  [datatype rdr missing vec]
-  `(let [~'rdr (dtype/->reader ~rdr ~datatype)
-         n-elems# (dtype/ecount ~'rdr)
-         missing# (as-roaring-bitmap (or ~missing (dtype/->bitmap-set)))
-         nullable?# (not (.isEmpty missing#))
-         ~'vec (doto (datatype->vec-type ~datatype ~vec)
-                (.setInitialCapacity (dtype/ecount ~'rdr))
-                (.setValueCount (dtype/ecount ~'rdr)))]
-     (dotimes [~'idx n-elems#]
-       (if (.contains missing# ~'idx)
-         (.setNull ~'vec ~'idx)
-         (do
-           (.setIndexDefined ~'vec ~'idx)
-           ~(cond
-              (= :string datatype)
-              `(.setSafe ~'vec ~'idx (.getBytes ^String (~'rdr ~'idx) "UTF-8"))
-              (= :boolean datatype)
-              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
-                                      :boolean :int8 (~'rdr ~'idx)))
-              (or (= :int8 datatype)
-                  (= :int16 datatype))
-              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
-                                      ::unknown :int32 (~'rdr ~'idx)))
-              (= :epoch-milliseconds datatype)
-              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
-                                      :unknown :int64 (~'rdr ~'idx)))
-              :else
-              `(.setSafe ~'vec ~'idx (casting/datatype->cast-fn
-                                      :unknown ~datatype (~'rdr ~'idx)))))))
-     ~'vec))
-
-
-(def base-convertible-datatypes
-  [:uint8 :int8 :uint16 :int16 :uint32 :int32 :uint64 :int64
-   :float32 :float64 :string :epoch-milliseconds])
-
-
-(defmacro rdr-convert-fn-map-macro
-  []
-  (->> base-convertible-datatypes
-       (map (fn [datatype]
-              [datatype `(fn
-                           ([rdr# missing# vec#]
-                            (assign-arrow-vec ~datatype rdr# missing# vec#)))]))
-       (into {})))
-
-
-(def rdr-convert-map (rdr-convert-fn-map-macro))
-
-
-(defn data->arrow-vector
-  ^FieldVector [data name field-type missing]
-  (let [data (dtype-dt/unpack data)
-        datatype (dtype/get-datatype data)
-        convert-fn (get rdr-convert-map datatype)]
-    (when-not convert-fn
-      (throw (Exception. "Failed to find conversion from reader type to arrow")))
-    (convert-fn data missing (make-arrow-vector datatype name field-type))))
-
-
-(defn copy-to-arrow!
-  ^FieldVector [data missing field-vec]
-  (let [data (dtype-dt/unpack data)
-        datatype (dtype/get-datatype data)
-        convert-fn (get rdr-convert-map datatype)]
-    (when-not convert-fn
-      (throw (Exception. "Failed to find conversion from reader type to arrow")))
-    (convert-fn data missing field-vec)))
+(defn copy-column->arrow!
+  ^FieldVector [col field-vec]
+  (let [dtype (dtype/get-datatype col)
+        missing (col-proto/missing col)]
+    (if (or (= dtype :text)
+            (= dtype :encoded-text))
+      (strings->varchar! col missing field-vec)
+      (do
+        (when-not (instance? BaseFixedWidthVector field-vec)
+          (throw (Exception. (format "Input is not a fixed-width vector"))))
+        (let [n-elems (dtype/ecount col)
+              ^BaseFixedWidthVector field-vec field-vec
+              _ (do (.allocateNew field-vec n-elems)
+                    (.setValueCount field-vec n-elems))
+              data-buf (.getDataBuffer field-vec)
+              valid-buf (.getValidityBuffer field-vec)
+              data (if (= :string dtype)
+                     (-> (ds-base/column->string-table col)
+                         (str-table/indices))
+                     col)]
+          (missing->valid-buf missing valid-buf n-elems)
+          (dtype/copy! data field-vec))))
+    field-vec))
 
 
 (defn ->timezone
@@ -505,7 +597,7 @@
                        :else
                        (dtype-dt-ops/->milliseconds col))
                      (assoc (meta col)
-                            :timezone timezone
+                            :timezone (str timezone)
                             :source-datatype (dtype/get-datatype col))
                      (col-proto/missing col))))
            ds)))
@@ -547,56 +639,90 @@
 
 
 (defn field-vec->column
-  [^FieldVector fv dict-map]
+  [{:keys [fix-date-types?]
+    :or {fix-date-types? true}}
+   dict-map
+   ^FieldVector fv]
   (let [field (.getField fv)
+        n-elems (dtype/ecount fv)
         ft (.getFieldType field)
         encoding (.getDictionary ft)
         ^Dictionary dict (when encoding
                            (get dict-map (.getId encoding)))
-        metadata (->> (.getMetadata field)
-                      (map (fn [[k v]]
-                             [(edn/read-string k)
-                              (edn/read-string v)]))
-                      (into {}))
+        metadata (try (->> (.getMetadata field)
+                           (map (fn [[k v]]
+                                  [(edn/read-string k)
+                                   (edn/read-string v)]))
+                           (into {}))
+                      (catch Throwable e
+                        (throw
+                         (Exception.
+                          (format "Failed to deserialize metadata: %s\n%s"
+                                  e
+                                  (.getMetadata field))))))
         valid-buf (.getValidityBuffer fv)
         value-buf (.getDataBuffer fv)
         offset-buf (when (instance? BaseVariableWidthVector fv)
                      (.getOffsetBuffer fv))
-        missing (valid-buf->missing valid-buf)
+        missing (valid-buf->missing valid-buf n-elems)
         coldata
         (cond
           dict
           (let [strs (dictionary->strings dict)
                 n-dict-elems (dtype/ecount strs)
-                data (-> (primitive-vec->typed-buffer (dtype/get-datatype fv) value-buf)
-                         (dtype/clone))
-                n-elems (dtype/ecount data)
-                str->int (HashMap. (dtype/ecount strs))]
-            (dotimes [idx n-elems]
+                data (DynamicIntList. (dtype/->list-backing-store (dtype/clone fv))
+                                      nil)
+                _ (when-not (== 0 (dtype/ecount data))
+                    (.getInt data 0))
+                n-table-elems (dtype/ecount strs)
+                str->int (HashMap. n-table-elems)]
+            (dotimes [idx n-table-elems]
               (.put str->int (.get strs idx) idx))
             (StringTable. strs str->int data))
           offset-buf
           (varchar->strings fv)
+          (and fix-date-types?
+               (:timezone metadata)
+               (:source-datatype metadata)
+               (dtype-dt/datetime-datatype? (:source-datatype metadata))
+               (not= (:source-datatype metadata) (dtype/get-datatype fv)))
+          (let [src-dt (:source-datatype metadata)]
+            (->
+             (case (dtype-dt/unpack-datatype src-dt)
+               :local-date
+               (dtype-dt-ops/milliseconds-since-epoch->local-date
+                fv (ZoneId/of (str (:timezone metadata))))
+               :local-date-time
+               (dtype-dt-ops/milliseconds-since-epoch->local-date-time
+                fv (ZoneId/of (str (:timezone metadata))))
+               (dtype-dt-ops/milliseconds->datetime src-dt fv))
+             (#(if (dtype-dt/packed-datatype? src-dt)
+                 (dtype-dt/pack %)
+                 %))
+             (dtype/clone)))
           :else
-          (-> (primitive-vec->typed-buffer (dtype/get-datatype fv) value-buf)
-              (dtype/clone)))]
+          (dtype/clone fv))]
     (col-impl/new-column (:name metadata) coldata metadata missing)))
 
 
-(defn read-dataset
-  [path]
-  (with-open [istream (io/input-stream path)
-              reader (ArrowStreamReader. istream (allocator))]
-    (.loadNextBatch reader)
-    (let [schema-root (.getVectorSchemaRoot reader)
-          dict-map (.getDictionaryVectors reader)]
-      (->> (.getFieldVectors schema-root)
-           (map (fn [field-vec]
-                  (case (dtype/get-datatype field-vec)
+(defn arrow->ds
+  [ds-name ^VectorSchemaRoot schema-root dict-map options]
+  (->> (.getFieldVectors schema-root)
+       (map (partial field-vec->column options dict-map))
+       (ds-impl/new-dataset ds-name)))
 
-                    )
-                  ))
-           (ds-impl/new-dataset path)))))
+
+(defn read-dataset
+  ([path options]
+   (with-open [istream (io/input-stream path)
+               reader (ArrowStreamReader. istream (allocator))]
+     (when (.loadNextBatch reader)
+       (arrow->ds path
+                  (.getVectorSchemaRoot reader)
+                  (.getDictionaryVectors reader)
+                  options))))
+  ([path]
+   (read-dataset path {})))
 
 
 (comment
