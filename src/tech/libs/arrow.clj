@@ -101,63 +101,6 @@
       :float64 (.asDoubleBuffer nio-buf))))
 
 
-(defn varchar->string-reader
-  "copies the data into a list of strings."
-  ^List [^VarCharVector fv]
-  (let [n-elems (dtype/ecount fv)
-        value-buf (arrow-buffer->typed-nio :int8 (.getDataBuffer fv))
-        offset-buf (arrow-buffer->typed-nio :int32 (.getOffsetBuffer fv))
-        n-value-elems (dtype/ecount value-buf)
-        offset-rdr (dtype/->reader offset-buf)
-        retval (ArrayList. n-elems)]
-    (dtype/object-reader
-     n-elems
-     (fn [^long idx]
-       (let [cur-offset (offset-rdr idx)
-             next-offset (offset-rdr (inc idx))]
-         (String. ^bytes (dtype/->array-copy
-                          (dtype/sub-buffer value-buf cur-offset
-                                            (- next-offset cur-offset))))))
-     :string)))
-
-
-(defn varchar->strings
-  ^List [^VarCharVector fv]
-  (doto (ArrayList.)
-    (.addAll (varchar->string-reader fv))))
-
-
-(defn dictionary->strings
-  ^List [^Dictionary dict]
-  (varchar->strings (.getVector dict)))
-
-
-(defn strings->varchar!
-  ^VarCharVector [string-reader ^RoaringBitmap missing ^VarCharVector fv]
-  (let [byte-list (ByteArrayList.)
-        offsets (IntArrayList.)
-        ^RoaringBitmap missing (or missing (dtype/->bitmap-set))
-        str-rdr (dtype/->reader string-reader)
-        n-elems (dtype/ecount str-rdr)]
-    (.add offsets 0)
-    (dotimes [idx n-elems]
-      (let [cur-offset (.size byte-list)]
-        (when-not (.contains missing idx)
-          (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
-            (.addAll byte-list (ByteArrayList/wrap byte-data))))
-        (.add offsets (.size byte-list))))
-    (.allocateNew fv (.size byte-list) n-elems)
-    (.setLastSet fv n-elems)
-    (.setValueCount fv n-elems)
-    (let [valid-buf (.getValidityBuffer fv)
-          data-buf (.getDataBuffer fv)
-          offset-buf (.getOffsetBuffer fv)]
-      (missing->valid-buf missing valid-buf n-elems)
-      (dtype/copy! offsets (arrow-buffer->typed-nio :int32 offset-buf))
-      (dtype/copy! byte-list (arrow-buffer->typed-nio :int8 data-buf)))
-    fv))
-
-
 (defn valid-buf->missing
   ^RoaringBitmap [^ArrowBuf buffer ^long n-elems]
   (let [nio-buf (typecast/datatype->reader :int8 (arrow-buffer->typed-nio :int8 buffer))
@@ -222,6 +165,63 @@
     buffer))
 
 
+(defn varchar->string-reader
+  "copies the data into a list of strings."
+  ^List [^VarCharVector fv]
+  (let [n-elems (dtype/ecount fv)
+        value-buf (arrow-buffer->typed-nio :int8 (.getDataBuffer fv))
+        offset-buf (arrow-buffer->typed-nio :int32 (.getOffsetBuffer fv))
+        n-value-elems (dtype/ecount value-buf)
+        offset-rdr (dtype/->reader offset-buf)
+        retval (ArrayList. n-elems)]
+    (dtype/object-reader
+     n-elems
+     (fn [^long idx]
+       (let [cur-offset (offset-rdr idx)
+             next-offset (offset-rdr (inc idx))]
+         (String. ^bytes (dtype/->array-copy
+                          (dtype/sub-buffer value-buf cur-offset
+                                            (- next-offset cur-offset))))))
+     :string)))
+
+
+(defn varchar->strings
+  ^List [^VarCharVector fv]
+  (doto (ArrayList.)
+    (.addAll (varchar->string-reader fv))))
+
+
+(defn dictionary->strings
+  ^List [^Dictionary dict]
+  (varchar->strings (.getVector dict)))
+
+
+(defn strings->varchar!
+  ^VarCharVector [string-reader ^RoaringBitmap missing ^VarCharVector fv]
+  (let [byte-list (ByteArrayList.)
+        offsets (IntArrayList.)
+        ^RoaringBitmap missing (or missing (dtype/->bitmap-set))
+        str-rdr (dtype/->reader string-reader)
+        n-elems (dtype/ecount str-rdr)]
+    (.add offsets 0)
+    (dotimes [idx n-elems]
+      (let [cur-offset (.size byte-list)]
+        (when-not (.contains missing idx)
+          (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
+            (.addAll byte-list (ByteArrayList/wrap byte-data))))
+        (.add offsets (.size byte-list))))
+    (.allocateNew fv (.size byte-list) n-elems)
+    (.setLastSet fv n-elems)
+    (.setValueCount fv n-elems)
+    (let [valid-buf (.getValidityBuffer fv)
+          data-buf (.getDataBuffer fv)
+          offset-buf (.getOffsetBuffer fv)]
+      (missing->valid-buf missing valid-buf n-elems)
+      (dtype/copy! offsets (arrow-buffer->typed-nio :int32 offset-buf))
+      (dtype/copy! byte-list (arrow-buffer->typed-nio :int8 data-buf)))
+    fv))
+
+
 (defn bitwise-vec->boolean-reader
   [^BitVector data]
   (let [rdr (typecast/datatype->reader
@@ -269,7 +269,7 @@
   [^FieldVector vvec]
   (let [data (.getDataBuffer vvec)]
     (case (dtype/get-datatype vvec)
-      :boolean (bitwise-buf->booleans vvec (dtype/ecount vvec))
+      :boolean (arrow-buffer->typed-nio :int8 data)
       :int8 (arrow-buffer->typed-nio :int8 data)
       :uint8 (TypedBuffer. :uint8 (arrow-buffer->typed-nio :int8 data))
       :int16 (arrow-buffer->typed-nio :int16 data)
@@ -629,9 +629,9 @@
                    (= :string col-type)
                    (-> (ds-base/column->string-table col)
                        (str-table/indices)
-                       (copy-to-arrow! missing field-vec))
+                       (copy-column->arrow! missing field-vec))
                    :else
-                   (copy-to-arrow! coldata missing field-vec)))))
+                   (copy-column->arrow! coldata missing field-vec)))))
             (dorun))
        (.writeBatch writer))))
   ([ds path]
@@ -681,6 +681,8 @@
             (StringTable. strs str->int data))
           offset-buf
           (varchar->strings fv)
+          ;;Mapping back to local-dates takes a bit of time.  This is only
+          ;;necessary if you really need them.
           (and fix-date-types?
                (:timezone metadata)
                (:source-datatype metadata)
