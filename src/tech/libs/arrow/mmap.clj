@@ -26,14 +26,8 @@
   (->native-buffer [buf]))
 
 
-(defn as-native-buffer
-  ^NativeBuffer [item]
-  (when (convertible-to-native-buffer? item)
-    (->native-buffer item)))
-
-
 (defmacro native-buffer->reader
-  [datatype buffer address size]
+  [datatype buffer address n-elems]
   (let [byte-width (casting/numeric-byte-width datatype)]
     `(reify
        PToNativeBuffer
@@ -56,11 +50,11 @@
        (convertible-to-data-ptr? [item#] true)
        (->jna-ptr [item#] (Pointer. ~address))
        dtype-proto/PToNioBuffer
-       (convertible-to-nio-buffer? [item#] (< ~size Integer/MAX_VALUE))
+       (convertible-to-nio-buffer? [item#] (< ~n-elems Integer/MAX_VALUE))
        (->buffer-backing-store [item#]
          (dtype-proto/->buffer-backing-store ~buffer))
        ~(typecast/datatype->reader-type (casting/safe-flatten datatype))
-       (lsize [rdr#] ~size)
+       (lsize [rdr#] ~n-elems)
        (read [rdr# ~'idx]
          ~(case datatype
             :int8 `(.getByte (unsafe) (pmath/+ ~address ~'idx))
@@ -79,7 +73,7 @@
 
 
 (defmacro native-buffer->writer
-  [datatype buffer address size]
+  [datatype buffer address n-elems]
   (let [byte-width (casting/numeric-byte-width datatype)]
     `(reify
        PToNativeBuffer
@@ -102,11 +96,11 @@
        (convertible-to-data-ptr? [item#] true)
        (->jna-ptr [item#] (Pointer. ~address))
        dtype-proto/PToNioBuffer
-       (convertible-to-nio-buffer? [item#] (< ~size Integer/MAX_VALUE))
+       (convertible-to-nio-buffer? [item#] (< ~n-elems Integer/MAX_VALUE))
        (->buffer-backing-store [item#]
          (dtype-proto/->buffer-backing-store ~buffer))
        ~(typecast/datatype->writer-type (casting/safe-flatten datatype))
-       (lsize [rdr#] ~size)
+       (lsize [rdr#] ~n-elems)
        (write [rdr# ~'idx ~'value]
          ~(case datatype
             :int8 `(.putByte (unsafe) (pmath/+ ~address ~'idx) ~'value)
@@ -122,14 +116,14 @@
 
 
 ;;Size is in elements, not in bytes
-(defrecord NativeBuffer [^long address ^long size datatype]
+(defrecord NativeBuffer [^long address ^long n-elems datatype]
   PToNativeBuffer
   (convertible-to-native-buffer? [this] true)
   (->native-buffer [this] this)
   dtype-proto/PDatatype
   (get-datatype [this] datatype)
   dtype-proto/PCountable
-  (ecount [this] size)
+  (ecount [this] n-elems)
   dtype-proto/PClone
   (clone [this]
     (dtype/make-container
@@ -142,10 +136,10 @@
   (sub-buffer [this offset length]
     (let [offset (long offset)
           length (long length)]
-      (when-not (<= (+ offset length) size)
-        (throw (Exception. (format "Offset+length (%s) > size (%s)"
-                                   (+ offset length) size))))
-      (SimpleBuffer. (+ address offset) length datatype)))
+      (when-not (<= (+ offset length) n-elems)
+        (throw (Exception. (format "Offset+length (%s) > n-elems (%s)"
+                                   (+ offset length) n-elems))))
+      (NativeBuffer. (+ address offset) length datatype)))
   dtype-proto/PSetConstant
   (set-constant! [buffer offset value elem-count]
     (if (or (= :datatype :int8)
@@ -158,52 +152,117 @@
   (convertible-to-data-ptr? [item#] true)
   (->jna-ptr [item#] (Pointer. address))
   dtype-proto/PToNioBuffer
-  (convertible-to-nio-buffer? [item#] (< size Integer/MAX_VALUE))
+  (convertible-to-nio-buffer? [item#] (< n-elems Integer/MAX_VALUE))
   (->buffer-backing-store [item#]
     (let [ptr (Pointer. address)
-          n-bytes (* size (casting/numeric-byte-width datatype))]
+          n-bytes (* n-elems (casting/numeric-byte-width datatype))]
       (dtype-jna/pointer->nio-buffer ptr datatype n-bytes)))
   dtype-proto/PToReader
   (convertible-to-reader? [this] true)
   (->reader [this options]
     (-> (case datatype
-          :int8 (native-buffer->reader :int8 this address size)
-          :uint8 (native-buffer->reader :uint8 this address size)
-          :int16 (native-buffer->reader :int16 this address size)
-          :uint16 (native-buffer->reader :uint16 this address size)
-          :int32 (native-buffer->reader :int32 this address size)
-          :uint32 (native-buffer->reader :uint32 this address size)
-          :int64 (native-buffer->reader :int64 this address size)
-          :uint64 (native-buffer->reader :uint64 this address size)
-          :float32 (native-buffer->reader :float32 this address size)
-          :float64 (native-buffer->reader :float64 this address size))
+          :int8 (native-buffer->reader :int8 this address n-elems)
+          :uint8 (native-buffer->reader :uint8 this address n-elems)
+          :int16 (native-buffer->reader :int16 this address n-elems)
+          :uint16 (native-buffer->reader :uint16 this address n-elems)
+          :int32 (native-buffer->reader :int32 this address n-elems)
+          :uint32 (native-buffer->reader :uint32 this address n-elems)
+          :int64 (native-buffer->reader :int64 this address n-elems)
+          :uint64 (native-buffer->reader :uint64 this address n-elems)
+          :float32 (native-buffer->reader :float32 this address n-elems)
+          :float64 (native-buffer->reader :float64 this address n-elems))
         (dtype-proto/->reader options)))
   dtype-proto/PToWriter
   (convertible-to-writer? [this] true)
   (->writer [this options]
     (-> (case datatype
-          :int8 (native-buffer->writer :int8 this address size)
-          :uint8 (native-buffer->writer :uint8 this address size)
-          :int16 (native-buffer->writer :int16 this address size)
-          :uint16 (native-buffer->writer :uint16 this address size)
-          :int32 (native-buffer->writer :int32 this address size)
-          :uint32 (native-buffer->writer :uint32 this address size)
-          :int64 (native-buffer->writer :int64 this address size)
-          :uint64 (native-buffer->writer :uint64 this address size)
-          :float32 (native-buffer->writer :float32 this address size)
-          :float64 (native-buffer->writer :float64 this address size))
+          :int8 (native-buffer->writer :int8 this address n-elems)
+          :uint8 (native-buffer->writer :uint8 this address n-elems)
+          :int16 (native-buffer->writer :int16 this address n-elems)
+          :uint16 (native-buffer->writer :uint16 this address n-elems)
+          :int32 (native-buffer->writer :int32 this address n-elems)
+          :uint32 (native-buffer->writer :uint32 this address n-elems)
+          :int64 (native-buffer->writer :int64 this address n-elems)
+          :uint64 (native-buffer->writer :uint64 this address n-elems)
+          :float32 (native-buffer->writer :float32 this address n-elems)
+          :float64 (native-buffer->writer :float64 this address n-elems))
         (dtype-proto/->writer options))))
+
+
+(defn as-native-buffer
+  ^NativeBuffer [item]
+  (when (convertible-to-native-buffer? item)
+    (->native-buffer item)))
 
 
 (defn set-native-datatype
   ^NativeBuffer [item datatype]
   (if-let [nb (as-native-buffer item)]
-    (let [original-size (.size nb)
+    (let [original-size (.n-elems nb)
           n-bytes (* original-size (casting/numeric-byte-width
                                     (dtype/get-datatype item)))
           new-byte-width (casting/numeric-byte-width
                           (dtype/get-datatype item))]
       (NativeBuffer. (.address nb) (quot n-bytes new-byte-width) datatype))))
+
+
+;;One off data reading
+(defn read-double
+  (^double [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 8) 0))
+   (.getDouble (unsafe) (+ (.address native-buffer) offset)))
+  (^double [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 8) 0))
+   (.getDouble (unsafe) (.address native-buffer))))
+
+
+(defn read-float
+  (^double [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 4) 0))
+   (.getFloat (unsafe) (+ (.address native-buffer) offset)))
+  (^double [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 4) 0))
+   (.getFloat (unsafe) (.address native-buffer))))
+
+
+(defn read-long
+  (^long [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 8) 0))
+   (.getLong (unsafe) (+ (.address native-buffer) offset)))
+  (^long [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 8) 0))
+   (.getLong (unsafe) (.address native-buffer))))
+
+
+(defn read-int
+  (^long [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 4) 0))
+   (.getInt (unsafe) (+ (.address native-buffer) offset)))
+  (^long [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 4) 0))
+   (.getInt (unsafe) (.address native-buffer))))
+
+
+(defn read-short
+  (^long [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 2) 0))
+   (unchecked-long
+    (.getShort (unsafe) (+ (.address native-buffer) offset))))
+  (^long [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 2) 0))
+   (unchecked-long
+    (.getShort (unsafe) (.address native-buffer)))))
+
+
+(defn read-byte
+  (^long [^NativeBuffer native-buffer ^long offset]
+   (assert (>= (- (.n-elems native-buffer) offset 1) 0))
+   (unchecked-long
+    (.getByte (unsafe) (+ (.address native-buffer) offset))))
+  (^long [^NativeBuffer native-buffer]
+   (assert (>= (- (.n-elems native-buffer) 1) 0))
+   (unchecked-long
+    (.getByte (unsafe) (.address native-buffer)))))
 
 
 (defn read-only-mmap-file
