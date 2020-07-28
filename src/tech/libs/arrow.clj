@@ -31,7 +31,8 @@
            [io.netty.buffer ArrowBuf]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
             DictionaryProvider$MapDictionaryProvider]
-           [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter]
+           [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
+            ArrowFileWriter ArrowFileReader]
            [org.apache.arrow.vector.types Types]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map ArrayList List HashMap]
@@ -101,14 +102,14 @@
       :float64 (.asDoubleBuffer nio-buf))))
 
 
-(defn valid-buf->missing
-  ^RoaringBitmap [^ArrowBuf buffer ^long n-elems]
-  (let [nio-buf (typecast/datatype->reader :int8 (arrow-buffer->typed-nio :int8 buffer))
+(defn int8-buf->missing
+  ^RoaringBitmap [data-buf n-elems]
+  (let [data-buf (typecast/datatype->reader :int8 data-buf)
         ^RoaringBitmap missing (dtype/->bitmap-set)
         n-bytes (quot (+ n-elems 7) 8)]
     (dotimes [idx n-bytes]
       (let [offset (pmath/* 8 idx)
-            data (unchecked-int (.read nio-buf idx))]
+            data (unchecked-int (.read data-buf idx))]
         ;;TODO - find more elegant way of pulling this off
         (when (== 0 (pmath/bit-and data 1))
           (.add missing offset))
@@ -127,6 +128,11 @@
         (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
           (.add missing (pmath/+ offset 7)))))
     missing))
+
+
+(defn valid-buf->missing
+  ^RoaringBitmap [^ArrowBuf buffer ^long n-elems]
+  (int8-buf->missing (arrow-buffer->typed-nio :int8 buffer) n-elems))
 
 
 (defn add-bit
@@ -268,19 +274,22 @@
 (defn primitive-vec->typed-buffer
   [^FieldVector vvec]
   (let [data (.getDataBuffer vvec)]
-    (case (dtype/get-datatype vvec)
-      :boolean (arrow-buffer->typed-nio :int8 data)
-      :int8 (arrow-buffer->typed-nio :int8 data)
-      :uint8 (TypedBuffer. :uint8 (arrow-buffer->typed-nio :int8 data))
-      :int16 (arrow-buffer->typed-nio :int16 data)
-      :uint16 (TypedBuffer. :uint16 (arrow-buffer->typed-nio :int16 data))
-      :int32 (arrow-buffer->typed-nio :int32 data)
-      :uint32 (TypedBuffer. :uint32 (arrow-buffer->typed-nio :int32 data))
-      :int64 (arrow-buffer->typed-nio :int64 data)
-      :uint64 (TypedBuffer. :uint64 (arrow-buffer->typed-nio :int64 data))
-      :float32 (arrow-buffer->typed-nio :float32 data)
-      :float64 (arrow-buffer->typed-nio :float64 data)
-      :epoch-milliseconds (arrow-buffer->typed-nio :int64 data))))
+    (if (= :boolean (dtype/get-datatype vvec))
+      (arrow-buffer->typed-nio :int8 data)
+      (->
+       (case (dtype/get-datatype vvec)
+         :int8 (arrow-buffer->typed-nio :int8 data)
+         :uint8 (TypedBuffer. :uint8 (arrow-buffer->typed-nio :int8 data))
+         :int16 (arrow-buffer->typed-nio :int16 data)
+         :uint16 (TypedBuffer. :uint16 (arrow-buffer->typed-nio :int16 data))
+         :int32 (arrow-buffer->typed-nio :int32 data)
+         :uint32 (TypedBuffer. :uint32 (arrow-buffer->typed-nio :int32 data))
+         :int64 (arrow-buffer->typed-nio :int64 data)
+         :uint64 (TypedBuffer. :uint64 (arrow-buffer->typed-nio :int64 data))
+         :float32 (arrow-buffer->typed-nio :float32 data)
+         :float64 (arrow-buffer->typed-nio :float64 data)
+         :epoch-milliseconds (arrow-buffer->typed-nio :int64 data))
+       (dtype-proto/sub-buffer 0 (dtype/ecount vvec))))))
 
 
 (def datatype->vec-type-map
@@ -365,8 +374,8 @@
                       dtype-proto/PToNioBuffer
                       (convertible-to-nio-buffer? [item#] ~(nio-datatype? dtype))
                       (->buffer-backing-store [item#]
-                        (dtype-proto/->buffer-backing-store
-                         (primitive-vec->typed-buffer item#)))
+                        (-> (primitive-vec->typed-buffer item#)
+                            (dtype-proto/->buffer-backing-store)))
                       dtype-proto/PToJNAPointer
                       (convertible-to-data-ptr? [item#] ~(nio-datatype? dtype))
                       (->jna-ptr [item#]
@@ -469,8 +478,6 @@
     :datatype))
 
 
-(declare data->arrow-vector)
-
 
 (defn string-column->dict
   "Given a string column, return a map of {:dictionary :indices} which
@@ -486,8 +493,9 @@
         arrow-indices-type (ArrowType$Int. bit-width true)
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
         ftype (datatype->field-type :text true)
-        varchar-vec (data->arrow-vector (dtype/->reader int->str :string)
-                                        "unnamed" ftype nil)]
+        varchar-vec (strings->varchar! (dtype/->reader int->str :string)
+                                       nil
+                                       (VarCharVector. "unnamed" (allocator)))]
     (Dictionary. varchar-vec encoding)))
 
 
@@ -539,9 +547,8 @@
 
 
 (defn copy-column->arrow!
-  ^FieldVector [col field-vec]
-  (let [dtype (dtype/get-datatype col)
-        missing (col-proto/missing col)]
+  ^FieldVector [col missing field-vec]
+  (let [dtype (dtype/get-datatype col)]
     (if (or (= dtype :text)
             (= dtype :encoded-text))
       (strings->varchar! col missing field-vec)
@@ -605,6 +612,26 @@
      (ds-base/columns ds))))
 
 
+(defn copy-ds->vec-root
+  [^VectorSchemaRoot vec-root ds]
+  (.setRowCount vec-root (ds-base/row-count ds))
+  (->> (ds-base/columns ds)
+       (map-indexed
+        (fn [^long idx col]
+          (let [field-vec (.getVector vec-root idx)
+                coldata (dtype-dt/unpack col)
+                col-type (dtype/get-datatype coldata)
+                missing (col-proto/missing col)]
+            (cond
+              (= :string col-type)
+              (-> (ds-base/column->string-table col)
+                  (str-table/indices)
+                  (copy-column->arrow! missing field-vec))
+              :else
+              (copy-column->arrow! coldata missing field-vec)))))
+       (dorun)))
+
+
 (defn write-dataset!
   ([ds path options]
    (let [ds (ds-base/ensure-dataset-string-tables ds)
@@ -617,22 +644,25 @@
                            ^BufferAllocator (allocator))
                  writer (ArrowStreamWriter. vec-root dict-provider ostream)]
        (.start writer)
-       (.setRowCount vec-root (ds-base/row-count ds))
-       (->> (ds-base/columns ds)
-            (map-indexed
-             (fn [^long idx col]
-               (let [field-vec (.getVector vec-root idx)
-                     coldata (dtype-dt/unpack col)
-                     col-type (dtype/get-datatype coldata)
-                     missing (col-proto/missing col)]
-                 (cond
-                   (= :string col-type)
-                   (-> (ds-base/column->string-table col)
-                       (str-table/indices)
-                       (copy-column->arrow! missing field-vec))
-                   :else
-                   (copy-column->arrow! coldata missing field-vec)))))
-            (dorun))
+       (copy-ds->vec-root vec-root ds)
+       (.writeBatch writer))))
+  ([ds path]
+   (write-dataset! ds path {})))
+
+
+(defn write-dataset-to-file!
+  ([ds path options]
+   (let [ds (ds-base/ensure-dataset-string-tables ds)
+         ds (datetime-cols-to-millis-from-epoch ds options)
+         {:keys [schema dict-provider]} (ds->arrow-schema ds)
+         ^DictionaryProvider dict-provider dict-provider]
+     (with-open [ostream (java.io.RandomAccessFile. ^String path "w")
+                 vec-root (VectorSchemaRoot/create
+                           ^Schema schema
+                           ^BufferAllocator (allocator))
+                 writer (ArrowFileWriter. vec-root dict-provider (.getChannel ostream))]
+       (.start writer)
+       (copy-ds->vec-root vec-root ds)
        (.writeBatch writer))))
   ([ds path]
    (write-dataset! ds path {})))
@@ -731,7 +761,8 @@
   (require '[tech.ml.dataset :as ds])
   (def stocks (ds/->dataset "test/data/stocks.csv"))
   (write-dataset! stocks "test.arrow" {:timezone "US/Eastern"})
-  (def big-stocks (apply ds/concat-copying (repeat 100 stocks)))
+  (def big-stocks (apply ds/concat-copying (repeat 10000 stocks)))
   (write-dataset! big-stocks "big-stocks.feather")
+  (write-dataset-to-file! big-stocks "big-stocks.file.feather")
   (io/put-nippy! "big-stocks.nippy" big-stocks)
   )

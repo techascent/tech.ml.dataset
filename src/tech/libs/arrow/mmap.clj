@@ -27,7 +27,7 @@
 
 
 (defmacro native-buffer->reader
-  [datatype buffer address n-elems]
+  [datatype advertised-datatype buffer address n-elems]
   (let [byte-width (casting/numeric-byte-width datatype)]
     `(reify
        PToNativeBuffer
@@ -54,6 +54,7 @@
        (->buffer-backing-store [item#]
          (dtype-proto/->buffer-backing-store ~buffer))
        ~(typecast/datatype->reader-type (casting/safe-flatten datatype))
+       (getDatatype [rdr#] ~advertised-datatype)
        (lsize [rdr#] ~n-elems)
        (read [rdr# ~'idx]
          ~(case datatype
@@ -160,17 +161,17 @@
   dtype-proto/PToReader
   (convertible-to-reader? [this] true)
   (->reader [this options]
-    (-> (case datatype
-          :int8 (native-buffer->reader :int8 this address n-elems)
-          :uint8 (native-buffer->reader :uint8 this address n-elems)
-          :int16 (native-buffer->reader :int16 this address n-elems)
-          :uint16 (native-buffer->reader :uint16 this address n-elems)
-          :int32 (native-buffer->reader :int32 this address n-elems)
-          :uint32 (native-buffer->reader :uint32 this address n-elems)
-          :int64 (native-buffer->reader :int64 this address n-elems)
-          :uint64 (native-buffer->reader :uint64 this address n-elems)
-          :float32 (native-buffer->reader :float32 this address n-elems)
-          :float64 (native-buffer->reader :float64 this address n-elems))
+    (-> (case (casting/un-alias-datatype datatype)
+          :int8 (native-buffer->reader :int8 datatype this address n-elems)
+          :uint8 (native-buffer->reader :uint8 datatype this address n-elems)
+          :int16 (native-buffer->reader :int16 datatype this address n-elems)
+          :uint16 (native-buffer->reader :uint16 datatype this address n-elems)
+          :int32 (native-buffer->reader :int32 datatype this address n-elems)
+          :uint32 (native-buffer->reader :uint32 datatype this address n-elems)
+          :int64 (native-buffer->reader :int64 datatype this address n-elems)
+          :uint64 (native-buffer->reader :uint64 datatype this address n-elems)
+          :float32 (native-buffer->reader :float32 datatype this address n-elems)
+          :float64 (native-buffer->reader :float64 datatype this address n-elems))
         (dtype-proto/->reader options)))
   dtype-proto/PToWriter
   (convertible-to-writer? [this] true)
