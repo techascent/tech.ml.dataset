@@ -28,12 +28,12 @@
             DurationVector TimeStampMicroTZVector TimeStampMicroVector TimeStampVector
             TimeStampMilliVector TimeStampMilliTZVector FieldVector VectorSchemaRoot
             BaseVariableWidthVector BaseFixedWidthVector]
-           [io.netty.buffer ArrowBuf]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
             DictionaryProvider$MapDictionaryProvider]
            [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
             ArrowFileWriter ArrowFileReader]
            [org.apache.arrow.vector.types Types]
+           [org.apache.arrow.memory ArrowBuf]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map ArrayList List HashMap]
            [tech.ml.dataset.impl.column Column]
@@ -68,7 +68,7 @@
      (cond
        (instance? clojure.lang.IDeref alloc-deref)
        @alloc-deref
-       (instance? BaseAllocator alloc-deref)
+       (instance? BufferAllocator alloc-deref)
        alloc-deref
        :else
        (throw (Exception. "No allocator provided.  See `with-allocator`")))))
@@ -144,8 +144,10 @@
     (bit-or data (bit-shift-left 1 bit-idx))))
 
 
+(defonce t (atom nil))
 (defn missing->valid-buf
   ^ArrowBuf [^RoaringBitmap bitmap ^ArrowBuf buffer ^long n-elems]
+  (reset! t buffer)
   (let [nio-buf (arrow-buffer->typed-nio :int8 buffer)
         ^RoaringBitmap missing (dtype/->bitmap-set)
         n-bytes (quot (+ n-elems 7) 8)

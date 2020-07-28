@@ -105,15 +105,26 @@
        (write [rdr# ~'idx ~'value]
          ~(case datatype
             :int8 `(.putByte (unsafe) (pmath/+ ~address ~'idx) ~'value)
-            :uint8 `(.putByte (unsafe) (pmath/+ ~address ~'idx) (unchecked-byte ~'value))
-            :int16 `(.putShort (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value)
-            :uint16 `(.putShort (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) (unchecked-short ~'value))
-            :int32 `(.putInt (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value)
-            :uint32 `(.putInt (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) (unchecked-int ~'value))
-            :int64 `(.putLong (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value)
-            :uint64 `(.putLong (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value)
-            :float32 `(.putFloat (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value)
-            :float64 `(.putDouble (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width)) ~'value))))))
+            :uint8 `(.putByte (unsafe) (pmath/+ ~address ~'idx)
+                              (unchecked-byte ~'value))
+            :int16 `(.putShort (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                               ~'value)
+            :uint16 `(.putShort (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                                (unchecked-short ~'value))
+            :int32 `(.putInt (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                             ~'value)
+            :uint32 `(.putInt (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                              (unchecked-int ~'value))
+            :int64 `(.putLong (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                              ~'value)
+            :uint64 `(.putLong (unsafe) (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                               ~'value)
+            :float32 `(.putFloat (unsafe)
+                                 (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                                 ~'value)
+            :float64 `(.putDouble (unsafe)
+                                  (pmath/+ ~address (pmath/* ~'idx ~byte-width))
+                                  ~'value))))))
 
 
 ;;Size is in elements, not in bytes
@@ -138,8 +149,9 @@
     (let [offset (long offset)
           length (long length)]
       (when-not (<= (+ offset length) n-elems)
-        (throw (Exception. (format "Offset+length (%s) > n-elems (%s)"
-                                   (+ offset length) n-elems))))
+        (throw (Exception.
+                (format "Offset+length (%s) > n-elems (%s)"
+                        (+ offset length) n-elems))))
       (NativeBuffer. (+ address offset) length datatype)))
   dtype-proto/PSetConstant
   (set-constant! [buffer offset value elem-count]
