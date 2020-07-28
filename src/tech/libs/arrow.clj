@@ -645,7 +645,8 @@
                  writer (ArrowStreamWriter. vec-root dict-provider ostream)]
        (.start writer)
        (copy-ds->vec-root vec-root ds)
-       (.writeBatch writer))))
+       (.writeBatch writer)
+       (.end writer))))
   ([ds path]
    (write-dataset! ds path {})))
 
@@ -663,7 +664,8 @@
                  writer (ArrowFileWriter. vec-root dict-provider (.getChannel ostream))]
        (.start writer)
        (copy-ds->vec-root vec-root ds)
-       (.writeBatch writer))))
+       (.writeBatch writer)
+       (.end writer))))
   ([ds path]
    (write-dataset! ds path {})))
 
