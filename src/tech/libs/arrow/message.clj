@@ -325,12 +325,12 @@
   (def dict-map {(:id dict-data) dict-data})
   (def inplace-ds (records->ds schema dict-map record))
 
-
-  (defn mean-test-1
+  (require '[tech.v2.datatype.functional :as dfn])
+  (defn sum-test-1
     []
     (resource/stack-resource-context
      (let [ds (inplace-load-dataset "big-stocks.feather")]
-       (dfn/mean (ds "price")))))
+       (dfn/reduce-+ (ds "price")))))
 
 ;;   Evaluation count : 18 in 6 samples of 3 calls.
 ;;              Execution time mean : 38.154803 ms
@@ -345,10 +345,10 @@
 
 
   (require '[tech.io :as io])
-  (defn mean-test-2
+  (defn sum-test-2
     []
     (let [ds (io/get-nippy "big-stocks.nippy")]
-      (dfn/mean (ds "price"))))
+      (dfn/reduce-+ (ds "price"))))
 
   ;; Evaluation count : 12 in 6 samples of 2 calls.
   ;;            Execution time mean : 86.257718 ms
@@ -358,13 +358,13 @@
   ;;                  Overhead used : 2.635202 ns
 
   (import '[org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter ArrowFileReader])
-  (defn mean-test-3
+  (defn sum-test-3
     []
     (with-open [istream (io/input-stream "big-stocks.feather")
                 reader (ArrowStreamReader. istream (arrow/allocator))]
       (.loadNextBatch reader)
-      (dfn/mean (.get (.getFieldVectors (.getVectorSchemaRoot reader))
-                      2))))
+      (dfn/reduce-+ (.get (.getFieldVectors (.getVectorSchemaRoot reader))
+                          2))))
   ;; Evaluation count : 6 in 6 samples of 1 calls.
   ;;            Execution time mean : 139.675153 ms
   ;;   Execution time std-deviation : 1.335229 ms
@@ -434,7 +434,7 @@
     ;;Fails to load the file...
     (defn arrow-file-load
       []
-      (with-open [istream (java.io.RandomAccessFile. "big-stocks.feather.file" "r")
+      (with-open [istream (java.io.RandomAccessFile. "big-stocks.file.feather" "r")
                   reader (ArrowFileReader. (.getChannel istream) (arrow/allocator))]
         (.loadNextBatch reader)))
 

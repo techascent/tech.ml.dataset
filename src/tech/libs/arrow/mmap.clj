@@ -74,7 +74,7 @@
 
 
 (defmacro native-buffer->writer
-  [datatype buffer address n-elems]
+  [datatype advertised-datatype buffer address n-elems]
   (let [byte-width (casting/numeric-byte-width datatype)]
     `(reify
        PToNativeBuffer
@@ -101,6 +101,7 @@
        (->buffer-backing-store [item#]
          (dtype-proto/->buffer-backing-store ~buffer))
        ~(typecast/datatype->writer-type (casting/safe-flatten datatype))
+       (getDatatype [rdr#] ~advertised-datatype)
        (lsize [rdr#] ~n-elems)
        (write [rdr# ~'idx ~'value]
          ~(case datatype
@@ -157,10 +158,13 @@
   (set-constant! [buffer offset value elem-count]
     (if (or (= :datatype :int8)
             (= (double value) 0.0))
-      (.setMemory (unsafe) (+ address * (long offset))
+      (.setMemory (unsafe) (+ address (long offset))
                   (* (long elem-count) (casting/numeric-byte-width datatype))
                   (byte 0))
-      (dtype-proto/set-constant! (dtype/->writer buffer) offset value elem-count)))
+      (let [writer (dtype/->writer (dtype/sub-buffer buffer offset elem-count))
+            value (casting/cast value datatype)]
+        (dotimes [iter elem-count]
+          (writer iter value)))))
   dtype-proto/PToJNAPointer
   (convertible-to-data-ptr? [item#] true)
   (->jna-ptr [item#] (Pointer. address))
@@ -168,8 +172,9 @@
   (convertible-to-nio-buffer? [item#] (< n-elems Integer/MAX_VALUE))
   (->buffer-backing-store [item#]
     (let [ptr (Pointer. address)
-          n-bytes (* n-elems (casting/numeric-byte-width datatype))]
-      (dtype-jna/pointer->nio-buffer ptr datatype n-bytes)))
+          unaliased-dtype (casting/un-alias-datatype datatype)
+          n-bytes (* n-elems (casting/numeric-byte-width unaliased-dtype))]
+      (dtype-jna/pointer->nio-buffer ptr unaliased-dtype n-bytes)))
   dtype-proto/PToReader
   (convertible-to-reader? [this] true)
   (->reader [this options]
@@ -188,17 +193,17 @@
   dtype-proto/PToWriter
   (convertible-to-writer? [this] true)
   (->writer [this options]
-    (-> (case datatype
-          :int8 (native-buffer->writer :int8 this address n-elems)
-          :uint8 (native-buffer->writer :uint8 this address n-elems)
-          :int16 (native-buffer->writer :int16 this address n-elems)
-          :uint16 (native-buffer->writer :uint16 this address n-elems)
-          :int32 (native-buffer->writer :int32 this address n-elems)
-          :uint32 (native-buffer->writer :uint32 this address n-elems)
-          :int64 (native-buffer->writer :int64 this address n-elems)
-          :uint64 (native-buffer->writer :uint64 this address n-elems)
-          :float32 (native-buffer->writer :float32 this address n-elems)
-          :float64 (native-buffer->writer :float64 this address n-elems))
+    (-> (case (casting/un-alias-datatype datatype)
+          :int8 (native-buffer->writer :int8 datatype this address n-elems)
+          :uint8 (native-buffer->writer :uint8 datatype this address n-elems)
+          :int16 (native-buffer->writer :int16 datatype this address n-elems)
+          :uint16 (native-buffer->writer :uint16 datatype this address n-elems)
+          :int32 (native-buffer->writer :int32 datatype this address n-elems)
+          :uint32 (native-buffer->writer :uint32 datatype this address n-elems)
+          :int64 (native-buffer->writer :int64 datatype this address n-elems)
+          :uint64 (native-buffer->writer :uint64 datatype this address n-elems)
+          :float32 (native-buffer->writer :float32 datatype this address n-elems)
+          :float64 (native-buffer->writer :float64 datatype this address n-elems))
         (dtype-proto/->writer options))))
 
 

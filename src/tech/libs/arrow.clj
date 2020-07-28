@@ -4,14 +4,13 @@
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.string-table :as str-table]
-            [tech.ml.dataset.text :as ds-text]
             [tech.v2.datatype.casting :as casting]
             [tech.v2.datatype.datetime :as dtype-dt]
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype :as dtype]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.typed-buffer :as typed-buf]
+            [tech.libs.arrow.mmap :as mmap]
             [clojure.edn :as edn]
             [tech.ml.utils :as ml-utils]
             [tech.io :as io]
@@ -48,7 +47,8 @@
            [it.unimi.dsi.fastutil.ints IntArrayList]
            [com.sun.jna Pointer]
            [sun.misc Unsafe]
-           [org.apache.arrow.memory.util MemoryUtil]))
+           [org.apache.arrow.memory.util MemoryUtil]
+           [tech.libs.arrow.mmap NativeBuffer]))
 
 
 ;;TODO - check out gandiva
@@ -87,19 +87,13 @@
 
 
 ;; Base datatype bindings
-
-(defn arrow-buffer->typed-nio
-  ^Buffer [datatype ^ArrowBuf buf]
-  (let [^ByteBuffer nio-buf (-> (.nioBuffer buf)
-                                (.order ByteOrder/LITTLE_ENDIAN)
-                                (.limit (.capacity buf)))]
-    (case datatype
-      :int8 nio-buf
-      :int16 (.asShortBuffer nio-buf)
-      :int32 (.asIntBuffer nio-buf)
-      :int64 (.asLongBuffer nio-buf)
-      :float32 (.asFloatBuffer nio-buf)
-      :float64 (.asDoubleBuffer nio-buf))))
+(defn arrow-buffer->typed-buffer
+  ^NativeBuffer [datatype ^ArrowBuf buf]
+  (let [native-buf (NativeBuffer. (.memoryAddress buf)
+                                  (.capacity buf) :int8)]
+    (if (= datatype :int8)
+      native-buf
+      (mmap/set-native-datatype native-buf datatype))))
 
 
 (defn int8-buf->missing
@@ -132,7 +126,7 @@
 
 (defn valid-buf->missing
   ^RoaringBitmap [^ArrowBuf buffer ^long n-elems]
-  (int8-buf->missing (arrow-buffer->typed-nio :int8 buffer) n-elems))
+  (int8-buf->missing (arrow-buffer->typed-buffer :int8 buffer) n-elems))
 
 
 (defn add-bit
@@ -148,7 +142,7 @@
 (defn missing->valid-buf
   ^ArrowBuf [^RoaringBitmap bitmap ^ArrowBuf buffer ^long n-elems]
   (reset! t buffer)
-  (let [nio-buf (arrow-buffer->typed-nio :int8 buffer)
+  (let [nio-buf (arrow-buffer->typed-buffer :int8 buffer)
         ^RoaringBitmap missing (dtype/->bitmap-set)
         n-bytes (quot (+ n-elems 7) 8)
         writer (typecast/datatype->writer :int8 nio-buf)]
@@ -177,11 +171,9 @@
   "copies the data into a list of strings."
   ^List [^VarCharVector fv]
   (let [n-elems (dtype/ecount fv)
-        value-buf (arrow-buffer->typed-nio :int8 (.getDataBuffer fv))
-        offset-buf (arrow-buffer->typed-nio :int32 (.getOffsetBuffer fv))
-        n-value-elems (dtype/ecount value-buf)
-        offset-rdr (dtype/->reader offset-buf)
-        retval (ArrayList. n-elems)]
+        value-buf (arrow-buffer->typed-buffer :int8 (.getDataBuffer fv))
+        offset-buf (arrow-buffer->typed-buffer :int32 (.getOffsetBuffer fv))
+        offset-rdr (dtype/->reader offset-buf)]
     (dtype/object-reader
      n-elems
      (fn [^long idx]
@@ -213,11 +205,10 @@
         n-elems (dtype/ecount str-rdr)]
     (.add offsets 0)
     (dotimes [idx n-elems]
-      (let [cur-offset (.size byte-list)]
-        (when-not (.contains missing idx)
-          (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
-            (.addAll byte-list (ByteArrayList/wrap byte-data))))
-        (.add offsets (.size byte-list))))
+      (when-not (.contains missing idx)
+        (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
+          (.addAll byte-list (ByteArrayList/wrap byte-data))))
+      (.add offsets (.size byte-list)))
     (.allocateNew fv (.size byte-list) n-elems)
     (.setLastSet fv n-elems)
     (.setValueCount fv n-elems)
@@ -225,8 +216,8 @@
           data-buf (.getDataBuffer fv)
           offset-buf (.getOffsetBuffer fv)]
       (missing->valid-buf missing valid-buf n-elems)
-      (dtype/copy! offsets (arrow-buffer->typed-nio :int32 offset-buf))
-      (dtype/copy! byte-list (arrow-buffer->typed-nio :int8 data-buf)))
+      (dtype/copy! offsets (arrow-buffer->typed-buffer :int32 offset-buf))
+      (dtype/copy! byte-list (arrow-buffer->typed-buffer :int8 data-buf)))
     fv))
 
 
@@ -234,7 +225,7 @@
   [^BitVector data]
   (let [rdr (typecast/datatype->reader
              :int8
-             (arrow-buffer->typed-nio
+             (arrow-buffer->typed-buffer
               :int8 (.getDataBuffer data)))
         n-elems (dtype/ecount data)]
     (dtype/make-reader
@@ -250,11 +241,11 @@
   [^BitVector data]
   (let [rdr (typecast/datatype->reader
              :int8
-             (arrow-buffer->typed-nio
+             (arrow-buffer->typed-buffer
               :int8 (.getDataBuffer data)))
         src-wtr (typecast/datatype->writer
                  :int8
-                 (arrow-buffer->typed-nio
+                 (arrow-buffer->typed-buffer
                   :int8 (.getDataBuffer data)))
         n-elems (dtype/ecount data)]
     (reify BooleanWriter
@@ -277,21 +268,9 @@
   [^FieldVector vvec]
   (let [data (.getDataBuffer vvec)]
     (if (= :boolean (dtype/get-datatype vvec))
-      (arrow-buffer->typed-nio :int8 data)
-      (->
-       (case (dtype/get-datatype vvec)
-         :int8 (arrow-buffer->typed-nio :int8 data)
-         :uint8 (TypedBuffer. :uint8 (arrow-buffer->typed-nio :int8 data))
-         :int16 (arrow-buffer->typed-nio :int16 data)
-         :uint16 (TypedBuffer. :uint16 (arrow-buffer->typed-nio :int16 data))
-         :int32 (arrow-buffer->typed-nio :int32 data)
-         :uint32 (TypedBuffer. :uint32 (arrow-buffer->typed-nio :int32 data))
-         :int64 (arrow-buffer->typed-nio :int64 data)
-         :uint64 (TypedBuffer. :uint64 (arrow-buffer->typed-nio :int64 data))
-         :float32 (arrow-buffer->typed-nio :float32 data)
-         :float64 (arrow-buffer->typed-nio :float64 data)
-         :epoch-milliseconds (arrow-buffer->typed-nio :int64 data))
-       (dtype-proto/sub-buffer 0 (dtype/ecount vvec))))))
+      (arrow-buffer->typed-buffer :int8 data)
+      (-> (arrow-buffer->typed-buffer (dtype/get-datatype vvec) data)
+          (dtype-proto/sub-buffer 0 (dtype/ecount vvec))))))
 
 
 (def datatype->vec-type-map
@@ -352,7 +331,7 @@
   [[:epoch-milliseconds `TimeStampMilliTZVector]
    [:int64 `TimeStampMilliVector]])
 
-(defn- nio-datatype?
+(defn- primitive-datatype?
   [datatype]
   (boolean #{:int8 :uint8
              :int16 :uin16
@@ -374,12 +353,12 @@
                       dtype-proto/PCountable
                       (ecount [item#] (.getValueCount item#))
                       dtype-proto/PToNioBuffer
-                      (convertible-to-nio-buffer? [item#] ~(nio-datatype? dtype))
+                      (convertible-to-nio-buffer? [item#] ~(primitive-datatype? dtype))
                       (->buffer-backing-store [item#]
                         (-> (primitive-vec->typed-buffer item#)
                             (dtype-proto/->buffer-backing-store)))
                       dtype-proto/PToJNAPointer
-                      (convertible-to-data-ptr? [item#] ~(nio-datatype? dtype))
+                      (convertible-to-data-ptr? [item#] ~(primitive-datatype? dtype))
                       (->jna-ptr [item#]
                         (let [arrow-buf# (.getDataBuffer item#)]
                           (Pointer. (.memoryAddress arrow-buf#))))
