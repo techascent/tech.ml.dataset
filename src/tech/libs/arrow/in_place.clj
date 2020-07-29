@@ -1,15 +1,13 @@
-(ns tech.libs.arrow.message
-  (:require [tech.libs.arrow.mmap :as mmap]
-            [tech.libs.arrow :as arrow]
+(ns tech.libs.arrow.in-place
+  (:require [tech.v2.datatype.mmap :as mmap]
+            [tech.libs.arrow.copying :as arrow]
             [tech.v2.datatype :as dtype]
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.ml.dataset.impl.dataset :as ds-impl]
             [tech.ml.dataset.base :as ds-base]
-            [tech.ml.dataset.string-table :as str-table]
-            [tech.resource :as resource]
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]])
-  (:import [tech.libs.arrow.mmap NativeBuffer]
+  (:import [tech.v2.datatype.mmap NativeBuffer]
            [org.apache.arrow.vector.ipc.message MessageSerializer
             MessageMetadataResult]
            [org.apache.arrow.vector TypeLayout Float8Vector]
@@ -69,6 +67,7 @@
 
 
 (defn message-seq
+  "Given a native buffer of arrow stream data, produce a sequence of flatbuf messages"
   [^NativeBuffer data]
   (when-let [msg (read-message data)]
     (cons msg (lazy-seq (message-seq (:data msg))))))
@@ -129,7 +128,8 @@
                            datafied-data (datafy arrow-type)]
                        (when-not (map? datafied-data)
                          (throw (Exception.
-                                 (format ("Failed to datafy datatype %s" (type arrow-type))))))
+                                 (format "Failed to datafy datatype %s"
+                                         (type arrow-type)))))
                        (merge
                         {:name (.getName field)
                          :nullable? (.isNullable field)
@@ -153,7 +153,8 @@
                           :n-null-entries (.nullCount node)})))
     :buffers (->> (range (.buffersLength record-batch))
                   (mapv #(let [buffer (.buffers record-batch (int %))]
-                           (dtype/sub-buffer data (.offset buffer) (.length buffer)))))})
+                           (dtype/sub-buffer data (.offset buffer)
+                                             (.length buffer)))))})
   ([{:keys [message body message-type] :as msg}]
    (read-record-batch (.header ^Message message (RecordBatch.)) body)))
 
@@ -175,7 +176,9 @@
      :records (read-record-batch (.data db) body)}))
 
 
-(defmulti parse-message :message-type)
+(defmulti parse-message
+  "Given a message, parse it just a bit into a more interpretable datastructure."
+  :message-type)
 
 
 (defmethod parse-message :schema
@@ -210,7 +213,8 @@
      (fn [^long idx]
        (let [start-off (long (offsets idx))
              end-off (long (offsets (inc idx)))
-             ^bytes byte-data (-> (dtype/sub-buffer data start-off (- end-off start-off))
+             ^bytes byte-data (-> (dtype/sub-buffer data start-off
+                                                    (- end-off start-off))
                                   (dtype/->array-copy))]
          (String. byte-data)))
      :string)))
@@ -230,7 +234,8 @@
                     (dtype/sub-buffer 0 n-elems))
         data (mmap/set-native-datatype databuf :int8)
         str-data (doto (ArrayList. (dec n-elems))
-                   (.addAll ^List (offsets-data->string-reader offsets data (dec n-elems))))]
+                   (.addAll ^List (offsets-data->string-reader
+                                   offsets data (dec n-elems))))]
     {:id id
      :strings str-data}))
 
@@ -268,14 +273,18 @@
                          n-elems (long (:n-elems node))
                          missing (if (== 0 (long (:n-null-entries node)))
                                    (dtype/->bitmap-set)
-                                   (arrow/int8-buf->missing (first specific-bufs) n-elems))
+                                   (arrow/int8-buf->missing (first specific-bufs)
+                                                            n-elems))
                          metadata (into {} (:metadata field))]
                      [(conj retval
                             (col-impl/new-column
                              (:name field)
                              (case field-dtype
-                               :string (string-data->column-data dict-map encoding (drop 1 specific-bufs) n-elems)
-                               (-> (mmap/set-native-datatype (second specific-bufs) field-dtype)
+                               :string (string-data->column-data
+                                        dict-map encoding (drop 1 specific-bufs)
+                                        n-elems)
+                               (-> (mmap/set-native-datatype
+                                    (second specific-bufs) field-dtype)
                                    (dtype/sub-buffer 0 n-elems)))
                              metadata
                              missing))
@@ -285,12 +294,12 @@
          (ds-impl/new-dataset))))
 
 
-(defn inplace-load-dataset
+(defn read-stream-dataset-inplace
   "Loads data up to and including the first data record.  Returns the dataset
   and the memory-mapped file.
   This method is expected to be called from within a stack resource context."
   [fname & [options]]
-  (let [fdata (mmap/read-only-mmap-file fname options)
+  (let [fdata (mmap/mmap-file fname options)
         messages (mapv parse-message (message-seq fdata))
         schema (first messages)
         _ (when-not (= :schema (:message-type schema))
@@ -306,7 +315,6 @@
         data-record (first rest-messages)
         _ (when-not (= :record-batch (:message-type data-record))
             (throw (Exception. "No data records detected")))]
-
     (-> (records->ds schema dict-map data-record)
         (ds-base/set-dataset-name fname))))
 
@@ -314,7 +322,7 @@
 (comment
   ;;Overriding to use GC memory management.  Default is stack and thus needs to be in
   ;;a call to resource/stack-resource-context.
-  (def fdata (mmap/read-only-mmap-file "big-stocks.feather" {:resource-type :gc}))
+  (def fdata (mmap/mmap-file "big-stocks.feather" {:resource-type :gc}))
   (def messages (mapv parse-message (message-seq fdata)))
   (assert (= 3 (count messages)))
   (assert (= [:schema :dictionary-batch :record-batch] (mapv :message-type messages)))
@@ -325,23 +333,38 @@
   (def dict-map {(:id dict-data) dict-data})
   (def inplace-ds (records->ds schema dict-map record))
 
+  (require '[criterium.core :as crit])
   (require '[tech.v2.datatype.functional :as dfn])
+  (require '[tech.resource :as resource])
+  (require '[tech.parallel.for :as parallel-for])
+  (require '[tech.v2.datatype.typecast :as typecast])
+
+  (defn fast-reduce-plus
+    ^double [rdr]
+    (let [rdr (typecast/datatype->reader :float64 rdr)]
+      (parallel-for/indexed-map-reduce
+       (.lsize rdr)
+       (fn [^long start-idx ^long group-len]
+         (let [end-idx (long (+ start-idx group-len))]
+           (loop [idx (long start-idx)
+                  result 0.0]
+             (if (< idx end-idx)
+               (recur (unchecked-inc idx)
+                      (+ result (.read rdr idx)))
+               result))))
+       (partial reduce +))))
+
   (defn sum-test-1
     []
     (resource/stack-resource-context
-     (let [ds (inplace-load-dataset "big-stocks.feather")]
-       (dfn/reduce-+ (ds "price")))))
-
-;;   Evaluation count : 18 in 6 samples of 3 calls.
-;;              Execution time mean : 38.154803 ms
-;;     Execution time std-deviation : 665.843038 µs
-;;    Execution time lower quantile : 37.547873 ms ( 2.5%)
-;;    Execution time upper quantile : 39.208054 ms (97.5%)
-;;                    Overhead used : 2.635202 ns
-
-;; Found 1 outliers in 6 samples (16.6667 %)
-;; 	low-severe	 1 (16.6667 %)
-;;  Variance from outliers : 13.8889 % Variance is moderately inflated by outliers
+     (let [ds (read-dataset-inplace "big-stocks.feather")]
+       (fast-reduce-plus (ds "price")))))
+  ;; Evaluation count : 96 in 6 samples of 16 calls.
+  ;;            Execution time mean : 7.955908 ms
+  ;;   Execution time std-deviation : 1.019668 ms
+  ;;  Execution time lower quantile : 6.706196 ms ( 2.5%)
+  ;;  Execution time upper quantile : 9.318124 ms (97.5%)
+  ;;                  Overhead used : 2.377233 ns
 
 
   (require '[tech.io :as io])
@@ -363,14 +386,14 @@
     (with-open [istream (io/input-stream "big-stocks.feather")
                 reader (ArrowStreamReader. istream (arrow/allocator))]
       (.loadNextBatch reader)
-      (dfn/reduce-+ (.get (.getFieldVectors (.getVectorSchemaRoot reader))
-                          2))))
+      (fast-reduce-plus (.get (.getFieldVectors (.getVectorSchemaRoot reader))
+                              2))))
   ;; Evaluation count : 6 in 6 samples of 1 calls.
-  ;;            Execution time mean : 139.675153 ms
-  ;;   Execution time std-deviation : 1.335229 ms
-  ;;  Execution time lower quantile : 137.497802 ms ( 2.5%)
-  ;;  Execution time upper quantile : 141.018613 ms (97.5%)
-  ;;                  Overhead used : 2.635202 ns
+  ;;            Execution time mean : 104.142056 ms
+  ;;   Execution time std-deviation : 810.545821 µs
+  ;;  Execution time lower quantile : 103.241336 ms ( 2.5%)
+  ;;  Execution time upper quantile : 105.123550 ms (97.5%)
+  ;;                  Overhead used : 2.377233 ns
 
     (defn mean-test-4
     []
@@ -394,7 +417,7 @@
     (defn inplace-load
       []
       (resource/stack-resource-context
-       (inplace-load-dataset "big-stocks.feather")
+       (read-dataset-inplace "big-stocks.feather")
        :ok))
    ;;  Evaluation count : 4566 in 6 samples of 761 calls.
    ;;           Execution time mean : 133.148490 µs
