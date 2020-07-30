@@ -13,7 +13,7 @@
   (try
     ;;!!CRUCIAL!!!  inplace *requires* a stack resource context and the dataset
     ;;is invalid outside the resource context.  If you want a valid dataset outside
-    ;;this context, use dtype/clone!!
+    ;;this context, use dtype/clone
     (resource/stack-resource-context
      (let [stocks (ds/->dataset "test/data/stocks.csv")
            _ (arrow/write-dataset-to-stream! stocks "temp.stocks.arrow")

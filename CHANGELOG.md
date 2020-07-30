@@ -1,4 +1,15 @@
 # Changelog
+## 3.08
+#### Arrow Support
+ * Proper arrow support.  In-place or accelerated copy pathway into the jvm.
+ * 'tech.libs.arrow` exposes a few functions to dive through arrow files and
+   product datatsets.  Right now only stream file format is supported.
+   Copying is supported via their blessed API.  In-place is supported by
+   a more or less clean room implementation using memory mapped files.  There
+   will be a blog post on this soon.
+ * tech.datatype has a new namespace, tech.v2.datatype.mmap that supports memory
+   mapping files and direct memory access for address spaces (and files) larger
+   than the java nio 2GB limit for memory mapping and nio buffers.
 
 ## 3.07
  * Issue 122 - Datasets with columns of datasets did not serialize to nippy.
@@ -18,17 +29,17 @@
    interpolate column such that differences between successive vaules are smaller
    than a given cutoff.  Use replace-missing functionality on all other columns
    to fill in values for generated rows.
- * Issue 115 - `tech.ml.dataset/replace-missing` Subset of replace-missing from 
+ * Issue 115 - `tech.ml.dataset/replace-missing` Subset of replace-missing from
    tablecloth implemented.
 
 ## 3.03
  * Bugfix - Some string tables saved out with version 2.X would not load correctly.
 
 ## 3.02
- * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting 
+ * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting
    colnames to keywords.
  * Issue 113 - NPE when doing hasheq on empty datatset
- * Issue 114 - Columns now have full hasheq implementation - They are 
+ * Issue 114 - Columns now have full hasheq implementation - They are
    `IPersisentCollections`.
 
 ## 3.01
