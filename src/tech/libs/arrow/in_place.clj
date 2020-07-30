@@ -46,24 +46,25 @@
 (defn read-message
   "returns a pair of offset-data and message."
   [^NativeBuffer data]
-  (let [msg-size (mmap/read-int data)
-        [msg-size offset] (if (== -1 msg-size)
-                            [(mmap/read-int data 4) 8]
-                            [msg-size 4])
-        offset (long offset)
-        msg-size (long msg-size)]
-    (when (> msg-size 0)
-      (let [new-msg (Message/getRootAsMessage (-> (dtype/sub-buffer data offset msg-size)
-                                              (dtype/->buffer-backing-store)))
-            next-buf (dtype/sub-buffer data (+ offset msg-size))
-            body-length (.bodyLength new-msg)
-            aligned-offset (align-offset (+ offset msg-size body-length))]
-        (merge
-         {:data (dtype/sub-buffer data aligned-offset)
-          :message new-msg
-          :message-type (message-id->message-type (.headerType new-msg))}
-         (when-not (== 0 body-length)
-           {:body (dtype/sub-buffer next-buf 0 (.bodyLength new-msg))}))))))
+  (when-not (== 0 (.n-elems data))
+    (let [msg-size (mmap/read-int data)
+          [msg-size offset] (if (== -1 msg-size)
+                              [(mmap/read-int data 4) 8]
+                              [msg-size 4])
+          offset (long offset)
+          msg-size (long msg-size)]
+      (when (> msg-size 0)
+        (let [new-msg (Message/getRootAsMessage (-> (dtype/sub-buffer data offset msg-size)
+                                                    (dtype/->buffer-backing-store)))
+              next-buf (dtype/sub-buffer data (+ offset msg-size))
+              body-length (.bodyLength new-msg)
+              aligned-offset (align-offset (+ offset msg-size body-length))]
+          (merge
+           {:data (dtype/sub-buffer data aligned-offset)
+            :message new-msg
+            :message-type (message-id->message-type (.headerType new-msg))}
+           (when-not (== 0 body-length)
+             {:body (dtype/sub-buffer next-buf 0 (.bodyLength new-msg))})))))))
 
 
 (defn message-seq
@@ -111,6 +112,8 @@
      (when (and (.getTimezone this)
                 (not= 0 (count (.getTimezone this))))
        {:timezone (.getTimezone this)})))
+  ArrowType$Bool
+  (datafy [this] {:datatype :boolean})
   DictionaryEncoding
   (datafy [this] {:id (.getId this)
                   :ordered? (.isOrdered this)
@@ -233,9 +236,8 @@
         offsets (-> (mmap/set-native-datatype offsets :int32)
                     (dtype/sub-buffer 0 n-elems))
         data (mmap/set-native-datatype databuf :int8)
-        str-data (doto (ArrayList. (dec n-elems))
-                   (.addAll ^List (offsets-data->string-reader
-                                   offsets data (dec n-elems))))]
+        str-data (dtype/make-container :list :string
+                   (offsets-data->string-reader offsets data n-elems))]
     {:id id
      :strings str-data}))
 
@@ -252,7 +254,8 @@
           retval (StringTable. str-list nil (DynamicIntList. index-data index-data))]
       retval)
     (let [[offsets varchar-data] buffers]
-      (offsets-data->string-reader offsets varchar-data n-elems))))
+      (offsets-data->string-reader (mmap/set-native-datatype offsets :int32)
+                                   varchar-data n-elems))))
 
 
 (defn records->ds
@@ -263,6 +266,7 @@
     (->> (map vector fields nodes)
          (reduce (fn [[retval ^long buf-idx] [field node]]
                    (let [field-dtype (get-in field [:field-type :datatype])
+                         col-metadata (dissoc (:field-type field) :datatype)
                          encoding (get field :dictionary-encoding)
                          n-buffers (long (if (and (= :string field-dtype)
                                                   (not encoding))
@@ -275,7 +279,7 @@
                                    (dtype/->bitmap-set)
                                    (arrow/int8-buf->missing (first specific-bufs)
                                                             n-elems))
-                         metadata (into {} (:metadata field))]
+                         metadata (into col-metadata (:metadata field))]
                      [(conj retval
                             (col-impl/new-column
                              (:name field)
@@ -283,6 +287,7 @@
                                :string (string-data->column-data
                                         dict-map encoding (drop 1 specific-bufs)
                                         n-elems)
+                               :boolean (arrow/bitbuffer->boolean-reader (second specific-bufs) n-elems)
                                (-> (mmap/set-native-datatype
                                     (second specific-bufs) field-dtype)
                                    (dtype/sub-buffer 0 n-elems)))
@@ -322,7 +327,7 @@
 (comment
   ;;Overriding to use GC memory management.  Default is stack and thus needs to be in
   ;;a call to resource/stack-resource-context.
-  (def fdata (mmap/mmap-file "big-stocks.feather" {:resource-type :gc}))
+  (def fdata (mmap/mmap-file "ames.arrow" {:resource-type :gc}))
   (def messages (mapv parse-message (message-seq fdata)))
   (assert (= 3 (count messages)))
   (assert (= [:schema :dictionary-batch :record-batch] (mapv :message-type messages)))

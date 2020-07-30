@@ -26,7 +26,8 @@
             Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
             DurationVector TimeStampMicroTZVector TimeStampMicroVector TimeStampVector
             TimeStampMilliVector TimeStampMilliTZVector FieldVector VectorSchemaRoot
-            BaseVariableWidthVector BaseFixedWidthVector]
+            BaseVariableWidthVector BaseFixedWidthVector TimeStampNanoVector
+            TimeStampNanoTZVector TimeStampSecVector TimeStampSecTZVector]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
             DictionaryProvider$MapDictionaryProvider]
            [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
@@ -121,7 +122,7 @@
           (.add missing (pmath/+ offset 6)))
         (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
           (.add missing (pmath/+ offset 7)))))
-    missing))
+    (dtype/set-and missing (range n-elems))))
 
 
 (defn valid-buf->missing
@@ -187,8 +188,7 @@
 
 (defn varchar->strings
   ^List [^VarCharVector fv]
-  (doto (ArrayList.)
-    (.addAll (varchar->string-reader fv))))
+  (dtype/make-container :list :string (varchar->string-reader fv)))
 
 
 (defn dictionary->strings
@@ -221,20 +221,23 @@
     fv))
 
 
-(defn bitwise-vec->boolean-reader
-  [^BitVector data]
-  (let [rdr (typecast/datatype->reader
-             :int8
-             (arrow-buffer->typed-buffer
-              :int8 (.getDataBuffer data)))
-        n-elems (dtype/ecount data)]
+(defn bitbuffer->boolean-reader
+  [bitbuffer ^long n-elems]
+  (let [rdr (typecast/datatype->reader :int8 bitbuffer)]
     (dtype/make-reader
      :boolean n-elems
      ;;idx is the indexing variable that is implicitly defined in scope.
-     (let [byte-data (.read rdr (quot idx 8))]
+     (let [data (.read rdr (quot idx 8))]
        (if (pmath/== 1 (pmath/bit-and data (pmath/bit-shift-left 1 (rem idx 8))))
          true
          false)))))
+
+
+(defn bitwise-vec->boolean-reader
+  [^BitVector data]
+  (bitbuffer->boolean-reader
+   (arrow-buffer->typed-buffer :int8 (.getDataBuffer data))
+   (dtype/ecount data)))
 
 
 (defn bitwise-vec->boolean-writer
@@ -258,10 +261,7 @@
                 byte-data (if value
                             (pmath/bit-or byte-data bitmask)
                             (pmath/bit-and byte-data (pmath/bit-not bitmask)))]
-            (.write src-wtr byte-idx (unchecked-byte byte-data))
-            (if (pmath/== 1 (pmath/bit-and data byte-data bitmask))
-              true
-              false)))))))
+            (.write src-wtr byte-idx (unchecked-byte byte-data))))))))
 
 
 (defn primitive-vec->typed-buffer
@@ -329,7 +329,8 @@
 
 (def extension-datatypes
   [[:epoch-milliseconds `TimeStampMilliTZVector]
-   [:int64 `TimeStampMilliVector]])
+   [:int64 `TimeStampMilliVector]
+   [:int64 `TimeStampVector]])
 
 (defn- primitive-datatype?
   [datatype]
@@ -652,13 +653,55 @@
    (write-dataset-to-file! ds path {})))
 
 
+(defprotocol PFieldVecMeta
+  (field-vec-metadata [fv]))
+
+
+(defn- timezone-from-field-vec
+  [^FieldVector fv]
+  (let [ft (-> (.getField fv)
+               (.getType))]
+    (when (instance? ArrowType$Timestamp ft)
+      (.getTimezone ^ArrowType$Timestamp ft))))
+
+
+(extend-protocol PFieldVecMeta
+  Object
+  (field-vec-metadata [fv] {})
+  TimeStampNanoVector
+  (field-vec-metadata [fv] {:time-unit :epoch-nanosecond})
+  TimeStampNanoTZVector
+  (field-vec-metadata [fv] {:time-unit :epoch-nanosecond
+                            :timezone (timezone-from-field-vec fv)})
+  TimeStampMicroVector
+  (field-vec-metadata [fv] {:time-unit :epoch-microsecond})
+  TimeStampMicroTZVector
+  (field-vec-metadata [fv] {:time-unit :epoch-microsecond
+                            :timezone (timezone-from-field-vec fv)})
+  TimeStampMilliVector
+  (field-vec-metadata [fv] {:time-unit :epoch-millisecond})
+  TimeStampMilliTZVector
+  (field-vec-metadata [fv] {:time-unit :epoch-millisecond
+                            :timezone (timezone-from-field-vec fv)})
+
+  TimeStampSecVector
+  (field-vec-metadata [fv] {:time-unit :epoch-second})
+  TimeStampSecTZVector
+  (field-vec-metadata [fv] {:time-unit :epoch-second
+                            :timezone (timezone-from-field-vec fv)}))
+
+
+
 (defn field-vec->column
-  [{:keys [fix-date-types?]
-    :or {fix-date-types? true}}
+  [{:keys [fix-date-types?]}
    dict-map
-   ^FieldVector fv]
+   [^long idx ^FieldVector fv]]
   (let [field (.getField fv)
         n-elems (dtype/ecount fv)
+        colname (if (and (.getName fv)
+                         (not= (count (.getName fv)) 0))
+                  (.getName fv)
+                  (str "column-" idx))
         ft (.getFieldType field)
         encoding (.getDictionary ft)
         ^Dictionary dict (when encoding
@@ -679,6 +722,9 @@
         offset-buf (when (instance? BaseVariableWidthVector fv)
                      (.getOffsetBuffer fv))
         missing (valid-buf->missing valid-buf n-elems)
+        ;;Aside from actual metadata saved with the field vector, some field vector
+        ;;types generate their own bit of metadata
+        metadata (merge metadata (field-vec-metadata fv))
         coldata
         (cond
           dict
@@ -718,12 +764,13 @@
              (dtype/clone)))
           :else
           (dtype/clone fv))]
-    (col-impl/new-column (:name metadata) coldata metadata missing)))
+    (col-impl/new-column (or (:name metadata) colname) coldata metadata missing)))
 
 
 (defn arrow->ds
   [ds-name ^VectorSchemaRoot schema-root dict-map options]
   (->> (.getFieldVectors schema-root)
+       (map-indexed vector)
        (map (partial field-vec->column options dict-map))
        (ds-impl/new-dataset ds-name)))
 
