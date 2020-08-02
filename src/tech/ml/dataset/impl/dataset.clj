@@ -7,6 +7,7 @@
             [tech.v2.datatype.argtypes :as argtypes]
             [tech.v2.datatype.protocols :as dtype-proto]
             [tech.v2.datatype.bitmap :as bitmap]
+            [tech.v2.datatype.monotonic-range :as dt-range]
             [clojure.pprint :as pprint])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
@@ -49,6 +50,29 @@
       (col-impl/new-column col-name
                            (col-impl/ensure-column-reader
                             new-col-data)))))
+
+
+(defn- nearest-range-start
+  ^long [^long bound ^long range-start ^long increment]
+  (if (> increment 0)
+    ;;if starting before bound
+    (if (>= range-start bound)
+      range-start
+      (+ range-start
+         (+ increment
+            (* increment
+               (quot (- bound (inc range-start))
+                     increment)))))
+    ;;if starting after bound
+    (if (<= range-start bound)
+      range-start
+      (+ range-start
+         (+ increment
+            (* increment
+               (quot (- bound range-start)
+                     increment)))))))
+
+
 
 (deftype Dataset [^List columns
                   colmap
@@ -212,17 +236,33 @@
     ;;Conversion to a reader is expensive in some cases so do it here
     ;;to avoid each column doing it.
     (let [map-selector? (instance? Map column-name-seq-or-map)
-          indexes (if (= :all index-seq)
+          n-rows (long (second (dtype/shape dataset)))
+          indexes (cond
+                    (= :all index-seq)
                     nil
-                    (if-let [bmp (dtype/as-roaring-bitmap index-seq)]
+                    (dtype-proto/convertible-to-bitmap? index-seq)
+                    (let [bmp (dtype/as-roaring-bitmap index-seq)]
                       (dtype/->reader
                        (bitmap/bitmap->efficient-random-access-reader
-                        bmp))
-                      (if (dtype/reader? index-seq)
-                        (dtype/->reader index-seq)
-                        (dtype/->reader (dtype/make-container
-                                         :java-array :int32
-                                         index-seq)))))
+                        bmp)))
+                    (dtype-proto/convertible-to-range? index-seq)
+                    (let [idx-seq (dtype-proto/->range index-seq {})
+                          rstart (long (dtype-proto/range-start idx-seq))
+                          rinc (long (dtype-proto/range-increment idx-seq))
+                          rend (+ rstart (* rinc (dtype/ecount idx-seq)))]
+                      (if (> rinc 0)
+                        (range (nearest-range-start 0 rstart rinc)
+                               (min n-rows rend)
+                               rinc)
+                        (range (nearest-range-start (dec n-rows) rstart rinc)
+                               (max -1 rend)
+                               rinc)))
+                    (dtype/reader? index-seq)
+                    (dtype/->reader index-seq)
+                    :else
+                    (dtype/->reader (dtype/make-container
+                                     :java-array :int32
+                                     index-seq)))
           columns
           (cond
             (= :all column-name-seq-or-map)

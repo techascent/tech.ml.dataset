@@ -814,6 +814,19 @@
     (is (= ds thawed-ds))))
 
 
+(deftest select-range-intersection
+  (let [ds (-> (tech.ml.dataset/->dataset [{:a 1} {:a 3}])
+               (tech.ml.dataset/select-rows (range -100 100)))]
+    (is (= 2 (tech.ml.dataset/row-count ds))))
+  (let [range-ds (tech.ml.dataset/->dataset {:a (range 100)})]
+    (is (= (vec (range 80 -1 -20))
+           (vec (-> (ds/select-rows range-ds (range 100 -100 -20))
+                    (ds/column :a)))))
+    (is (= (vec (range 0 100 20))
+           (vec (-> (ds/select-rows range-ds (range -100 100 20))
+                    (ds/column :a)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
