@@ -60,7 +60,7 @@
               body-length (.bodyLength new-msg)
               aligned-offset (align-offset (+ offset msg-size body-length))]
           (merge
-           {:data (dtype/sub-buffer data aligned-offset)
+           {:next-data (dtype/sub-buffer data aligned-offset)
             :message new-msg
             :message-type (message-id->message-type (.headerType new-msg))}
            (when-not (== 0 body-length)
@@ -71,7 +71,7 @@
   "Given a native buffer of arrow stream data, produce a sequence of flatbuf messages"
   [^NativeBuffer data]
   (when-let [msg (read-message data)]
-    (cons msg (lazy-seq (message-seq (:data msg))))))
+    (cons msg (lazy-seq (message-seq (:next-data msg))))))
 
 
 (extend-protocol clj-proto/Datafiable
