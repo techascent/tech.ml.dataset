@@ -112,7 +112,7 @@
 
   Type-hinting your columns and providing specific parsers for datetime types like:
   (ds/->dataset input {:parser-fn {\"date\" [:packed-local-date \"yyyy-MM-dd\"]}})
-  may have a larger effect than parallelization in most cases.
+  will have a larger effect than parallelization in most cases.
 
   Loading multiple files in parallel will also have a larger effect than
   single-file parallelization in most cases."
@@ -129,6 +129,42 @@
              (apply ds-base/concat))))))
   ([input]
    (parallelized-load-csv input {})))
+
+
+(defn csv->dataset-seq
+  "Lazily (except for first one) load a csv into a sequence of datasets.
+
+  options - same options as ->dataset with an addition :num-rows-per-batch
+  option that defaults to 1 million.
+
+  Note that when loading large datasets chosing the exact column datatype is
+  going to have a good effect on performance.  For example, for datetime datatypes
+  specifying the exact datetimeformatter parse string has an outsized effect
+  on performance,"
+  ([input {:keys [num-rows-per-batch]
+           :or {num-rows-per-batch 1000000}
+           :as options}]
+   (let [{:keys [gzipped? file-type]}
+         (when (string? input)
+           (ds-base/str->file-info input))]
+     (ds-base/wrap-stream-fn
+      input gzipped?
+      (fn [input]
+        (let [row-seq (->> (ds-parse/csv->rows input options)
+                           (partition-all num-rows-per-batch))
+              first-ds (first row-seq)
+              row-seq (rest row-seq)
+              first-ds (ds-parse/rows->dataset options first-ds)
+              ;;Setup parse-fn to explicitly set datatype of parsed columns
+              ;;to ensure schema stays constant.
+              parse-fn (merge (->> (vals first-ds)
+                                   (map (comp (juxt :name :datatype) meta))
+                                   (into {}))
+                              (:parser-fn options))
+              options (clojure.core/assoc options :parser-fn parse-fn)]
+          (cons first-ds (map (partial ds-parse/rows->dataset options) row-seq)))))))
+  ([input]
+   (csv->dataset-seq input {})))
 
 
 (defn select-columns-by-index
