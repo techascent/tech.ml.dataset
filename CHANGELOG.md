@@ -1,6 +1,6 @@
 # Changelog
 ## 3.09-SNAPSHOT
- * `tech.libs.arrow/write-dataset-seq-to-stream! - Given a sequence of datasets, write
+ * `tech.libs.arrow/write-dataset-seq-to-stream!` - Given a sequence of datasets, write
     an arrow stream with one record-batch for each dataset.
  * `tech.libs.arrow/stream->dataset-seq-copying` - Given an arrow stream, return a
     sequence of datasets, one for each arrow data record.
@@ -11,7 +11,7 @@
  * `tech.libs.arrow/visualize-arrow-stream` - memory-maps a file and returns the arrow
     structure in a way that prints nicely to the REPL.  Useful for exploring an arrow
 	file and quickly seeing the low level structure.
- * `tech.ml.dataset/csv->dataset-seq - Given a potentially large csv, parse it into
+ * `tech.ml.dataset/csv->dataset-seq` - Given a potentially large csv, parse it into
     a sequence of datasets.  These datasets are guaranteed to share a schema and so
 	an efficient form of writing really large arrow files is to using this function
 	along with `tech.libs.arrow/write-dataset-seq-to-stream!`.
