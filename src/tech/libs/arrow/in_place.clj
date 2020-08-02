@@ -54,8 +54,9 @@
           offset (long offset)
           msg-size (long msg-size)]
       (when (> msg-size 0)
-        (let [new-msg (Message/getRootAsMessage (-> (dtype/sub-buffer data offset msg-size)
-                                                    (dtype/->buffer-backing-store)))
+        (let [new-msg (Message/getRootAsMessage
+                       (-> (dtype/sub-buffer data offset msg-size)
+                           (dtype/->buffer-backing-store)))
               next-buf (dtype/sub-buffer data (+ offset msg-size))
               body-length (.bodyLength new-msg)
               aligned-offset (align-offset (+ offset msg-size body-length))]
@@ -287,7 +288,8 @@
                                :string (string-data->column-data
                                         dict-map encoding (drop 1 specific-bufs)
                                         n-elems)
-                               :boolean (arrow/bitbuffer->boolean-reader (second specific-bufs) n-elems)
+                               :boolean (arrow/bitbuffer->boolean-reader
+                                         (second specific-bufs) n-elems)
                                (-> (mmap/set-native-datatype
                                     (second specific-bufs) field-dtype)
                                    (dtype/sub-buffer 0 n-elems)))
@@ -297,6 +299,46 @@
                  [[] 0])
          (first)
          (ds-impl/new-dataset))))
+
+
+(defn- parse-next-dataset
+  [fdata schema messages fname idx]
+  (when (seq messages)
+    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
+                                    messages)
+          rest-messages (drop (count dict-messages) messages)
+          dict-map (->> dict-messages
+                        (map dictionary->strings)
+                        (map (juxt :id identity))
+                        (into {}))
+          data-record (first rest-messages)]
+      (cons
+       (-> (records->ds schema dict-map data-record)
+           (ds-base/set-dataset-name (format "%s-%03d" fname idx))
+           ;;Assoc on the file data so the gc doesn't release the source memory map
+           ;;until no one is accessing the dataset any more in the case where
+           ;;the file was opened with {:resource-type :gc}
+           (vary-meta assoc :source-mmap fdata))
+       (lazy-seq (parse-next-dataset fdata schema (rest rest-messages)
+                                     fname (inc (long idx))))))))
+
+
+(defn stream->dataset-seq-inplace
+  "Loads data up to and including the first data record.  Returns the a lazy
+  sequence of datasets.  Datasets use mmapped data, however, so realizing the
+  entire sequence is usually safe, even for datasets that are larger than
+  available RAM.
+  This method is expected to be called from within a stack resource context
+  unless options include {:resource-type :gc}.  See documentation for
+  tech.v2.datatype.mmap/mmap-file."
+  [fname & [options]]
+  (let [fdata (mmap/mmap-file fname options)
+        messages (mapv parse-message (message-seq fdata))
+        schema (first messages)
+        _ (when-not (= :schema (:message-type schema))
+            (throw (Exception. "Initial message is not a schema message.")))
+        messages (rest messages)]
+    (parse-next-dataset fdata schema messages fname 0)))
 
 
 (defn read-stream-dataset-inplace
@@ -317,9 +359,12 @@
                       (map dictionary->strings)
                       (map (juxt :id identity))
                       (into {}))
-        data-record (first rest-messages)
-        _ (when-not (= :record-batch (:message-type data-record))
-            (throw (Exception. "No data records detected")))]
+        data-record (first rest-messages)]
+    (when-not (= :record-batch (:message-type data-record))
+      (throw (Exception. "No data records detected")))
+    (when (seq (rest rest-messages))
+      (throw (Exception. "File contains multiple record batches.
+Please use stream->dataset-seq-inplace.")))
     (-> (records->ds schema dict-map data-record)
         (ds-base/set-dataset-name fname))))
 
@@ -327,7 +372,7 @@
 (comment
   ;;Overriding to use GC memory management.  Default is stack and thus needs to be in
   ;;a call to resource/stack-resource-context.
-  (def fdata (mmap/mmap-file "ames.arrow" {:resource-type :gc}))
+  (def fdata (mmap/mmap-file "test.arrow" {:resource-type :gc}))
   (def messages (mapv parse-message (message-seq fdata)))
   (assert (= 3 (count messages)))
   (assert (= [:schema :dictionary-batch :record-batch] (mapv :message-type messages)))

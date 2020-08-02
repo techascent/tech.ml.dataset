@@ -1,4 +1,17 @@
 # Changelog
+## 3.09-SNAPSHOT
+ * `tech.libs.arrow/write-dataset-seq-to-stream! - Given a sequence of datasets, write
+    an arrow stream with one record-batch for each dataset.
+ * `tech.libs.arrow/stream->dataset-seq-copying` - Given an arrow stream, return a
+    sequence of datasets, one for each arrow data record.
+ * `tech.libs.arrow/stream->dataset-seq-inplace` - Given an arrow stream, return a
+    sequence of datasets constructed in-place on memory mapped data.  Expects to be
+	used with in a `tech.resource/stack-resource-context` but accepts options for
+	`tech.v2.datatype.mmap/mmap-file`.
+ * `tech.libs.arrow/visualize-arrow-stream` - memory-maps a file and returns the arrow
+    structure in a way that prints nicely to the REPL.  Useful for exploring an arrow
+	file and quickly seeing the low level structure.
+
 ## 3.08
 #### Arrow Support
  * Proper arrow support.  In-place or accelerated copy pathway into the jvm.

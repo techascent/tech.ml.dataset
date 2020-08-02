@@ -36,6 +36,7 @@
            [org.apache.arrow.memory ArrowBuf]
            [org.roaringbitmap RoaringBitmap]
            [java.util Map ArrayList List HashMap]
+           [java.io InputStream RandomAccessFile]
            [tech.ml.dataset.impl.column Column]
            [tech.v2.datatype ObjectWriter]
            [tech.ml.dataset.string_table StringTable]
@@ -441,24 +442,24 @@
        :int64 (ft-fn (ArrowType$Int. 64 true))
        :float32 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/SINGLE))
        :float64 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/DOUBLE))
-       :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND (str (:timezone extra-data))))
+       :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
+                                                        (str (:timezone extra-data))))
        :local-time (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 8)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
-       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND (str (:timezone extra-data))))
-       :string (let [^DictionaryEncoding encoding (:encoding extra-data)
-                     int-type (.getIndexType encoding)]
-                 (when-not encoding
-                   (throw (Exception.
-                           "String tables must have a dictionary encoding")))
-                 (ft-fn int-type encoding))
-       :text (ft-fn (ArrowType$Utf8.))))))
+       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
+                                             (str (:timezone extra-data))))
+       :string (if-let [^DictionaryEncoding encoding (:encoding extra-data)]
+                 (ft-fn (.getIndexType encoding) encoding)
+                 ;;If no encoding is provided then just save the string as text
+                 (ft-fn (ArrowType$Utf8.)))
+       :text (ft-fn (ArrowType$Utf8.))
+       :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
 
 (defmulti metadata->field-type
   "Convert column metadata into an arrow field"
   (fn [meta any-missing?]
     :datatype))
-
 
 
 (defn string-column->dict
@@ -491,7 +492,7 @@
 
 
 (defn idx-col->field
-  ^Field [dict-provider ^long idx col]
+  ^Field [dict-provider {:keys [strings-as-text?]} ^long idx col]
   (let [colmeta (meta col)
         nullable? (boolean
                    (or (:nullable? colmeta)
@@ -501,7 +502,8 @@
         col-dtype (:datatype colmeta)
         colname (:name colmeta)
         extra-data (merge (select-keys (meta col) [:timezone])
-                          (when (= :string col-dtype)
+                          (when (and (not strings-as-text?)
+                                     (= :string col-dtype))
                             (string-col->encoding dict-provider colname col)))]
     (try
       (make-field
@@ -514,14 +516,16 @@
 
 
 (defn ds->arrow-schema
-  [ds]
-  (let [dict-provider (DictionaryProvider$MapDictionaryProvider.
-                       (make-array Dictionary 0))]
-    {:schema
-     (Schema. ^Iterable
-              (->> (ds-base/columns ds)
-                   (map-indexed (partial idx-col->field dict-provider))))
-     :dict-provider dict-provider}))
+  ([ds options]
+   (let [dict-provider (DictionaryProvider$MapDictionaryProvider.
+                        (make-array Dictionary 0))]
+     {:schema
+      (Schema. ^Iterable
+               (->> (ds-base/columns ds)
+                    (map-indexed (partial idx-col->field dict-provider options))))
+      :dict-provider dict-provider}))
+  ([ds]
+   (ds->arrow-schema ds {})))
 
 
 (defn as-roaring-bitmap
@@ -529,10 +533,13 @@
 
 
 (defn copy-column->arrow!
-  ^FieldVector [col missing field-vec]
-  (let [dtype (dtype/get-datatype col)]
+  ^FieldVector [col missing ^FieldVector field-vec]
+  (let [dtype (dtype/get-datatype col)
+        ft (-> (.getField field-vec)
+               (.getType))]
     (if (or (= dtype :text)
-            (= dtype :encoded-text))
+            (= dtype :encoded-text)
+            (instance? ArrowType$Utf8 ft))
       (strings->varchar! col missing field-vec)
       (do
         (when-not (instance? BaseFixedWidthVector field-vec)
@@ -580,9 +587,11 @@
                      (col-proto/column-name col)
                      (cond
                        (= :local-date col-dt)
-                       (dtype-dt-ops/local-date->milliseconds-since-epoch col 0 timezone)
+                       (dtype-dt-ops/local-date->milliseconds-since-epoch
+                        col 0 timezone)
                        (= :local-date-time col-dt)
-                       (dtype-dt-ops/local-date-time->milliseconds-since-epoch col timezone)
+                       (dtype-dt-ops/local-date-time->milliseconds-since-epoch
+                        col timezone)
                        :else
                        (dtype-dt-ops/->milliseconds col))
                      (assoc (meta col)
@@ -601,11 +610,13 @@
        (map-indexed
         (fn [^long idx col]
           (let [field-vec (.getVector vec-root idx)
+                vec-type (.getType (.getField field-vec))
                 coldata (dtype-dt/unpack col)
                 col-type (dtype/get-datatype coldata)
                 missing (col-proto/missing col)]
             (cond
-              (= :string col-type)
+              (and (= :string col-type)
+                   (not (instance? ArrowType$Utf8 vec-type)))
               (-> (ds-base/column->string-table col)
                   (str-table/indices)
                   (copy-column->arrow! missing field-vec))
@@ -633,7 +644,32 @@
    (write-dataset-to-stream! ds path {})))
 
 
+(defn write-dataset-seq-to-stream!
+  "Write a sequence of datasets to a stream.  Datasets are written with doseq.
+  All datasets must be amenable to being written into vectors of the type dictated
+  by the schema of the first dataset.  Each dataset is written to a separate batch."
+  ([ds-seq path options]
+   (let [ds (first ds-seq)
+         ds (datetime-cols-to-millis-from-epoch ds options)
+         {:keys [schema dict-provider]} (ds->arrow-schema ds {:strings-as-text? true})
+         ^DictionaryProvider dict-provider dict-provider]
+     (with-open [ostream (io/output-stream! path)
+                 vec-root (VectorSchemaRoot/create
+                           ^Schema schema
+                           ^BufferAllocator (allocator))
+                 writer (ArrowStreamWriter. vec-root dict-provider ostream)]
+       (.start writer)
+       (doseq [ds ds-seq]
+         (let [ds (datetime-cols-to-millis-from-epoch ds options)]
+           (copy-ds->vec-root vec-root ds))
+         (.writeBatch writer))
+       (.end writer))))
+  ([ds path]
+   (write-dataset-seq-to-stream! ds path {})))
+
+
 (defn write-dataset-to-file!
+  "EXPERIMENTAL & NOT WORKING - please use streaming formats for now."
   ([ds path options]
    (let [ds (ds-base/ensure-dataset-string-tables ds)
          ds (datetime-cols-to-millis-from-epoch ds options)
@@ -775,15 +811,44 @@
        (ds-impl/new-dataset ds-name)))
 
 
+(defn do-load-dataset-seq
+  [^InputStream istream ^ArrowStreamReader reader path idx options]
+  (if (.loadNextBatch reader)
+    (cons (arrow->ds (format "%s-%03d" path idx)
+                     (.getVectorSchemaRoot reader)
+                     (.getDictionaryVectors reader)
+                     options)
+          (lazy-seq (do-load-dataset-seq istream reader path (inc idx) options)))
+    (do (.close reader)
+        (.close istream)
+        nil)))
+
+
+(defn stream->dataset-seq-copying
+  "Read a complete arrow file lazily.  Each data record is copied into an
+  independent dataset."
+  ([path options]
+   (let [istream (io/input-stream path)
+         reader (ArrowStreamReader. istream (allocator))]
+     (do-load-dataset-seq istream reader path 0 options)))
+  ([path]
+   (stream->dataset-seq-copying path {})))
+
+
 (defn read-stream-dataset-copying
   ([path options]
    (with-open [istream (io/input-stream path)
                reader (ArrowStreamReader. istream (allocator))]
      (when (.loadNextBatch reader)
-       (arrow->ds path
-                  (.getVectorSchemaRoot reader)
-                  (.getDictionaryVectors reader)
-                  options))))
+       (let [retval
+             (arrow->ds path
+                        (.getVectorSchemaRoot reader)
+                        (.getDictionaryVectors reader)
+                        options)]
+         (when (.loadNextBatch reader)
+           (throw (Exception. "File contains multiple batches.
+Please use `stream->dataset-seq-copying`")))
+         retval))))
   ([path]
    (read-stream-dataset-copying path {})))
 
