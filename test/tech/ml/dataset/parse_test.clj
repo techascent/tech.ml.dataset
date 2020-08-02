@@ -363,6 +363,13 @@
     (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))))
 
 
+(deftest string-separators
+  (let [ds (ds-base/->dataset "test/data/double_parse_test.csv" {:separator ","})]
+    (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))
+    (is (thrown? Throwable (ds-base/->dataset "test/data/double_parse_test.csv"
+                                              {:separator ",n"})))))
+
+
 (deftest encoded-text
   (let [tf "test/data/medical-text.csv"
         base-ds (ds-base/->dataset tf)

@@ -58,6 +58,20 @@
     (throw (Exception. "Item seq must of either strings or numbers"))))
 
 
+(defn- ->character
+  [item]
+  (cond
+    (instance? Character item)
+    item
+    (string? item)
+    (if (== 1 (count item))
+      (first item)
+      (throw (Exception.
+              (format "Multicharacter separators (%s) are not supported." item))))
+    :else
+    (throw (Exception. (format "'%s' is not a valid separator" item)))))
+
+
 
 (defn create-csv-parser
   "Create an implementation of univocity csv parser."
@@ -81,7 +95,7 @@
           num-rows (or num-rows (:n-records options))
           separator-seq (concat [\, \tab]
                                 (when separator
-                                  [separator]))]
+                                  [(->character separator)]))]
 
       (.detectFormatAutomatically settings (into-array Character/TYPE separator-seq))
       (when num-rows
