@@ -675,7 +675,7 @@
          ds (datetime-cols-to-millis-from-epoch ds options)
          {:keys [schema dict-provider]} (ds->arrow-schema ds)
          ^DictionaryProvider dict-provider dict-provider]
-     (with-open [ostream (java.io.RandomAccessFile. ^String path "w")
+     (with-open [ostream (java.io.RandomAccessFile. ^String path "rw")
                  vec-root (VectorSchemaRoot/create
                            ^Schema schema
                            ^BufferAllocator (allocator))
