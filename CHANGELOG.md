@@ -1,5 +1,5 @@
 # Changelog
-## 3.09-SNAPSHOT
+## 3.09
  * `tech.libs.arrow/write-dataset-seq-to-stream!` - Given a sequence of datasets, write
     an arrow stream with one record-batch for each dataset.
  * `tech.libs.arrow/stream->dataset-seq-copying` - Given an arrow stream, return a
