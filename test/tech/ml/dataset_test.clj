@@ -79,7 +79,6 @@
 
 ;;PCA is broken on travis.
 (deftest ^:travis-broken pca
-  (println "PCA test")
   (let [test-data (tens/->tensor (->> (range 25)
                                       shuffle
                                       (partition 5)))
