@@ -8,4 +8,5 @@
   :lein-tools-deps/config {:config-files [:install :user :project]}
   :profiles {:dev {:lein-tools-deps/config {:aliases [:test]}}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
+  :test-selectors {:travis (complement :travis-broken)}
   :java-source-paths ["java"])

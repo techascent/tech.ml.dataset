@@ -77,29 +77,31 @@
            (tens/->jvm result-tens :datatype :int32)))))
 
 
-(comment (deftest ^:pca pca
-           (let [test-data (tens/->tensor (->> (range 25)
-                                               shuffle
-                                               (partition 5)))
-                 test-ds (ds-tens/row-major-tensor->dataset test-data)
-                 pca-info (pca/pca-dataset test-ds)
-                 transformed-ds (pca/pca-transform-dataset test-ds pca-info 3 :float64)
-                 trans-tens (ds-tens/dataset->row-major-tensor transformed-ds :float64)
-                 smile-svd-pca (doto (PCA/fit (->> test-data
-                                                   tens/rows
-                                                   (map dtype/->array-copy)
-                                                   (into-array (Class/forName "[D"))))
-                                 (.setProjection (int 3)))
-                 smile-transformed-ds (-> (.project smile-svd-pca
-                                                    (->> test-data
-                                                         (tens/rows)
-                                                         (map dtype/->array-copy)
-                                                         (into-array (Class/forName "[D"))))
-                                          (tens/->tensor))]
-             ;;Make sure we get the same answer as smile.
-             (is (dfn/equals trans-tens
-                             smile-transformed-ds
-                             0.01)))))
+;;PCA is broken on travis.
+(deftest ^:travis-broken pca
+  (println "PCA test")
+  (let [test-data (tens/->tensor (->> (range 25)
+                                      shuffle
+                                      (partition 5)))
+        test-ds (ds-tens/row-major-tensor->dataset test-data)
+        pca-info (pca/pca-dataset test-ds)
+        transformed-ds (pca/pca-transform-dataset test-ds pca-info 3 :float64)
+        trans-tens (ds-tens/dataset->row-major-tensor transformed-ds :float64)
+        smile-svd-pca (doto (PCA/fit (->> test-data
+                                          tens/rows
+                                          (map dtype/->array-copy)
+                                          (into-array (Class/forName "[D"))))
+                        (.setProjection (int 3)))
+        smile-transformed-ds (-> (.project smile-svd-pca
+                                           (->> test-data
+                                                (tens/rows)
+                                                (map dtype/->array-copy)
+                                                (into-array (Class/forName "[D"))))
+                                 (tens/->tensor))]
+    ;;Make sure we get the same answer as smile.
+    (is (dfn/equals trans-tens
+                    smile-transformed-ds
+                    0.01))))
 
 
 (deftest n-permutations

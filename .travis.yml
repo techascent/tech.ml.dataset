@@ -10,5 +10,7 @@ addons:
     - libopenblas-dev
 before_script:
  - ./scripts/get-data.sh
+script:
+  lein test :travis
 cache:
   directories: "$HOME/.m2"
