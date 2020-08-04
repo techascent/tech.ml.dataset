@@ -354,35 +354,35 @@
         ;;Sale price cannot be in the set as it was explicitly removed.
         (is (not (contains? skewed-set "SalePrice")))))
 
-    (testing "Full ames pathway is sane"
-      (let [dataset (-> src-ds
-                        full-ames-pt-1
-                        full-ames-pt-2
-                        full-ames-pt-3)
-            std-set (set (cf/numeric-and-non-categorical-and-not-target dataset))
-            mean-var-seq (->> std-set
-                              (map (comp #(ds-col/stats % [:mean :variance])
-                                         (partial ds/column dataset))))]
-        ;;Are means 0?
-        (is (dfn/equals (mapv :mean mean-var-seq)
-                        (vec (repeat (count mean-var-seq) 0))
-                        0.001))
-        (try
-          (let [pca-ds (dsp/pca dataset)]
-            (is (= 127 (count (ds/columns dataset))))
-            (is (= 45 (count (cf/categorical? pca-ds))))
-            (is (= 75 (count (ds/columns pca-ds))))
-            (is (= 1 (count (cf/target? pca-ds)))))
-          (let [pca-ds (dsp/pca dataset
-                                cf/numeric-and-non-categorical-and-not-target
-                                :n-components 10)]
-            (is (= 45 (count (cf/categorical? dataset))))
-            (is (= 45 (count (cf/categorical? pca-ds))))
-            (is (= 127 (count (ds/columns dataset))))
-            (is (= 56 (count (ds/columns pca-ds))))
-            (is (= 1 (count (cf/target? pca-ds)))))
-          (catch Throwable e
-            (log/warnf e "Skiping tests due to exception in pca pathway")))))))
+    (comment (testing "Full ames pathway is sane"
+               (let [dataset (-> src-ds
+                                 full-ames-pt-1
+                                 full-ames-pt-2
+                                 full-ames-pt-3)
+                     std-set (set (cf/numeric-and-non-categorical-and-not-target dataset))
+                     mean-var-seq (->> std-set
+                                       (map (comp #(ds-col/stats % [:mean :variance])
+                                                  (partial ds/column dataset))))]
+                 ;;Are means 0?
+                 (is (dfn/equals (mapv :mean mean-var-seq)
+                                 (vec (repeat (count mean-var-seq) 0))
+                                 0.001))
+                 (try
+                   (let [pca-ds (dsp/pca dataset)]
+                     (is (= 127 (count (ds/columns dataset))))
+                     (is (= 45 (count (cf/categorical? pca-ds))))
+                     (is (= 75 (count (ds/columns pca-ds))))
+                     (is (= 1 (count (cf/target? pca-ds)))))
+                   (let [pca-ds (dsp/pca dataset
+                                         cf/numeric-and-non-categorical-and-not-target
+                                         :n-components 10)]
+                     (is (= 45 (count (cf/categorical? dataset))))
+                     (is (= 45 (count (cf/categorical? pca-ds))))
+                     (is (= 127 (count (ds/columns dataset))))
+                     (is (= 56 (count (ds/columns pca-ds))))
+                     (is (= 1 (count (cf/target? pca-ds)))))
+                   (catch Throwable e
+                     (log/warnf e "Skiping tests due to exception in pca pathway"))))))))
 
 
 (deftest tostring-regression
