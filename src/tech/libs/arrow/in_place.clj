@@ -366,7 +366,10 @@
       (throw (Exception. "File contains multiple record batches.
 Please use stream->dataset-seq-inplace.")))
     (-> (records->ds schema dict-map data-record)
-        (ds-base/set-dataset-name fname))))
+        (ds-base/set-dataset-name fname)
+        ;;We have to be sure that the dataset keeps a reference to the file data
+        ;;else the GC may clean up our mmap before we are ready.
+        (vary-meta assoc :source-mmap fdata))))
 
 
 (comment

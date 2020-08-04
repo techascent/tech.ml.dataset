@@ -24,6 +24,7 @@
             [tech.ml.protocols.dataset :as ds-proto]
             [tech.ml.dataset.text :as ds-text]
             [tech.v2.datatype.casting :as casting]
+            [tech.io :as io]
             [tech.parallel.for :as parallel-for]
             [tech.libs.smile.data :as smile-data]
             [taoensso.nippy :as nippy]
@@ -36,6 +37,7 @@
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList]
            [org.roaringbitmap RoaringBitmap]
+           [java.io InputStream]
            [tech.ml.dataset.impl.column Column]
            [tech.ml.dataset.impl.dataset Dataset]
            [tech.ml.dataset.string_table StringTable]
@@ -131,6 +133,25 @@
    (parallelized-load-csv input {})))
 
 
+(defn- lazy-cons-csv->dataset-seq
+  [^InputStream input-stream past-ds row-seq options]
+  (try
+    (if (seq row-seq)
+      (cons past-ds (lazy-seq
+                     (lazy-cons-csv->dataset-seq
+                      input-stream
+                      (ds-parse/rows->dataset options (first row-seq))
+                      (rest row-seq)
+                      options)))
+      (do
+        (.close input-stream)
+        (cons past-ds nil)))
+    (catch Throwable e
+      (.close input-stream)
+      (throw e))))
+
+
+
 (defn csv->dataset-seq
   "Lazily (except for first one) load a csv into a sequence of datasets.
 
@@ -141,28 +162,40 @@
   going to have a good effect on performance.  For example, for datetime datatypes
   specifying the exact datetimeformatter parse string has an outsized effect
   on performance,"
-  ([input {:keys [num-rows-per-batch]
-           :or {num-rows-per-batch 1000000}
+  ([input {:keys [num-rows-per-batch header-row?]
+           :or {num-rows-per-batch 1000000 header-row? true}
            :as options}]
-   (let [{:keys [gzipped? file-type]}
+   (let [{:keys [gzipped?]}
          (when (string? input)
            (ds-base/str->file-info input))]
-     (ds-base/wrap-stream-fn
-      input gzipped?
-      (fn [input]
-        (let [row-seq (->> (ds-parse/csv->rows input options)
-                           (partition-all num-rows-per-batch))
-              first-ds (first row-seq)
-              row-seq (rest row-seq)
-              first-ds (ds-parse/rows->dataset options first-ds)
-              ;;Setup parse-fn to explicitly set datatype of parsed columns
-              ;;to ensure schema stays constant.
-              parse-fn (merge (->> (vals first-ds)
-                                   (map (comp (juxt :name :datatype) meta))
-                                   (into {}))
-                              (:parser-fn options))
-              options (clojure.core/assoc options :parser-fn parse-fn)]
-          (cons first-ds (map (partial ds-parse/rows->dataset options) row-seq)))))))
+     (let [^InputStream input (if (instance? InputStream input)
+                                input
+                                (if gzipped?
+                                  (io/gzip-input-stream input)
+                                  (io/input-stream input)))]
+       (try
+         (let [row-seq (ds-parse/csv->rows input options)
+               row-seq (if header-row?
+                         (let [hr (first row-seq)]
+                           (->> (partition-all num-rows-per-batch
+                                               (rest row-seq))
+                                (map #(clojure.core/concat [hr] %))))
+                         (partition-all num-rows-per-batch row-seq))
+               first-ds (first row-seq)
+               row-seq (rest row-seq)
+               first-ds (ds-parse/rows->dataset options first-ds)
+               ;;Setup parse-fn to explicitly set datatype of parsed columns
+               ;;to ensure schema stays constant.
+               parse-fn (merge (->> (vals first-ds)
+                                    (map (comp (juxt :name :datatype) meta))
+                                    (into {}))
+                               (:parser-fn options))
+               options (clojure.core/assoc options :parser-fn parse-fn)]
+
+           (lazy-cons-csv->dataset-seq input first-ds row-seq options))
+         (catch Throwable e
+           (.close input)
+           (throw e))))))
   ([input]
    (csv->dataset-seq input {})))
 
