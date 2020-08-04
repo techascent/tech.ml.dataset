@@ -20,7 +20,7 @@
             IntVectorImpl LongVectorImpl FloatVectorImpl DoubleVectorImpl
             StringVectorImpl VectorImpl
             VectorFactory]
-           [smile.data.measure NominalScale DiscreteMeasure]
+           [smile.data.measure NominalScale]
            [org.roaringbitmap RoaringBitmap]
            [java.util Collection List ArrayList]
            [java.io Writer]))

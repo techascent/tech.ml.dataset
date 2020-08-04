@@ -5,30 +5,38 @@
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.v2.datatype :as dtype])
   (:import [smile.projection PCA]
-           [smile.math.matrix DenseMatrix Matrix]))
+           [smile.math.matrix Matrix]
+           [java.nio DoubleBuffer]))
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
 
+(def matrix-data
+  (let [data-field (doto (.getDeclaredField Matrix "A")
+                     (.setAccessible true))]
+    (fn ^DoubleBuffer [^Matrix mat]
+      (.get data-field mat))))
+
+
 (defn- smile-dense->tensor
   "Smile matrixes are row-major."
-  [^DenseMatrix dense-mat]
-  (-> (.data dense-mat)
+  [^Matrix dense-mat]
+  (-> (matrix-data dense-mat)
       (tens/reshape [(.nrows dense-mat)
                      (.ncols dense-mat)])))
 
 
 (defn- tensor->smile-dense
-  ^DenseMatrix [tens-data]
+  ^Matrix [tens-data]
   (when-not (= 2 (count (dtype/shape tens-data)))
     (throw (ex-info "Data is not right shape" {})))
   (let [[n-rows n-cols] (dtype/shape tens-data)
-        retval (Matrix/zeros n-rows n-cols)]
+        retval (Matrix. n-rows n-cols)]
     ;;This should hit the optimized pathways if the datatypes line up.
     ;;If they don't, at least it will still work.
-    (dtype/copy! tens-data (.data retval))
+    (dtype/copy! tens-data (matrix-data retval))
     retval))
 
 
