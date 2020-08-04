@@ -1,4 +1,10 @@
 # Changelog
+## 3.11
+ * Major fix to tech.v2.datatype.mmap/mmap-file - resource types weren't being set in
+   default.
+ * `tech.ml.dataset/csv->dataset-seq` - Fixed input stream closing before sequence is
+   completely consumed.
+
 ## 3.10
  * `tech.libs.arrow/write-dataset-seq-to-stream!` - Given a sequence of datasets, write
     an arrow stream with one record-batch for each dataset.
