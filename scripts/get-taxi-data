@@ -1,0 +1,15 @@
+#!/bin/bash
+
+mkdir -p test/data/nyc-taxi
+
+YEAR=2009
+while [ $YEAR -le 2019 ]
+do
+    MONTHS=("01" "02" "03" "04" "05" "06"
+	    "07" "08" "09" "10" "11" "12")
+    for MONTH in "${MONTHS[@]}"
+    do
+	wget "https://ursa-labs-taxi-data.s3.us-east-2.amazonaws.com/$YEAR/$MONTH/data.parquet" -O "test/data/nyc-taxi/$YEAR-$MONTH-data.parquet"
+    done		  
+    YEAR=$(( $YEAR + 1 ))
+done

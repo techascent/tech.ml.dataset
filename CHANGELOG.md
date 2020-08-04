@@ -1,4 +1,7 @@
 # Changelog
+## 4.00
+ * Upgrade to smile 2.5.0
+
 ## 3.11
  * Major fix to tech.v2.datatype.mmap/mmap-file - resource types weren't being set in
    default.
