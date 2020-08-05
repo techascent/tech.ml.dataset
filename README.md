@@ -25,7 +25,7 @@ writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
 Upgraded support for [Apache Arrow](src/tech.libs/arrow.clj).  We support copying pathway using
 the standard api -- data is copied from disk into buffers.  We also
-support a more or less [from-scratch implmentation](src/tech/libs/arrow/in_place.clj) of an in-place 
+support a more or less [from-scratch implementation](src/tech/libs/arrow/in_place.clj) of an in-place 
 pathway built expressly to enable both datasets that are larger than machine
 RAM and purely for performance on top of the 
 ['tech.v2.datatype.mmap'](https://github.com/techascent/tech.datatype/blob/a2ea4011b18c92f38512b67ed8a5e995fb9f4a16/src/tech/v2/datatype/mmap.clj#L397) 
