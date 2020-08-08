@@ -7,9 +7,12 @@
             [primitive-math :as pmath])
   (:import [tech.ml.dataset IndexReduction IndexReduction$IndexedBiFunction]
            [java.util Map Map$Entry HashMap List Set HashSet]
+           [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiFunction BiConsumer Function]
            [java.util.stream Stream]
-           [tech.v2.datatype DoubleReader]))
+           [tech.v2.datatype DoubleReader]
+           [it.unimi.dsi.fastutil.ints Int2ObjectMap
+            Int2ObjectOpenHashMap]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -31,30 +34,48 @@
                                 (.merge lhs k v reduce-bi-fn))))
                            lhs)
                           ([lhs] lhs))
-         reduction
-         (->> ds-seq
-              (parallel/queued-pmap
-               3
-               (fn [dataset]
-                 (let [coldata (dtype/->reader (dataset column-name) :object)
-                  n-elems (dtype/ecount coldata)
-                  dataset-context (.datasetContext reducer dataset)]
-                   (parallel-for/indexed-map-reduce
-                    n-elems
-                    (fn [^long start-idx ^long n-groups]
-                      (let [groups (HashMap.)
-                            end-idx (long (+ start-idx n-groups))
-                            compute-fn (IndexReduction$IndexedBiFunction.
-                                        dataset-context reducer)]
-                        (loop [idx start-idx]
-                          (if (< idx end-idx)
-                            (do
-                              (.setIndex compute-fn idx)
-                              (.compute groups (coldata idx) compute-fn)
-                              (recur (unchecked-inc idx)))
-                            groups))))
-                    (partial reduce reduce-maps-fn)))))
-              (reduce reduce-maps-fn))]
+
+         ;; reduction
+         ;; (->> ds-seq
+         ;;      (parallel/queued-pmap
+         ;;       3
+         ;;       (fn [dataset]
+         ;;         (let [coldata (dtype/->reader (dataset column-name) :object)
+         ;;               n-elems (dtype/ecount coldata)
+         ;;               dataset-context (.datasetContext reducer dataset)]
+         ;;           (parallel-for/indexed-map-reduce
+         ;;            n-elems
+         ;;            (fn [^long start-idx ^long n-groups]
+         ;;              (let [groups (HashMap.)
+         ;;                    end-idx (long (+ start-idx n-groups))
+         ;;                    compute-fn (IndexReduction$IndexedBiFunction.
+         ;;                                dataset-context reducer)]
+         ;;                (loop [idx start-idx]
+         ;;                  (if (< idx end-idx)
+         ;;                    (do
+         ;;                      (.setIndex compute-fn idx)
+         ;;                      (.compute groups (coldata idx) compute-fn)
+         ;;                      (recur (unchecked-inc idx)))
+         ;;                    groups))))
+         ;;            (partial reduce reduce-maps-fn)))))
+         ;;      (reduce reduce-maps-fn))
+         reduction (ConcurrentHashMap.)
+         _ (doseq [dataset ds-seq]
+             (let [coldata(dtype/->reader (dataset column-name) :object)
+                   n-elems (dtype/ecount coldata)
+                   dataset-context (.datasetContext reducer dataset)]
+               (parallel-for/indexed-map-reduce
+                n-elems
+                (fn [^long start-idx ^long n-groups]
+                  (let [end-idx (long (+ start-idx n-groups))
+                        compute-fn (IndexReduction$IndexedBiFunction.
+                                    dataset-context reducer)]
+                    (loop [idx start-idx]
+                      (when (< idx end-idx)
+                        (do
+                          (.setIndex compute-fn idx)
+                          (.compute reduction (coldata idx) compute-fn)
+                          (recur (unchecked-inc idx))))))))))]
      (-> (.entrySet ^Map reduction)
          (.parallelStream)
          (.map (reify Function
@@ -190,30 +211,29 @@
 
 (comment
   (def stocks (ds-base/->dataset "test/data/stocks.csv"))
-  (aggregate-group-by-column-reduce
-   "symbol"
-   (reify IndexReduction
-     (reduceIndex [this ds ctx idx]
-       (let [{:keys [price sum n-elems] :as ctx}
-             (if ctx
-               ctx
-               {:price (dtype/->reader (ds "price"))
-                :sum 0.0
-                :n-elems 0})]
-         (-> ctx
-             (update :sum (fn [^double sum]
-                            (+ sum (price idx))))
-             (update :n-elems inc))))
-     (reduceReductions [this lhs-ctx rhs-ctx]
-       (let [sum (+ (double (:sum lhs-ctx))
-                    (double (:sum rhs-ctx)))
-             n-elems (+ (:n-elems lhs-ctx)
-                        (:n-elems rhs-ctx))]
-         {:sum sum
-          :avg (/ sum n-elems)
-          :n-elems n-elems}))
-     (finalize [this ctx] ctx))
-   [stocks])
+  (-> (aggregate-group-by-column-reduce
+       "symbol"
+       (reify IndexReduction
+         (reduceIndex [this ds ctx idx]
+           (let [{:keys [price sum n-elems] :as ctx}
+                 (if ctx
+                   ctx
+                   {:price (dtype/->reader (ds "price"))
+                    :sum 0.0
+                    :n-elems 0})]
+             (-> ctx
+                 (update :sum (fn [^double sum]
+                                (+ sum (price idx))))
+                 (update :n-elems inc))))
+         (reduceReductions [this lhs-ctx rhs-ctx]
+           (let [sum (+ (double (:sum lhs-ctx))
+                        (double (:sum rhs-ctx)))
+                 n-elems (+ (:n-elems lhs-ctx)
+                            (:n-elems rhs-ctx))]
+             {:sum sum
+              :n-elems n-elems}))
+         (finalize [this ctx] (select-keys ctx [:sum :n-elems])))
+       [stocks]))
 
 
   (aggregate-group-by-column-reduce
