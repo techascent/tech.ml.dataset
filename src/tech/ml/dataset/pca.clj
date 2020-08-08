@@ -20,7 +20,7 @@
       (.get data-field mat))))
 
 
-(defn- smile-dense->tensor
+(defn smile-dense->tensor
   "Smile matrixes are row-major."
   [^Matrix dense-mat]
   (-> (matrix-data dense-mat)
@@ -28,7 +28,7 @@
                      (.ncols dense-mat)])))
 
 
-(defn- tensor->smile-dense
+(defn tensor->smile-dense
   ^Matrix [tens-data]
   (when-not (= 2 (count (dtype/shape tens-data)))
     (throw (ex-info "Data is not right shape" {})))

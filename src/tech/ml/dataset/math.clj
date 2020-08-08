@@ -6,7 +6,7 @@
             [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v2.datatype.bitmap :as bitmap]
             [tech.v2.datatype.writers.indexed :as indexed-wtr]
-            [tech.ml.utils :as ml-utils]
+            [tech.ml.dataset.utils :as ml-utils]
             [tech.ml.dataset.column :as ds-col]
             [tech.ml.dataset.base
              :refer [columns-with-missing-seq

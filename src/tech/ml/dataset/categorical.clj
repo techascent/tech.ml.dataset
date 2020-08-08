@@ -10,7 +10,7 @@
             [tech.ml.dataset.impl.column :as col-impl]
             [tech.v2.datatype :as dtype]
             [clojure.set :as c-set]
-            [tech.ml.utils :as utils]
+            [tech.ml.dataset.utils :as utils]
             [tech.parallel.for :as parallel-for])
   (:import [java.util HashMap Map]
            [java.util.function Function BiFunction BiConsumer]))

@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.utils.slf4j-log-level
+(ns ^:no-doc tech.ml.dataset.utils.slf4j-log-level
   (:import [ch.qos.logback.classic Logger]
            [ch.qos.logback.classic Level]))
 

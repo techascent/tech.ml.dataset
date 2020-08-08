@@ -1,4 +1,11 @@
 # Changelog
+## 4.01-SNAPSHOT
+ * Major cleanup of dependencies.  Logging works now, for better or definitely
+   at times for worse.  To silence annoying, loud logging call:
+   ```clojure
+   (tech.ml.dataset.utils/set-slf4j-log-level :info)
+   ```.
+
 ## 4.00
  * Upgrade to smile 2.5.0
 

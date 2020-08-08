@@ -12,7 +12,7 @@
             [tech.v2.datatype.typecast :as typecast]
             [tech.v2.datatype.mmap :as mmap]
             [clojure.edn :as edn]
-            [tech.ml.utils :as ml-utils]
+            [tech.ml.dataset.utils :as ml-utils]
             [tech.io :as io]
             [primitive-math :as pmath])
   (:import [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema

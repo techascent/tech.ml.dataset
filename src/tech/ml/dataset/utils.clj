@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.utils
+(ns ^:no-doc tech.ml.dataset.utils
   (:require [tech.parallel.require :as parallel-req]
             [tech.parallel.next-item-fn :as parallel-nfn]
             [tech.v2.datatype.casting :as casting])
@@ -58,7 +58,8 @@
   classpath."
   [level]
   (try
-    ((parallel-req/require-resolve 'tech.ml.utils.slf4j-log-level/set-log-level) level)
+    ((parallel-req/require-resolve
+      'tech.ml.dataset.utils.slf4j-log-level/set-log-level) level)
     (catch Throwable e
       :exception)))
 
