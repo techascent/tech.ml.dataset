@@ -453,44 +453,6 @@
                             missing))))))
 
 
-(defn ^:no-doc columnwise-reduce
-  "In parallel, run function over each column and produce a new dataset with a
-  single row of the result.  Returns a new dataset with the same columns as the
-  original.  Exceptions are logged with 'warn' and a missing value for that column
-  is produced.
-
-  In addition to being a function from column->scalar, reduce-fn may be a map of
-  colname to reduction function in which case only columns which have entries in
-  the map are reduced, other columns are dropped.
-
-  This function is deprecated -
-  https://github.com/techascent/tech.ml.dataset/issues/43
-
-  "
-  [reduce-fn dataset]
-  (let [colnames (if (instance? Map reduce-fn)
-                   (let [keyset (.keySet ^Map reduce-fn)]
-                     (clojure.core/filter #(.contains keyset  %)
-                                          (column-names dataset)))
-                   (column-names dataset))
-        dataset (select-columns dataset colnames)]
-    (->> dataset
-         (pmap (fn [col]
-                 (let [colname (ds-col/column-name col)]
-                   [colname
-                    (try
-                      (if (instance? Map reduce-fn)
-                        (when-let [map-reduce-fn (get reduce-fn colname)]
-                          (map-reduce-fn col))
-                        (reduce-fn col))
-                      (catch Throwable e
-                        (log/warnf "Error processing column %s: %s"
-                                   (ds-col/column-name col) e)
-                        nil))])))
-         (into {})
-         (vector)
-         (->>dataset {:dataset-name (dataset-name dataset)}))))
-
 
 (defn columnwise-concat
   "Given a dataset and a list of columns, produce a new dataset with
