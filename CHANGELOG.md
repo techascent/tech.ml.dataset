@@ -1,10 +1,14 @@
 # Changelog
-## 4.01-SNAPSHOT
+## 4.01
  * Major cleanup of dependencies.  Logging works now, for better or definitely
    at times for worse.  To silence annoying, loud logging call:
    ```clojure
    (tech.ml.dataset.utils/set-slf4j-log-level :info)
    ```.
+ * Added a large-dataset reduction namespace: `tech.ml.dataset.reductions`.  Current
+   very beta but in general large reductions will reduce to java streams as these have
+   parallelization possibilities that sequences do not have; for instance you can
+   get a parallel stream out of a hash map.
 
 ## 4.00
  * Upgrade to smile 2.5.0
