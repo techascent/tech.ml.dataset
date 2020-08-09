@@ -24,6 +24,7 @@
                  [http-kit                         "2.3.0"]
                  ;;Things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]]
+  :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
@@ -47,8 +48,7 @@
                               :exclusions [commons-codec]]]
               :test-paths ["test" "neanderthal"]}
              ;;No neanderthal on travis
-             :travis {:test-selectors {:travis (complement :travis-broken)}
-                      :dependencies [[criterium "0.4.5"]
+             :travis {:dependencies [[criterium "0.4.5"]
                                      [http-kit "2.3.0"]
                                      [techascent/tech.viz "0.3"]
                                      [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
