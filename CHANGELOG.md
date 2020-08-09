@@ -1,4 +1,8 @@
 # Changelog
+## 4.02
+ * Optimized conversion from a dataset to and from a neanderthal dense matrix is
+   now supported -- see tech.ml.dataset.neanderthal.
+
 ## 4.01
  * Major cleanup of dependencies.  Logging works now, for better or definitely
    at times for worse.  To silence annoying, loud logging call:
