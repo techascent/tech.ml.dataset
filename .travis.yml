@@ -11,6 +11,6 @@ addons:
 before_script:
  - ./scripts/get-data.sh
 script:
-  lein test with-profile travis :travis
+  lein with-profile travis test :travis
 cache:
   directories: "$HOME/.m2"
