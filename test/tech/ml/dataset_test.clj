@@ -828,6 +828,12 @@
                     (ds/column :a)))))))
 
 
+(deftest unique-by-nil-regression
+  (-> (ds/->dataset [])
+      (ds/add-column (ds-col/new-column :abc [nil nil]))
+      (->> (ds/unique-by-column :abc))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

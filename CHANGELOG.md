@@ -1,4 +1,7 @@
 # Changelog
+## 4.03
+ * Fix for #136
+
 ## 4.02
  * Optimized conversion from a dataset to and from a neanderthal dense matrix is
    now supported -- see tech.ml.dataset.neanderthal.

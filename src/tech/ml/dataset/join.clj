@@ -27,8 +27,8 @@
 (defmacro datatype->group-by
   [datatype]
   (case datatype
-    :int32 `dfn/arggroup-by-int
-    :int64 `dfn/arggroup-by))
+    :int32 `dfn/arggroup-by-stable-int
+    :int64 `dfn/arggroup-by-stable))
 
 (defn- colname->str
   ^String [item]

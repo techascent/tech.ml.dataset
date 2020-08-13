@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "4.03-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "4.03"
   :description "Dataset and ETL pipeline for machine learning"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [techascent/tech.datatype         "5.15"]
+                 [techascent/tech.datatype         "5.16"]
                  [techascent/tech.io               "3.17"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]

@@ -388,7 +388,7 @@ This is an interface change and we do apologize!"))))
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
         (mapseq-reader)
-        (dfn/arggroup-by key-fn)))
+        (dfn/arggroup-by-stable key-fn)))
   ([key-fn dataset]
    (group-by->indexes key-fn nil dataset)))
 
@@ -416,7 +416,7 @@ This is an interface change and we do apologize!"))))
   [colname dataset]
   (->> (column dataset colname)
        (dtype/->reader)
-       (dfn/arggroup-by identity)))
+       (dfn/arggroup-by-stable identity)))
 
 
 (defn group-by-column
