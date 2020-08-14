@@ -25,10 +25,10 @@ writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
 Upgraded support for [Apache Arrow](src/tech.libs/arrow.clj).  We support copying pathway using
 the standard api -- data is copied from disk into buffers.  We also
-support a more or less [from-scratch implementation](src/tech/libs/arrow/in_place.clj) of an in-place 
+support a more or less [from-scratch implementation](src/tech/libs/arrow/in_place.clj) of an in-place
 pathway built expressly to enable both datasets that are larger than machine
-RAM and purely for performance on top of the 
-['tech.v2.datatype.mmap'](https://github.com/techascent/tech.datatype/blob/a2ea4011b18c92f38512b67ed8a5e995fb9f4a16/src/tech/v2/datatype/mmap.clj#L397) 
+RAM and purely for performance on top of the
+['tech.v2.datatype.mmap'](https://github.com/techascent/tech.datatype/blob/a2ea4011b18c92f38512b67ed8a5e995fb9f4a16/src/tech/v2/datatype/mmap.clj#L397)
 namespace.
 
 We now have support for [nippy serialization](docs/nippy-serialization-rocks.md).
@@ -113,12 +113,12 @@ user> (take 2 (ds/mapseq-reader csv-data))
   "price" 36.35})
 
 ;;Datasets are comprised of named columns, and provide a Clojure hashmap-compatible
-;;collection.  Datasets allow reading and updating column data associated with a column name, 
+;;collection.  Datasets allow reading and updating column data associated with a column name,
 ;;and provide a sequential view of [column-name column] entries.
 
 ;;You can look up columns via `get`, keyword lookup, and invoking the dataset as a function on
 ;;a key (a column name). `keys` and `vals` retrieve respective sequences of column names and columns.
-;;The functions `assoc` and `dissoc` work to define new associations to conveniently 
+;;The functions `assoc` and `dissoc` work to define new associations to conveniently
 ;;add, update, or remove columns, with add/update semantics defined by`tech.ml.dataset/add-or-update-column`.
 
 ;;Column data is stored in primitive arrays (even most datetimes!) and strings are stored
@@ -142,7 +142,7 @@ user> (take 5 (xls-data "Gender"))
 ;;You can access a sequence of columns of a dataset with `ds/columns`, or `vals` like a map,
 ;;and access the metadata with `meta`:
 
-user> (->> csv-data 
+user> (->> csv-data
            vals  ;synonymous with ds/columns
            (map (fn [column]
                   (meta column))))
@@ -165,7 +165,7 @@ user> (let [{:strs [symbol date]} csv-data]
 symbol
 [MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
  {:name "date", :size 560, :datatype :packed-local-date}]
-  
+
 ;;We can get a brief description of the dataset:
 
 user> (ds/brief csv-data)
@@ -215,7 +215,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv: d
 
 ;;You can add/remove/update columns, or use the map idioms of `assoc` and `dissoc`
 
-user> (-> csv-data 
+user> (-> csv-data
           (assoc "always-ten" 10) ;scalar values are expanded as needed
           (assoc "random"   (repeatedly (ds/row-count csv-data) #(rand-int 100)))
           ds/head)
@@ -229,7 +229,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 |   MSFT | 2000-04-01 | 28.37 |         10 |      6 |
 |   MSFT | 2000-05-01 | 25.45 |         10 |     52 |
 
-user> (-> csv-data 
+user> (-> csv-data
           (dissoc "price")
           ds/head)
 https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 2]:
@@ -243,8 +243,8 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 |   MSFT | 2000-05-01 |
 
 
-;;since `conj` works as with clojure maps and sequences of map-entries or pairs, 
-;;you can use idioms like `reduce conj` or `into` to construct new datasets on the 
+;;since `conj` works as with clojure maps and sequences of map-entries or pairs,
+;;you can use idioms like `reduce conj` or `into` to construct new datasets on the
 ;;fly with familiar clojure idioms:
 
 user> (let [new-cols [["always-ten" 10] ["new-price" (map inc (csv-data "price"))]]
@@ -273,7 +273,15 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 ;;There is much more.  Please checkout the walkthough and try it out!
 ```
 
-### Arrow and Parquet Support
+### Arrow Dependencies
+
+```clojure
+[org.apache.arrow/arrow-memory-netty "1.0.0"]
+[org.apache.arrow/arrow-memory-core "1.0.0"]
+[org.apache.arrow/arrow-vector "1.0.0" :exclusions [commons-codec]]
+```
+
+### Parquet Support
 
 This support comes in via the smile pathway and thus there is currently not great
 support for missing values for those two formats.  You will need to rescan the data
@@ -284,13 +292,6 @@ most likely to know where the missing values lie.
 ```clojure
 org.apache.parquet/parquet-hadoop {:mvn/version "1.10.1"}
 org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
-```
-
-#### Arrow Dependencies
-
-```clojure
-org.apache.arrow/arrow-memory {:mvn/version "0.16.0"}
-org.apache.arrow/arrow-vector {:mvn/version "0.16.0"}
 ```
 
 
