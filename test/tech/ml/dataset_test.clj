@@ -7,6 +7,7 @@
             [tech.ml.dataset.tensor :as ds-tens]
             [tech.ml.dataset.pca :as pca]
             [tech.ml.dataset.math :as ds-math]
+            [tech.ml.dataset.tensor :as ds-tens]
             [tech.io :as tech-io]
             [clojure.test :refer :all]
             [tech.v2.datatype :as dtype]
@@ -832,6 +833,22 @@
   (-> (ds/->dataset [])
       (ds/add-column (ds-col/new-column :abc [nil nil]))
       (->> (ds/unique-by-column :abc))))
+
+
+(deftest missing-values-and-tensors
+  (let [ds (ds/->dataset {:a [1 nil 2]
+                          :b [1.0 nil 2.0]
+                          :c [5 nil 6]})]
+    (is (= 3
+           (->> (ds-tens/dataset->column-major-tensor ds :float64)
+                (dtype/->reader)
+                (filter #(Double/isNaN %))
+                (count))))
+    (is (= 3
+           (->> (ds-tens/dataset->row-major-tensor ds :float64)
+                (dtype/->reader)
+                (filter #(Double/isNaN %))
+                (count))))))
 
 
 (comment

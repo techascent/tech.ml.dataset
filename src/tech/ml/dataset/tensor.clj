@@ -34,13 +34,14 @@
 
 (defn dataset->column-major-tensor
   [dataset datatype]
-  (-> (dtype/copy-raw->item! dataset
-                             (tens/new-tensor (dtype/shape dataset)
-                                              :datatype datatype
-                                              :init-value nil)
-                             0
-                             {:unchecked? true})
-      first))
+  (let [retval (tens/new-tensor (dtype/shape dataset)
+                                :datatype datatype
+                                :init-value nil)]
+    (dtype/copy-raw->item!
+     (->> (ds/columns dataset)
+          (map #(dtype/set-datatype % datatype)))
+     retval)
+    retval))
 
 
 
