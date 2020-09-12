@@ -783,7 +783,10 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
      (-> stats-ds
          (select-columns (->> stat-names
                               (clojure.core/filter existing-colname-set)))
-         (set-dataset-name (str (dataset-name dataset) ": descriptive-stats"))))))
+         (set-dataset-name (str (dataset-name dataset) ": descriptive-stats"))
+         ;;Always print all the columns after descriptive stats
+         (vary-meta clojure.core/assoc
+                    :print-index-range (range (column-count dataset)))))))
 
 
 (defn brief
