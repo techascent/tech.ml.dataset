@@ -1,6 +1,6 @@
-(ns tech.ml.dataset.parallel-unique
-  (:require [tech.parallel.for :as parallel-for]
-            [tech.v2.datatype :as dtype])
+(ns tech.v3.dataset.parallel-unique
+  (:require [tech.v3.parallel.for :as parallel-for]
+            [tech.v3.datatype :as dtype])
   (:import [java.util HashSet Set]))
 
 

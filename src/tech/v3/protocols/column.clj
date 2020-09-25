@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.protocols.column)
+(ns ^:no-doc tech.v3.protocols.column)
 
 (defprotocol PIsColumn
   (is-column? [item]))
@@ -15,13 +15,6 @@
     "Return a new column.")
   (supported-stats [col]
     "List of available stats for the column")
-  (metadata [col]
-    "Return the metadata map for this column.
-    Metadata must contain :name :type :size.  Categorical
-columns must have :categorical? true and the inference target
-should have :target? true.")
-  (set-metadata [col data-map]
-    "Set the metadata on the column returning a new column.")
   (missing [col]
     "Indexes of missing values")
   (is-missing? [col idx]

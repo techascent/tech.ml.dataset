@@ -1,26 +1,25 @@
-(ns ^:no-doc tech.ml.dataset.impl.column
-  (:require [tech.ml.protocols.column :as ds-col-proto]
-            [tech.ml.dataset.string-table :refer [make-string-table]]
-            [tech.ml.dataset.parallel-unique :refer [parallel-unique]]
-            [tech.ml.dataset.text :as ds-text]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.functional :as dtype-fn]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.pprint :as dtype-pp]
-            [tech.v2.datatype.readers.indexed :as indexed-rdr]
-            [tech.v2.datatype.bitmap :refer [->bitmap] :as bitmap]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.builtin-op-providers :as builtin-op-providers]
-            [tech.v2.datatype.readers.concat :as concat-rdr]
-            [tech.v2.datatype.readers.const :as const-rdr]
-            [tech.parallel.for :as parallel-for])
+(ns ^:no-doc tech.v3.dataset.impl.column
+  (:require [tech.v3.protocols.column :as ds-col-proto]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.functional :as dtype-fn]
+            [tech.v3.datatype.typecast :as typecast]
+            [tech.v3.datatype.pprint :as dtype-pp]
+            [tech.v3.datatype.readers.indexed :as indexed-rdr]
+            [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.builtin-op-providers :as builtin-op-providers]
+            [tech.v3.datatype.readers.concat :as concat-rdr]
+            [tech.v3.datatype.readers.const :as const-rdr]
+            [tech.v3.dataset.string-table :refer [make-string-table]]
+            [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
+            [tech.v3.parallel.for :as parallel-for])
   (:import [java.util ArrayList HashSet Collections Set List]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
-           [tech.v2.datatype ObjectReader DoubleReader ObjectWriter
+           [tech.v3.datatype ObjectReader DoubleReader ObjectWriter
             ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
@@ -78,10 +77,6 @@
              (dotimes [iter n-elems]
                (.add list-data ""))
              list-data)
-     :encoded-text (let [^List list-data (ds-text/encoded-text-builder)]
-                     (dotimes [iter n-elems]
-                       (.add list-data iter ""))
-                     list-data)
      (dtype/make-container :list dtype n-elems)))
   ([dtype]
    (make-container dtype 0)))
