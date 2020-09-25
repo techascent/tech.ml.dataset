@@ -4,14 +4,12 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.functional :as dtype-fn]
-            [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.pprint :as dtype-pp]
-            [tech.v3.datatype.readers.indexed :as indexed-rdr]
+            [tech.v3.datatype.io-indexed-buffer :as indexed-rdr]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.builtin-op-providers :as builtin-op-providers]
-            [tech.v3.datatype.readers.concat :as concat-rdr]
-            [tech.v3.datatype.readers.const :as const-rdr]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.const-reader :as const-rdr]
             [tech.v3.dataset.string-table :refer [make-string-table]]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.parallel.for :as parallel-for])
@@ -19,7 +17,7 @@
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
-           [tech.v3.datatype ObjectReader DoubleReader ObjectWriter
+           [tech.v3.datatype ObjectIO DoubleIO LongIO BooleanIO
             ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
@@ -37,17 +35,11 @@
     :int64 Long/MIN_VALUE
     :float32 Float/NaN
     :float64 Double/NaN
-    :packed-instant (dtype-dt/pack (dtype-dt/milliseconds-since-epoch->instant 0))
-    :packed-local-date-time (dtype-dt/pack
-                             (dtype-dt/milliseconds-since-epoch->local-date-time 0))
-    :packed-local-date (dtype-dt/pack
-                        (dtype-dt/milliseconds-since-epoch->local-date 0))
-    :packed-local-time (dtype-dt/pack
-                        (dtype-dt/milliseconds->local-time 0))
+    :packed-instant (packing/pack (dtype-dt/milliseconds-since-epoch->instant 0))
+    :packed-local-date (packing/pack (dtype-dt/milliseconds-since-epoch->local-date 0))
     :packed-duration 0
     :instant (dtype-dt/milliseconds-since-epoch->instant 0)
     :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
-    :offset-date-time (dtype-dt/milliseconds-since-epoch->offset-date-time 0)
     :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
     :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
     :local-time (dtype-dt/milliseconds->local-time 0)
@@ -61,7 +53,7 @@
 
 (defn datatype->missing-value
   [dtype]
-  (let [dtype (if (dtype-dt/packed-datatype? dtype)
+  (let [dtype (if (packing/packed-datatype? dtype)
                 dtype
                 (casting/un-alias-datatype dtype))]
     (if (contains? @dtype->missing-val-map dtype)
