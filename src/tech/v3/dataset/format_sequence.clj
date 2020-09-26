@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.dataset.format-sequence
+(ns ^:no-doc tech.v3.dataset.format-sequence
   "This code provided initial by genmeblog after careful consideration
   of R print code"
   (:require [clojure.pprint :refer [cl-format]]))

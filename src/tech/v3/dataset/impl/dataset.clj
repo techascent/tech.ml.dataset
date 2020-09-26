@@ -1,13 +1,14 @@
 (ns ^:no-doc tech.ml.dataset.impl.dataset
-  (:require [tech.ml.protocols.column :as ds-col-proto]
-            [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.print :as ds-print]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.argtypes :as argtypes]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [tech.v2.datatype.monotonic-range :as dt-range]
+  (:require [tech.v3.protocols.column :as ds-col-proto]
+            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.print :as ds-print]
+            [tech.v3.datatype.pprint :as dtype-pp]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.argtypes :as argtypes]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.monotonic-range :as dt-range]
             [clojure.pprint :as pprint])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
@@ -32,13 +33,13 @@
 
 (defn- coldata->column
   [n-rows col-name new-col-data]
-  (let [argtype (argtypes/arg->arg-type new-col-data)
+  (let [argtype (argtypes/arg-type new-col-data)
         n-rows (if (= 0 n-rows)
                  Integer/MAX_VALUE
                  n-rows)]
     (cond
       (ds-col-proto/is-column? new-col-data)
-      (ds-col-proto/set-name new-col-data col-name)
+      (vary-meta new-col-data assoc :name col-name)
       (= argtype :scalar)
       (col-impl/new-column col-name
                            (dtype/const-reader new-col-data n-rows))
@@ -179,15 +180,6 @@
   (set-dataset-name [dataset new-name]
     (Dataset. columns colmap
      (assoc metadata :name new-name) _hash _hasheq))
-  (maybe-column [dataset column-name]
-    (when-let [idx (get colmap column-name)]
-      (.get columns (int idx))))
-
-  (metadata [dataset] metadata)
-  (set-metadata [dataset meta-map]
-    (Dataset. columns colmap
-              (col-impl/->persistent-map meta-map)
-              _hash _hasheq))
 
   (columns [dataset] columns)
 
@@ -241,7 +233,7 @@
                     (= :all index-seq)
                     nil
                     (dtype-proto/convertible-to-bitmap? index-seq)
-                    (let [bmp (dtype/as-roaring-bitmap index-seq)]
+                    (let [bmp (dtype-proto/as-roaring-bitmap index-seq)]
                       (dtype/->reader
                        (bitmap/bitmap->efficient-random-access-reader
                         bmp)))
@@ -261,7 +253,7 @@
                     (dtype/->reader index-seq)
                     :else
                     (dtype/->reader (dtype/make-container
-                                     :java-array :int32
+                                     :jvm-heap :int32
                                      index-seq)))
           columns
           (cond
@@ -290,23 +282,9 @@
                     col)))
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
-  (select-columns-by-index [dataset num-seq]
-    (let [col-indexes (int-array (distinct num-seq))]
-      (when-not (== (count col-indexes) (count num-seq))
-        (throw (Exception. (format "Duplicate column selection detected: %s"
-                                   num-seq))))
-      (->> col-indexes
-           (map (fn [^long idx]
-                  (.get columns idx)))
-           (new-dataset (ds-proto/dataset-name dataset) metadata))))
-
 
   (supported-column-stats [dataset]
     (ds-col-proto/supported-stats (first columns)))
-
-
-  (from-prototype [dataset dataset-name column-seq]
-    (new-dataset dataset-name column-seq))
 
 
   dtype-proto/PShape
@@ -419,20 +397,8 @@
    (new-dataset {} {} column-seq)))
 
 
-(defmethod print-method Dataset
-  [^Dataset dataset w]
-  (.write ^Writer w ^String (.toString dataset)))
+(dtype-pp/implement-tostring-print Dataset)
 
 
 (defmethod pprint/simple-dispatch
   tech.ml.dataset.impl.dataset.Dataset [f] (pr f))
-
-
-(defn item-val->string
-  [item-val item-dtype item-name]
-  (cond
-    (string? item-val) item-val
-    (keyword? item-val) item-val
-    (symbol? item-val) item-val
-    :else
-    (str item-val)))

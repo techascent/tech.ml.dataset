@@ -7,12 +7,10 @@
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
-            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
-            [tech.v3.datatype.const-reader :as const-rdr]
-            [tech.v3.dataset.string-table :refer [make-string-table]]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
-            [tech.v3.parallel.for :as parallel-for])
+            [tech.v3.dataset.impl.column-base :as column-base]
+            [tech.v3.dataset.impl.column-data-process :as column-data-process])
   (:import [java.util ArrayList HashSet Collections Set List Map]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
@@ -24,52 +22,6 @@
 
 
 (declare new-column)
-
-
-(def ^Map dtype->missing-val-map
-  {:boolean false
-   :int8 Byte/MIN_VALUE
-   :int16 Short/MIN_VALUE
-   :int32 Integer/MIN_VALUE
-   :int64 Long/MIN_VALUE
-   :float32 Float/NaN
-   :float64 Double/NaN
-   :packed-instant (packing/pack (dtype-dt/milliseconds-since-epoch->instant 0))
-   :packed-local-date (packing/pack (dtype-dt/milliseconds-since-epoch->local-date 0))
-   :packed-duration 0
-   :instant (dtype-dt/milliseconds-since-epoch->instant 0)
-   :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
-   :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
-   :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
-   :local-time (dtype-dt/milliseconds->local-time 0)
-   :duration (dtype-dt/milliseconds->duration 0)
-   :string ""
-   :text ""
-   :keyword nil
-   :symbol nil})
-
-
-(defn datatype->missing-value
-  [dtype]
-  (let [dtype (if (packing/packed-datatype? dtype)
-                dtype
-                (casting/un-alias-datatype dtype))]
-    (if (contains? dtype->missing-val-map dtype)
-      (get dtype->missing-val-map dtype)
-      nil)))
-
-
-(defn make-container
-  ([dtype n-elems]
-   (case dtype
-     :string (make-string-table n-elems "")
-     :text (let [^List list-data (dtype/make-container :list :string 0)]
-             (dotimes [iter n-elems]
-               (.add list-data ""))
-             list-data)
-     (dtype/make-container :list dtype n-elems)))
-  ([dtype]
-   (make-container dtype 0)))
 
 
 (defn ->persistent-map
@@ -135,7 +87,7 @@
             (.readDouble src idx)))
         (readObject [this idx]
           (if (.contains missing idx)
-            (get dtype->missing-val-map dtype)
+            (get column-base/dtype->missing-val-map dtype)
             (.readObject src idx)))
         (writeBoolean [this idx val]
           (.remove missing (unchecked-inc idx))
@@ -218,15 +170,15 @@
   (sub-buffer [this offset len]
     (let [offset (long offset)
           len (long len)]
-      ;;TODO - use bitmap operations to perform this calculation
-      (let [new-missing (->> missing
-                             (filter #(let [arg (long %)]
-                                        (or (< arg offset)
-                                            (>= (- arg offset) len))))
-                             (map #(+ (long %) offset))
-                             (->bitmap))
-            new-data (dtype-proto/sub-buffer data offset len)]
-        (Column. new-missing new-data metadata nil))))
+      (if (and (== offset 0)
+               (== len (dtype/ecount this)))
+        this
+        ;;TODO - use bitmap operations to perform this calculation
+        (let [new-missing (dtype-proto/set-and
+                           missing
+                           (bitmap/->bitmap (range offset (+ offset len))))
+              new-data (dtype-proto/sub-buffer data offset len)]
+          (Column. new-missing new-data metadata nil)))))
   dtype-proto/PClone
   (clone [col]
     (let [new-data (if (or (dtype/writer? data)
@@ -271,11 +223,7 @@
       (throw (ex-info "Stats aren't available on non-numeric columns"
                       {:column-type (dtype/get-datatype col)
                        :column-name (:name metadata)})))
-    (dfn/descriptive-statistics (dtype/->reader
-                                 col
-                                 (dtype/get-datatype col)
-                                 {:missing-policy :elide})
-                                stats-set))
+    (dfn/descriptive-statistics stats-set col))
   (correlation [col other-column correlation-type]
     (case correlation-type
       :pearson (dfn/pearsons-correlation col other-column)
@@ -304,13 +252,16 @@
           any-missing? (not= 0 n-missing)
           col-dtype (dtype/get-datatype col)]
       (when (and any-missing? error-on-missing?)
-        (throw (Exception. "Missing values detected and error-on-missing set")))
+        (throw (Exception. "Missing values detected and error-on-missing? set")))
       (when-not (or (= :boolean col-dtype)
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/make-container :java-array :float64 col)))
+      (dtype/make-container :jvm-heap :float64 col)))
   IObj
-  (meta [this] metadata)
+  (meta [this]
+    (assoc metadata
+           :datatype (dtype-proto/elemwise-datatype this)
+           :n-elems (dtype-proto/ecount this)))
   (withMeta [this new-meta] (Column. missing data new-meta cached-vector))
   Counted
   (count [this] (int (dtype/ecount data)))
@@ -331,20 +282,13 @@
     (let [n-elems (dtype/ecount data)
           format-str (if (> n-elems 20)
                        "#tech.ml.dataset.column<%s>%s\n%s\n[%s...]"
-                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")
-          ;;Make the data printable
-          src-rdr (dtype-pp/reader-converter item)
-          data-rdr (dtype/make-reader
-                    :object
-                    (dtype/ecount src-rdr)
-                    (if (.contains missing idx)
-                      nil
-                      (src-rdr idx)))]
+                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")]
       (format format-str
-              (name (dtype/get-datatype item))
+              (name (dtype/elemwise-datatype item))
               [n-elems]
               (ds-col-proto/column-name item)
-              (-> (dtype-proto/sub-buffer data-rdr 0 (min 20 n-elems))
+              (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
+                  (packing/unpack)
                   (dtype-pp/print-reader-data)))))
 
   ;;Delegates to ListPersistentVector, which caches results for us.
@@ -366,116 +310,17 @@
     (throw (ex-info "conj/.cons is not supported on columns" {})))
   (empty [this]
     (Column. (->bitmap)
-             (make-container (dtype-proto/elemwise-datatype this) 0)
+             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
              {}
              nil))
   (equiv [this o] (or (identical? this o)
                       (.equiv (cached-vector!) o))))
 
 
-(defmethod print-method Column
-  [col ^java.io.Writer w]
-  (.write w (.toString ^Object col)))
-
-
-(def object-primitive-array-types
-  {(Class/forName "[Ljava.lang.Boolean;") :boolean
-   (Class/forName "[Ljava.lang.Byte;") :int8
-   (Class/forName "[Ljava.lang.Short;") :int16
-   (Class/forName "[Ljava.lang.Integer;") :int32
-   (Class/forName "[Ljava.lang.Long;") :int64
-   (Class/forName "[Ljava.lang.Float;") :float32
-   (Class/forName "[Ljava.lang.Double;") :float64})
-
-
-(defn process-object-primitive-array-data
-  [obj-data]
-  (let [dst-container-type (get object-primitive-array-types (type obj-data))
-        ^objects obj-data obj-data
-        n-items (dtype/ecount obj-data)
-        sparse-val (get dtype->missing-val-map dst-container-type)
-        ^List dst-data (dtype/make-container :list dst-container-type n-items)
-        sparse-indexes (LongArrayList.)]
-    (parallel-for/parallel-for
-     idx
-     n-items
-     (let [obj-data (aget obj-data idx)]
-       (if (not (nil? obj-data))
-         (.set dst-data idx obj-data)
-         (locking sparse-indexes
-           (.add sparse-indexes idx)
-           (.set dst-data idx sparse-val)))))
-    {:data dst-data
-     :missing sparse-indexes}))
-
-
-(defn scan-object-data-for-missing
-  [container-dtype ^List obj-data]
-  (let [n-items (dtype/ecount obj-data)
-        ^List dst-data (make-container container-dtype n-items)
-        sparse-indexes (LongArrayList.)
-        sparse-val (get dtype->missing-val-map container-dtype)]
-    (parallel-for/parallel-for
-     idx
-     n-items
-     (let [obj-data (.get obj-data idx)]
-       (if (not (nil? obj-data))
-         (.set dst-data idx obj-data)
-         (locking sparse-indexes
-           (.add sparse-indexes idx)
-           (.set dst-data idx sparse-val)))))
-    {:data dst-data
-     :missing sparse-indexes}))
-
-
-(defn scan-object-numeric-data-for-missing
-  [container-dtype ^List obj-data]
-  (let [n-items (dtype/ecount obj-data)
-        ^List dst-data (make-container container-dtype n-items)
-        sparse-indexes (LongArrayList.)
-        sparse-val (get dtype->missing-val-map container-dtype)]
-    (parallel-for/parallel-for
-     idx
-     n-items
-     (let [obj-data (.get obj-data idx)]
-       (if (and (not (nil? obj-data))
-                (or (= container-dtype :boolean)
-                    (not= sparse-val obj-data)))
-         (.set dst-data idx (casting/cast obj-data container-dtype))
-         (locking sparse-indexes
-           (.add sparse-indexes idx)
-           (.set dst-data idx sparse-val)))))
-    {:data dst-data
-     :missing sparse-indexes}))
-
-
-(defn ensure-column-reader
-  [values-seq]
-  (if (dtype/reader? values-seq)
-    values-seq
-    (dtype/make-container :list
-                          (dtype/get-datatype values-seq)
-                          values-seq)))
-
-
-(defn scan-data-for-missing
-  [coldata]
-  (if (contains? object-primitive-array-types coldata)
-    (process-object-primitive-array-data coldata)
-    (let [data-reader (dtype/->reader (ensure-column-reader coldata))]
-      (if (= :object (dtype/get-datatype data-reader))
-        (let [target-dtype (reduce casting/widest-datatype
-                                   (->> data-reader
-                                        (remove nil?)
-                                        (take 20)
-                                        (map dtype/get-datatype)))]
-          (scan-object-numeric-data-for-missing target-dtype data-reader))
-        {:data data-reader}))))
+(dtype-pp/implement-tostring-print Column)
 
 
 (defn ensure-column
-  "Convert an item to a column if at all possible.  Currently columns either implement
-  the required protocols "
   [item]
   (cond
     (ds-col-proto/is-column? item)
@@ -484,12 +329,16 @@
     (let [{:keys [name data missing metadata force-datatype?] :as cdata} item]
       (when-not (and (contains? cdata :name) data)
         (throw (Exception. "Column data map must have name and data")))
-      (new-column
-       name
-       (if-not force-datatype?
-         (:data (scan-data-for-missing data))
-         data)
-       metadata missing))
+      (let [{data :data
+             new-missing :missing}
+            (if-not force-datatype?
+              (column-data-process/scan-data-for-missing data)
+              {:data data
+               :missing (bitmap/->bitmap)})]
+        (new-column
+         name
+         data
+         metadata (or missing new-missing))))
     :else
     (throw (ex-info "item is not convertible to a column without further information"
                     {:item item}))))
@@ -508,10 +357,10 @@
                                       idx
                                       %)))
             (dtype/reader? item)
-            (let [{:keys [data missing]} (scan-data-for-missing item)]
+            (let [{:keys [data missing]} (column-data-process/scan-data-for-missing item)]
               (new-column idx data {} missing))
             (instance? Iterable item)
-            (let [{:keys [data missing]} (scan-data-for-missing item)]
+            (let [{:keys [data missing]} (column-data-process/scan-data-for-missing item)]
               (new-column idx data {} missing))
             :else
             (throw (ex-info "Item does not appear to be either randomly accessable or iterable"
@@ -553,13 +402,13 @@
       (new-column
        (ds-col-proto/column-name column)
        (dtype/concat-buffers
+        col-dtype
         [(.data column)
-         (dtype/make-reader
-          (get dtype->missing-val-map col-dtype)
-          col-dtype
+         (dtype/const-reader
+          (get column-base/dtype->missing-val-map col-dtype)
           n-empty)])
        (.metadata column)
-       (dtype/set-add-range! (dtype/clone (.missing column))
+       (dtype-proto/set-add-range! (dtype/clone (.missing column))
              (unchecked-int n-elems)
              (unchecked-int (+ n-elems n-empty)))))))
 
@@ -572,13 +421,14 @@
           col-dtype (dtype/get-datatype column)]
       (new-column
        (ds-col-proto/column-name column)
-       (dtype/concat-concat-rdr/concat-readers
+       (dtype/concat-buffers
+        col-dtype
         [(dtype/const-reader
-          (get dtype->missing-val-map col-dtype)
+          (get column-base/dtype->missing-val-map col-dtype)
           n-empty)
          (.data column)])
        (.metadata column)
-       (dtype/set-add-range!
-        (dtype/set-offset (.missing column) n-empty)
+       (dtype-proto/set-add-range!
+        (dtype-proto/set-offset (.missing column) n-empty)
         (unchecked-int 0)
         (unchecked-int n-empty))))))

@@ -1,16 +1,16 @@
-(ns tech.ml.dataset.print
-  (:require [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.protocols.column :as ds-col-proto]
-            [tech.ml.dataset.format-sequence :as format-sequence]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.pprint :as dtype-pp]
-            [tech.v2.datatype.datetime :as dtype-dt]
+(ns tech.v3.dataset.print
+  (:require [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.protocols.column :as ds-col-proto]
+            [tech.v3.dataset.format-sequence :as format-sequence]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.pprint :as dtype-pp]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.string :as str]
             [clojure.pprint :as pp])
-  (:import [tech.v2.datatype ObjectReader]
+  (:import [tech.v3.datatype PrimitiveIO ObjectReader]
            [java.util List HashMap Collections ArrayList]
-           [tech.ml.dataset FastStruct]
+           [tech.v3.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
             PersistentVector]
            [org.roaringbitmap RoaringBitmap]))
@@ -41,28 +41,29 @@
 (defn- reader->string-lines
   [reader-data ^RoaringBitmap missing line-policy column-max-width new-number-format?]
   (let [reader-data (if (and new-number-format?
-                             (#{:float32 :float64} (dtype/get-datatype reader-data)))
+                             (#{:float32 :float64} (dtype/elemwise-datatype reader-data)))
                       (vec (format-sequence/format-sequence reader-data))
                       reader-data)]
-    (dtype/object-reader
-     (dtype/ecount reader-data)
-     #(if (.contains missing (int %))
-        nil
-        (let [lines (str/split-lines (print-stringify (reader-data %)))
-              lines (if (number? column-max-width)
-                      (let [width (long column-max-width)]
-                        (->> lines (map (fn [^String line]
-                                          (if (> (count line) width)
-                                            (.substring line 0 width)
-                                            line)))))
-                      lines)]
-          (case line-policy
-            :single
-            [(first lines)]
-            :markdown
-            [(str/join "<br>" lines)]
-            :repl
-            lines))))))
+    (reify ObjectReader
+      (lsize [rdr] (dtype/ecount reader-data))
+      (readObject [rdr idx]
+        (if (.contains missing (int idx))
+           nil
+           (let [lines (str/split-lines (print-stringify (reader-data idx)))
+                 lines (if (number? column-max-width)
+                         (let [width (long column-max-width)]
+                           (->> lines (map (fn [^String line]
+                                             (if (> (count line) width)
+                                               (.substring line 0 width)
+                                               line)))))
+                         lines)]
+             (case line-policy
+               :single
+               [(first lines)]
+               :markdown
+               [(str/join "<br>" lines)]
+               :repl
+               lines)))))))
 
 
 (defn- append-line!
@@ -113,8 +114,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          print-ds (ds-proto/select dataset :all index-range)
-         column-names (map #(.toString ^Object %)
-                           (ds-proto/column-names print-ds))
+         column-names (map #(.toString ^Object %) (keys print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (dtype-pp/reader-converter)
                                   (reader->string-lines (ds-col-proto/missing %)
