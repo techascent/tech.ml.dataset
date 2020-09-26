@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
                  [cnuernber/dtype-next             "0.3.1"]
-                 [techascent/tech.io               "3.17"
+                 [techascent/tech.io               "3.19"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]
                  [org.apache.poi/poi-ooxml         "4.1.2"]

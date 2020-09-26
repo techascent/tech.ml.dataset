@@ -1,14 +1,13 @@
 (ns tech.ml.dataset.column
-  (:require [tech.ml.protocols.column :as col-proto]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.string-table :as str-table]
-            [tech.ml.dataset.parse :as ds-parse]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.typecast :as typecast])
-  (:import [it.unimi.dsi.fastutil.longs LongArrayList]
-           [java.util List]
-           [tech.ml.dataset.impl.column Column]
+  (:require [tech.v3.protocols.column :as col-proto]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.parse :as ds-parse]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.typecast :as typecast])
+  (:import [java.util List]
+           [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
 
 
