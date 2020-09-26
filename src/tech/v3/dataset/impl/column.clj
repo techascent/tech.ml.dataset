@@ -3,9 +3,9 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.datatype.functional :as dtype-fn]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype.pprint :as dtype-pp]
-            [tech.v3.datatype.io-indexed-buffer :as indexed-rdr]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
@@ -13,12 +13,11 @@
             [tech.v3.dataset.string-table :refer [make-string-table]]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.parallel.for :as parallel-for])
-  (:import [java.util ArrayList HashSet Collections Set List]
+  (:import [java.util ArrayList HashSet Collections Set List Map]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
-           [tech.v3.datatype ObjectIO DoubleIO LongIO BooleanIO
-            ListPersistentVector]))
+           [tech.v3.datatype PrimitiveIO ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,28 +26,27 @@
 (declare new-column)
 
 
-(def dtype->missing-val-map
-  (atom
-   {:boolean false
-    :int16 Short/MIN_VALUE
-    :int32 Integer/MIN_VALUE
-    :int64 Long/MIN_VALUE
-    :float32 Float/NaN
-    :float64 Double/NaN
-    :packed-instant (packing/pack (dtype-dt/milliseconds-since-epoch->instant 0))
-    :packed-local-date (packing/pack (dtype-dt/milliseconds-since-epoch->local-date 0))
-    :packed-duration 0
-    :instant (dtype-dt/milliseconds-since-epoch->instant 0)
-    :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
-    :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
-    :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
-    :local-time (dtype-dt/milliseconds->local-time 0)
-    :duration (dtype-dt/milliseconds->duration 0)
-    :string ""
-    :text ""
-    :keyword nil
-    :symbol nil}))
-
+(def ^Map dtype->missing-val-map
+  {:boolean false
+   :int8 Byte/MIN_VALUE
+   :int16 Short/MIN_VALUE
+   :int32 Integer/MIN_VALUE
+   :int64 Long/MIN_VALUE
+   :float32 Float/NaN
+   :float64 Double/NaN
+   :packed-instant (packing/pack (dtype-dt/milliseconds-since-epoch->instant 0))
+   :packed-local-date (packing/pack (dtype-dt/milliseconds-since-epoch->local-date 0))
+   :packed-duration 0
+   :instant (dtype-dt/milliseconds-since-epoch->instant 0)
+   :zoned-date-time (dtype-dt/milliseconds-since-epoch->zoned-date-time 0)
+   :local-date-time (dtype-dt/milliseconds-since-epoch->local-date-time 0)
+   :local-date (dtype-dt/milliseconds-since-epoch->local-date 0)
+   :local-time (dtype-dt/milliseconds->local-time 0)
+   :duration (dtype-dt/milliseconds->duration 0)
+   :string ""
+   :text ""
+   :keyword nil
+   :symbol nil})
 
 
 (defn datatype->missing-value
@@ -56,8 +54,8 @@
   (let [dtype (if (packing/packed-datatype? dtype)
                 dtype
                 (casting/un-alias-datatype dtype))]
-    (if (contains? @dtype->missing-val-map dtype)
-      (get @dtype->missing-val-map dtype)
+    (if (contains? dtype->missing-val-map dtype)
+      (get dtype->missing-val-map dtype)
       nil)))
 
 
@@ -72,51 +70,6 @@
      (dtype/make-container :list dtype n-elems)))
   ([dtype]
    (make-container dtype 0)))
-
-
-(defmacro create-missing-reader
-  [datatype missing data n-elems options]
-  `(let [rdr# (typecast/datatype->reader ~datatype ~data (:unchecked ~options))
-         missing# ~missing
-         missing-val# (casting/datatype->cast-fn
-                       :unknown ~datatype
-                       (datatype->missing-value ~datatype))
-         n-elems# (long ~n-elems)]
-     (reify ~(typecast/datatype->reader-type datatype)
-       (getDatatype [this#] (.getDatatype rdr#))
-       (lsize [this#] n-elems#)
-       (read [this# idx#]
-         (if (.contains missing# idx#)
-           missing-val#
-           (.read rdr# idx#))))))
-
-
-(defn create-string-text-missing-reader
-  [^RoaringBitmap missing data n-elems options]
-  (let [rdr (typecast/datatype->reader :object data)
-         missing-val ""
-         n-elems (long n-elems)]
-    (reify ObjectReader
-      (getDatatype [this] (.getDatatype rdr))
-      (lsize [this] n-elems)
-      (read [this idx]
-        (if (.contains missing idx)
-          missing-val
-          (.read rdr idx))))))
-
-
-(defn create-object-missing-reader
-  [^RoaringBitmap missing data n-elems options]
-  (let [rdr (typecast/datatype->reader :object data)
-        missing-val nil
-        n-elems (long n-elems)]
-    (reify ObjectReader
-      (getDatatype [this] (.getDatatype rdr))
-      (lsize [this] n-elems)
-      (read [this idx]
-        (if (.contains missing idx)
-          missing-val
-          (.read rdr idx))))))
 
 
 (defn ->persistent-map
@@ -136,11 +89,88 @@
     :else
     (long-array item)))
 
+
+(defn- make-primitive-io
+  [^RoaringBitmap missing data]
+  (let [^PrimitiveIO src (dtype-proto/->primitive-io data)
+        dtype (.elemwiseDatatype src)]
+    (if (.isEmpty missing)
+      src
+      (reify PrimitiveIO
+        (elemwiseDatatype [this] dtype)
+        (lsize [this] (.lsize src))
+        (allowsRead [this] (.allowsRead src))
+        (allowsWrite [this] (.allowsWrite src))
+        (readBoolean [this idx]
+          (if (.contains missing idx)
+            false
+            (.readBoolean src idx)))
+        (readByte [this idx]
+          (if (.contains missing idx)
+            Byte/MIN_VALUE
+            (.readByte src idx)))
+        (readShort [this idx]
+          (if (.contains missing idx)
+            Short/MIN_VALUE
+            (.readShort src idx)))
+        (readChar [this idx]
+          (if (.contains missing idx)
+            Character/MAX_VALUE
+            (.readChar src idx)))
+        (readInt [this idx]
+          (if (.contains missing idx)
+            Integer/MIN_VALUE
+            (.readInt src idx)))
+        (readLong [this idx]
+          (if (.contains missing idx)
+            Long/MIN_VALUE
+            (.readLong src idx)))
+        (readFloat [this idx]
+          (if (.contains missing idx)
+            Float/NaN
+            (.readFloat src idx)))
+        (readDouble [this idx]
+          (if (.contains missing idx)
+            Double/NaN
+            (.readDouble src idx)))
+        (readObject [this idx]
+          (if (.contains missing idx)
+            (get dtype->missing-val-map dtype)
+            (.readObject src idx)))
+        (writeBoolean [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeBoolean src idx val))
+        (writeByte [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeByte src idx val))
+        (writeShort [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeShort src idx val))
+        (writeChar [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeChar src idx val))
+        (writeInt [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeInt src idx val))
+        (writeLong [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeLong src idx val))
+        (writeFloat [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeFloat src idx val))
+        (writeDouble [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeDouble src idx val))
+        (writeObject [this idx val]
+          (.remove missing (unchecked-inc idx))
+          (.writeObject src idx val))))))
+
+
 (defmacro cached-vector! []
   `(or ~'cached-vector
        (do (set! ~'cached-vector
                  (ListPersistentVector.
-                  (typecast/datatype->reader :object ~'this)))
+                  (make-primitive-io ~'missing ~'data)))
            ~'cached-vector)))
 
 (deftype Column
@@ -148,90 +178,47 @@
      data
      ^IPersistentMap metadata
      ^:unsynchronized-mutable ^ListPersistentVector cached-vector]
-  dtype-proto/PDatatype
-  (get-datatype [this] (dtype-proto/get-datatype data))
-  dtype-proto/PSetDatatype
-  (set-datatype [this new-dtype]
-    (Column. missing (dtype-proto/set-datatype data new-dtype)
+  dtype-proto/PToArrayBuffer
+  (convertible-to-array-buffer? [this]
+    (and (.isEmpty missing)
+         (dtype-proto/convertible-to-array-buffer? data)))
+  (->array-buffer [this]
+    (dtype-proto/->array-buffer data))
+
+  dtype-proto/PToNativeBuffer
+  (convertible-to-native-buffer? [this]
+    (and (.isEmpty missing)
+         (dtype-proto/convertible-to-native-buffer? data)))
+  (->native-buffer [this]
+    (dtype-proto/->native-buffer data))
+  dtype-proto/PElemwiseDatatype
+  (elemwise-datatype [this] (dtype-proto/elemwise-datatype data))
+  dtype-proto/PElemwiseCast
+  (elemwise-cast [this new-dtype]
+    (Column. missing
+             (dtype-proto/elemwise-cast data new-dtype)
              metadata
-             cached-vector))
-  dtype-proto/PCountable
-  (ecount [this] (dtype-proto/ecount data))
+             nil))
+  dtype-proto/PToPrimitiveIO
+  (convertible-to-primitive-io? [this] true)
+  (->primitive-io [this]
+    (cached-vector!)
+    (.data cached-vector))
   dtype-proto/PToReader
-  (convertible-to-reader? [this] true)
-  (->reader [this options]
-    (let [missing-policy (get options :missing-policy :include)
-          n-missing (dtype/ecount missing)
-          any-missing? (not= 0 n-missing)
-          missing-policy (if-not any-missing?
-                            :include
-                            missing-policy)
-          n-elems (dtype/ecount data)
-          data (if (= :object (:datatype options))
-                 (dtype-dt/unpack data)
-                 data)
-          col-reader
-          (if (or (= :elide missing-policy)
-                  (not any-missing?))
-            (dtype/->reader data options)
-            (case (casting/un-alias-datatype
-                   (or (:datatype options)
-                       (dtype/get-datatype this)))
-              :int16 (create-missing-reader :int16 missing data n-elems options)
-              :int32 (create-missing-reader :int32 missing data n-elems options)
-              :int64 (create-missing-reader :int64 missing data n-elems options)
-              :float32 (create-missing-reader :float32 missing data n-elems options)
-              :float64 (create-missing-reader :float64 missing data n-elems options)
-              :string (create-string-text-missing-reader missing data n-elems options)
-              :text (create-string-text-missing-reader missing data n-elems options)
-              (create-object-missing-reader missing data n-elems options)))
-          new-reader (case missing-policy
-                       :elide
-                       (let [valid-indexes (->> (range (dtype/ecount data))
-                                                (remove #(.contains missing (long %)))
-                                                long-array)]
-                         (indexed-rdr/make-indexed-reader valid-indexes
-                                                          col-reader
-                                                          {}))
-                       :include
-                       col-reader
-                       :error
-                       (if (not any-missing?)
-                         col-reader
-                         (throw (ex-info (format "Column has missing indexes: %s"
-                                                 (vec missing))
-                                         {}))))]
-      (dtype-proto/->reader new-reader options)))
+  (convertible-to-reader? [this]
+    (dtype-proto/convertible-to-reader? data))
+  (->reader [this]
+    (dtype-proto/->primitive-io this))
   dtype-proto/PToWriter
-  (convertible-to-writer? [this] (dtype-proto/convertible-to-writer? data))
-  (->writer [this options]
-    (let [col-dtype (dtype/get-datatype data)
-          options (update options :datatype
-                          #(or % (dtype/get-datatype data)))
-          data-writer (typecast/datatype->writer :object data)
-          missing-val (get @dtype->missing-val-map col-dtype)
-          n-elems (dtype/ecount data)]
-      ;;writing to columns like this is inefficient due to the necessity to
-      ;;keep the missing set accurate.  In most cases you are better off
-      ;;simply creating a new column of some sort.
-      (-> (reify ObjectWriter
-            (lsize [this] n-elems)
-            (write [this idx val]
-              (locking this
-                (if (or (nil? val)
-                        (and (not (boolean? val))
-                             (.equals ^Object val missing-val)))
-                  (do
-                    (.add missing idx)
-                    (.write data-writer idx missing-val))
-                  (do
-                    (.remove missing idx)
-                    (.write data-writer idx val))))))
-          (dtype-proto/->writer options))))
+  (convertible-to-writer? [this]
+    (dtype-proto/convertible-to-writer? data))
+  (->writer [this]
+    (dtype-proto/->primitive-io this))
   dtype-proto/PBuffer
   (sub-buffer [this offset len]
     (let [offset (long offset)
           len (long len)]
+      ;;TODO - use bitmap operations to perform this calculation
       (let [new-missing (->> missing
                              (filter #(let [arg (long %)]
                                         (or (< arg offset)
@@ -239,63 +226,30 @@
                              (map #(+ (long %) offset))
                              (->bitmap))
             new-data (dtype-proto/sub-buffer data offset len)]
-        (Column. new-missing new-data metadata cached-vector))))
-  dtype-proto/PToNioBuffer
-  (convertible-to-nio-buffer? [item]
-    (and (== 0 (dtype/ecount missing))
-         (dtype-proto/convertible-to-nio-buffer? data)))
-  (->buffer-backing-store [item]
-    (dtype-proto/->buffer-backing-store data))
-  ;;This also services to make concrete definitions of the data so this must
-  ;;store the result realized.
+        (Column. new-missing new-data metadata nil))))
   dtype-proto/PClone
   (clone [col]
-    (let [new-data (cond
-                     (dtype/writer? data)
+    (let [new-data (if (or (dtype/writer? data)
+                           (= :string (dtype/get-datatype data))
+                           (= :encoded-text (dtype/get-datatype data)))
                      (dtype/clone data)
-                     ;;Strings are dangerous, defer to the data definition
-                     ;;for cloning.
-                     (or (= :string (dtype/get-datatype data))
-                         (= :encoded-text (dtype/get-datatype data)))
-                     (dtype/clone data)
-                     :else
                      ;;It is important that the result of this operation be writeable.
-                     (dtype/make-container :java-array
+                     (dtype/make-container :jvm-heap
                                            (dtype/get-datatype data) data))]
       (Column. (dtype/clone missing)
                new-data
                metadata
                nil)))
-  dtype-proto/PPrototype
-  (from-prototype [col datatype shape]
-    (let [n-elems (long (apply * shape))]
-      (Column. (->bitmap)
-               (make-container datatype n-elems)
-               {}
-               nil)))
-  dtype-proto/PToArray
-  (->sub-array [col]
-    (when-let [data-ary (when (== 0 (dtype/ecount missing))
-                          (dtype-proto/->sub-array data))]
-      data-ary))
-  (->array-copy [col] (dtype-proto/->array-copy (dtype/->reader col)))
   Iterable
   (iterator [this]
-    (.iterator ^Iterable (cached-vector!)))
-
+    (.iterator ^PrimitiveIO (dtype-proto/->primitive-io this)))
   ds-col-proto/PIsColumn
   (is-column? [this] true)
   ds-col-proto/PColumn
   (column-name [col] (:name metadata))
   (set-name [col name] (Column. missing data (assoc metadata :name name)
                                 cached-vector))
-  (supported-stats [col] dtype-fn/supported-descriptive-stats)
-  (metadata [col]
-    (merge metadata
-           {:size (dtype/ecount col)
-            :datatype (dtype/get-datatype col)}))
-  (set-metadata [col data-map] (Column. missing data (->persistent-map data-map)
-                                        cached-vector))
+  (supported-stats [col] stats/all-descriptive-stats-names)
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
   (set-missing [col long-rdr]
@@ -313,38 +267,36 @@
     (->> (parallel-unique this)
          (into #{})))
   (stats [col stats-set]
-    (when-not (casting/numeric-type? (dtype-proto/get-datatype col))
+    (when-not (casting/numeric-type? (dtype-proto/elemwise-datatype col))
       (throw (ex-info "Stats aren't available on non-numeric columns"
                       {:column-type (dtype/get-datatype col)
                        :column-name (:name metadata)})))
-    (dtype-fn/descriptive-stats (dtype/->reader
+    (dfn/descriptive-statistics (dtype/->reader
                                  col
                                  (dtype/get-datatype col)
                                  {:missing-policy :elide})
                                 stats-set))
   (correlation [col other-column correlation-type]
     (case correlation-type
-      :pearson (dtype-fn/pearsons-correlation col other-column)
-      :spearman (dtype-fn/spearmans-correlation col other-column)
-      :kendall (dtype-fn/kendalls-correlation col other-column)))
+      :pearson (dfn/pearsons-correlation col other-column)
+      :spearman (dfn/spearmans-correlation col other-column)
+      :kendall (dfn/kendalls-correlation col other-column)))
   (select [col idx-rdr]
     (let [idx-rdr (->efficient-reader idx-rdr)]
       (if (== 0 (dtype/ecount missing))
         ;;common case
-        (Column. (->bitmap) (dtype/indexed-reader idx-rdr data)
+        (Column. (->bitmap) (dtype/indexed-buffer idx-rdr data)
                  metadata
                  nil)
         ;;Uggh.  Construct a new missing set
-        (let [idx-rdr (typecast/datatype->reader :int64 idx-rdr)
+        (let [idx-rdr (dtype/->reader idx-rdr)
               n-idx-elems (.lsize idx-rdr)
               ^RoaringBitmap result-set (->bitmap)]
-          (parallel-for/serial-for
-           idx
-           n-idx-elems
-           (when (.contains missing (.read idx-rdr idx))
+          (dotimes [idx n-idx-elems]
+           (when (.contains missing (.readLong idx-rdr idx))
              (.add result-set idx)))
           (Column. result-set
-                   (dtype/indexed-reader idx-rdr data)
+                   (dtype/indexed-buffer idx-rdr data)
                    metadata
                    nil)))))
   (to-double-array [col error-on-missing?]
@@ -358,13 +310,12 @@
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
       (dtype/make-container :java-array :float64 col)))
   IObj
-  (meta [this] (ds-col-proto/metadata this))
+  (meta [this] metadata)
   (withMeta [this new-meta] (Column. missing data new-meta cached-vector))
   Counted
   (count [this] (int (dtype/ecount data)))
   Indexed
   (nth [this idx]
-    #_(.nth (cached-vector!) idx)
     (.get (.data (cached-vector!)) (long idx)))
   (nth [this idx def-val]
     (.nth (cached-vector!) idx def-val))
@@ -415,7 +366,7 @@
     (throw (ex-info "conj/.cons is not supported on columns" {})))
   (empty [this]
     (Column. (->bitmap)
-             (make-container (.get-datatype this) 0)
+             (make-container (dtype-proto/elemwise-datatype this) 0)
              {}
              nil))
   (equiv [this o] (or (identical? this o)
@@ -442,7 +393,7 @@
   (let [dst-container-type (get object-primitive-array-types (type obj-data))
         ^objects obj-data obj-data
         n-items (dtype/ecount obj-data)
-        sparse-val (get @dtype->missing-val-map dst-container-type)
+        sparse-val (get dtype->missing-val-map dst-container-type)
         ^List dst-data (dtype/make-container :list dst-container-type n-items)
         sparse-indexes (LongArrayList.)]
     (parallel-for/parallel-for
@@ -463,7 +414,7 @@
   (let [n-items (dtype/ecount obj-data)
         ^List dst-data (make-container container-dtype n-items)
         sparse-indexes (LongArrayList.)
-        sparse-val (get @dtype->missing-val-map container-dtype)]
+        sparse-val (get dtype->missing-val-map container-dtype)]
     (parallel-for/parallel-for
      idx
      n-items
@@ -482,7 +433,7 @@
   (let [n-items (dtype/ecount obj-data)
         ^List dst-data (make-container container-dtype n-items)
         sparse-indexes (LongArrayList.)
-        sparse-val (get @dtype->missing-val-map container-dtype)]
+        sparse-val (get dtype->missing-val-map container-dtype)]
     (parallel-for/parallel-for
      idx
      n-items
@@ -513,7 +464,7 @@
     (process-object-primitive-array-data coldata)
     (let [data-reader (dtype/->reader (ensure-column-reader coldata))]
       (if (= :object (dtype/get-datatype data-reader))
-        (let [target-dtype (reduce builtin-op-providers/widest-datatype
+        (let [target-dtype (reduce casting/widest-datatype
                                    (->> data-reader
                                         (remove nil?)
                                         (take 20)
@@ -601,10 +552,10 @@
           n-elems (dtype/ecount column)]
       (new-column
        (ds-col-proto/column-name column)
-       (concat-rdr/concat-readers
+       (dtype/concat-buffers
         [(.data column)
-         (const-rdr/make-const-reader
-          (get @dtype->missing-val-map col-dtype)
+         (dtype/make-reader
+          (get dtype->missing-val-map col-dtype)
           col-dtype
           n-empty)])
        (.metadata column)
@@ -621,10 +572,9 @@
           col-dtype (dtype/get-datatype column)]
       (new-column
        (ds-col-proto/column-name column)
-       (concat-rdr/concat-readers
-        [(const-rdr/make-const-reader
-          (get @dtype->missing-val-map col-dtype)
-          col-dtype
+       (dtype/concat-concat-rdr/concat-readers
+        [(dtype/const-reader
+          (get dtype->missing-val-map col-dtype)
           n-empty)
          (.data column)])
        (.metadata column)
