@@ -179,7 +179,8 @@
   (make-parser-container [parser])
   (can-parse? [parser str-val])
   (simple-parse! [parser container str-val])
-  (simple-missing! [parser container]))
+  (simple-missing! [parser container])
+  )
 
 
 (defmacro dtype->parse-fn
@@ -293,22 +294,6 @@
       (.add ^List container# ""))))
 
 
-(defn simple-encoded-text-parser
-  ([encoder]
-   (reify
-     dtype-proto/PDatatype
-     (get-datatype [item#] :encoded-text)
-     PSimpleColumnParser
-     (make-parser-container [this] (ds-text/encoded-text-builder encoder))
-     (can-parse? [this# item#] true)
-     (simple-parse! [parser# container# str-val#]
-       (.add ^List container# str-val#))
-     (simple-missing! [parser# container#]
-       (.add ^List container# ""))))
-  ([]
-   (simple-encoded-text-parser ds-text/default-charset)))
-
-
 (defmacro make-datetime-simple-parser
   [datatype]
   `(let [missing-val# (col-impl/datatype->missing-value ~datatype)]
@@ -339,10 +324,8 @@
    :uuid (simple-col-parser :uuid)
    :packed-duration (make-datetime-simple-parser :packed-duration)
    :packed-local-date (make-datetime-simple-parser :packed-local-date)
-   :packed-local-date-time (make-datetime-simple-parser :packed-local-date-time)
    :zoned-date-time (make-datetime-simple-parser :zoned-date-time)
    :string (simple-string-parser)
-   :encoded-text (simple-encoded-text-parser)
    :float32 (simple-col-parser :float32)
    :keyword (simple-col-parser :keyword)
    :symbol (simple-col-parser :symbol)

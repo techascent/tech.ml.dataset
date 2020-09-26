@@ -1,15 +1,9 @@
-(ns ^:no-doc tech.ml.dataset.parse.datetime
+(ns ^:no-doc tech.v3.dataset.parse.datetime
   (:require [clojure.string :as s]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.casting :as casting]
-            [primitive-math :as pmath])
+            [tech.v3.datatype.datetime :as dtype-dt])
   (:import [java.time LocalDate LocalDateTime LocalTime
             ZonedDateTime OffsetDateTime Instant Duration]
-           [tech.v2.datatype.typed_buffer TypedBuffer]
-           [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
-           [java.util List]
-           [it.unimi.dsi.fastutil.ints IntList]
-           [it.unimi.dsi.fastutil.longs LongList]))
+           [java.time.format DateTimeFormatter DateTimeFormatterBuilder]))
 
 
 (set! *warn-on-reflection* true)
@@ -127,66 +121,13 @@
         (Duration/ofNanos (* (long mult) (long nanos)))))))
 
 
-(defmacro compile-time-datetime-parse-str
-  [datatype str-val]
-  (case datatype
-    :local-date
-    `(parse-local-date ~str-val)
-    :local-date-time
-    `(parse-local-date-time ~str-val)
-    :local-time
-    `(parse-local-time ~str-val)
-    :packed-local-date
-    `(dtype-dt/pack-local-date (parse-local-date ~str-val))
-    :packed-local-date-time
-    `(dtype-dt/pack-local-date-time (parse-local-date-time ~str-val))
-    :packed-local-time
-    `(dtype-dt/pack-local-time (parse-local-time ~str-val))
-    :duration
-    `(parse-duration ~str-val)
-    :packed-duration
-    `(dtype-dt/pack-duration (parse-duration ~str-val))
-    :instant
-    `(Instant/parse ~str-val)
-    :packed-instant
-    `(dtype-dt/pack-instant (Instant/parse ~str-val))
-    :zoned-date-time
-    `(ZonedDateTime/parse ~str-val)
-    :offset-date-time
-    `(OffsetDateTime/parse ~str-val)))
-
-
-(defmacro ^:private make-parse-str-fn
-  [datatype str-val]
-  `(case ~datatype
-     ~@(->> dtype-dt/datetime-datatypes
-            (mapcat
-             (fn [dtype]
-               [dtype
-                `(compile-time-datetime-parse-str ~dtype ~str-val)])))))
-
-
-(defn parse-str
-  "Parse a string into a particular datetime type."
-  [datatype str-val]
-  (make-parse-str-fn datatype str-val))
-
-
-(defn try-parse-datetimes
-  "Given unknown string value, attempt to parse out a datetime value.
-  Returns tuple of
-  [dtype value]"
-  [str-value]
-  (or
-   (->> [:local-date :duration :local-date-time :zoned-date-time]
-        (map (fn [datatype]
-               (when-let [date-val (try
-                                     (parse-str datatype str-value)
-                                     (catch Exception e nil))]
-                 [datatype date-val])))
-        (remove nil?)
-        (first))
-   [:string str-value]))
+(def datatype->general-parse-fn-map
+  {:local-date parse-local-date
+   :local-date-time parse-local-date-time
+   :duration parse-duration
+   :local-time parse-local-time
+   :instant #(Instant/parse ^String %)
+   :zoned-date-time #(ZonedDateTime/parse ^String %)})
 
 
 (defn datetime-formatter-parse-str-fn
@@ -198,72 +139,10 @@
     #(LocalDateTime/parse % formatter)
     :local-time
     #(LocalTime/parse % formatter)
-    :packed-local-date
-    #(dtype-dt/pack-local-date (LocalDate/parse % formatter))
-    :packed-local-date-time
-    #(dtype-dt/pack-local-date-time (LocalDateTime/parse % formatter))
-    :packed-local-time
-    #(dtype-dt/pack-local-time (LocalTime/parse % formatter))
     :zoned-date-time
     #(ZonedDateTime/parse % formatter)
     :offset-date-time
     #(OffsetDateTime/parse % formatter)))
-
-
-(defn as-typed-buffer
-  ^TypedBuffer [item] item)
-
-(defn as-list
-  ^List [item] item)
-
-(defn as-int-list
-  ^IntList [item] item)
-
-(defn as-long-list
-  ^LongList [item] item)
-
-
-(defmacro compile-time-add-to-container!
-  [datatype container parsed-val]
-  (if (dtype-dt/packed-datatype? datatype)
-    (let [datatype (casting/un-alias-datatype datatype)]
-      (case datatype
-        :int32 `(.add (as-int-list (.backing-store (as-typed-buffer ~container)))
-                      (pmath/int ~parsed-val))
-        :int64 `(.add (as-long-list (.backing-store (as-typed-buffer ~container)))
-                      (pmath/long ~parsed-val))))
-    `(.add (as-list ~container) ~parsed-val)))
-
-
-(defmacro ^:private make-add-to-container-fn
-  [datatype container parsed-val]
-  `(case ~datatype
-     ~@(->> dtype-dt/datetime-datatypes
-            (mapcat (fn [dtype]
-                      [dtype
-                       `(compile-time-add-to-container! ~dtype ~container ~parsed-val)])))))
-
-
-(defn add-to-container!
-  [datatype container parsed-val]
-  (make-add-to-container-fn datatype container parsed-val))
-
-
-(defmacro datetime-can-parse?
-  [datatype str-val]
-  `(try
-     (compile-time-datetime-parse-str ~datatype ~str-val)
-     true
-     (catch Throwable e#
-       false)))
-
-(def all-datetime-datatypes
-  (set (concat (flatten (seq dtype-dt/packed-type->unpacked-type-table))
-               [:zoned-date-time :offset-date-time])))
-
-(defn datetime-datatype?
-  [dtype]
-  (boolean (all-datetime-datatypes dtype)))
 
 
 (defn datetime-formatter-or-str->parser-fn
