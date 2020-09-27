@@ -4,7 +4,8 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.datatype :as dtype])
-  (:import [java.util Map List]))
+  (:import [java.util Map List]
+           [tech.v3.datatype PrimitiveList]))
 
 
 (def ^Map dtype->missing-val-map
@@ -41,7 +42,7 @@
 
 
 (defn make-container
-  ([dtype n-elems]
+  (^PrimitiveList [dtype n-elems]
    (case dtype
      :string (str-table/make-string-table n-elems "")
      :text (let [^List list-data (dtype/make-container :list :string 0)]
@@ -49,5 +50,5 @@
                (.add list-data ""))
              list-data)
      (dtype/make-container :list dtype n-elems)))
-  ([dtype]
+  (^PrimitiveList [dtype]
    (make-container dtype 0)))

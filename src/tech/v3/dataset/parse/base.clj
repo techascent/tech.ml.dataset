@@ -1,12 +1,18 @@
 (ns tech.v3.dataset.parse.base
   (:require [tech.v3.dataset.parse.datetime :as parse-dt]
+            [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :as bitmap]
-            [tech.v3.datatype.errors :as errors])
-  (:import [java.util UUID]
+            [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.argops :as argops]
+            [tech.v3.datatype.datetime :as dtype-dt])
+  (:import [java.util UUID List]
            [tech.v3.datatype PrimitiveList]
-           [org.roaringbitmap RoaringBitmap]))
+           [org.roaringbitmap RoaringBitmap]
+           [clojure.lang IFn]
+           [java.time.format DateTimeFormatter]))
 
 
 (set! *warn-on-reflection* true)
@@ -25,74 +31,89 @@
 ;; 2. If parse is specified, use parse if
 
 
-(defmacro dtype->parse-fn
-  [datatype val]
-  (case datatype
-    :boolean `(boolean
-               (cond
-                 (or (.equalsIgnoreCase "t" ~val)
-                     (.equalsIgnoreCase "y" ~val)
-                     (.equalsIgnoreCase "yes" ~val)
-                     (.equalsIgnoreCase "True" ~val))
-                 true
-                 (or (.equalsIgnoreCase "f" ~val)
-                     (.equalsIgnoreCase "n" ~val)
-                     (.equalsIgnoreCase "no" ~val)
-                     (.equalsIgnoreCase "false" ~val))
-                 false
-                 :else
-                 (throw (Exception. (format "Boolean parse failure: %s" ~val) ))))
-    :int16 `(Short/parseShort ~val)
-    :int32 `(Integer/parseInt ~val)
-    :int64 `(Long/parseLong ~val)
-    :float32 `(Float/parseFloat ~val)
-    :float64 `(Double/parseDouble ~val)
-    :uuid `(UUID/fromString ~val)
-    :keyword `(keyword ~val)
-    :symbol `(symbol ~val)))
-
-
 (def parse-failure :tech.ml.dataset.parse/parse-failure)
 (def missing :tech.ml.dataset.parse/missing)
 
-(def str-parsers
+(defn make-safe-parse-fn
+  [parser-fn]
+  (fn [str-val]
+    (try
+      (parser-fn str-val)
+      (catch Throwable e
+        parse-failure))))
+
+(defn- packed-parser
+  [datatype str-parse-fn]
+  (make-safe-parse-fn (packing/wrap-with-packing
+                       datatype
+                       #(if (= datatype (dtype/elemwise-datatype %))
+                          %
+                          (str-parse-fn %)))))
+
+(def default-coercers
   (merge
-   {:boolean #(let [^String data %]
-                (boolean
-                 (cond
-                   (or (.equalsIgnoreCase "t" data)
-                       (.equalsIgnoreCase "y" data)
-                       (.equalsIgnoreCase "yes" data)
-                       (.equalsIgnoreCase "True" data))
-                   true
-                   (or (.equalsIgnoreCase "f" data)
-                       (.equalsIgnoreCase "n" data)
-                       (.equalsIgnoreCase "no" data)
-                       (.equalsIgnoreCase "false" data))
-                   false
-                   :else
-                   parse-failure)))
-    :int16 #(try (Short/parseShort %) (catch Throwable e parse-failure))
-    :int32 #(try (Integer/parseInt %) (catch Throwable e parse-failure))
-    :int64 #(try (Long/parseLong %) (catch Throwable e parse-failure))
-    :float32 #(try (Float/parseFloat %) (catch Throwable e parse-failure))
-    :float64 #(try (Double/parseDouble %) (catch Throwable e parse-failure))
-    :uuid #(try (UUID/fromString %) (catch Throwable e parse-failure))
+   {:boolean #(if (string? %)
+                (let [^String data %]
+                  (cond
+                    (or (.equalsIgnoreCase "t" data)
+                        (.equalsIgnoreCase "y" data)
+                        (.equalsIgnoreCase "yes" data)
+                        (.equalsIgnoreCase "True" data))
+                    true
+                    (or (.equalsIgnoreCase "f" data)
+                        (.equalsIgnoreCase "n" data)
+                        (.equalsIgnoreCase "no" data)
+                        (.equalsIgnoreCase "false" data))
+                    false
+                    :else
+                    parse-failure))
+                (boolean %))
+    :int16 (make-safe-parse-fn #(if (string? %)
+                                  (Short/parseShort %)
+                                  (short %)))
+    :int32 (make-safe-parse-fn  #(if (string? %)
+                                   (Integer/parseInt %)
+                                   (int %)))
+    :int64 (make-safe-parse-fn #(if (string? %)
+                                  (Long/parseLong %)
+                                  (long %)))
+    :float32 (make-safe-parse-fn #(if (string? %)
+                                    (let [fval (Float/parseFloat %)]
+                                      (if (Float/isNaN fval)
+                                        missing
+                                        fval)
+                                      (float %))))
+    :float64 (make-safe-parse-fn #(if (string? %)
+                                    (let [dval (Double/parseDouble %)]
+                                      (if (Double/isNaN dval)
+                                        missing
+                                        dval)
+                                      (double %))))
+    :uuid (make-safe-parse-fn #(if (string? %)
+                                 (UUID/fromString %)
+                                 (if (instance? UUID %)
+                                   %
+                                   parse-failure)))
     :keyword #(if-let [retval (keyword %)]
                 retval
                 parse-failure)
     :symbol #(if-let [retval (symbol %)]
                retval
-               parse-failure)}
+               parse-failure)
+    :string #(if (string? %)
+               (if (< (count %) 1024)
+                 parse-failure)
+               (str %))
+    :text #(str %)}
    (->> parse-dt/datatype->general-parse-fn-map
         (mapcat (fn [[k v]]
-                  (let [unpacked-parser #(try (v %)
-                                              (catch Throwable e parse-failure))]
+                  (let [unpacked-parser (make-safe-parse-fn
+                                         #(if (= k (dtype/elemwise-datatype %))
+                                            %
+                                            (v %)))]
                     (if (packing/unpacked-datatype? k)
                       [[k unpacked-parser]
-                       [(packing/pack-datatype k)
-                        #(try (packing/pack (v %))
-                              (catch Throwable e parse-failure))]]
+                       [(packing/pack-datatype k) (packed-parser k v)]]
                       [[k unpacked-parser]]))))
         (into {}))))
 
@@ -113,38 +134,262 @@
         (recur (unchecked-inc n-elems))))))
 
 
+(defn finalize-parser-data!
+  [container missing failed-values failed-indexes
+   missing-value rowcount]
+  (add-missing-values! container missing missing-value rowcount)
+  (merge
+   {:data container
+    :missing missing
+      :force-datatype? true}
+   (when (and failed-values
+                (not= 0 (dtype/ecount failed-values)))
+     {:metadata {:unparsed-data failed-values
+                 :unparsed-indexes failed-indexes}})))
+
+
+(defn- missing-str-value?
+  [^String value]
+  (or (nil? value)
+      (= "" value)
+      (and (string? value) (.equalsIgnoreCase value "na"))))
+
+
 (deftype FixedTypeParser [^PrimitiveList container
                           container-dtype
-                          ^RoaringBitmap missing
                           missing-value parse-fn
-                          ^PrimitiveList failed-values]
+                          ^RoaringBitmap missing
+                          ^PrimitiveList failed-values
+                          ^RoaringBitmap failed-indexes]
   PParser
   (add-value! [p idx value]
-    (when-not (= (long idx) (.lsize container))
-      (add-missing-values! container missing missing-value idx))
-    (if (= (dtype/elemwise-datatype value)
-           container-dtype)
-      (.add container value)
-      (let [parsed-value (parse-fn value)]
-        (cond
-          (= parsed-value parse-failure)
-          (if failed-values
+    (when-not (missing-str-value? value)
+      (let [idx (long idx)]
+        (let [value-dtype (dtype/elemwise-datatype value)]
+          (if (= value-dtype container-dtype)
             (do
-              (.addObject failed-values value)
-              (.add missing (.size container))
-              (.addObject container missing-value))
-            (errors/throwf "Failed to parse value %s as datatype %s" value container-dtype))
-          (= parsed-value :missing)
-          (do
-            (.add missing (.size container))
-            (.addObject container missing-value))
-          :else
-          (.addObject container parsed-value)))))
+              (add-missing-values! container missing missing-value idx)
+              (.add container value))
+            (let [parsed-value (parse-fn value)]
+              (cond
+                (= parsed-value parse-failure)
+                (if failed-values
+                  (do
+                    (.addObject failed-values value)
+                    (.add failed-indexes (unchecked-int idx)))
+                  (errors/throwf "Failed to parse value %s as datatype %s on row %d"
+                                 value container-dtype idx))
+                (not= parsed-value missing-value)
+                (do
+                  (add-missing-values! container missing missing-value idx)
+                  (.addObject container parsed-value)))))))))
   (finalize! [p rowcount]
-    (add-missing-values! container missing missing-value rowcount)
-    (merge
-     {:data container
-      :missing missing
-      :force-datatype? true}
-     (when failed-values
-       {:metadata {:unparsed-data failed-values}}))))
+    (finalize-parser-data! container missing failed-values failed-indexes
+                           missing-value rowcount)))
+
+
+(defn- find-fixed-parser
+  [kwd]
+  (if (or (= kwd :string)
+          (= kwd :text))
+    [kwd str]
+    (if-let [retval (get default-coercers kwd)]
+      retval
+      (errors/throwf "Failed to find parser for keyword %s" kwd))))
+
+
+(defn- datetime-formatter-parser-fn
+  [parser-datatype formatter]
+  (let [unpacked-datatype (packing/unpack-datatype parser-datatype)
+        parser-fn (parse-dt/datetime-formatter-parse-str-fn
+                   unpacked-datatype formatter)]
+    [(make-safe-parse-fn
+      (packing/wrap-with-packing
+       parser-datatype parser-fn)) false]))
+
+
+(defn parser-entry->parser-tuple
+  [parser-kwd]
+  (if (vector? parser-kwd)
+    (do
+      (assert (= 2 (count parser-kwd)))
+      (let [[parser-datatype parser-fn] parser-kwd]
+        (assert (keyword? parser-datatype))
+        [parser-datatype
+         (cond
+           (= :relaxed? parser-fn)
+           [(find-fixed-parser parser-datatype) true]
+           (instance? IFn parser-fn)
+           [parser-fn true]
+           (and (dtype-dt/datetime-datatype? parser-datatype)
+                (string? parser-fn))
+           (datetime-formatter-parser-fn parser-datatype
+                                         (DateTimeFormatter/ofPattern parser-fn))
+           (and (dtype-dt/datetime-datatype? parser-datatype)
+                (instance? DateTimeFormatter parser-fn))
+           (datetime-formatter-parser-fn parser-datatype
+                                         parser-fn)
+           :else
+           (errors/throwf "Unrecoginzed parser fn type: %s" (type parser-fn)))]))
+    [parser-kwd [(find-fixed-parser parser-kwd) false]]))
+
+
+(defn make-fixed-parser
+  [parser-kwd]
+  (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
+        [failed-values failed-indexes] (when relaxed?
+                                         [(dtype/make-container :list :object 0)
+                                          (bitmap/->bitmap)])
+        container (column-base/make-container dtype)
+        missing-value (column-base/datatype->missing-value dtype)
+        missing (bitmap/->bitmap)]
+    (FixedTypeParser. container dtype missing-value parse-fn
+                      missing failed-values failed-indexes)))
+
+
+(defn parser-kwd-list->parser-tuples
+  [kwd-list]
+  (mapv parser-entry->parser-tuple kwd-list))
+
+
+(def default-parser-datatype-sequence
+  [:boolean :int16 :int32 :int64 :float64 :uuid
+   :packed-duration :packed-local-date
+   :zoned-date-time :string :text])
+
+
+(defn- promote-container
+  ^PrimitiveList [old-container ^RoaringBitmap missing new-dtype]
+  (let [n-elems (dtype/ecount old-container)
+        container (column-base/make-container
+                   new-dtype 0)
+        missing-value (column-base/datatype->missing-value new-dtype)
+        ;;Ensure we unpack a container if we have to promote it.
+        old-container (packing/unpack old-container)]
+    (.ensureCapacity container n-elems)
+    (dotimes [idx n-elems]
+      (if (.contains missing idx)
+        (.addObject container missing-value)
+        (.addObject container (casting/cast
+                               (old-container idx)
+                               new-dtype))))
+    container))
+
+
+(deftype PromotionalStringParser [^{:unsynchronized-mutable true
+                                    :tag PrimitiveList} container
+                                  ^{:unsynchronized-mutable true} container-dtype
+                                  ^{:unsynchronized-mutable true} missing-value
+                                  ^{:unsynchronized-mutable true} parse-fn
+                                  ^RoaringBitmap missing
+                                  ;;List of datatype,parser-fn tuples
+                                  ^List promotion-list]
+  PParser
+  (add-value! [p idx value]
+    (when-not (missing-str-value? value)
+      (let [idx (long idx)]
+        (let [value-dtype (dtype/elemwise-datatype value)]
+          (cond
+            (= value-dtype container-dtype)
+            (do
+              (add-missing-values! container missing missing-value idx)
+              (.add container value))
+            parse-fn
+            (let [parsed-value (parse-fn value)]
+              (cond
+                (= parsed-value parse-failure)
+                (let [start-idx (argops/index-of container-dtype (mapv first promotion-list))
+                      n-elems (.size promotion-list)
+                      next-idx (if (== start-idx -1)
+                                 -1
+                                 (long (loop [idx (inc start-idx)]
+                                         (if (< idx n-elems)
+                                           (let [[_container-datatype parser-fn] (.get promotion-list idx)
+                                                 parsed-value (parser-fn value)]
+                                             (if (= parsed-value parse-failure)
+                                               (recur (inc idx))
+                                               idx))
+                                           -1))))
+                      [parser-datatype new-parser-fn] (if (== -1 next-idx)
+                                                        [:object nil]
+                                                        (.get promotion-list next-idx))
+                      parsed-value (if new-parser-fn
+                                     (new-parser-fn value)
+                                     value)
+                      new-container (promote-container container missing parser-datatype)
+                      new-missing-value (column-base/datatype->missing-value parser-datatype)]
+                  (set! container new-container)
+                  (set! container-dtype parser-datatype)
+                  (set! missing-value new-missing-value)
+                  (set! parse-fn new-parser-fn)
+                  (add-missing-values! new-container missing new-missing-value idx)
+                  (.add new-container parsed-value))
+                (not= parsed-value missing-value)
+                (do
+                  (add-missing-values! container missing missing-value idx)
+                  (.addObject container parsed-value))))
+            :else
+            (do
+              (add-missing-values! container missing missing-value idx)
+              (.addObject container value)))))))
+  (finalize! [p rowcount]
+    (finalize-parser-data! container missing nil nil
+                           missing-value rowcount)))
+
+
+(defn promotional-string-parser
+  ([parser-datatype-sequence]
+   (let [first-dtype (first parser-datatype-sequence)]
+     (PromotionalParser. (column-base/make-container first-dtype)
+                         first-dtype
+                         false
+                         (default-coercers first-dtype)
+                         (bitmap/->bitmap)
+                         (mapv (juxt identity default-coercers)
+                               parser-datatype-sequence))))
+  ([]
+   (promotional-string-parser default-parser-datatype-sequence)))
+
+
+(deftype PromotionalObjectParser [^{:unsynchronized-mutable true
+                                    :tag PrimitiveList} container
+                                  ^{:unsynchronized-mutable true} container-dtype
+                                  ^{:unsynchronized-mutable true} missing-value
+                                  ^RoaringBitmap missing]
+  PParser
+  (add-value! [p idx value]
+    (when-not (missing-str-value? value)
+      (let [idx (long idx)
+            org-datatype (dtype/elemwise-datatype value)
+            packed-dtype (packing/pack-datatype org-datatype)
+            container-ecount (dtype/ecount container)]
+        (if (or (== 0 container-ecount)
+                (= container-dtype packed-dtype))
+          (let [value (packing/pack value)]
+            (when (== 0 container-ecount)
+              (set! container (column-base/make-container packed-dtype))
+              (set! container-dtype packed-dtype)
+              (set! missing-value (column-base/datatype->missing-value packed-dtype)))
+            (when-not (== container-ecount idx)
+              (add-missing-values! container missing missing-value idx))
+            (.addObject container value))
+          (let [widest-datatype (casting/widest-datatype container-dtype packed-dtype)]
+            (when-not (= widest-datatype container-dtype)
+              (let [new-container (promote-container container missing widest-datatype)]
+                (set! container new-container)
+                (set! container-dtype widest-datatype)
+                (set! missing-value (column-base/datatype->missing-value widest-datatype))))
+            (when-not (== container-ecount idx)
+              (add-missing-values! container missing missing-value idx))
+            (.addObject container value))))))
+  (finalize! [p rowcount]
+    (finalize-parser-data! container missing nil nil
+                           missing-value rowcount)))
+
+
+(defn promotional-object-parser
+  []
+  (PromotionalObjectParser. (dtype/make-container :list :boolean 0)
+                            :boolean
+                            false
+                            (bitmap/->bitmap)))
