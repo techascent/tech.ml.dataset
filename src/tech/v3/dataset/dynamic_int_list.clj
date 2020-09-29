@@ -10,7 +10,7 @@
             [tech.v3.parallel.for :as parallel-for]
             [primitive-math :as pmath])
   (:import [java.util List Iterator]
-           [tech.v3.datatype PrimitiveList LongIO BooleanConversions]
+           [tech.v3.datatype PrimitiveList LongBuffer BooleanConversions]
            [tech.v3.datatype.list ListImpl]))
 
 (set! *warn-on-reflection* true)
@@ -70,7 +70,7 @@
         (set! backing-store (dtype/make-container :list :int32 backing-store))
         (set! int-width 32)))
     (.addLong backing-store value))
-  LongIO
+  LongBuffer
   (readLong [this idx]
     (.readLong backing-store idx))
   ;;Writing is serialized.

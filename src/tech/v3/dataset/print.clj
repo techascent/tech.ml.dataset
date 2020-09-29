@@ -6,9 +6,10 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.packing :as packing]
             [clojure.string :as str]
             [clojure.pprint :as pp])
-  (:import [tech.v3.datatype PrimitiveIO ObjectReader]
+  (:import [tech.v3.datatype Buffer ObjectReader]
            [java.util List HashMap Collections ArrayList]
            [tech.v3.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
@@ -116,7 +117,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          print-ds (ds-proto/select dataset :all index-range)
          column-names (map #(.toString ^Object %) (keys print-ds))
          string-columns (map #(-> (dtype/->reader %)
-                                  (dtype-pp/reader-converter)
+                                  (packing/unpack)
                                   (reader->string-lines (ds-col-proto/missing %)
                                                         line-policy
                                                         column-width

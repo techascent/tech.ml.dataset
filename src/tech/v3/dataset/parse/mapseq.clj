@@ -1,87 +1,43 @@
-(ns ^:no-doc tech.ml.dataset.parse.mapseq
+(ns ^:no-doc tech.v3.dataset.parse.mapseq
   "Sequences of maps are maybe the most basic pure datastructure for data.
   Converting them into a more structured form (and back) is a key component of
   dealing with datatets"
-  (:require [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.argtypes :as argtypes]
-            [tech.ml.dataset.parse.spreadsheet :as parse-spreadsheet]
-            [clojure.set :as set])
-  (:import [java.util HashMap List Iterator Map]
-           [java.util.concurrent ConcurrentHashMap]
-           [java.util.function Function]
-           [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
-            Spreadsheet$Row Spreadsheet$Cell]))
-
-
-(defn map->row
-  ^Spreadsheet$Row
-  [row-number map-data colname->idx]
-  (let [vals (into [] map-data)
-        row-number (int row-number)]
-    (reify Spreadsheet$Row
-      (getRowNum [this] row-number)
-      (iterator [this]
-        (let [^Iterator src-iter (.iterator ^List vals)]
-          (reify Iterator
-            (hasNext [this] (.hasNext src-iter))
-            (next [this]
-              (let [[k v] (.next src-iter)
-                    col-index (colname->idx k)]
-                (reify
-                  dtype-proto/PDatatype
-                  (get-datatype [this]
-                    (if (= :scalar (argtypes/arg->arg-type v))
-                      (dtype-proto/get-datatype v)
-                      (let [v-dtype (dtype-proto/get-datatype v)]
-                        (if (= v-dtype :dataset)
-                          v-dtype
-                          :object))))
-                  Spreadsheet$Cell
-                  (missing [this] (or (nil? v)
-                                      (= "" v)
-                                      (and (number? v)
-                                           (not (Double/isFinite (double v))))))
-                  (getColumnNum [this] (int col-index))
-                  (value [this] v)
-                  (doubleValue [this] (double v))
-                  (boolValue [this] (boolean v)))))))))))
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.dataset.parse.column-parsers :as column-parsers]
+            [tech.v3.parallel.for :as pfor]
+            [tech.v3.dataset.impl.dataset :as ds-impl])
+  (:import [java.util HashMap]
+           [java.util.function Function]))
 
 
 (defn mapseq->dataset
-  ([mapseq {:keys [parser-scan-len parser-fn]
-            :or {parser-scan-len 100}
-            :as options}]
-   (let [cell-name-hash (ConcurrentHashMap.)
-         colname-compute-fn (reify Function
-                              (apply [this k]
-                                (long (.size cell-name-hash))))
-         colname->idx (fn [colname]
-                        (.computeIfAbsent cell-name-hash colname
-                                          colname-compute-fn))
-         rows (->> mapseq
-                   (map-indexed (fn [idx data]
-                                  (map->row idx data colname->idx))))
-         scan-rows (when parser-fn
-                     (parse-spreadsheet/scan-initial-rows rows parser-scan-len))
-         initial-idx->colname (set/map-invert cell-name-hash)
-         col-parser-gen (reify
-                          Function
-                          (apply [this column-number]
-                            (if parser-fn
-                              (let [colname (get initial-idx->colname
-                                                 (long column-number))]
-                                (parse-spreadsheet/make-parser
-                                 parser-fn colname (scan-rows column-number)))
-                              (parse-spreadsheet/default-column-parser))))
-         col-idx->colname-data (atom nil)]
-     (parse-spreadsheet/process-spreadsheet-rows
-      rows false col-parser-gen
-      #(let [mapdata (swap! col-idx->colname-data
-                            (fn [existing]
-                              (if existing
-                                existing
-                                (set/map-invert cell-name-hash))))]
-         (get mapdata % %))
-      options)))
+  ([options mapseq]
+   (let [rows (map-indexed vector mapseq)
+         parse-context (column-parsers/options->parse-context options :object)
+         parsers (HashMap.)
+         key-fn (:key-fn options identity)
+         colparser-compute-fn (reify Function
+                                (apply [this colname]
+                                  (let [col-idx (.size parsers)]
+                                    {:column-idx col-idx
+                                     :column-name (key-fn colname)
+                                     :column-parser (parse-context colname)})))
+         colname->parse-context (fn [colname]
+                                  (:column-parser
+                                   (.computeIfAbsent parsers colname
+                                                     colparser-compute-fn)))]
+     (pfor/consume!
+      (fn [[row-idx rowmap]]
+        (doseq [[k v] rowmap]
+          (let [parser (colname->parse-context k)]
+            (column-parsers/add-value! parser row-idx v))))
+      rows)
+     (let [row-count (apply max 0 (map (comp dtype/ecount :column-parser) (vals parsers)))]
+       (->> parsers
+            (sort-by :column-idx)
+            (mapv (fn [{:keys [column-name column-parser]}]
+                    (assoc (column-parsers/finalize! column-parser row-count)
+                           :name column-name)))
+            (ds-impl/new-dataset options)))))
   ([mapseq]
-   (mapseq->dataset mapseq {})))
+   (mapseq->dataset {} mapseq)))

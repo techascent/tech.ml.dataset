@@ -39,7 +39,7 @@
         (if-let [obj-data (dtype/as-reader obj-data)]
           (let [n-items (dtype/ecount obj-data)
                 dst-data (dtype/make-container :jvm-heap dst-container-type n-items)
-                dst-io (dtype/->primitive-io dst-data)]
+                dst-io (dtype/->buffer dst-data)]
             (parallel-for/parallel-for
              idx
              n-items
@@ -55,10 +55,9 @@
             (parallel-for/consume!
              #(if-not (nil? %)
                 (.addObject dst-data %)
-                (do
-                  (let [idx (.size dst-data)]
-                    (.add sparse-indexes idx)
-                    (.addObject dst-data sparse-val))))
+                (let [idx (.size dst-data)]
+                  (.add sparse-indexes idx)
+                  (.addObject dst-data sparse-val)))
              obj-data)
             {:data dst-data
              :missing sparse-indexes}))))))

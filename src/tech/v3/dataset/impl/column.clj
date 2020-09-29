@@ -15,7 +15,7 @@
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
-           [tech.v3.datatype PrimitiveIO ListPersistentVector]))
+           [tech.v3.datatype Buffer ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -42,13 +42,13 @@
     (long-array item)))
 
 
-(defn- make-primitive-io
+(defn- make-buffer
   [^RoaringBitmap missing data]
-  (let [^PrimitiveIO src (dtype-proto/->primitive-io data)
+  (let [^Buffer src (dtype-proto/->buffer data)
         dtype (.elemwiseDatatype src)]
     (if (.isEmpty missing)
       src
-      (reify PrimitiveIO
+      (reify Buffer
         (elemwiseDatatype [this] dtype)
         (lsize [this] (.lsize src))
         (allowsRead [this] (.allowsRead src))
@@ -90,31 +90,31 @@
             (get column-base/dtype->missing-val-map dtype)
             (.readObject src idx)))
         (writeBoolean [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeBoolean src idx val))
         (writeByte [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeByte src idx val))
         (writeShort [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeShort src idx val))
         (writeChar [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeChar src idx val))
         (writeInt [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeInt src idx val))
         (writeLong [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeLong src idx val))
         (writeFloat [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeFloat src idx val))
         (writeDouble [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeDouble src idx val))
         (writeObject [this idx val]
-          (.remove missing (unchecked-inc idx))
+          (.remove missing (unchecked-int idx))
           (.writeObject src idx val))))))
 
 
@@ -122,7 +122,7 @@
   `(or ~'cached-vector
        (do (set! ~'cached-vector
                  (ListPersistentVector.
-                  (make-primitive-io ~'missing ~'data)))
+                  (make-buffer ~'missing ~'data)))
            ~'cached-vector)))
 
 (deftype Column
@@ -151,22 +151,22 @@
              (dtype-proto/elemwise-cast data new-dtype)
              metadata
              nil))
-  dtype-proto/PToPrimitiveIO
-  (convertible-to-primitive-io? [this] true)
-  (->primitive-io [this]
+  dtype-proto/PToBuffer
+  (convertible-to-buffer? [this] true)
+  (->buffer [this]
     (cached-vector!)
     (.data cached-vector))
   dtype-proto/PToReader
   (convertible-to-reader? [this]
     (dtype-proto/convertible-to-reader? data))
   (->reader [this]
-    (dtype-proto/->primitive-io this))
+    (dtype-proto/->buffer this))
   dtype-proto/PToWriter
   (convertible-to-writer? [this]
     (dtype-proto/convertible-to-writer? data))
   (->writer [this]
-    (dtype-proto/->primitive-io this))
-  dtype-proto/PBuffer
+    (dtype-proto/->buffer this))
+  dtype-proto/PSubBuffer
   (sub-buffer [this offset len]
     (let [offset (long offset)
           len (long len)]
@@ -194,7 +194,7 @@
                nil)))
   Iterable
   (iterator [this]
-    (.iterator ^PrimitiveIO (dtype-proto/->primitive-io this)))
+    (.iterator (dtype-proto/->buffer this)))
   ds-col-proto/PIsColumn
   (is-column? [this] true)
   ds-col-proto/PColumn

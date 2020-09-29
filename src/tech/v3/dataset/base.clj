@@ -844,11 +844,6 @@ This is an interface change and we do apologize!"))))
            argument to Charset/forName.
         - `DateTimeFormatter` - use with the appropriate temporal parse static function
            to parse the value.
-        -  :encoded-text datatype - `parse-data` can be a string, a
-           java.nio.charset.Charset, or an implementation of
-           tech.ml.dataset.text/PEncodingToFn.  If you want to serialize this format
-           to nippy your encoding had better be nippy serializable (defrecords
-           always are).
    - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.

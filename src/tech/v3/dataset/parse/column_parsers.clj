@@ -1,4 +1,5 @@
-(ns tech.v3.dataset.parse.base
+(ns tech.v3.dataset.parse.column-parsers
+  "Per-column parsers."
   (:require [tech.v3.dataset.parse.datetime :as parse-dt]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.packing :as packing]
@@ -7,7 +8,8 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]
-            [tech.v3.datatype.datetime :as dtype-dt])
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util UUID List]
            [tech.v3.datatype PrimitiveList]
            [org.roaringbitmap RoaringBitmap]
@@ -81,14 +83,14 @@
                                     (let [fval (Float/parseFloat %)]
                                       (if (Float/isNaN fval)
                                         missing
-                                        fval)
-                                      (float %))))
+                                        fval))
+                                    (float %)))
     :float64 (make-safe-parse-fn #(if (string? %)
                                     (let [dval (Double/parseDouble %)]
                                       (if (Double/isNaN dval)
                                         missing
-                                        dval)
-                                      (double %))))
+                                        dval))
+                                    (double %)))
     :uuid (make-safe-parse-fn #(if (string? %)
                                  (UUID/fromString %)
                                  (if (instance? UUID %)
@@ -148,7 +150,7 @@
                  :unparsed-indexes failed-indexes}})))
 
 
-(defn- missing-str-value?
+(defn- missing-value?
   [^String value]
   (or (nil? value)
       (= "" value)
@@ -161,9 +163,11 @@
                           ^RoaringBitmap missing
                           ^PrimitiveList failed-values
                           ^RoaringBitmap failed-indexes]
+  dtype-proto/PECount
+  (ecount [this] (.lsize container))
   PParser
   (add-value! [p idx value]
-    (when-not (missing-str-value? value)
+    (when-not (missing-value? value)
       (let [idx (long idx)]
         (let [value-dtype (dtype/elemwise-datatype value)]
           (if (= value-dtype container-dtype)
@@ -284,9 +288,11 @@
                                   ^RoaringBitmap missing
                                   ;;List of datatype,parser-fn tuples
                                   ^List promotion-list]
+  dtype-proto/PECount
+  (ecount [this] (.lsize container))
   PParser
   (add-value! [p idx value]
-    (when-not (missing-str-value? value)
+    (when-not (missing-value? value)
       (let [idx (long idx)]
         (let [value-dtype (dtype/elemwise-datatype value)]
           (cond
@@ -340,13 +346,13 @@
 (defn promotional-string-parser
   ([parser-datatype-sequence]
    (let [first-dtype (first parser-datatype-sequence)]
-     (PromotionalParser. (column-base/make-container first-dtype)
-                         first-dtype
-                         false
-                         (default-coercers first-dtype)
-                         (bitmap/->bitmap)
-                         (mapv (juxt identity default-coercers)
-                               parser-datatype-sequence))))
+     (PromotionalStringParser. (column-base/make-container first-dtype)
+                               first-dtype
+                               false
+                               (default-coercers first-dtype)
+                               (bitmap/->bitmap)
+                               (mapv (juxt identity default-coercers)
+                                     parser-datatype-sequence))))
   ([]
    (promotional-string-parser default-parser-datatype-sequence)))
 
@@ -356,9 +362,11 @@
                                   ^{:unsynchronized-mutable true} container-dtype
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^RoaringBitmap missing]
+  dtype-proto/PECount
+  (ecount [this] (.lsize container))
   PParser
   (add-value! [p idx value]
-    (when-not (missing-str-value? value)
+    (when-not (missing-value? value)
       (let [idx (long idx)
             org-datatype (dtype/elemwise-datatype value)
             packed-dtype (packing/pack-datatype org-datatype)
@@ -393,3 +401,31 @@
                             :boolean
                             false
                             (bitmap/->bitmap)))
+
+
+
+(defn options->parse-context
+  "Given the (beast of an) options map used for parsing, run through it
+  and created the specific parse context.  A parse context is a function
+  that produces a column parser for a given column name or index.
+  parse-type is either :string or :object."
+  [options parse-type]
+  (let [default-parse-fn (case parse-type
+                           :object promotional-object-parser
+                           :string promotional-string-parser)
+        key-fn (or (:key-fn options) identity)
+        parser-descriptor (:parser-fn options)]
+    (fn [cname-or-index]
+      (cond
+        (nil? parser-descriptor)
+        (default-parse-fn)
+        (map? parser-descriptor)
+        (let [cname (if (number? cname-or-index)
+                      (long cname-or-index)
+                      (key-fn cname-or-index))]
+          (if-let [col-parser-desc (or (get parser-descriptor cname)
+                                       (get parser-descriptor cname-or-index))]
+            (make-fixed-parser col-parser-desc)
+            (default-parse-fn)))
+        :else
+        (make-fixed-parser parser-descriptor)))))

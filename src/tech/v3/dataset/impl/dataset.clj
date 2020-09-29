@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.dataset.impl.dataset
+(ns ^:no-doc tech.v3.dataset.impl.dataset
   (:require [tech.v3.protocols.column :as ds-col-proto]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
@@ -8,7 +8,8 @@
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.bitmap :as bitmap]
-            [tech.v3.datatype.monotonic-range :as dt-range]
+            [tech.v3.dataset.impl.column-data-process :as column-data-process]
+            [tech.v3.dataset.impl.column-base :as column-base]
             [clojure.pprint :as pprint])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
@@ -31,10 +32,27 @@
                                (.containsKey m k)) (keys this))))))
 
 
+(defn- shorten-or-extend
+  [^long n-rows reader]
+  (let [reader-dtype (dtype/elemwise-datatype reader)
+        reader-ecount (dtype/ecount reader)]
+    (cond
+      (== reader-ecount n-rows)
+      reader
+      (< reader-ecount n-rows)
+      (dtype/concat-buffers (dtype/elemwise-datatype reader)
+                            [reader (dtype/const-reader (column-base/datatype->missing-value
+                                                         reader-dtype)
+                                                        (- n-rows reader-ecount))])
+      ;;Else the number of elements is greater than the number of rows
+      :else
+      (dtype/sub-buffer reader 0 n-rows))))
+
+
 (defn- coldata->column
-  [n-rows col-name new-col-data]
+  [n-cols n-rows col-name new-col-data]
   (let [argtype (argtypes/arg-type new-col-data)
-        n-rows (if (= 0 n-rows)
+        n-rows (if (= 0 n-cols)
                  Integer/MAX_VALUE
                  n-rows)]
     (cond
@@ -43,14 +61,21 @@
       (= argtype :scalar)
       (col-impl/new-column col-name
                            (dtype/const-reader new-col-data n-rows))
-      (= argtype :iterable)
-      (col-impl/new-column col-name
-                           (col-impl/ensure-column-reader
-                            (take n-rows new-col-data)))
       :else
-      (col-impl/new-column col-name
-                           (col-impl/ensure-column-reader
-                            new-col-data)))))
+      (let [new-reader (if (= argtype :iterable)
+                         (column-data-process/scan-data-for-missing
+                          (take n-rows new-col-data))
+                         ;;Else has to be reader or tensor.
+                         (let [data-ecount (dtype/ecount new-col-data)
+                               new-col-data (if (> data-ecount n-rows)
+                                              (dtype/sub-buffer new-col-data 0 n-rows)
+                                              new-col-data)]
+                           (column-data-process/scan-data-for-missing
+                            new-col-data)))]
+        (col-impl/new-column
+         col-name (if-not (= 0 n-cols)
+                    (shorten-or-extend n-rows new-reader)
+                    new-reader))))))
 
 
 (defn- nearest-range-start
@@ -209,7 +234,8 @@
     (let [col-idx (get colmap col-name)
           col (.get columns (int col-idx))
           n-rows (long (second (dtype/shape dataset)))
-          new-col-data (coldata->column n-rows col-name (col-fn col))]
+          n-cols (long (first (dtype/shape dataset)))
+          new-col-data (coldata->column n-cols n-rows col-name (col-fn col))]
       (Dataset.
        (assoc columns col-idx new-col-data)
        colmap
@@ -219,7 +245,8 @@
 
   (add-or-update-column [dataset col-name new-col-data]
     (let [n-rows (long (second (dtype/shape dataset)))
-          col-data (coldata->column n-rows col-name new-col-data)]
+          n-cols (long (first (dtype/shape dataset)))
+          col-data (coldata->column n-cols n-rows col-name new-col-data)]
       (if (contains? colmap col-name)
         (ds-proto/update-column dataset col-name (constantly col-data))
         (ds-proto/add-column dataset col-data))))

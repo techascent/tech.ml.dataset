@@ -9,7 +9,7 @@
   (:import [java.util List HashMap Map RandomAccess Iterator ArrayList
             Collections]
            [java.util.function Function]
-           [tech.v3.datatype PrimitiveList ObjectIO]))
+           [tech.v3.datatype PrimitiveList ObjectBuffer]))
 
 
 (defprotocol PStrTable
@@ -55,7 +55,7 @@
                                (.add int->str keyval)
                                retval)))))]
       (.addLong data item-idx)))
-  ObjectIO
+  ObjectBuffer
   (readObject [this idx]
     (.get int->str (.readLong data idx)))
   (writeObject [this idx value]
