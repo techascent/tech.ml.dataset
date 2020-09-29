@@ -1,5 +1,5 @@
 (ns ^:no-doc tech.v3.dataset.impl.column
-  (:require [tech.v3.protocols.column :as ds-col-proto]
+  (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
@@ -8,6 +8,7 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
+            [tech.v3.tensor :as dtt]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process])
@@ -195,9 +196,9 @@
   Iterable
   (iterator [this]
     (.iterator (dtype-proto/->buffer this)))
-  ds-col-proto/PIsColumn
+  col-proto/PIsColumn
   (is-column? [this] true)
-  ds-col-proto/PColumn
+  col-proto/PColumn
   (column-name [col] (:name metadata))
   (set-name [col name] (Column. missing data (assoc metadata :name name)
                                 cached-vector))
@@ -286,7 +287,7 @@
       (format format-str
               (name (dtype/elemwise-datatype item))
               [n-elems]
-              (ds-col-proto/column-name item)
+              (col-proto/column-name item)
               (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
                   (packing/unpack)
                   (dtype-pp/print-reader-data)))))
@@ -323,7 +324,7 @@
 (defn ensure-column
   [item]
   (cond
-    (ds-col-proto/is-column? item)
+    (col-proto/is-column? item)
     item
     (map? item)
     (let [{:keys [name data missing metadata force-datatype?] :as cdata} item]
@@ -349,7 +350,7 @@
   ;;mapv to force errors here instead of later
   (mapv (fn [idx item]
           (cond
-            (ds-col-proto/is-column? item)
+            (col-proto/is-column? item)
             item
             (map? item)
             (ensure-column (update item :name
@@ -400,7 +401,7 @@
           col-dtype (dtype/get-datatype column)
           n-elems (dtype/ecount column)]
       (new-column
-       (ds-col-proto/column-name column)
+       (col-proto/column-name column)
        (dtype/concat-buffers
         col-dtype
         [(.data column)
@@ -420,7 +421,7 @@
     (let [^Column column column
           col-dtype (dtype/get-datatype column)]
       (new-column
-       (ds-col-proto/column-name column)
+       (col-proto/column-name column)
        (dtype/concat-buffers
         col-dtype
         [(dtype/const-reader
@@ -432,3 +433,17 @@
         (dtype-proto/set-offset (.missing column) n-empty)
         (unchecked-int 0)
         (unchecked-int n-empty))))))
+
+
+;;Object defaults
+(extend-type Object
+  col-proto/PIsColumn
+  (is-column? [this] false)
+  col-proto/PColumn
+  (column-name [this] :_unnamed)
+  (supported-stats [this] nil)
+  (missing [col] (bitmap/->bitmap))
+  (select [col idx-seq]
+    (dtt/select col [(->efficient-reader idx-seq)]))
+  (to-double-array [col error-on-missing?]
+    (dtype/->double-array col)))

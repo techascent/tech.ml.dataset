@@ -1,11 +1,12 @@
-(ns tech.ml.dataset.column
+(ns tech.v3.dataset.column
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.string-table :as str-table]
-            [tech.v3.dataset.parse :as ds-parse]
+            [tech.v3.dataset.parse.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.datatype.typecast :as typecast])
+            [tech.v3.parallel.for :as pfor])
   (:import [java.util List]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
@@ -17,8 +18,9 @@
 (defn is-column?
   "Return true if this item is a column."
   [item]
-  (and (satisfies? col-proto/PColumn item)
-       (col-proto/is-column? item)))
+  (when item
+    (col-proto/is-column? item)))
+
 
 (defn column-name
   [col]
@@ -35,30 +37,6 @@
   "List of available stats for the column"
   [col]
   (col-proto/supported-stats col))
-
-
-(defn metadata
- "Return the metadata map for this column.
-  Metadata must contain :name :datatype :size.  Categorical columns must have
-  :categorical? true and the inference target should have :target? true."
-  [col]
-  (col-proto/metadata col))
-
-
-(defn set-metadata
-  "Set the metadata on the column returning a new column.
-  Beware this could change the name."
-  [col data-map]
-  (col-proto/set-metadata col data-map))
-
-
-(defn merge-metadata
-  "Merge metadata in column with this map.
-  Beware this could change the name of the column."
-  [col data-map]
-  (->> (merge (metadata col)
-              data-map)
-       (set-metadata col)))
 
 
 (defn missing
@@ -144,33 +122,24 @@ Implementations should check their metadata before doing calculations."
   missing value will be added or :tech.ml.dataset.parse/parse-failure in which case the
   a missing index will be added and the string value will be recorded in the metadata's
   :unparsed-data, :unparsed-indexes entries."
-  ([datatype options col]
+  ([datatype col]
    (let [colname (column-name col)
-         parse-fn (:parse-fn options datatype)
-         parser-scan-len (:parser-scan-len options 100)
-         col-reader (typecast/datatype->reader
-                     :object
-                     (-> (dtype/->reader col)
-                         (ds-parse/convert-reader-to-strings)))
-         col-parser (ds-parse/make-parser parse-fn (column-name col)
-                                          (take parser-scan-len col-reader))
-         ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap (missing col))
+         col-reader (dtype/emap #(when % (str %)) :string col)
+         col-parser (column-parsers/make-fixed-parser datatype)
          n-elems (dtype/ecount col-reader)]
      (dotimes [iter n-elems]
-       (if (.contains missing iter)
-         (ds-parse/missing! col-parser)
-         (ds-parse/parse! col-parser (.read col-reader iter))))
-     (let [{:keys [data missing metadata]} (ds-parse/column-data col-parser)]
-       (new-column colname data metadata missing))))
-  ([datatype col]
-   (parse-column datatype {} col)))
+       (column-parsers/add-value! col-parser iter (col-reader iter)))
+
+     (let [{:keys [data missing metadata]}
+           (column-parsers/finalize! col-parser n-elems)]
+       (new-column colname data metadata missing)))))
 
 
 (defn new-column
   ([name data] (new-column name data nil nil))
   ([name data metadata] (new-column name data metadata nil))
   ([name data metadata missing]
-   (let [coldata (col-impl/ensure-column-reader data)]
+   (let [coldata (column-data-process/scan-data-for-missing data)]
      (col-impl/new-column name coldata metadata missing))))
 
 
@@ -190,3 +159,14 @@ Implementations should check their metadata before doing calculations."
   Finally, any missing values should be indicated by a NaN of the expected type."
   ^doubles [col & [error-on-missing?]]
   (col-proto/to-double-array col error-on-missing?))
+
+
+(defn column-map
+  "Map a scalar function across one or more columns.  New missing set becomes
+  the union of all the other missing sets.  Column is named :_unnamed.
+  This is the missing-set aware version of tech.v3.datatype/emap."
+  [map-fn res-dtype & args]
+  (col-impl/new-column :_unnamed
+                       (apply dtype/emap map-fn res-dtype args)
+                       nil
+                       (reduce dtype-proto/set-and (map col-proto/missing args))))

@@ -1,14 +1,16 @@
 (ns tech.libs.smile.data
-  (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.casting :as casting]
-            [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.string-table :as str-table]
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.copy-make-container :as dtype-cmc]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.array-buffer :as array-buffer]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.string-table :as str-table]
             [clojure.set :as set])
-  (:import [tech.ml.dataset.impl.dataset Dataset]
+  (:import [tech.v3.dataset.impl.dataset Dataset]
            [smile.data DataFrame DataFrameImpl DataFrameFactory]
            [java.time.format DateTimeFormatter]
            [java.time LocalDate LocalTime LocalDateTime]
@@ -32,7 +34,7 @@
 (def datatype->smile-map
   {:boolean DataTypes/BooleanType
    :int8 DataTypes/ByteType
-   :character DataTypes/CharType
+   :char DataTypes/CharType
    :int16 DataTypes/ShortType
    :int32 DataTypes/IntegerType
    :int64 DataTypes/LongType
@@ -116,14 +118,9 @@
 
 (defn column->smile
   ^BaseVector [col]
-  (let [col-base-dtype (dtype/get-datatype col)
-        col-data (if (dtype-dt/packed-datatype? col-base-dtype)
-                   (dtype-dt/unpack col)
-                   col)
+  (let [col-data (packing/unpack col)
         col-dtype (dtype/get-datatype col-data)
-        col-ary (if-let [col-ary (dtype/->array col-data)]
-                  col-ary
-                  (dtype/make-container :java-array col-dtype col-data))
+        col-ary (dtype-cmc/->array col-data)
         field (column->field col)]
     (case (casting/safe-flatten col-dtype)
       :boolean (VectorFactory/booleanVector field ^booleans col-ary)
@@ -160,45 +157,29 @@
 
 
 (extend-type BaseVector
-  dtype-proto/PDatatype
-  (get-datatype [v]
+  dtype-proto/PElemwiseDatatype
+  (elemwise-datatype [v]
     (if-let [retval (get smile->datatype-map (.type v))]
       retval
       :object))
-  dtype-proto/PCountable
+  dtype-proto/PECount
   (ecount [v] (long (.size v))))
 
 
 (defmacro extend-primitive-vec
   [datatype]
   `(extend-type ~(datatype->smile-vec-impl-type datatype)
-     dtype-proto/PDatatype
-     (get-datatype [v#] ~datatype)
-     dtype-proto/PToArray
-     (->sub-array [v#]
-       {:java-array (.array v#)
-        :offset 0
-        :length (dtype/ecount (.array v#))})
-     (->array-copy [v#]
-       (dtype/clone (.array v#)))
-     dtype-proto/PToNioBuffer
-     (convertible-to-nio-buffer? [v#] true)
-     (->buffer-backing-store [v#]
-       (dtype-proto/->buffer-backing-store (.array v#)))
-     dtype-proto/PBuffer
-     (sub-buffer [v# offset# length#]
-       (dtype-proto/sub-buffer (.array v#) offset# length#))
+     dtype-proto/PElemwiseDatatype
+     (elemwise-datatype [v#] ~datatype)
+     dtype-proto/PToArrayBuffer
+     (convertible-to-array-buffer? [V#] true)
+     (->array-buffer [v#]
+       (array-buffer/array-buffer (.array v#) (dtype-proto/elemwise-datatype v#)))
      dtype-proto/PClone
      (clone [v#]
        (construct-primitive-smile-vec
         ~datatype (StructField. (.name v#) (.type v#) (.measure v#))
-        (dtype/clone (.array v#))))
-     dtype-proto/PToReader
-     (convertible-to-reader? [v#] true)
-     (->reader [v# options#] (dtype-proto/->reader (.array v#) options#))
-     dtype-proto/PToWriter
-     (convertible-to-writer? [v#] true)
-     (->writer [v# options#] (dtype-proto/->writer (.array v#) options#))))
+        (dtype/clone (.array v#))))))
 
 
 (extend-primitive-vec :boolean)
@@ -211,28 +192,16 @@
 
 
 (extend-type VectorImpl
-  dtype-proto/PToArray
-  (->sub-array [v]
-    {:java-array (.array v)
-     :offset 0
-     :length (dtype/ecount (.array v))})
-  (->array-copy [v]
-    (dtype/clone (.array v)))
-  dtype-proto/PBuffer
-  (sub-buffer [v offset length]
-    (dtype-proto/sub-buffer (.array v) offset length))
+  dtype-proto/PToArrayBuffer
+  (convertible-to-array-buffer? [v] true)
+  (->array-buffer [v]
+    (array-buffer/array-buffer (.array v) (dtype-proto/elemwise-datatype v)))
   dtype-proto/PClone
   (clone [v]
     (let [new-field (StructField. (.name v) (.type v) (.measure v))]
       (if (= :string (dtype/get-datatype v))
         (StringVectorImpl. new-field ^"[Ljava.lang.String;" (dtype/clone (.array v)))
-        (VectorImpl. new-field (.array v)))))
-  dtype-proto/PToReader
-  (convertible-to-reader? [v] true)
-  (->reader [v options] (dtype-proto/->reader (.array v) options))
-  dtype-proto/PToWriter
-  (convertible-to-writer? [v#] true)
-  (->writer [v options] (dtype-proto/->writer (.array v) options)))
+        (VectorImpl. new-field (.array v))))))
 
 
 (defn dataframe->dataset
@@ -245,19 +214,7 @@
                 :data
                 (if (and unify-strings?
                          (= :string (dtype/get-datatype smile-vec)))
-                  (let [col-rdr (dtype/->reader smile-vec)
-                        str-rdr (dtype/object-reader
-                                 (dtype/ecount col-rdr)
-                                 #(let [read-val (col-rdr %)]
-                                    (cond
-                                      (string? read-val)
-                                      read-val
-                                      (nil? read-val)
-                                      ""
-                                      :else
-                                      (throw (Exception.
-                                              (format "Value not a string: %s"
-                                                      read-val))))))]
+                  (let [str-rdr (dtype/emap #(when % (str %)) :string smile-vec)]
                     (str-table/string-table-from-strings str-rdr))
                   smile-vec)}))
         (ds-impl/new-dataset options  {:name "_unnamed"})))

@@ -1,4 +1,5 @@
-(ns ^:no-doc tech.v3.protocols.column)
+(ns ^:no-doc tech.v3.protocols.column
+  (:import [org.roaringbitmap RoaringBitmap]))
 
 (defprotocol PIsColumn
   (is-column? [item]))
@@ -15,7 +16,7 @@
     "Return a new column.")
   (supported-stats [col]
     "List of available stats for the column")
-  (missing [col]
+  (^RoaringBitmap missing [col]
     "Indexes of missing values")
   (is-missing? [col idx]
     "Return true if this index is missing.")
@@ -35,8 +36,6 @@ Supported types are:
 :kendall")
   (select [col idx-seq]
     "Return a new column with the subset of indexes")
-  (new-column [col datatype elem-count-or-values missing-set metadata]
-    "Return a new column of this supertype with these values")
   (to-double-array [col error-on-missing?]
     "Convert to a java primitive array of a given datatype.  For strings,
 an implicit string->double mapping is expected.  For booleans, true=1 false=0.

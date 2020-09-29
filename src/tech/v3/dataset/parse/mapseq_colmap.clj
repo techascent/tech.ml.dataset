@@ -7,14 +7,14 @@
             [tech.v3.dataset.parse.context :as parse-context]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.impl.dataset :as ds-impl])
-  (:import [java.util HashMap]
+  (:import [java.util HashMap Map]
            [java.util.function Function]))
 
 
 (defn mapseq->dataset
   ([options mapseq]
    (let [rows (map-indexed vector mapseq)
-         parse-context (column-parsers/options->parse-context options :object)
+         parse-context (parse-context/options->parser-fn options :object)
          parsers (HashMap.)
          key-fn (:key-fn options identity)
          colparser-compute-fn (reify Function
@@ -27,12 +27,17 @@
                            (:column-parser
                             (.computeIfAbsent parsers colname
                                               colparser-compute-fn)))]
-     (pfor/consume!
-      (fn [[row-idx rowmap]]
-        (doseq [[k v] rowmap]
-          (let [parser (colname->parser k)]
-            (column-parsers/add-value! parser row-idx v))))
-      rows)
+     (pfor/doiter
+      rowdata rows
+      (let [[row-idx rowmap] rowdata
+            entry-iter (if (instance? Map rowmap)
+                         (.entrySet rowmap)
+                         rowmap)]
+        (pfor/doiter
+         cell entry-iter
+         (let [[k v] cell
+               parser (colname->parser k)]
+           (column-parsers/add-value! parser row-idx v)))))
      (parse-context/parsers->dataset parsers)))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
@@ -40,7 +45,7 @@
 
 (defn column-map->dataset
   ([options column-map]
-   (let [parse-context (column-parsers/options->parse-context options :object)]
+   (let [parse-context (parse-context/options->parser-fn options :object)]
      (->> column-map
           (map (fn [[colname coldata]]
                  ;;Fastpath for non-object already-niceified data
