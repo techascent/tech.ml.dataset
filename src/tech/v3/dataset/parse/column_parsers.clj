@@ -9,8 +9,10 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.protocols :as dtype-proto])
-  (:import [java.util UUID List]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.dataset.impl.dataset :as ds-impl])
+  (:import [java.util UUID List HashMap]
+           [java.util.function Function]
            [tech.v3.datatype PrimitiveList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
@@ -401,31 +403,3 @@
                             :boolean
                             false
                             (bitmap/->bitmap)))
-
-
-
-(defn options->parse-context
-  "Given the (beast of an) options map used for parsing, run through it
-  and created the specific parse context.  A parse context is a function
-  that produces a column parser for a given column name or index.
-  parse-type is either :string or :object."
-  [options parse-type]
-  (let [default-parse-fn (case parse-type
-                           :object promotional-object-parser
-                           :string promotional-string-parser)
-        key-fn (or (:key-fn options) identity)
-        parser-descriptor (:parser-fn options)]
-    (fn [cname-or-index]
-      (cond
-        (nil? parser-descriptor)
-        (default-parse-fn)
-        (map? parser-descriptor)
-        (let [cname (if (number? cname-or-index)
-                      (long cname-or-index)
-                      (key-fn cname-or-index))]
-          (if-let [col-parser-desc (or (get parser-descriptor cname)
-                                       (get parser-descriptor cname-or-index))]
-            (make-fixed-parser col-parser-desc)
-            (default-parse-fn)))
-        :else
-        (make-fixed-parser parser-descriptor)))))
