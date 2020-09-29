@@ -1,9 +1,9 @@
-(ns tech.libs.poi-test
-  (:require [tech.libs.poi :as xlsx-parse]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype :as dtype]
+(ns tech.v3.libs.poi-test
+  (:require [tech.v3.libs.poi :as xlsx-parse]
+            [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype :as dtype]
             [clojure.test :refer [deftest is]]))
 
 

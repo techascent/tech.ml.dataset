@@ -1,22 +1,15 @@
 #!/bin/bash
-mkdir -p data/ames-house-prices
 
-pushd data
+DATA_DIR=test/data/ames-house-prices
 
-wget https://s3.us-east-2.amazonaws.com/tech.public.data/test-svm-dataset.svm
+mkdir -p $DATA_DIR
 
 wget https://s3.us-east-2.amazonaws.com/tech.public.data/house-prices-advanced-regression-techniques.zip
 
-unzip house-prices-advanced-regression-techniques.zip -d ames-house-prices
-
-pushd ames-house-prices
+unzip -o house-prices-advanced-regression-techniques.zip -d $DATA_DIR
 
 # Of course the files have incorrect permissions...
 
-chmod 644 *
+chmod 644 $(find test/data/ames-house-prices -type f)
 
-gzip -k train.csv
-
-popd
-
-popd
+rm house-prices-advanced-regression-techniques.zip
