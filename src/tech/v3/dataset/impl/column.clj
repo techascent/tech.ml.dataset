@@ -46,8 +46,12 @@
 (defn- make-buffer
   [^RoaringBitmap missing data]
   (let [^Buffer src (dtype-proto/->buffer data)
-        dtype (.elemwiseDatatype src)]
-    (if (.isEmpty missing)
+        dtype (.elemwiseDatatype src)
+        {:keys [unpacking-read packing-write]}
+        (packing/buffer-packing-pair dtype)]
+    ;;Sometimes we can utilize a pure passthrough.
+    (if (and (.isEmpty missing)
+             (not unpacking-read))
       src
       (reify Buffer
         (elemwiseDatatype [this] dtype)
@@ -72,24 +76,24 @@
             (.readChar src idx)))
         (readInt [this idx]
           (if (.contains missing idx)
-            Integer/MIN_VALUE
+            (get column-base/dtype->missing-val-map dtype)
             (.readInt src idx)))
         (readLong [this idx]
           (if (.contains missing idx)
-            Long/MIN_VALUE
+            (get column-base/dtype->missing-val-map dtype)
             (.readLong src idx)))
         (readFloat [this idx]
           (if (.contains missing idx)
-            Float/NaN
+            (get column-base/dtype->missing-val-map dtype)
             (.readFloat src idx)))
         (readDouble [this idx]
           (if (.contains missing idx)
-            Double/NaN
             (.readDouble src idx)))
         (readObject [this idx]
-          (if (.contains missing idx)
-            (get column-base/dtype->missing-val-map dtype)
-            (.readObject src idx)))
+          (when-not (.contains missing idx)
+            (if unpacking-read
+              (unpacking-read this idx)
+              (.readObject src idx))))
         (writeBoolean [this idx val]
           (.remove missing (unchecked-int idx))
           (.writeBoolean src idx val))
@@ -115,8 +119,13 @@
           (.remove missing (unchecked-int idx))
           (.writeDouble src idx val))
         (writeObject [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeObject src idx val))))))
+          (if val
+            (do
+              (.remove missing (unchecked-int idx))
+              (if packing-write
+                (packing-write this idx val)
+                (.writeObject src idx val)))
+            (.add missing (unchecked-int idx))))))))
 
 
 (defmacro cached-vector! []
@@ -289,7 +298,6 @@
               [n-elems]
               (col-proto/column-name item)
               (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
-                  (packing/unpack)
                   (dtype-pp/print-reader-data)))))
 
   ;;Delegates to ListPersistentVector, which caches results for us.

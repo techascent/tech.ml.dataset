@@ -1,9 +1,10 @@
-(ns ^:no-doc tech.ml.dataset.base
+(ns ^:no-doc tech.v3.dataset.base
   "Base dataset bare bones implementation.  Methods here are used in further
   implementations and they are exposed to users."
   (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.datetime :as dtype-dt]
@@ -13,6 +14,7 @@
             [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.libs.smile.data :as smile-data]
+            [tech.v3.dataset.readers :as ds-readers]
             [tech.io :as io]
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
@@ -55,24 +57,6 @@
   [dataset]
   (column-count dataset))
 
-(defn metadata
-  [dataset]
-  (ds-proto/metadata dataset))
-
-(defn set-metadata
-  [dataset meta-map]
-  (ds-proto/set-metadata dataset meta-map))
-
-(defn maybe-column
-  "Return either column if exists or nil."
-  [dataset column-name]
-  (ds-proto/maybe-column dataset column-name))
-
-
-(defn column
-  "Return the column or throw if it doesn't exist."
-  [dataset column-name]
-  (ds-proto/column dataset column-name))
 
 (defn columns
   "Return sequence of all columns in dataset."
@@ -80,12 +64,11 @@
   (ds-proto/columns dataset))
 
 
-(defn column-name->column-map
-  "clojure map of column-name->column"
-  [datatypes]
-  (->> (ds-proto/columns datatypes)
-       (map (juxt ds-col/column-name identity))
-       (into {})))
+(defn column
+  [dataset colname]
+  (if-let [retval (get dataset colname)]
+    retval
+    (errors/throwf "Unable to find column %s" colname)))
 
 
 (defn column-names
@@ -97,10 +80,7 @@
 
 (defn has-column?
   [dataset column-name]
-  (try
-    (boolean (ds-proto/column dataset column-name))
-    (catch Throwable e
-      false)))
+  (contains? dataset column-name))
 
 
 (defn columns-with-missing-seq
@@ -247,7 +227,7 @@
                   (ds-col/set-name col (get colname-map old-name))
                   col))))
        (ds-impl/new-dataset (dataset-name dataset)
-                            (metadata dataset))))
+                            (meta dataset))))
 
 
 (defn select-rows
@@ -283,39 +263,11 @@
           (vals dataset)))
 
 
-(defn index-value-seq
-  "Get a sequence of tuples:
-  [idx col-value-vec]
-
-Values are in order of column-name-seq.  Duplicate names are allowed and result in
-duplicate values."
-  [dataset & [reader-options]]
-  (->> (ds-proto/columns dataset)
-       (map #(dtype-proto/->reader % reader-options))
-       ;;produce row-wise vectors of data
-       (apply map vector)
-       ;;Index them.
-       (map-indexed vector)))
-
-
-(par-util/export-symbols tech.ml.dataset.readers
-                         value-reader
-                         mapseq-reader)
-
-
 (defn supported-column-stats
   "Return the set of natively supported stats for the dataset.  This must be at least
 #{:mean :variance :median :skew}."
   [dataset]
   (ds-proto/supported-column-stats dataset))
-
-
-(defn from-prototype
-  "Create a new dataset that is the same type as this one but with a potentially
-different table name and column sequence.  Take care that the columns are all of
-the correct type."
-  [dataset table-name column-seq]
-  (ds-proto/from-prototype dataset table-name column-seq))
 
 
 (defn check-dataset-wrong-position
@@ -332,8 +284,8 @@ This is an interface change and we do apologize!"))))
    (check-dataset-wrong-position column-name-seq)
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
-        (mapseq-reader)
-        (dfn/argfilter predicate)
+        (ds-readers/mapseq-reader)
+        (argops/argfilter predicate)
         (select dataset :all)))
   ([predicate dataset]
    (filter predicate nil dataset)))
@@ -363,8 +315,8 @@ This is an interface change and we do apologize!"))))
                           (fn [^double arg] (== arg predicate)))
                         :else
                         #(= predicate %))))]
-    (->> (column dataset colname)
-         (dfn/argfilter predicate)
+    (->> (get dataset colname)
+         (argops/argfilter predicate)
          (select dataset :all))))
 
 
@@ -379,8 +331,8 @@ This is an interface change and we do apologize!"))))
    (check-dataset-wrong-position column-name-seq)
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
-        (mapseq-reader)
-        (dfn/arggroup-by-stable key-fn)))
+        (ds-readers/mapseq-reader)
+        (argops/arggroup-by key-fn {:unordered? false})))
   ([key-fn dataset]
    (group-by->indexes key-fn nil dataset)))
 
@@ -408,7 +360,7 @@ This is an interface change and we do apologize!"))))
   [colname dataset]
   (->> (column dataset colname)
        (dtype/->reader)
-       (dfn/arggroup-by-stable identity)))
+       (argops/arggroup {:unordered? false})))
 
 
 (defn group-by-column
@@ -438,58 +390,25 @@ This is an interface change and we do apologize!"))))
   "Sort a dataset by a key-fn and compare-fn."
   ([key-fn compare-fn column-name-seq dataset]
    (check-dataset-wrong-position column-name-seq)
-   (let [^List data (->> (or column-name-seq (column-names dataset))
-                         (select-columns dataset)
-                         (mapseq-reader)
-                         (dtype/reader-map
-                          #(key-fn %)))
-         n-elems (.size data)]
-     (->> (dfn/argsort data :comparator (->comparator compare-fn))
-          (select dataset :all))))
+   (->> (or column-name-seq (column-names dataset))
+        (select-columns dataset)
+        (ds-readers/mapseq-reader)
+        (dtype/emap key-fn :object)
+        (argops/argsort compare-fn)
+        (select dataset :all)))
   ([key-fn compare-fn dataset]
    (sort-by key-fn compare-fn :all dataset))
   ([key-fn dataset]
    (sort-by key-fn nil :all dataset)))
-
-
-(defn ds-sort-by
-  "Legacy method.  Please see sort-by"
-  ([key-fn compare-fn column-name-seq dataset]
-   (check-dataset-wrong-position column-name-seq)
-   (sort-by key-fn compare-fn dataset column-name-seq))
-  ([key-fn compare-fn dataset]
-   (sort-by key-fn compare-fn :all dataset))
-  ([key-fn dataset]
-   (sort-by key-fn nil :all dataset)))
-
-
-(defn ->sort-by
-  "Version of sort-by used in -> statements common in dataflows"
-  ([dataset key-fn compare-fn column-name-seq]
-   (sort-by key-fn compare-fn dataset column-name-seq))
-  ([dataset key-fn compare-fn]
-   (sort-by key-fn compare-fn dataset :all))
-  ([dataset key-fn]
-   (sort-by key-fn nil dataset :all)))
 
 
 (defn sort-by-column
   "Sort a dataset by a given column using the given compare fn."
   ([colname compare-fn dataset]
-   (let [^List data (dtype/->reader (dataset colname))
-         n-elems (.size data)]
-     (->> (dfn/argsort data :comparator (->comparator compare-fn))
-          (select dataset :all))))
+   (->> (argops/argsort compare-fn (dataset colname))
+        (select dataset :all)))
   ([colname dataset]
    (sort-by-column colname nil dataset)))
-
-
-(defn ds-sort-by-column
-  "Legacy method.  Please see sort by column."
-  ([colname compare-fn dataset]
-   (sort-by-column colname compare-fn dataset))
-  ([colname dataset]
-   (sort-by-column colname dataset)))
 
 
 (defn ->sort-by-column
@@ -511,13 +430,13 @@ This is an interface change and we do apologize!"))))
                  (mapcat (fn [dataset]
                            (->> (columns dataset)
                                 (mapv (fn [col]
-                                        (assoc (ds-col/metadata col)
+                                        (assoc (meta col)
                                                :column
                                                col
                                                :table-name (dataset-name dataset)))))))
                  (clojure.core/group-by :name))
             label-map (->> datasets
-                           (map (comp :label-map metadata))
+                           (map (comp :label-map meta))
                            (apply merge))]
         (when-not (= 1 (count (->> (vals column-list)
                                    (map count)
@@ -528,16 +447,16 @@ This is an interface change and we do apologize!"))))
                      (let [columns (map :column columns)
                            final-dtype (if (== 1 (count columns))
                                          (dtype/get-datatype (first columns))
-                                         (reduce builtin-op-providers/widest-datatype
+                                         (reduce casting/widest-datatype
                                                  (map dtype/get-datatype columns)))
                            column-values (reader-concat-fn final-dtype columns)
                            missing
                            (->> (reduce
                                  (fn [[missing offset] col]
-                                   [(dtype/set-or
+                                   [(dtype-proto/set-or
                                      missing
-                                     (dtype/set-offset (ds-col/missing col)
-                                                       offset))
+                                     (dtype-proto/set-offset (ds-col/missing col)
+                                                             offset))
                                     (+ offset (dtype/ecount col))])
                                  [(->bitmap) 0]
                                  columns)
@@ -545,18 +464,17 @@ This is an interface change and we do apologize!"))))
                            first-col (first columns)]
                        (ds-col/new-column colname
                                           column-values
-                                          (ds-col/metadata first-col)
+                                          (meta first-col)
                                           missing))))
-             (ds-proto/from-prototype dataset (dataset-name dataset))
-             (#(set-metadata % {:label-map label-map})))))))
+             (ds-impl/new-dataset (dataset-name dataset))
+             (#(with-meta % {:label-map label-map})))))))
 
 
 (defn concat-inplace
   "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
   same columns.  Result column datatypes will be a widening cast of the datatypes."
   [dataset & datasets]
-  (do-concat #(reader-concat/concat-readers
-               {:datatype %1} %2)
+  (do-concat #(dtype/concat-buffers %1 %2)
              dataset datasets))
 
 
@@ -570,8 +488,8 @@ This is an interface change and we do apologize!"))))
                       seq)
         n-rows (long (reduce + (map row-count datasets)))]
     (do-concat #(-> (dtype/copy-raw->item! %2
-                                          (dtype/make-container
-                                           :typed-buffer %1 n-rows))
+                                           (dtype/make-container
+                                            :jvm-heap %1 n-rows))
                     (first))
                (first datasets) (rest datasets))))
 
@@ -582,12 +500,6 @@ This is an interface change and we do apologize!"))))
   Also see concat-copying as this may be faster in many situations."
   [dataset & datasets]
   (apply concat-inplace dataset datasets))
-
-
-(defn ds-concat
-  "Legacy method.  Please see concat"
-  [dataset & other-datasets]
-  (apply concat dataset other-datasets))
 
 
 (defn- sorted-int32-sequence
@@ -629,98 +541,6 @@ This is an interface change and we do apologize!"))))
         (select dataset :all)))
   ([colname dataset]
    (unique-by-column colname {} dataset)))
-
-
-(defn- perform-aggregation
-  [numeric-aggregate-fn
-   boolean-aggregate-fn
-   default-aggregate-fn
-   column-seq]
-  (let [col-dtype (dtype/get-datatype (first column-seq))]
-    (->
-     (cond
-       (casting/numeric-type? col-dtype)
-       (mapv numeric-aggregate-fn column-seq)
-       (= :boolean col-dtype)
-       (mapv boolean-aggregate-fn column-seq)
-       :else
-       (mapv default-aggregate-fn column-seq))
-     (dtype/->reader ( (= col-dtype :boolean)
-                       :int64
-                       col-dtype)))))
-
-
-(defn- finish-aggregate-by
-  [dataset index-groups
-   numeric-aggregate-fn
-   boolean-aggregate-fn
-   default-aggregate-fn
-   count-column-name]
-  (let [index-sequences (->> index-groups
-                             (map (fn [[_ v]]
-                                    (int-array v))))
-        count-column-name (or count-column-name
-                              (if (keyword? (first (column-names dataset)))
-                                :index-counts
-                                "index-counts"))
-        new-ds
-        (->> (columns dataset)
-             (map
-              (fn [column]
-                (->> index-sequences
-                     (map (partial ds-col/select column))
-                     (perform-aggregation numeric-aggregate-fn
-                                          boolean-aggregate-fn
-                                          default-aggregate-fn))))
-             (ds-proto/from-prototype dataset (dataset-name dataset)))]
-    (add-or-update-column new-ds count-column-name
-                          (long-array (mapv count index-sequences)))))
-
-(defn count-true
-  [boolean-seq]
-  (-> (dtype/->reader boolean-seq :int64)
-      (dfn/reduce-+)))
-
-
-(defn aggregate-by
-  "Group the dataset by map-fn, then aggregate by the aggregate fn.
-  Returns aggregated datatset.
-  :aggregate-fn - passed a sequence of columns and must return a new column
-  with the same number of entries as the count of the column sequences."
-  [map-fn dataset & {:keys [column-name-seq
-                            numeric-aggregate-fn
-                            boolean-aggregate-fn
-                            default-aggregate-fn
-                            count-column-name]
-                     :or {numeric-aggregate-fn dfn/reduce-+
-                          boolean-aggregate-fn count-true
-                          default-aggregate-fn first}}]
-  (finish-aggregate-by dataset
-                       (group-by->indexes map-fn column-name-seq dataset)
-                       numeric-aggregate-fn
-                       boolean-aggregate-fn
-                       default-aggregate-fn
-                       count-column-name))
-
-
-(defn aggregate-by-column
-  "Group the dataset by map-fn, then aggregate by the aggregate fn.
-  Returns aggregated datatset.
-  :aggregate-fn - passed a sequence of columns and must return a new column
-  with the same number of entries as the count of the column sequences."
-  [colname dataset & {:keys [numeric-aggregate-fn
-                             boolean-aggregate-fn
-                             default-aggregate-fn
-                             count-column-name]
-                      :or {numeric-aggregate-fn dfn/reduce-+
-                           boolean-aggregate-fn count-true
-                           default-aggregate-fn first}}]
-  (finish-aggregate-by dataset
-                       (group-by-column->indexes colname dataset)
-                       numeric-aggregate-fn
-                       boolean-aggregate-fn
-                       default-aggregate-fn
-                       count-column-name))
 
 
 (defn take-nth

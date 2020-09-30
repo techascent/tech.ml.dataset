@@ -1,8 +1,9 @@
-(ns tech.libs.smile.data
+(ns tech.v3.libs.smile.data
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.casting :as casting]

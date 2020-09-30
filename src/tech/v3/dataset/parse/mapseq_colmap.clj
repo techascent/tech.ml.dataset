@@ -38,7 +38,7 @@
          (let [[k v] cell
                parser (colname->parser k)]
            (column-parsers/add-value! parser row-idx v)))))
-     (parse-context/parsers->dataset parsers)))
+     (parse-context/parsers->dataset options parsers)))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

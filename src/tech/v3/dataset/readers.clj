@@ -1,11 +1,8 @@
-(ns ^:no-doc tech.ml.dataset.readers
-  (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.dataset.column :as ds-col])
-  (:import [tech.v2.datatype ObjectReader]
-           [tech.ml.dataset FastStruct]
+(ns ^:no-doc tech.v3.dataset.readers
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.protocols.dataset :as ds-proto])
+  (:import [tech.v3.datatype ObjectReader Buffer]
+           [tech.v3.dataset FastStruct]
            [org.roaringbitmap RoaringBitmap]
            [java.util List HashMap Collections ArrayList]))
 
@@ -16,29 +13,9 @@
   options -
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
-  (^List [dataset {:keys [missing-nil?]
-                   :or {missing-nil? true}
-                   :as _options}]
-   (->> (ds-proto/columns dataset)
-        (mapv (fn [coldata]
-                (let [col-reader (dtype/->reader coldata)
-                      ^RoaringBitmap missing (dtype/as-roaring-bitmap
-                                              (ds-col/missing coldata))
-                      col-rdr (typecast/datatype->reader
-                               :object
-                               (if (dtype-dt/packed-datatype?
-                                    (dtype/get-datatype col-reader))
-                                 (dtype-dt/unpack col-reader)
-                                 col-reader))]
-                  (if missing-nil?
-                    (dtype/object-reader
-                     (.size col-rdr)
-                     (fn [^long idx]
-                       (when-not (.contains missing idx)
-                         (.read col-rdr idx))))
-                    col-rdr))))))
   (^List [dataset]
-   (dataset->column-readers dataset {})))
+   (->> (ds-proto/columns dataset)
+        (mapv dtype/->reader))))
 
 
 (defn value-reader
@@ -46,19 +23,17 @@
   Options:
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
-  (^ObjectReader [dataset options]
-   (let [readers (dataset->column-readers dataset options)
+  (^Buffer [dataset]
+   (let [readers (dataset->column-readers dataset)
          n-rows (long (second (dtype/shape dataset)))
          n-cols (long (first (dtype/shape dataset)))]
-     (dtype/object-reader
-      n-rows
-      (fn [^long idx]
-        (dtype/object-reader
-         n-cols
-         (fn [^long inner-idx]
-           (.get ^List (.get readers inner-idx) idx)))))))
-  (^ObjectReader [dataset]
-   (value-reader dataset {})))
+     (reify ObjectReader
+       (lsize [rdr] n-rows)
+       (readObject [rdr idx]
+         (reify ObjectReader
+           (lsize [rdr] n-cols)
+           (readObject [rdr inner-idx]
+             (.get ^List (.get readers inner-idx) idx))))))))
 
 
 (defn mapseq-reader
@@ -67,16 +42,15 @@
   Options:
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
-  (^ObjectReader [dataset options]
+  (^Buffer [dataset]
    (let [colnamemap (HashMap.)
-         _ (doseq [[c-name c-idx] (->> (ds-proto/column-names dataset)
-                                      (map-indexed #(vector %2 (int %1))))]
+         _ (doseq [[c-name c-idx] (->> (ds-proto/columns dataset)
+                                       (map (comp :name meta))
+                                       (map-indexed #(vector %2 (int %1))))]
              (.put colnamemap c-name c-idx))
          colnamemap (Collections/unmodifiableMap colnamemap)
-         readers (value-reader dataset options)]
+         readers (value-reader dataset)]
      (reify ObjectReader
        (lsize [rdr] (.lsize readers))
-       (read [rdr idx]
-         (FastStruct. colnamemap (.read readers idx))))))
-  (^ObjectReader [dataset]
-   (mapseq-reader dataset {})))
+       (readObject [rdr idx]
+         (FastStruct. colnamemap (readers idx)))))))
