@@ -7,7 +7,9 @@
                  [camel-snake-kebab                "0.4.0"]
                  [cnuernber/dtype-next             "0.4.1"]
                  [techascent/tech.io               "3.19"
-                  :exclusions [org.apache.commons/commons-compress]]
+                  :exclusions [org.apache.commons/commons-compress
+                               com.taoensso/nippy]]
+                 [com.taoensso/nippy-mincore "3.0.0"]
                  [com.univocity/univocity-parsers  "2.7.5"]
                  [org.apache.poi/poi-ooxml         "4.1.2"]
                  [org.dhatim/fastexcel-reader      "0.10.12"
@@ -63,6 +65,10 @@
                                      [org.apache.arrow/arrow-memory-netty "1.0.0"]
                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
                                      [org.apache.arrow/arrow-vector "1.0.0"
-                                      :exclusions [commons-codec]]]}}
+                                      :exclusions [commons-codec]]]}
+             :uberjar {:aot [tech.v3.dataset.column tech.io
+                             clojure.core.async]
+                       :source-paths ["src"]
+                       :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"])

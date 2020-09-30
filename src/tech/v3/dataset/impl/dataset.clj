@@ -13,7 +13,8 @@
             [clojure.pprint :as pprint])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed]
-           [java.util Map List LinkedHashSet]))
+           [java.util Map List LinkedHashSet]
+           [org.roaringbitmap RoaringBitmap]))
 
 
 (set! *warn-on-reflection* true)
