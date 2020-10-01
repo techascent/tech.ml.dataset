@@ -48,7 +48,8 @@
 (defn is-missing?
   "Return true if this index is missing."
   [col idx]
-  (col-proto/is-missing? col idx))
+  (when-let [^RoaringBitmap bmp (missing col)]
+    (.contains bmp idx)))
 
 
 (defn set-missing

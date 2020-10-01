@@ -1,6 +1,7 @@
-(ns tech.v3.dataset.univocity
+(ns tech.v3.dataset.parse.univocity
   (:require [tech.io :as io]
-            [tech.v3.dataset.parse.string-row-parser :as row-parser])
+            [tech.v3.dataset.parse.string-row-parser :as row-parser]
+            [tech.v3.dataset.parse :as ds-parse])
   (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
            [com.univocity.parsers.csv
             CsvFormat CsvParserSettings CsvParser
@@ -183,6 +184,20 @@
         (row-parser/rows->dataset options)))
   ([input]
    (csv->dataset input {})))
+
+
+(defmethod ds-parse/data->dataset :csv
+  [data options]
+  (ds-parse/wrap-stream-fn
+   data (:gzipped? options)
+   #(csv->dataset %1 options)))
+
+
+(defmethod ds-parse/data->dataset :tsv
+  [data options]
+  (ds-parse/wrap-stream-fn
+   data (:gzipped? options)
+   #(csv->dataset %1 options)))
 
 
 (defn write!

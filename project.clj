@@ -5,11 +5,9 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [cnuernber/dtype-next             "0.4.1"]
+                 [cnuernber/dtype-next             "0.4.2"]
                  [techascent/tech.io               "3.19"
-                  :exclusions [org.apache.commons/commons-compress
-                               com.taoensso/nippy]]
-                 [com.taoensso/nippy-mincore "3.0.0"]
+                  :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]
                  [org.apache.poi/poi-ooxml         "4.1.2"]
                  [org.dhatim/fastexcel-reader      "0.10.12"
@@ -29,7 +27,7 @@
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [uncomplicate/neanderthal "0.35.0"]
+                             ;; [uncomplicate/neanderthal "0.35.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
                              [org.apache.parquet/parquet-hadoop "1.10.1"]
                              [org.apache.hadoop/hadoop-common
@@ -66,8 +64,7 @@
                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
                                      [org.apache.arrow/arrow-vector "1.0.0"
                                       :exclusions [commons-codec]]]}
-             :uberjar {:aot [tech.v3.dataset.column tech.io
-                             clojure.core.async]
+             :uberjar {:aot [tech.v3.dataset.column tech.io]
                        :source-paths ["src"]
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]

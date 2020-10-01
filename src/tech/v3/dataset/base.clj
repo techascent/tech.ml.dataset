@@ -8,17 +8,21 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.libs.smile.data :as smile-data]
             [tech.v3.dataset.readers :as ds-readers]
+            [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap]
+            [tech.v3.dataset.parse :as ds-parse]
+            [tech.v3.dataset.parse.univocity :as univocity]
             [tech.io :as io]
             [clojure.tools.logging :as log])
   (:import [java.io InputStream File]
-           [tech.v3.datatype Buffer]
+           [tech.v3.datatype Buffer ObjectReader]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
@@ -280,21 +284,15 @@ This is an interface change and we do apologize!"))))
 (defn filter
   "dataset->dataset transformation.  Predicate is passed a map of
   colname->column-value."
-  ([predicate column-name-seq dataset]
+  ([dataset column-name-seq predicate]
    (check-dataset-wrong-position column-name-seq)
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
         (ds-readers/mapseq-reader)
         (argops/argfilter predicate)
         (select dataset :all)))
-  ([predicate dataset]
-   (filter predicate nil dataset)))
-
-
-(defn ds-filter
-  "Legacy method.  Please see filter"
-  [predicate dataset & [column-name-seq]]
-  (filter predicate column-name-seq dataset))
+  ([dataset predicate]
+   (filter dataset nil predicate)))
 
 
 (defn filter-column
@@ -302,7 +300,7 @@ This is an interface change and we do apologize!"))))
   If predicate is *not* an instance of Ifn it is treated as a value and will
   be used as if the predicate is #(= value %).
   Returns a dataset."
-  [predicate colname dataset]
+  [dataset colname predicate]
   (let [predicate (if (instance? IFn predicate)
                     predicate
                     (let [pred-dtype (dtype/get-datatype predicate)]
@@ -320,21 +318,15 @@ This is an interface change and we do apologize!"))))
          (select dataset :all))))
 
 
-(defn ds-filter-column
-  "Legacy method.  Please see filter-column"
-  [predicate colname dataset]
-  (filter-column predicate colname dataset))
-
-
 (defn group-by->indexes
-  ([key-fn column-name-seq dataset]
+  ([dataset column-name-seq key-fn]
    (check-dataset-wrong-position column-name-seq)
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
         (ds-readers/mapseq-reader)
         (argops/arggroup-by key-fn {:unordered? false})))
-  ([key-fn dataset]
-   (group-by->indexes key-fn nil dataset)))
+  ([dataset key-fn]
+   (group-by->indexes dataset nil key-fn)))
 
 
 (defn group-by
@@ -350,14 +342,8 @@ This is an interface change and we do apologize!"))))
    (group-by key-fn nil dataset)))
 
 
-(defn ds-group-by
-  "Legacy method. Please see group-by"
-  [key-fn dataset & [column-name-seq]]
-  (group-by key-fn dataset column-name-seq))
-
-
 (defn group-by-column->indexes
-  [colname dataset]
+  [dataset colname]
   (->> (column dataset colname)
        (dtype/->reader)
        (argops/arggroup {:unordered? false})))
@@ -366,29 +352,16 @@ This is an interface change and we do apologize!"))))
 (defn group-by-column
   "Return a map of column-value->dataset."
   [colname dataset]
-  (->> (group-by-column->indexes colname dataset)
+  (->> (group-by-column->indexes dataset colname)
        (pmap (fn [[k v]]
                [k (-> (select dataset :all v)
                       (set-dataset-name k))]))
        (into {})))
 
-(defn ds-group-by-column
-  "Legacy method.  Please see group-by-column"
-  [colname dataset]
-  (group-by-column colname dataset))
-
-
-(defn- ->comparator
-  [item]
-  (when item
-    (if (instance? java.util.Comparator item)
-      item
-      (comparator item))))
-
 
 (defn sort-by
   "Sort a dataset by a key-fn and compare-fn."
-  ([key-fn compare-fn column-name-seq dataset]
+  ([dataset compare-fn column-name-seq key-fn]
    (check-dataset-wrong-position column-name-seq)
    (->> (or column-name-seq (column-names dataset))
         (select-columns dataset)
@@ -396,10 +369,10 @@ This is an interface change and we do apologize!"))))
         (dtype/emap key-fn :object)
         (argops/argsort compare-fn)
         (select dataset :all)))
-  ([key-fn compare-fn dataset]
-   (sort-by key-fn compare-fn :all dataset))
-  ([key-fn dataset]
-   (sort-by key-fn nil :all dataset)))
+  ([dataset compare-fn key-fn]
+   (sort-by dataset compare-fn :all key-fn))
+  ([dataset key-fn]
+   (sort-by dataset nil :all key-fn)))
 
 
 (defn sort-by-column
@@ -514,15 +487,15 @@ This is an interface change and we do apologize!"))))
   return value.  Keep-fn is used to decide the index to keep.
 
   :keep-fn - Function from key,idx-seq->idx.  Defaults to #(first %2)."
-  ([map-fn {:keys [column-name-seq keep-fn]
+  ([dataset {:keys [column-name-seq keep-fn]
             :or {keep-fn #(first %2)}
-            :as _options}
-    dataset]
+             :as _options}
+    map-fn]
    (->> (group-by->indexes map-fn column-name-seq dataset)
         (map (fn [[k v]] (keep-fn k v)))
         (sorted-int32-sequence)
         (select dataset :all)))
-  ([map-fn dataset]
+  ([dataset map-fn]
    (unique-by map-fn {} dataset)))
 
 
@@ -531,65 +504,23 @@ This is an interface change and we do apologize!"))))
   return value.  Keep-fn is used to decide the index to keep.
 
   :keep-fn - Function from key, idx-seq->idx.  Defaults to #(first %2)."
-  ([colname {:keys [keep-fn]
-              :or {keep-fn #(first %2)}
-              :as _options}
-    dataset]
+  ([dataset
+    {:keys [keep-fn]
+     :or {keep-fn #(first %2)}
+     :as _options}
+    colname]
    (->> (group-by-column->indexes colname dataset)
         (map (fn [[k v]] (keep-fn k v)))
         (sorted-int32-sequence)
         (select dataset :all)))
-  ([colname dataset]
+  ([dataset colname]
    (unique-by-column colname {} dataset)))
 
 
 (defn take-nth
-  [n-val dataset]
+  [dataset n-val]
   (select dataset :all (->> (range (second (dtype/shape dataset)))
                             (clojure.core/take-nth n-val))))
-
-
-(defn ds-take-nth
-  "Legacy method.  Please see take-nth"
-  [n-val dataset]
-  (take-nth n-val dataset))
-
-
-(defn str->file-info
-  [^String file-str]
-  (let [file-str (.toLowerCase ^String file-str)
-        gzipped? (.endsWith file-str ".gz")
-        file-type (cond
-                    (or (.endsWith file-str ".json")
-                        (.endsWith file-str ".json.gz"))
-                    :json
-                    (or (.endsWith file-str ".tsv")
-                        (.endsWith file-str ".tsv.gz"))
-                    :tsv
-                    (or (.endsWith file-str ".xlsx")
-                        (.endsWith file-str ".xlsx.gz"))
-                    :xlsx
-                    (or (.endsWith file-str ".xls")
-                        (.endsWith file-str ".xls.gz"))
-                    :xls
-                    (.endsWith file-str ".parquet")
-                    :parquet
-                    (.endsWith file-str ".feather")
-                    :feather
-                    :else
-                    :csv)]
-    {:gzipped? gzipped?
-     :file-type file-type}))
-
-
-(defn wrap-stream-fn
-  [dataset gzipped? open-fn]
-  (with-open [^InputStream istream (if (instance? InputStream dataset)
-                                     dataset
-                                     (if gzipped?
-                                       (io/gzip-input-stream dataset)
-                                       (io/input-stream dataset)))]
-    (open-fn istream)))
 
 
 (defn ->dataset
@@ -635,10 +566,6 @@ This is an interface change and we do apologize!"))))
      row.  Works across both csv and spreadsheet datasets.
   - `:parser-fn` -
     - `keyword?` - all columns parsed to this datatype
-    - `ifn?` - called with two arguments: (parser-fn column-name-or-idx column-data)
-          - Return value must be implement tech.ml.dataset.parser.PColumnParser in
-            which case that is used or can return nil in which case the default
-            column parser is used.
     - tuple - pair of [datatype `parse-data`] in which case container of type
       [datatype] will be created. `parse-data` can be one of:
         - `:relaxed?` - data will be parsed such that parse failures of the standard
@@ -659,8 +586,6 @@ This is an interface change and we do apologize!"))))
    - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.
-  - `:parser-scan-len` - Length of initial column data used for parser-fn's datatype
-       detection routine. Defaults to 100.
 
   Returns a new dataset"
   ([dataset
@@ -685,64 +610,14 @@ This is an interface change and we do apologize!"))))
            (instance? DataFrame dataset)
            (smile-data/dataframe->dataset dataset options)
            (map? dataset)
-           (nvs-parse/parse-nvs dataset options)
+           (parse-mapseq-colmap/column-map->dataset options dataset)
+           (map? (first (seq dataset)))
+           (parse-mapseq-colmap/mapseq->dataset options dataset)
            (or (string? dataset) (instance? InputStream dataset))
-           (let [{:keys [file-type gzipped?]}
-                 (cond
-                   (:file-type options)
-                   {:file-type (:file-type options)
-                    :gzipped? (:gzipped? options)}
-                   (string? dataset)
-                   (str->file-info dataset)
-                   :else
-                   {:file-type :csv})]
-             (cond
-               (= file-type :json)
-               (let [options (if (not (contains? options :key-fn))
-                               (assoc options :key-fn keyword)
-                               options)]
-                 (wrap-stream-fn
-                  dataset gzipped?
-                  #(-> (apply io/get-json % (apply clojure.core/concat
-                                                   options))
-                       (ds-parse-mapseq/mapseq->dataset options))))
-               (or (= file-type :xls) (= file-type :xlsx))
-               (let [parse-fn (parallel-req/require-resolve
-                               'tech.libs.poi/workbook->datasets)
-                     options (if (= file-type :xls)
-                               (assoc options :poi-file-type :xls)
-                               (assoc options :poi-file-type :xlsx))]
-                 (wrap-stream-fn
-                  dataset gzipped?
-                  (fn [istream]
-                    (let [datasets (parse-fn istream options)]
-                      (when-not (== 1 (count datasets))
-                        (log/warnf "Found multiple (%d) worksheets when parsing %s"
-                                   (count datasets)
-                                   dataset))
-                      (first datasets)))))
-               (or (= file-type :feather) (= file-type :parquet))
-               (do
-                 (when-not (string? dataset)
-                   (throw (Exception.
-                           "Arrow and parquet files must be string paths.")))
-                 (let [^String dataset dataset]
-                   (-> (case file-type
-                         :feather
-                         (Read/arrow dataset)
-                         :parquet
-                         (Read/parquet dataset))
-                       (->dataset options))))
-               :else
-               (wrap-stream-fn
-                dataset gzipped?
-                #(ds-parse/csv->dataset
-                  % (merge {:dataset-name dataset}
-                           (when (= file-type :tsv)
-                             {:separator \tab})
-                           options)))))
-           :else
-           (ds-parse-mapseq/mapseq->dataset dataset options))]
+           (let [options (if (string? dataset)
+                           (merge (ds-parse/str->file-info dataset)
+                                  options))]
+             (ds-parse/data->dataset dataset options)))]
      (if dataset-name
        (ds-proto/set-dataset-name dataset dataset-name)
        dataset)))
@@ -758,18 +633,12 @@ This is an interface change and we do apologize!"))))
    (->dataset dataset)))
 
 
-(defn- ds-cons-fn
-  ([] nil)
-  ([item] (->dataset item)))
-
-
-(obj-dtypes/add-object-datatype Dataset :dataset ds-cons-fn)
+(casting/add-object-datatype! :dataset Dataset)
 
 
 (defn dataset->string
   ^String [ds]
-  (with-out-str
-    ((parallel-req/require-resolve 'tech.ml.dataset.print/print-dataset) ds)))
+  (.toString ^Object ds))
 
 
 (defn ensure-array-backed
@@ -789,42 +658,16 @@ This is an interface change and we do apologize!"))))
   ([ds {:keys [unpack?]
         :or {unpack? true}}]
    (reduce (fn [ds col]
-             (let [col-dtype (dtype/get-datatype col)
-                   colname (ds-col/column-name col)
-                   col (if (and unpack? (dtype-dt/datetime-datatype? col-dtype))
-                         (dtype-dt/unpack col)
+             (let [colname (ds-col/column-name col)
+                   col (if unpack?
+                         (packing/unpack col)
                          col)]
-               (if (dtype/->array col)
-                 ds
-                 (add-or-update-column ds
-                                       colname
-                                       (dtype/make-container :java-array
-                                                             (dtype/get-datatype col)
-                                                             col)))))
+               (assoc ds colname (dtype-cmc/->array col))))
            ds
            (columns ds)))
   ([ds]
    (ensure-array-backed ds {})))
 
-
-(defn- data->string
-  ^String [data-item]
-  (if data-item
-    (cond
-      (string? data-item) data-item
-      (keyword? data-item) (name data-item)
-      (symbol? data-item) (name data-item)
-      :else (.toString ^Object data-item))))
-
-
-(defn ->string-reader
-  [reader ^RoaringBitmap missing]
-  (let [reader (dtype/->reader reader)
-        n-elems (dtype/ecount reader)]
-    (dtype/object-reader n-elems #(if (.contains missing (int %))
-                                    nil
-                                    (-> (reader %)
-                                        data->string)))))
 
 (defn column->string-table
   ^StringTable [^Column col]
@@ -866,6 +709,16 @@ This is an interface change and we do apologize!"))))
    (vals ds)))
 
 
+(defn- data->string
+  ^String [data-item]
+  (if data-item
+    (cond
+      (string? data-item) data-item
+      (keyword? data-item) (name data-item)
+      (symbol? data-item) (name data-item)
+      :else (.toString ^Object data-item))))
+
+
 (defn write-csv!
   "Write a dataset to a tsv or csv output stream.  Closes output if a stream
   is passed in.  File output format will be inferred if output is a string -
@@ -878,31 +731,25 @@ This is an interface change and we do apologize!"))))
   ([ds output options]
    (let [{:keys [gzipped? file-type]}
          (when (string? output)
-           (str->file-info output))
+           (ds-parse/str->file-info output))
          headers (into-array String (map data->string
                                          (column-names ds)))
          ^List str-readers
          (->> (columns ds)
-              (mapv (fn [coldata]
-                      (let [dtype (dtype/get-datatype coldata)
-                            missing (ds-col/missing coldata)
-                            coldata (if (dtype-dt/packed-datatype? dtype)
-                                      (dtype-dt/unpack coldata)
-                                      coldata)]
-                        (->string-reader coldata missing)))))
+              (mapv #(ds-col/column-map data->string :string %)))
          tsv? (or (= file-type :tsv) (= \tab (:separator options)))
          n-cols (column-count ds)
          n-rows (row-count ds)
          str-rdr (reify ObjectReader
                    (lsize [rdr] n-rows)
-                   (read [rdr row-idx]
+                   (readObject [rdr row-idx]
                      (let [^"[Ljava.lang.String;" str-array (make-array
                                                              String n-cols)]
                        (dotimes [col-idx n-cols]
                          (aset str-array col-idx ^String
-                               (.read ^ObjectReader
-                                      (.get str-readers col-idx)
-                                      row-idx)))
+                               (.readObject ^ObjectReader
+                                            (.get str-readers col-idx)
+                                            row-idx)))
                        str-array)))
          output (if gzipped?
                   (io/gzip-output-stream! output)
@@ -912,6 +759,6 @@ This is an interface change and we do apologize!"))))
                                  {:separator \tab})
                           (merge options
                                  {:separator \,}))]
-     (ds-parse/write! output headers str-rdr output-options)))
+     (univocity/write! output headers str-rdr output-options)))
   ([ds output]
    (write-csv! ds output {})))
