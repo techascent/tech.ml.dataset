@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.ml.dataset.parse.spreadsheet
+(ns ^:no-doc tech.v3.dataset.parse.spreadsheet
   "Spreadsheets in general are stored in a cell-based format.  This means that any cell
   could have data of any type.  Commonalities around parsing spreadsheet-type systems
   are captured here."
@@ -14,8 +14,10 @@
 
 
 (defn sheet->dataset
-  [{:keys [header-row? n-initial-skip-rows]
-    :or {header-row? true}} options ^Spreadsheet$Sheet sheet]
+  [^Spreadsheet$Sheet sheet
+   {:keys [header-row? n-initial-skip-rows]
+    :or {header-row? true}
+    :as options}]
   (let [ds-name (or (:dataset-name options)
                     (.name sheet)
                     :_unnamed)

@@ -3,6 +3,9 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.tensor :as tens]
             [tech.v3.datatype.functional :as dfn]
+            ;;Loading multimethods required to load the files
+            [tech.v3.libs.poi]
+            [tech.v3.libs.fastexcel]
             ;; [tech.v3.dataset.tensor :as ds-tens]
             [tech.io :as tech-io]
             [clojure.test :refer :all]
@@ -483,10 +486,7 @@
   (let [ds (-> (ds/->dataset [{:a 1 :b 1} {:b 2}])
                (ds/update-column :a #(ds-col/new-column
                                       (ds-col/column-name %)
-                                      (let [src-rdr (dtype/->typed-reader % :int32)]
-                                        (dtype/make-reader :int32
-                                                           (.lsize src-rdr)
-                                                           (.read src-rdr idx)))
+                                      (dtype/emap int :int32 %)
                                       {}
                                       (ds-col/missing %))))]
     (is (== 1 (dtype/ecount (ds-col/missing (ds :a)))))
@@ -499,9 +499,10 @@
   (let [ds (-> (ds/->dataset [{:a 1.0} {:a 2.0}])
                (ds/update-column
                 :a
-                #(dtype/typed-reader-map (fn ^double [^double in]
-                                           (if (< in 2.0) (- in) in))
-                                         %)))]
+                #(dtype/emap (fn ^double [^double in]
+                               (if (< in 2.0) (- in) in))
+                             :float64
+                             %)))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [-1.0 2.0]
            (vec (ds :a))))))
@@ -510,13 +511,14 @@
 (deftest typed-column-map-missing
   (let [ds (-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}])
                (ds/column-map
-                :a
                 (fn ^double [^double lhs ^double rhs]
                   (+ lhs rhs))
+                :a
+                :float64
                 :a :b))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [false false true]
-           (vec (dfn/is-finite? (ds :a)))))))
+           (vec (dfn/finite? (ds :a)))))))
 
 
 (deftest mean-object-column
@@ -550,27 +552,27 @@
   (let [ds (ds/->dataset "test/data/stocks.csv"
                          {:key-fn keyword})
         read-indexes (HashSet.)
-        new-ds (ds/assoc ds
-                         :price-2
-                         (dtype/clone
-                          (dtype/make-reader
-                           :boolean
-                           (ds/row-count ds)
-                           (do
-                             (locking read-indexes
-                               (when (.contains read-indexes idx)
-                                 (throw (Exception. "Double read!!")))
-                               (.add read-indexes idx))
-                             true))))]
+        new-ds (assoc ds
+                      :price-2
+                      (dtype/clone
+                       (dtype/make-reader
+                        :boolean
+                        (ds/row-count ds)
+                        (do
+                          (locking read-indexes
+                            (when (.contains read-indexes idx)
+                              (throw (Exception. "Double read!!")))
+                            (.add read-indexes idx))
+                          true))))]
     (is (= [true true true true true]
            (vec (take 5 (new-ds :price-2)))))))
 
 
 (deftest stats-with-missing
-  (let [DSm2 (ds/name-values-seq->dataset {:a [nil nil nil 1 2 nil 3
-                                               4 nil nil nil 11 nil]
-                                           :b [nil 2   2   2 2 3   nil 3 nil
-                                               3   nil   4  nil]})]
+  (let [DSm2 (ds/->dataset {:a [nil nil nil 1 2 nil 3
+                                4 nil nil nil 11 nil]
+                            :b [nil 2   2   2 2 3   nil 3 nil
+                                3   nil   4  nil]})]
     (is (> (:mean (ds-col/stats (DSm2 :a) #{:mean})) 0.0))
     (is (> (:mean (ds-col/stats (DSm2 :b) #{:mean})) 0.0))))
 
@@ -588,7 +590,7 @@
     (is (= (vec uuids)
            (vec (ds :a))))
     (let [test-fname (str (UUID/randomUUID) ".csv")
-          _ (ds/write-csv! ds test-fname)
+          _ (ds/write! ds test-fname)
           loaded-ds (try (ds/->dataset test-fname
                                        {:key-fn keyword})
                          (finally
@@ -598,11 +600,11 @@
 
 
 (deftest filter-empty
-  (let [ds (ds/name-values-seq->dataset {:V1 (take 9 (cycle [1 2]))
-                                         :V2 (range 1 10)
-                                         :V3 (take 9 (cycle [0.5 1.0 1.5]))
-                                         :V4 (take 9 (cycle [\A \B \C]))})
-        result (ds/filter (constantly false) ds)]
+  (let [ds (ds/->dataset {:V1 (take 9 (cycle [1 2]))
+                          :V2 (range 1 10)
+                          :V3 (take 9 (cycle [0.5 1.0 1.5]))
+                          :V4 (take 9 (cycle [\A \B \C]))})
+        result (ds/filter ds (constantly false))]
     (is (= 0 (ds/row-count result)))
     (is (= (ds/column-count ds)
            (ds/column-count result)))
@@ -614,14 +616,14 @@
     (is (= #{0 2}
            (set (ds/missing ds))))
     (is (= [nil 1 nil]
-           (vec (dtype/->reader (ds :a) :object))))))
+           (vec (dtype/->reader (ds :a)))))))
 
 
 (deftest select-row
-  (let [ds (ds/name-values-seq->dataset {:V1 (take 9 (cycle [1 2]))
-                                         :V2 (range 1 10)
-                                         :V3 (take 9 (cycle [0.5 1.0 1.5]))
-                                         :V4 (take 9 (cycle [\A \B \C]))})]
+  (let [ds (ds/->dataset {:V1 (take 9 (cycle [1 2]))
+                          :V2 (range 1 10)
+                          :V3 (take 9 (cycle [0.5 1.0 1.5]))
+                          :V4 (take 9 (cycle [\A \B \C]))})]
 
     (is (= [2 6 1.5 \C]
            (-> (ds/select-rows ds 5)

@@ -13,7 +13,7 @@
 
 (defn mapseq->dataset
   ([options mapseq]
-   (let [rows (map-indexed vector mapseq)
+   (let [rows mapseq
          parse-context (parse-context/options->parser-fn options :object)
          parsers (HashMap.)
          key-fn (:key-fn options identity)
@@ -26,19 +26,21 @@
          colname->parser (fn [colname]
                            (:column-parser
                             (.computeIfAbsent parsers colname
-                                              colparser-compute-fn)))]
-     (pfor/doiter
-      rowdata rows
-      (let [[row-idx rowmap] rowdata
-            entry-iter (if (instance? Map rowmap)
-                         (.entrySet rowmap)
-                         rowmap)]
-        (pfor/doiter
-         cell entry-iter
-         (let [[k v] cell
-               parser (colname->parser k)]
-           (column-parsers/add-value! parser row-idx v)))))
-     (parse-context/parsers->dataset options parsers)))
+                                              colparser-compute-fn)))
+         iter (pfor/->iterator rows)
+         n-rows (loop [continue? (.hasNext iter)
+                       row-idx 0]
+                  (if continue?
+                    (let [row (.next iter)]
+                      (pfor/doiter
+                       cell row
+                       (let [[k v] cell
+                             parser (colname->parser k)]
+                         (column-parsers/add-value! parser row-idx v)))
+                      (recur (.hasNext iter)
+                             (unchecked-inc row-idx)))
+                    row-idx))]
+     (parse-context/parsers->dataset options parsers n-rows)))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

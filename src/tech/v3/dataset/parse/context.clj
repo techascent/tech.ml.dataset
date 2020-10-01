@@ -66,12 +66,16 @@
 
 
 (defn parsers->dataset
-  [options parsers]
-  (let [all-parsers (vals parsers)
-        row-count (apply max 0 (map (comp dtype/ecount :column-parser) all-parsers))]
-    (->> all-parsers
-         (sort-by :column-idx)
-         (mapv (fn [{:keys [column-name column-parser]}]
-                 (assoc (column-parsers/finalize! column-parser row-count)
-                        :name column-name)))
-            (ds-impl/new-dataset options))))
+  ([options parsers row-count]
+   (let [all-parsers (vals parsers)
+         row-count (long row-count)]
+     (->> all-parsers
+          (sort-by :column-idx)
+          (mapv (fn [{:keys [column-name column-parser]}]
+                  (assoc (column-parsers/finalize! column-parser row-count)
+                         :name column-name)))
+          (ds-impl/new-dataset options))))
+  ([options parsers]
+   (parsers->dataset options parsers
+                     (apply max 0 (map (comp dtype/ecount :column-parser)
+                                       (vals parsers))))))

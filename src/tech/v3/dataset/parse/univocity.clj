@@ -258,7 +258,7 @@
          headers (into-array String
                              (map (comp data->string :name meta) columns))
          ^List str-readers
-         (mapv #(ds-col/column-map data->string :string %) columns)
+         (mapv (comp dtype/->reader #(ds-col/column-map data->string :string %)) columns)
 
          tsv? (or (= file-type :tsv) (= \tab (:separator options)))
          [n-cols n-rows] (dtype/shape ds)

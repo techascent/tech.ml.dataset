@@ -76,18 +76,19 @@
             (.readChar src idx)))
         (readInt [this idx]
           (if (.contains missing idx)
-            (get column-base/dtype->missing-val-map dtype)
+            Integer/MIN_VALUE
             (.readInt src idx)))
         (readLong [this idx]
           (if (.contains missing idx)
-            (get column-base/dtype->missing-val-map dtype)
+            Long/MIN_VALUE
             (.readLong src idx)))
         (readFloat [this idx]
           (if (.contains missing idx)
-            (get column-base/dtype->missing-val-map dtype)
+            Float/NaN
             (.readFloat src idx)))
         (readDouble [this idx]
           (if (.contains missing idx)
+            Double/NaN
             (.readDouble src idx)))
         (readObject [this idx]
           (when-not (.contains missing idx)

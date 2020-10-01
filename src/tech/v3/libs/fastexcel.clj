@@ -1,11 +1,13 @@
-(ns tech.libs.fastexcel
+(ns tech.v3.libs.fastexcel
   (:require [tech.io :as io]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype :as dtype]
-            [tech.ml.dataset.parse.spreadsheet :as parse-spreadsheet])
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
+            [tech.v3.dataset.parse.spreadsheet :as parse-spreadsheet]
+            [tech.v3.dataset.parse :as ds-parse])
   (:import [org.dhatim.fastexcel.reader ReadableWorkbook
             Sheet Row Cell CellType]
-           [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
+           [tech.v3.dataset Spreadsheet$Workbook Spreadsheet$Sheet
             Spreadsheet$Row Spreadsheet$Cell]))
 
 
@@ -33,8 +35,8 @@
 (defn- wrap-cell
   [^Cell cell]
   (reify
-    dtype-proto/PDatatype
-    (get-datatype [this]
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [this]
       (let [cell-type (.getType cell)]
         (if (formula-type? cell-type )
           :float64
@@ -45,7 +47,7 @@
     (value [this]
       (if (formula-type? (.getType cell))
         (Double/parseDouble (.getRawValue cell))
-        (case (dtype-proto/get-datatype this)
+        (case (dtype-proto/elemwise-datatype this)
           :none nil
           :string (.getRawValue cell)
           :boolean (.asBoolean cell)
@@ -101,7 +103,7 @@
 
 (defn workbook->datasets
  "Returns a sequence of dataset named after the sheets.  This supports a subset of the arguments
-  for tech.ml.dataset/->dataset.  Specifically:
+  for tech.v3.dataset/->dataset.  Specifically:
   :header-row?
   :parser-fn
   :parser-scan-len"
@@ -114,3 +116,16 @@
            (.close workbook))))))
   ([workbook]
    (workbook->datasets workbook {})))
+
+
+(defmethod ds-parse/data->dataset :xlsx
+  [data options]
+  (let [datasets (workbook->datasets data options)
+        n-datasets (count datasets)]
+    (errors/when-not-errorf
+     (== 1 n-datasets)
+     (if (== 0 n-datasets)
+       "No (%d) datasets found in file"
+       "Multiple (%d) datasets found in file")
+     n-datasets)
+    (first datasets)))

@@ -61,11 +61,11 @@
       (byte-range? value)
       nil
       (short-range? value)
-      (when (pmath/< 16 int-width)
+      (when (pmath/< int-width 16)
         (set! backing-store (dtype/make-container :list :int16 backing-store))
         (set! int-width 16))
 
-      (pmath/< 32 int-width)
+      (pmath/< int-width 32)
       (do
         (set! backing-store (dtype/make-container :list :int32 backing-store))
         (set! int-width 32)))
@@ -80,11 +80,11 @@
         (byte-range? value)
         nil
         (short-range? value)
-        (when (pmath/< 16 int-width)
+        (when (pmath/< int-width 16)
           (set! backing-store (dtype/make-container :list :int16 backing-store))
           (set! int-width 16))
 
-        (< 32 int-width)
+        (< int-width 32)
         (do
           (set! backing-store (dtype/make-container :list :int32 backing-store))
           (set! int-width 32)))

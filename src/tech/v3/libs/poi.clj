@@ -1,16 +1,16 @@
-(ns tech.libs.poi
+(ns tech.v3.libs.poi
   "xls, xlsx formats."
   (:require [tech.io :as io]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.ml.dataset.parse.spreadsheet :as parse-spreadsheet]
-            [clojure.set :as set])
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.errors :as errors]
+            [tech.v3.dataset.parse.spreadsheet :as parse-spreadsheet]
+            [tech.v3.dataset.parse :as ds-parse])
   (:import [java.lang AutoCloseable]
            [org.apache.poi.ss.usermodel Workbook Sheet Cell
             CellType Row]
-           [tech.libs Spreadsheet$Workbook Spreadsheet$Sheet
+           [tech.v3.dataset Spreadsheet$Workbook Spreadsheet$Sheet
             Spreadsheet$Row Spreadsheet$Cell]
-           [tech.v2.datatype.typed_buffer TypedBuffer]
            [org.apache.poi.xssf.usermodel XSSFWorkbook]
            [org.apache.poi.hssf.usermodel HSSFWorkbook]
            [org.roaringbitmap RoaringBitmap]
@@ -44,8 +44,8 @@
 (defn- wrap-cell
   [^Cell cell]
   (reify
-    dtype-proto/PDatatype
-    (get-datatype [this]
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [this]
       (let [cell-type (.getCellType cell)]
         (if (or (= cell-type CellType/FORMULA)
                 (= cell-type CellType/ERROR))
@@ -55,7 +55,7 @@
     (getColumnNum [this] (.. cell getAddress getColumn))
     (missing [this] (= :none (dtype/get-datatype this)))
     (value [this]
-      (case (dtype-proto/get-datatype this)
+      (case (dtype-proto/elemwise-datatype this)
         :none nil
         :string (.getStringCellValue cell)
         :boolean (.getBooleanCellValue cell)
@@ -100,7 +100,7 @@
   (^Spreadsheet$Workbook [input options]
    (if (instance? Spreadsheet$Workbook input)
      input
-     (let [file-type (or (:poi-file-type options)
+     (let [file-type (or (:file-type options)
                          (when (string? input)
                            (fname->file-type input))
                          :xlsx)
@@ -136,3 +136,16 @@
            (.close workbook))))))
   ([workbook]
    (workbook->datasets workbook {})))
+
+
+(defmethod ds-parse/data->dataset :xls
+  [data options]
+  (let [datasets (workbook->datasets data options)
+        n-datasets (count datasets)]
+    (errors/when-not-errorf
+     (== 1 n-datasets)
+     (if (== 0 n-datasets)
+       "No (%d) datasets found in file"
+       "Multiple (%d) datasets found in file")
+     n-datasets)
+    (first datasets)))

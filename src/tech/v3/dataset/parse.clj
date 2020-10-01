@@ -3,6 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.libs.smile.data :as smile-data]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap])
   (:import [java.io InputStream File]
            [smile.data DataFrame]))
@@ -151,7 +152,9 @@
                            (merge (str->file-info dataset)
                                   options)
                            options)]
-             (data->dataset dataset options)))]
+             (data->dataset dataset options))
+           (nil? (seq dataset))
+           (ds-impl/new-dataset options nil))]
      (if dataset-name
        (ds-proto/set-dataset-name dataset dataset-name)
        dataset)))
