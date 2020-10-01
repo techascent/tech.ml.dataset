@@ -1,35 +1,27 @@
-(ns tech.ml.dataset
+(ns tech.v3.dataset
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
-  (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.parallel.utils :as par-util]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype.readers.const :as const-rdr]
-            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [tech.v2.datatype.pprint :as dtype-pp]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.string-table :as str-table]
-            [tech.ml.dataset.dynamic-int-list :as dyn-int-list]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.categorical :as categorical]
-            [tech.ml.dataset.pipeline.column-filters :as col-filters]
-            [tech.ml.dataset.parse :as ds-parse]
-            [tech.ml.dataset.base :as ds-base]
-            [tech.ml.dataset.modelling]
-            [tech.ml.dataset.math]
-            [tech.ml.protocols.dataset :as ds-proto]
-            [tech.ml.dataset.text :as ds-text]
-            [tech.v2.datatype.casting :as casting]
-            [tech.io :as io]
-            [tech.parallel.for :as parallel-for]
-            [tech.libs.smile.data :as smile-data]
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.export-symbols :refer [export-symbols]]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.parallel.for :as pfor]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.column-base :as col-base]
+;;            [tech.v3.dataset.categorical :as categorical]
+            ;;            [tech.v3.dataset.pipeline.column-filters :as col-filters]
+
+            ;;csv/tsv load/save provided by default
+            [tech.v3.dataset.parse.univocity]
+            ;; [tech.v3.dataset.modelling]
+            ;; [tech.v3.dataset.math]
+            [tech.v3.libs.smile.data :as smile-data]
             [taoensso.nippy :as nippy]
-            [clojure.math.combinatorics :as comb]
-            [clojure.tools.logging :as log]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [java.util HashSet Map List Iterator Collection ArrayList HashMap
@@ -38,188 +30,81 @@
            [it.unimi.dsi.fastutil.ints IntArrayList]
            [org.roaringbitmap RoaringBitmap]
            [java.io InputStream]
-           [tech.ml.dataset.impl.column Column]
-           [tech.ml.dataset.impl.dataset Dataset]
-           [tech.ml.dataset.string_table StringTable]
-           [tech.ml.dataset.dynamic_int_list DynamicIntList])
+           [tech.v3.dataset.impl.column Column]
+           [tech.v3.dataset.impl.dataset Dataset]
+           [tech.v3.dataset.string_table StringTable]
+           [tech.v3.dataset.dynamic_int_list DynamicIntList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth assoc dissoc]))
+                            rand-nth]))
 
 
 (set! *warn-on-reflection* true)
 
-(par-util/export-symbols tech.ml.dataset.base
-                        dataset-name
-                        set-dataset-name
-                        row-count
-                        column-count
-                        metadata
-                        set-metadata
-                        maybe-column
-                        column
-                        columns
-                        column-name->column-map
-                        column-names
-                        has-column?
-                        columns-with-missing-seq
-                        add-column
-                        new-column
-                        remove-column
-                        remove-columns
-                        drop-columns
-                        update-column
-                        order-column-names
-                        update-columns
-                        rename-columns
-                        select
-                        unordered-select
-                        select-columns
-                        select-rows
-                        drop-rows
-                        remove-rows
-                        missing
-                        add-or-update-column
-                        value-reader
-                        mapseq-reader
-                        group-by->indexes
-                        group-by-column->indexes
-                        group-by
-                        group-by-column
-                        sort-by
-                        sort-by-column
-                        ->sort-by
-                        ->sort-by-column
-                        filter
-                        filter-column
-                        unique-by
-                        unique-by-column
-                        aggregate-by
-                        aggregate-by-column
-                        ds-concat
-                        concat
-                        concat-copying
-                        concat-inplace
-                        ds-take-nth
-                        take-nth
-                        ->dataset
-                        ->>dataset
-                        from-prototype
-                        ensure-array-backed
-                        write-csv!)
+
+(export-symbols tech.v3.dataset.base
+                dataset-name
+                set-dataset-name
+                row-count
+                column-count
+                column
+                columns
+                column-names
+                has-column?
+                columns-with-missing-seq
+                add-column
+                new-column
+                remove-column
+                remove-columns
+                drop-columns
+                update-column
+                order-column-names
+                update-columns
+                rename-columns
+                select
+                unordered-select
+                select-columns
+                select-rows
+                drop-rows
+                remove-rows
+                missing
+                add-or-update-column
+                group-by->indexes
+                group-by-column->indexes
+                group-by
+                group-by-column
+                sort-by
+                sort-by-column
+                filter
+                filter-column
+                unique-by
+                unique-by-column
+                concat
+                concat-copying
+                concat-inplace
+                take-nth
+                ensure-array-backed
+                dataset->data
+                data->dataset)
+
+(export-symbols tech.v3.dataset.readers
+                value-reader
+                mapseq-reader)
 
 
-(defn parallelized-load-csv
-  "In load a csv distributing rows between N different datasets.  Concat them at the
-  end and return the final dataset.  Loads data into an out-of-order dataset.
+(export-symbols tech.v3.dataset.parse
+                ->dataset
+                ->>dataset
+                write!)
 
-  Type-hinting your columns and providing specific parsers for datetime types like:
-  (ds/->dataset input {:parser-fn {\"date\" [:packed-local-date \"yyyy-MM-dd\"]}})
-  will have a larger effect than parallelization in most cases.
-
-  Loading multiple files in parallel will also have a larger effect than
-  single-file parallelization in most cases."
-  ([input options]
-   (let [{:keys [gzipped? file-type]}
-         (when (string? input)
-           (ds-base/str->file-info input))]
-     (ds-base/wrap-stream-fn
-      input gzipped?
-      (fn [input]
-        (->> (ds-parse/csv->rows input options)
-             (ds-parse/rows->n-row-sequences options)
-             (pmap #(ds-parse/rows->dataset options %))
-             (apply ds-base/concat))))))
-  ([input]
-   (parallelized-load-csv input {})))
-
-
-(defn- lazy-cons-csv->dataset-seq
-  [^InputStream input-stream past-ds row-seq options]
-  (try
-    (if (seq row-seq)
-      (cons past-ds (lazy-seq
-                     (lazy-cons-csv->dataset-seq
-                      input-stream
-                      (ds-parse/rows->dataset options (first row-seq))
-                      (rest row-seq)
-                      options)))
-      (do
-        (.close input-stream)
-        (cons past-ds nil)))
-    (catch Throwable e
-      (.close input-stream)
-      (throw e))))
-
-
-
-(defn csv->dataset-seq
-  "Lazily (except for first one) load a csv into a sequence of datasets.
-
-  options - same options as ->dataset with an addition :num-rows-per-batch
-  option that defaults to 1 million.
-
-  Note that when loading large datasets chosing the exact column datatype is
-  going to have a good effect on performance.  For example, for datetime datatypes
-  specifying the exact datetimeformatter parse string has an outsized effect
-  on performance,"
-  ([input {:keys [num-rows-per-batch header-row?]
-           :or {num-rows-per-batch 1000000 header-row? true}
-           :as options}]
-   (let [{:keys [gzipped?]}
-         (when (string? input)
-           (ds-base/str->file-info input))]
-     (let [^InputStream input (if (instance? InputStream input)
-                                input
-                                (if gzipped?
-                                  (io/gzip-input-stream input)
-                                  (io/input-stream input)))]
-       (try
-         (let [row-seq (ds-parse/csv->rows input options)
-               row-seq (if header-row?
-                         (let [hr (first row-seq)]
-                           (->> (partition-all num-rows-per-batch
-                                               (rest row-seq))
-                                (map #(clojure.core/concat [hr] %))))
-                         (partition-all num-rows-per-batch row-seq))
-               first-ds (first row-seq)
-               row-seq (rest row-seq)
-               first-ds (ds-parse/rows->dataset options first-ds)
-               ;;Setup parse-fn to explicitly set datatype of parsed columns
-               ;;to ensure schema stays constant.
-               parse-fn (merge (->> (vals first-ds)
-                                    (map (comp (juxt :name :datatype) meta))
-                                    (into {}))
-                               (:parser-fn options))
-               options (clojure.core/assoc options :parser-fn parse-fn)]
-
-           (lazy-cons-csv->dataset-seq input first-ds row-seq options))
-         (catch Throwable e
-           (.close input)
-           (throw e))))))
-  ([input]
-   (csv->dataset-seq input {})))
-
-
-(defn select-columns-by-index
-  [ds idx-seq]
-  (ds-proto/select-columns-by-index ds idx-seq))
-
-
-(par-util/export-symbols tech.ml.dataset.print
-                         dataset-data->str
-                         dataset->str)
-
-;;Renamed for backwards compat.
-(def ^{:doc "Deprecated method.  See dataset->str"} dataset->string dataset->str)
 
 
 (defn shape
-  "Returns shape in row-major format of [n-columns n-rows]."
+  "Returns shape in column-major format of [n-columns n-rows]."
   [dataset]
   (dtype/shape dataset))
 
 
-(par-util/export-symbols tech.ml.dataset.join
+#_(par-util/export-symbols tech.v3.dataset.join
                          hash-join
                          inner-join
                          right-join
@@ -227,49 +112,11 @@
                          left-join-asof)
 
 
-(par-util/export-symbols tech.ml.dataset.impl.dataset
-                         new-dataset)
+(export-symbols tech.v3.dataset.impl.dataset
+                new-dataset)
 
-(par-util/export-symbols tech.ml.dataset.parse.name-values-seq
-                         name-values-seq->dataset)
-
-(par-util/export-symbols tech.ml.dataset.missing
-                         select-missing drop-missing replace-missing)
-
-
-(defn assoc
-  "If column exists, replace.  Else append new column.  The datatype of the new column
-  will the the datatype of the coldata.
-
-  coldata may be a sequence in which case 'vec' will be called and the datatype will be
-  :object.
-
-  coldata may be a reader, in which case the datatype will be the datatype of the
-  reader.  One way to make a reader is tech.v2.datatype/make-reader or anything
-  deriving from java.util.List and java.util.RandomAccess will do.
-
-  coldata may also be a new column (tech.ml.dataset.column/new-column) in which case
-  the missing set and the column metadata can be provided."
-  ([dataset colname coldata & more]
-   (do
-     (when-not (== 0 (rem (count more) 2))
-       (throw (Exception. "assoc requires an even number of arguments")))
-     (->> more
-          (partition 2)
-          (reduce #(add-or-update-column %1 (first %2) (second %2))
-                  (add-or-update-column dataset colname coldata)))))
-  ([dataset colname coldata]
-   (add-or-update-column dataset colname coldata)))
-
-
-(defn dissoc
-  "Remove one more more columns from the dataset."
-  ([dataset colname & more]
-   (->> more
-        (reduce #(remove-column %1 %2)
-                (remove-column dataset colname))))
-  ([dataset colname]
-   (remove-column dataset colname)))
+#_(par-util/export-symbols tech.v3.dataset.missing
+                           select-missing drop-missing replace-missing)
 
 
 (defn head
@@ -336,7 +183,7 @@
 (defn append-columns
   [dataset column-seq]
   (new-dataset (dataset-name dataset)
-               (metadata dataset)
+               (meta dataset)
                (clojure.core/concat (columns dataset) column-seq)))
 
 
@@ -345,22 +192,15 @@
   The result column will have a datatype of the widened combination of all
   the input column datatypes.
   The result column's missing indexes is the union of all input columns."
-  [dataset result-colname map-fn colname & colnames]
+  [dataset map-fn result-colname result-datatype colname & colnames]
   (let [all-colnames (->> (clojure.core/concat [colname]
                                                colnames)
                           (remove nil?)
                           vec)
         ;;Select the src columns to generate an error.
-        src-ds (select-columns dataset all-colnames)
-        missing-set (if (== 1 (count all-colnames))
-                      (ds-col/missing (src-ds (first all-colnames)))
-                      (reduce dtype-proto/set-or
-                              (map ds-col/missing (vals src-ds))))
-        result-reader (apply dtype/typed-reader-map
-                             map-fn (vals src-ds))]
-    (add-or-update-column
-     dataset result-colname
-     (ds-col/new-column result-colname result-reader {} missing-set))))
+        src-cols (vals (select-columns dataset all-colnames))]
+    (assoc dataset result-colname
+           (apply ds-col/column-map map-fn result-datatype src-cols))))
 
 
 (defn column-cast
@@ -372,19 +212,19 @@
 
   datatype may be a datatype enumeration or a tuple of
   [datatype cast-fn] where cast-fn may return either a new value,
-  :tech.ml.dataset.parse/missing, or :tech.ml.dataset.parse/parse-failure.
+  :tech.v3.dataset.parse/missing, or :tech.v3.dataset.parse/parse-failure.
   Exceptions are propagated to the caller.  The new column has at least the
   existing missing set (if no attempt returns :missing or :cast-failure).
   :cast-failure means the value gets added to metadata key :unparsed-data
   and the index gets added to :unparsed-indexes.
 
 
-  If the existing datatype is string, then tech.ml.datatype.column/parse-column
+  If the existing datatype is string, then tech.v3.datatype.column/parse-column
   is called.
 
   Casts between numeric datatypes need no cast-fn but one may be provided.
   Casts to string need no cast-fn but one may be provided.
-  Casts from string to anything will call tech.ml.dataset.column/parse-column."
+  Casts from string to anything will call tech.v3.dataset.column/parse-column."
   [dataset colname datatype]
   (let [[src-colname dst-colname] (if (instance? Collection colname)
                                     colname
@@ -417,16 +257,16 @@
              ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap
                                      (ds-col/missing src-col))
              ^RoaringBitmap new-missing (dtype/clone missing)
-             col-reader (dtype-pp/reader-converter (dtype/->reader src-col))
+             col-reader (dtype/->reader src-col)
              n-elems (dtype/ecount col-reader)
              unparsed-data (ArrayList.)
              unparsed-indexes (bitmap/->bitmap)
              result (if (= dst-dtype :string)
                       (str-table/make-string-table n-elems)
-                      (dtype/make-container :java-array dst-dtype n-elems))
+                      (dtype/make-container :jvm-heap dst-dtype n-elems))
              res-writer (dtype/->writer result)
-             missing-val (col-impl/datatype->missing-value dst-dtype)]
-         (parallel-for/parallel-for
+             missing-val (col-base/datatype->missing-value dst-dtype)]
+         (pfor/parallel-for
           idx
           n-elems
           (if (.contains missing idx)
@@ -503,8 +343,7 @@ null [6 3]:
                              ;;confusing...
                              (clojure.core/concat
                               [(ds-col/new-column colname-column-name
-                                                  (const-rdr/make-const-reader
-                                                   col-name :object row-count))
+                                                  (dtype/const-reader col-name row-count))
                                (ds-col/set-name data value-column-name)]
                               leftover-columns))))
                         colnames))))
@@ -575,10 +414,10 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                    #(casting/cast % result-datatype)
                    identity)
          [indexes container idx-container]
-         (parallel-for/indexed-map-reduce
+         (pfor/indexed-map-reduce
           (dtype/ecount coldata)
           (fn [^long start-idx ^long len]
-            (let [^List container (col-impl/make-container result-datatype)
+            (let [^List container (col-base/make-container result-datatype)
                   indexes (LongArrayList.)
                   ^List idx-container (when idx-colname
                                         (IntArrayList.))]
@@ -628,80 +467,34 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
              %))))))
 
 
-(defn ^:no-doc ->distinct-by-column
-  "Drop successive rows where we already have a given key."
-  [ds colname]
-  (let [coldata (ds colname)
-        colset (HashSet.)
-        bitmap (bitmap/->bitmap)
-        n-elems (dtype/ecount coldata)
-        obj-rdr (typecast/datatype->reader :object coldata)]
-    (dotimes [idx n-elems]
-      (when (.add colset (.read obj-rdr idx))
-        (.add bitmap idx)))
-    (select-rows ds bitmap)))
+
+;; (par-util/export-symbols tech.v3.dataset.modelling
+;;                          set-inference-target
+;;                          inference-target-column-names
+;;                          column-label-map
+;;                          inference-target-label-map
+;;                          dataset-label-map
+;;                          inference-target-label-inverse-map
+;;                          num-inference-classes
+;;                          feature-ecount
+;;                          model-type
+;;                          column-values->categorical
+;;                          reduce-column-names
+;;                          has-column-label-map?
+;;                          k-fold-datasets
+;;                          train-test-split
+;;                          row-major)
 
 
-(defn n-permutations
-  "Return n datasets with all permutations n of the columns possible.
-  N must be less than (column-count dataset))."
-  [n dataset]
-  (ds-base/check-dataset-wrong-position n)
-  (when-not (< n (first (dtype/shape dataset)))
-    (throw (ex-info (format "%d permutations of %d columns"
-                            n (first (dtype/shape dataset)))
-                    {})))
-  (->> (comb/combinations (column-names dataset) n)
-       (map set)
-       ;;assume order doesn't matter
-       distinct
-       (map (partial select-columns dataset))))
-
-
-(defn n-feature-permutations
-  "Given a dataset with at least one inference target column, produce all datasets
-  with n feature columns and the label columns."
-  [n dataset]
-  (ds-base/check-dataset-wrong-position n)
-  (let [label-columns (col-filters/target? dataset)
-        feature-columns (col-filters/not label-columns dataset)]
-    (when-not (seq label-columns)
-      (throw (ex-info "No label columns indicated" {})))
-    (->> (comb/combinations feature-columns n)
-         (map set)
-         ;;assume order doesn't matter
-         distinct
-         (map (comp (partial select-columns dataset)
-                    (partial clojure.core/concat label-columns))))))
-
-
-(par-util/export-symbols tech.ml.dataset.modelling
-                         set-inference-target
-                         inference-target-column-names
-                         column-label-map
-                         inference-target-label-map
-                         dataset-label-map
-                         inference-target-label-inverse-map
-                         num-inference-classes
-                         feature-ecount
-                         model-type
-                         column-values->categorical
-                         reduce-column-names
-                         has-column-label-map?
-                         ->k-fold-datasets
-                         ->train-test-split
-                         ->row-major)
-
-
-(par-util/export-symbols tech.ml.dataset.math
-                        correlation-table
-                        k-means
-                        g-means
-                        x-means
-                        compute-centroid-and-global-means
-                        impute-missing-by-centroid-averages
-                        interpolate-loess
-                        fill-range-replace)
+;; (par-util/export-symbols tech.v3.dataset.math
+;;                         correlation-table
+;;                         k-means
+;;                         g-means
+;;                         x-means
+;;                         compute-centroid-and-global-means
+;;                         impute-missing-by-centroid-averages
+;;                         interpolate-loess
+;;                         fill-range-replace)
 
 
 (defn all-descriptive-stats-names
@@ -755,11 +548,12 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                           :n-missing n-missing}
                          (cond
                            (dtype-dt/datetime-datatype? col-dtype)
-                           (dtype-dt-ops/millisecond-descriptive-stats col-reader
-                                                                       numeric-stats)
-                           (and (not (:categorical? (ds-col/metadata ds-col)))
+                           (dtype-dt/millisecond-descriptive-statistics
+                            numeric-stats
+                            col-reader)
+                           (and (not (:categorical? (meta ds-col)))
                                 (casting/numeric-type? col-dtype))
-                           (dfn/descriptive-stats col-reader numeric-stats)
+                           (dfn/descriptive-statistics col-reader numeric-stats)
                            :else
                            (let [histogram (->> (frequencies col-reader)
                                                 (clojure.core/sort-by second >))
@@ -803,72 +597,6 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
               :n-categorical-values nil})))
 
 
-(defn reverse-map-categorical-columns
-  "Given a dataset where we have converted columns from a categorical representation
-  to either a numeric reprsentation or a one-hot representation, reverse map
-  back to the original dataset given the reverse mapping of label->number in
-  the column's metadata."
-  [dataset {:keys [column-name-seq]}]
-  (let [label-map (dataset-label-map dataset)
-        column-name-seq (or column-name-seq
-                            (column-names dataset))
-        column-name-seq (reduce-column-names dataset column-name-seq)
-        dataset
-        (clojure.core/reduce
-         (fn [dataset colname]
-           (if (contains? label-map colname)
-             (add-or-update-column dataset colname
-                                   (categorical/column-values->categorical
-                                    dataset colname label-map))
-             dataset))
-         dataset
-         column-name-seq)]
-    (select-columns dataset column-name-seq)))
-
-
-(defn ->flyweight
-  "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown
-  on missing values or if nil should be inserted in the map.  If the dataset has a label
-  and number->string? is true then columns that have been converted from categorical to
-  numeric will be reverse-mapped back to string columns."
-  [dataset & {:keys [column-name-seq
-                     error-on-missing-values?
-                     number->string?]
-              :or {error-on-missing-values? true}}]
-  (let [column-name-seq (or column-name-seq
-                            (column-names dataset))
-        dataset (if number->string?
-                  (reverse-map-categorical-columns dataset {:column-name-seq
-                                                            column-name-seq})
-                  (select-columns dataset column-name-seq))]
-    (when-let [missing-columns
-               (when error-on-missing-values?
-                 (seq (columns-with-missing-seq dataset)))]
-      (throw (Exception. (format "Columns with missing data detected: %s"
-                                 missing-columns))))
-    (mapseq-reader dataset)))
-
-
-(defn labels
-  "Given a dataset and an options map, generate a sequence of label-values.
-  If label count is 1, then if there is a label-map associated with column
-  generate sequence of labels by reverse mapping the column(s) back to the original
-  dataset values.  If there are multiple label columns results are presented in
-  a dataset.
-  Return a reader of labels"
-  [dataset]
-  (when-not (seq (col-filters/target? dataset))
-    (throw (ex-info "No label columns indicated" {})))
-  (let [original-label-column-names (->> (col-filters/inference? dataset)
-                                         (reduce-column-names dataset))
-        dataset (reverse-map-categorical-columns
-                 dataset {:column-name-seq
-                          original-label-column-names})]
-    (if (= 1 (column-count dataset))
-      (dtype/->reader (first (vals dataset)))
-      dataset)))
-
-
 (defn invert-string->number
   "When ds-pipe/string->number is called it creates label maps.  This reverts
   the dataset back to those labels.  Currently results in object columns
@@ -876,16 +604,12 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   [ds]
   (->> (map meta ds)
        (clojure.core/filter :label-map)
-       ;;TODO - map back to original datatype.  Currently
        (reduce (fn [ds {:keys [name label-map]}]
-                 (let [src-rdr (dtype/->reader (ds name))
-                       inv-map (set/map-invert label-map)]
+                 (let [inv-map (set/map-invert label-map)
+                       res-dtype (dtype/elemwise-datatype (first (vals inv-map)))]
                    (assoc
                     ds name
-                    (-> (dtype/object-reader
-                         (row-count ds)
-                         #(get inv-map (long (src-rdr %)) nil))
-                        (dtype/clone)))))
+                    (ds-col/column-map #(get inv-map (long %)) res-dtype (ds name)))))
                ds)))
 
 
@@ -896,7 +620,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   See ensure-array-backed
 
   It is important to note that smile supports a subset of the functionality in
-  tech.ml.dataset.  One difference is smile columns have string column names and
+  tech.v3.dataset.  One difference is smile columns have string column names and
   have no missing set.
 
   Returns a smile.data.DataFrame"
@@ -905,118 +629,10 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
       (smile-data/dataset->dataframe)))
 
 
-(defn- column->string-data
-  [str-col]
-  (let [coldata (.data ^Column str-col)
-        ^StringTable str-table
-        (if (instance? StringTable coldata)
-          coldata
-          (str-table/string-table-from-strings coldata))
-        int->str-data (dtype/make-container
-                       :java-array :string (.int->str str-table))
-        strt-data (-> (.data str-table)
-                      (dyn-int-list/int-list->data))
-        data-ary (or (dtype/->array strt-data)
-                     (dtype/->array-copy strt-data))]
-    {:string-table int->str-data
-     ;;Between version 1 and 2 we changed the string table to be just
-     ;;an array of strings intead of a hashmap.
-     :version 2
-     :entries data-ary}))
-
-
-(defn- string-data->column-data
-  [{:keys [string-table entries version]}]
-  (let [int-data (DynamicIntList. (dtype/->list-backing-store entries)
-                                  nil)
-        ;;force int read creation when possible
-        _ (when-not (== 0 (dtype/ecount entries))
-            (.getInt int-data 0))]
-    (if (= version 2)
-      (let [^List int->str (dtype/make-container :list :string string-table)
-            str->int (HashMap. (dtype/ecount int->str))
-            n-elems (.size int->str)]
-        (dotimes [idx n-elems]
-          (.put str->int (.get int->str idx) idx))
-        (StringTable. int->str str->int int-data))
-      (let [^Map str->int string-table
-            int->str-ary-list (ArrayList. (count str->int))
-            _ (doseq [[k v] str->int]
-                (let [v (unchecked-int v)
-                      list-size (.size int->str-ary-list)]
-                  (dotimes [idx (max 0 (- (inc v) list-size))]
-                    (.add int->str-ary-list 0))
-                  (.set int->str-ary-list v k)))]
-        (StringTable. int->str-ary-list str->int int-data)))))
-
-
-(defn- column->encoded-text-data
-  [enc-data-col]
-  (if-let [^tech.ml.dataset.text.EncodedTextBuilder coldata
-           (.data ^Column enc-data-col)]
-    (ds-text/enc-builder->data coldata)
-    (dtype/->array-copy enc-data-col)))
-
-
-(defn- encoded-text-data->column-data
-  [enc-text-data]
-  (if (.isArray (.getClass ^Object enc-text-data))
-    enc-text-data
-    (ds-text/data->enc-builder enc-text-data)))
-
-
-(defn dataset->data
-  "Convert a dataset to a pure clojure datastructure.  Returns a map with two keys:
-  {:metadata :columns}.
-
-  :columns is a vector of column definitions appropriate for passing directly back
-  into new-dataset.
-
-  A column definition in this case is a map of {:name :missing :data :metadata}."
-  [ds]
-  {:metadata (meta ds)
-   :columns (->> (columns ds)
-                 (mapv (fn [col]
-                         (let [dtype (dtype/get-datatype col)]
-                           {:metadata (meta col)
-                            :missing (ds-col/missing col)
-                            :name (:name (meta col))
-                            :data (cond
-                                    (= :string (dtype/get-datatype col))
-                                    (column->string-data col)
-                                    (= :encoded-text dtype)
-                                    (column->encoded-text-data col)
-                                    ;;Nippy doesn't handle object arrays or arraylists
-                                    ;;very well.
-                                    (= :object (casting/flatten-datatype dtype))
-                                    (vec col)
-                                    :else
-                                    (or (dtype/->array col)
-                                        (dtype/->array-copy col)))}))))})
-
-
 (nippy/extend-freeze
  Dataset :tech.ml/dataset
  [ds out]
  (nippy/-freeze-without-meta! (dataset->data ds) out))
-
-
-(defn data->dataset
-  "Convert a data-ized dataset created via dataset->data back into a
-  full dataset"
-  [{:keys [metadata columns]}]
-  (->> columns
-       (map (fn [{:keys [metadata] :as coldata}]
-              (->
-               (cond
-                 (= :string (:datatype metadata))
-                 (update coldata :data string-data->column-data)
-                 (= :encoded-text (:datatype metadata))
-                 (update coldata :data encoded-text-data->column-data)
-                 :else
-                 (update coldata :data dtype/set-datatype (:datatype metadata)))
-               (clojure.core/assoc :force-datatype? true))))
-       (new-dataset {:dataset-name (:name metadata)} metadata)))
 
 
 (nippy/extend-thaw

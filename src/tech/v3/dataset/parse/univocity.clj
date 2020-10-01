@@ -297,3 +297,70 @@
 (defmethod ds-parse/dataset->data! :tsv
   [dataset output options]
   (write-csv! dataset output options))
+
+
+;; (defn- lazy-cons-csv->dataset-seq
+;;   [^InputStream input-stream past-ds row-seq options]
+;;   (try
+;;     (if (seq row-seq)
+;;       (cons past-ds (lazy-seq
+;;                      (lazy-cons-csv->dataset-seq
+;;                       input-stream
+;;                       (ds-parse/rows->dataset options (first row-seq))
+;;                       (rest row-seq)
+;;                       options)))
+;;       (do
+;;         (.close input-stream)
+;;         (cons past-ds nil)))
+;;     (catch Throwable e
+;;       (.close input-stream)
+;;       (throw e))))
+
+
+
+;; (defn csv->dataset-seq
+;;   "Lazily (except for first one) load a csv into a sequence of datasets.
+
+;;   options - same options as ->dataset with an addition :num-rows-per-batch
+;;   option that defaults to 1 million.
+
+;;   Note that when loading large datasets chosing the exact column datatype is
+;;   going to have a good effect on performance.  For example, for datetime datatypes
+;;   specifying the exact datetimeformatter parse string has an outsized effect
+;;   on performance,"
+;;   ([input {:keys [num-rows-per-batch header-row?]
+;;            :or {num-rows-per-batch 1000000 header-row? true}
+;;            :as options}]
+;;    (let [{:keys [gzipped?]}
+;;          (when (string? input)
+;;            (ds-base/str->file-info input))]
+;;      (let [^InputStream input (if (instance? InputStream input)
+;;                                 input
+;;                                 (if gzipped?
+;;                                   (io/gzip-input-stream input)
+;;                                   (io/input-stream input)))]
+;;        (try
+;;          (let [row-seq (ds-parse/csv->rows input options)
+;;                row-seq (if header-row?
+;;                          (let [hr (first row-seq)]
+;;                            (->> (partition-all num-rows-per-batch
+;;                                                (rest row-seq))
+;;                                 (map #(clojure.core/concat [hr] %))))
+;;                          (partition-all num-rows-per-batch row-seq))
+;;                first-ds (first row-seq)
+;;                row-seq (rest row-seq)
+;;                first-ds (ds-parse/rows->dataset options first-ds)
+;;                ;;Setup parse-fn to explicitly set datatype of parsed columns
+;;                ;;to ensure schema stays constant.
+;;                parse-fn (merge (->> (vals first-ds)
+;;                                     (map (comp (juxt :name :datatype) meta))
+;;                                     (into {}))
+;;                                (:parser-fn options))
+;;                options (clojure.core/assoc options :parser-fn parse-fn)]
+
+;;            (lazy-cons-csv->dataset-seq input first-ds row-seq options))
+;;          (catch Throwable e
+;;            (.close input)
+;;            (throw e))))))
+;;   ([input]
+;;    (csv->dataset-seq input {})))

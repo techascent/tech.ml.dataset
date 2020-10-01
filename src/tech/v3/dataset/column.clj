@@ -140,8 +140,9 @@ Implementations should check their metadata before doing calculations."
   ([name data] (new-column name data nil nil))
   ([name data metadata] (new-column name data metadata nil))
   ([name data metadata missing]
-   (let [coldata (column-data-process/scan-data-for-missing data)]
-     (col-impl/new-column name coldata metadata missing))))
+   (let [{coldata :data
+          scanned-missing :missing} (column-data-process/scan-data-for-missing data)]
+     (col-impl/new-column name coldata metadata (or missing scanned-missing)))))
 
 
 (defn extend-column-with-empty
@@ -170,4 +171,4 @@ Implementations should check their metadata before doing calculations."
   (col-impl/new-column :_unnamed
                        (apply dtype/emap map-fn res-dtype args)
                        nil
-                       (reduce dtype-proto/set-and (map col-proto/missing args))))
+                       (reduce dtype-proto/set-or (map col-proto/missing args))))

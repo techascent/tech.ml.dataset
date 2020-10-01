@@ -97,7 +97,7 @@
   ^PrimitiveList [num-or-item-seq]
   (if (number? num-or-item-seq)
     (DynamicIntList. (dtype/make-container :list :int8 (long num-or-item-seq))
-                     :int8)
+                     8)
     (let [retval (DynamicIntList. (dtype/make-container :list :int8 0)
                                   8)]
       (parallel-for/consume! #(.addLong retval (long %)) num-or-item-seq)

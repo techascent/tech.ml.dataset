@@ -63,20 +63,22 @@
       (col-impl/new-column col-name
                            (dtype/const-reader new-col-data n-rows))
       :else
-      (let [new-reader (if (= argtype :iterable)
-                         (column-data-process/scan-data-for-missing
-                          (take n-rows new-col-data))
-                         ;;Else has to be reader or tensor.
-                         (let [data-ecount (dtype/ecount new-col-data)
-                               new-col-data (if (> data-ecount n-rows)
-                                              (dtype/sub-buffer new-col-data 0 n-rows)
-                                              new-col-data)]
-                           (column-data-process/scan-data-for-missing
-                            new-col-data)))]
+      (let [{:keys [data missing]}
+            (if (= argtype :iterable)
+              (column-data-process/scan-data-for-missing
+               (take n-rows new-col-data))
+              ;;Else has to be reader or tensor.
+              (let [data-ecount (dtype/ecount new-col-data)
+                    new-col-data (if (> data-ecount n-rows)
+                                   (dtype/sub-buffer new-col-data 0 n-rows)
+                                   new-col-data)]
+                (column-data-process/scan-data-for-missing
+                 new-col-data)))]
         (col-impl/new-column
          col-name (if-not (= 0 n-cols)
-                    (shorten-or-extend n-rows new-reader)
-                    new-reader))))))
+                    (shorten-or-extend n-rows data)
+                    data)
+         nil missing)))))
 
 
 (defn- nearest-range-start

@@ -57,7 +57,8 @@
                      (pfor/consume!
                       #(column-parsers/add-value! parser (first %) (second %))
                       (map-indexed vector coldata))
-                     (column-parsers/finalize! parser (dtype/ecount parser))))))
+                     (assoc (column-parsers/finalize! parser (dtype/ecount parser))
+                            :name colname)))))
           (ds-impl/new-dataset options))))
   ([column-map]
    (column-map->dataset nil column-map)))
