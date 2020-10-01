@@ -35,5 +35,16 @@
 
 (defmethod data->dataset :default
   [data options]
-  (throw (format "Unrecognized options file type: %s"
+  (throw (format "Unrecognized read file type: %s"
+                 (:file-type options))))
+
+
+(defmulti dataset->data!
+  (fn [ds output options]
+    (:file-type options)))
+
+
+(defmethod dataset->data! :default
+  [ds output options]
+  (throw (format "Unrecognized write file type: %s"
                  (:file-type options))))

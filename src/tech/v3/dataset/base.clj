@@ -7,7 +7,6 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
-            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.dataset.column :as ds-col]
@@ -19,8 +18,7 @@
             [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.parse :as ds-parse]
             [tech.v3.dataset.parse.univocity :as univocity]
-            [tech.io :as io]
-            [clojure.tools.logging :as log])
+            [tech.io :as io])
   (:import [java.io InputStream File]
            [tech.v3.datatype Buffer ObjectReader]
            [tech.v3.dataset.impl.dataset Dataset]
@@ -377,19 +375,11 @@ This is an interface change and we do apologize!"))))
 
 (defn sort-by-column
   "Sort a dataset by a given column using the given compare fn."
-  ([colname compare-fn dataset]
+  ([dataset compare-fn colname]
    (->> (argops/argsort compare-fn (dataset colname))
         (select dataset :all)))
-  ([colname dataset]
-   (sort-by-column colname nil dataset)))
-
-
-(defn ->sort-by-column
-  "sort-by-column used in -> dataflows"
-  ([dataset colname compare-fn]
-   (sort-by-column colname compare-fn dataset))
   ([dataset colname]
-   (sort-by-column colname dataset)))
+   (sort-by-column dataset nil colname)))
 
 
 (defn- do-concat
@@ -477,7 +467,7 @@ This is an interface change and we do apologize!"))))
 
 (defn- sorted-int32-sequence
   [idx-seq]
-  (let [^ints data (dtype/make-container :java-array :int32 idx-seq)]
+  (let [data (dtype/->int-array idx-seq)]
     (Arrays/sort data)
     data))
 
@@ -496,7 +486,7 @@ This is an interface change and we do apologize!"))))
         (sorted-int32-sequence)
         (select dataset :all)))
   ([dataset map-fn]
-   (unique-by map-fn {} dataset)))
+   (unique-by dataset {} map-fn)))
 
 
 (defn unique-by-column
@@ -521,6 +511,81 @@ This is an interface change and we do apologize!"))))
   [dataset n-val]
   (select dataset :all (->> (range (second (dtype/shape dataset)))
                             (clojure.core/take-nth n-val))))
+
+(casting/add-object-datatype! :dataset Dataset)
+
+
+(defn dataset->string
+  ^String [ds]
+  (.toString ^Object ds))
+
+
+(defn ensure-array-backed
+  "Ensure the column data in the dataset is stored in pure java arrays.  This is
+  sometimes necessary for interop with other libraries and this operation will
+  force any lazy computations to complete.  This also clears the missing set
+  for each column and writes the missing values to the new arrays.
+
+  Columns that are already array backed and that have no missing values are not
+  changed and retuned.
+
+  The postcondition is that dtype/->array will return a java array in the appropriate
+  datatype for each column.
+
+  options -
+  :unpack? - unpack packed datetime types.  Defaults to true"
+  ([ds {:keys [unpack?]
+        :or {unpack? true}}]
+   (reduce (fn [ds col]
+             (let [colname (ds-col/column-name col)
+                   col (if unpack?
+                         (packing/unpack col)
+                         col)]
+               (assoc ds colname (dtype-cmc/->array col))))
+           ds
+           (columns ds)))
+  ([ds]
+   (ensure-array-backed ds {})))
+
+
+(defn column->string-table
+  ^StringTable [^Column col]
+  (if-let [retval (when (instance? StringTable (.data col))
+                    (.data col))]
+    retval
+    (throw (Exception. (format "Column %s does not contain a string table"
+                               (ds-col/column-name col))))))
+
+
+(defn ensure-column-string-table
+  "Ensure this column is backed by a string table.
+  If not, return a new column that is.
+  Column must be :string datatype."
+  ^StringTable [col]
+  (when-not (= :string (dtype/get-datatype col))
+    (throw (Exception.
+            (format "Column %s does not have :string datatype"
+                    (ds-col/column-name col)))))
+  (if (not (instance? StringTable (.data ^Column col)))
+    (str-table/string-table-from-strings col)
+    (.data ^Column col)))
+
+
+(defn ensure-dataset-string-tables
+  "Given a dataset, ensure every string column is backed by a string table."
+  [ds]
+  (reduce
+   (fn [ds col]
+     (if (= :string (dtype/get-datatype col))
+       (let [missing (ds-col/missing col)
+             metadata (meta col)
+             colname (:name metadata)
+             str-t (ensure-column-string-table col)]
+         (assoc ds (ds-col/column-name col)
+                (ds-col/new-column colname str-t metadata missing)))
+       ds))
+   ds
+   (vals ds)))
 
 
 (defn ->dataset
@@ -616,7 +681,8 @@ This is an interface change and we do apologize!"))))
            (or (string? dataset) (instance? InputStream dataset))
            (let [options (if (string? dataset)
                            (merge (ds-parse/str->file-info dataset)
-                                  options))]
+                                  options)
+                           options)]
              (ds-parse/data->dataset dataset options)))]
      (if dataset-name
        (ds-proto/set-dataset-name dataset dataset-name)
@@ -633,132 +699,11 @@ This is an interface change and we do apologize!"))))
    (->dataset dataset)))
 
 
-(casting/add-object-datatype! :dataset Dataset)
-
-
-(defn dataset->string
-  ^String [ds]
-  (.toString ^Object ds))
-
-
-(defn ensure-array-backed
-  "Ensure the column data in the dataset is stored in pure java arrays.  This is
-  sometimes necessary for interop with other libraries and this operation will
-  force any lazy computations to complete.  This also clears the missing set
-  for each column and writes the missing values to the new arrays.
-
-  Columns that are already array backed and that have no missing values are not
-  changed and retuned.
-
-  The postcondition is that dtype/->array will return a java array in the appropriate
-  datatype for each column.
-
-  options -
-  :unpack? - unpack packed datetime types.  Defaults to true"
-  ([ds {:keys [unpack?]
-        :or {unpack? true}}]
-   (reduce (fn [ds col]
-             (let [colname (ds-col/column-name col)
-                   col (if unpack?
-                         (packing/unpack col)
-                         col)]
-               (assoc ds colname (dtype-cmc/->array col))))
-           ds
-           (columns ds)))
-  ([ds]
-   (ensure-array-backed ds {})))
-
-
-(defn column->string-table
-  ^StringTable [^Column col]
-  (if-let [retval (when (instance? StringTable (.data col))
-                    (.data col))]
-    retval
-    (throw (Exception. (format "Column %s does not contain a string table"
-                               (ds-col/column-name col))))))
-
-
-(defn ensure-column-string-table
-  "Ensure this column is backed by a string table.
-  If not, return a new column that is.
-  Column must be :string datatype."
-  ^StringTable [col]
-  (when-not (= :string (dtype/get-datatype col))
-    (throw (Exception.
-            (format "Column %s does not have :string datatype"
-                    (ds-col/column-name col)))))
-  (if (not (instance? StringTable (.data ^Column col)))
-    (str-table/string-table-from-strings col)
-    (.data ^Column col)))
-
-
-(defn ensure-dataset-string-tables
-  "Given a dataset, ensure every string column is backed by a string table."
-  [ds]
-  (reduce
-   (fn [ds col]
-     (if (= :string (dtype/get-datatype col))
-       (let [missing (ds-col/missing col)
-             metadata (meta col)
-             colname (:name metadata)
-             str-t (ensure-column-string-table col)]
-         (assoc ds (ds-col/column-name col)
-                (ds-col/new-column colname str-t metadata missing)))
-       ds))
-   ds
-   (vals ds)))
-
-
-(defn- data->string
-  ^String [data-item]
-  (if data-item
-    (cond
-      (string? data-item) data-item
-      (keyword? data-item) (name data-item)
-      (symbol? data-item) (name data-item)
-      :else (.toString ^Object data-item))))
-
-
-(defn write-csv!
-  "Write a dataset to a tsv or csv output stream.  Closes output if a stream
-  is passed in.  File output format will be inferred if output is a string -
-    - .csv, .tsv - switches between tsv, csv.  Tsv is the default.
-    - *.gz - write to a gzipped stream.
-  At this time writing to json is not supported.
-  options -
-  :separator - in case output isn't a string, you can use either \\, or \\tab to switch
-    between csv or tsv output respectively."
-  ([ds output options]
-   (let [{:keys [gzipped? file-type]}
-         (when (string? output)
-           (ds-parse/str->file-info output))
-         headers (into-array String (map data->string
-                                         (column-names ds)))
-         ^List str-readers
-         (->> (columns ds)
-              (mapv #(ds-col/column-map data->string :string %)))
-         tsv? (or (= file-type :tsv) (= \tab (:separator options)))
-         n-cols (column-count ds)
-         n-rows (row-count ds)
-         str-rdr (reify ObjectReader
-                   (lsize [rdr] n-rows)
-                   (readObject [rdr row-idx]
-                     (let [^"[Ljava.lang.String;" str-array (make-array
-                                                             String n-cols)]
-                       (dotimes [col-idx n-cols]
-                         (aset str-array col-idx ^String
-                               (.readObject ^ObjectReader
-                                            (.get str-readers col-idx)
-                                            row-idx)))
-                       str-array)))
-         output (if gzipped?
-                  (io/gzip-output-stream! output)
-                  output)
-         output-options (if tsv?
-                          (merge options
-                                 {:separator \tab})
-                          (merge options
-                                 {:separator \,}))]
-     (univocity/write! output headers str-rdr output-options)))
-  ([ds output]
-   (write-csv! ds output {})))
+(defn write!
+  ([dataset output-path options]
+   (let [options (merge (when (string? output-path)
+                          (ds-parse/str->file-info output-path))
+                        options)]
+     (ds-parse/dataset->data! dataset output-path options)))
+  ([dataset output-path]
+   (write! dataset output-path nil)))

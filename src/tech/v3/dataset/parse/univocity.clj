@@ -1,16 +1,20 @@
 (ns tech.v3.dataset.parse.univocity
   (:require [tech.io :as io]
+            [tech.v3.datatype :as dtype]
             [tech.v3.dataset.parse.string-row-parser :as row-parser]
-            [tech.v3.dataset.parse :as ds-parse])
-  (:import [com.univocity.parsers.common AbstractParser AbstractWriter]
-           [com.univocity.parsers.csv
-            CsvFormat CsvParserSettings CsvParser
-            CsvWriterSettings CsvWriter]
-           [com.univocity.parsers.tsv
-            TsvWriterSettings TsvWriter]
-           [com.univocity.parsers.common.processor.core Processor]
-           [java.io Reader InputStream Closeable Writer]
-           [java.lang AutoCloseable]))
+            [tech.v3.dataset.parse :as ds-parse]
+            [tech.v3.dataset.column :as ds-col])
+  (:import  [tech.v3.datatype Buffer ObjectReader]
+            [com.univocity.parsers.common AbstractParser AbstractWriter]
+            [com.univocity.parsers.csv
+             CsvFormat CsvParserSettings CsvParser
+             CsvWriterSettings CsvWriter]
+            [com.univocity.parsers.tsv
+             TsvWriterSettings TsvWriter]
+            [com.univocity.parsers.common.processor.core Processor]
+            [java.io Reader InputStream Closeable Writer]
+            [java.util List]
+            [java.lang AutoCloseable]))
 
 
 (set! *warn-on-reflection* true)
@@ -200,7 +204,7 @@
    #(csv->dataset %1 options)))
 
 
-(defn write!
+(defn- write!
   ([output header-string-array row-string-array-seq]
    (write! output header-string-array row-string-array-seq {}))
   ([output header-string-array row-string-array-seq
@@ -223,3 +227,73 @@
          (.writeRow csvWriter row))
        (finally
          (.close csvWriter))))))
+
+
+(defn- data->string
+  ^String [data-item]
+  (if data-item
+    (cond
+      (string? data-item) data-item
+      (keyword? data-item) (name data-item)
+      (symbol? data-item) (name data-item)
+      :else (.toString ^Object data-item))))
+
+
+(defn- write-csv!
+  "Write a dataset to a tsv or csv output stream.  Closes output if a stream
+  is passed in.  File output format will be inferred if output is a string -
+    - .csv, .tsv - switches between tsv, csv.  Tsv is the default.
+    - *.gz - write to a gzipped stream.
+  At this time writing to json is not supported.
+  options -
+  :separator - in case output isn't a string, you can use either \\, or \\tab to switch
+    between csv or tsv output respectively."
+  ([ds output options]
+   (let [{:keys [gzipped? file-type]}
+         (merge
+          (when (string? output)
+            (ds-parse/str->file-info output))
+          options)
+         columns (vals ds)
+         headers (into-array String
+                             (map (comp data->string :name meta) columns))
+         ^List str-readers
+         (mapv #(ds-col/column-map data->string :string %) columns)
+
+         tsv? (or (= file-type :tsv) (= \tab (:separator options)))
+         [n-cols n-rows] (dtype/shape ds)
+         n-cols (long n-cols)
+         n-rows (long n-rows)
+         ;;Create a reader that produces string arrays of each row.
+         str-rdr (reify ObjectReader
+                   (lsize [rdr] n-rows)
+                   (readObject [rdr row-idx]
+                     (let [^"[Ljava.lang.String;" str-array (make-array
+                                                             String n-cols)]
+                       (dotimes [col-idx n-cols]
+                         (aset str-array col-idx ^String
+                               (.readObject ^ObjectReader
+                                            (.get str-readers col-idx)
+                                            row-idx)))
+                       str-array)))
+         output (if gzipped?
+                  (io/gzip-output-stream! output)
+                  output)
+         output-options (if tsv?
+                          (merge options
+                                 {:separator \tab})
+                          (merge options
+                                 {:separator \,}))]
+     (write! output headers str-rdr output-options)))
+  ([ds output]
+   (write-csv! ds output {})))
+
+
+(defmethod ds-parse/dataset->data! :csv
+  [dataset output options]
+  (write-csv! dataset output options))
+
+
+(defmethod ds-parse/dataset->data! :tsv
+  [dataset output options]
+  (write-csv! dataset output options))
