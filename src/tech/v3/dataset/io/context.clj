@@ -1,5 +1,5 @@
-(ns tech.v3.dataset.parse.context
-  (:require [tech.v3.dataset.parse.column-parsers :as column-parsers]
+(ns tech.v3.dataset.io.context
+  (:require [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
             [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [java.util.function Function]

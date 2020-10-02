@@ -1,6 +1,6 @@
-(ns tech.v3.dataset.parse.string-row-parser
-  (:require [tech.v3.dataset.parse.column-parsers :as column-parsers]
-            [tech.v3.dataset.parse.context :as parse-context]
+(ns tech.v3.dataset.io.string-row-parser
+  (:require [tech.v3.dataset.io.column-parsers :as column-parsers]
+            [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.datatype :as dtype]
             [tech.v3.parallel.for :as pfor])
   (:import [java.util.function Function]

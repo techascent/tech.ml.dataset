@@ -1,10 +1,10 @@
-(ns tech.v3.dataset.parse
+(ns tech.v3.dataset.io
   (:require [tech.io :as io]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.libs.smile.data :as smile-data]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.dataset.parse.mapseq-colmap :as parse-mapseq-colmap])
+            [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap])
   (:import [java.io InputStream File]
            [smile.data DataFrame]))
 

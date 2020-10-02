@@ -1,8 +1,8 @@
-(ns tech.v3.dataset.parse.univocity
+(ns tech.v3.dataset.io.univocity
   (:require [tech.io :as io]
             [tech.v3.datatype :as dtype]
-            [tech.v3.dataset.parse.string-row-parser :as row-parser]
-            [tech.v3.dataset.parse :as ds-parse]
+            [tech.v3.dataset.io.string-row-parser :as row-parser]
+            [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.column :as ds-col])
   (:import  [tech.v3.datatype Buffer ObjectReader]
             [com.univocity.parsers.common AbstractParser AbstractWriter]
@@ -190,16 +190,16 @@
    (csv->dataset input {})))
 
 
-(defmethod ds-parse/data->dataset :csv
+(defmethod ds-io/data->dataset :csv
   [data options]
-  (ds-parse/wrap-stream-fn
+  (ds-io/wrap-stream-fn
    data (:gzipped? options)
    #(csv->dataset %1 options)))
 
 
-(defmethod ds-parse/data->dataset :tsv
+(defmethod ds-io/data->dataset :tsv
   [data options]
-  (ds-parse/wrap-stream-fn
+  (ds-io/wrap-stream-fn
    data (:gzipped? options)
    #(csv->dataset %1 options)))
 
@@ -252,7 +252,7 @@
    (let [{:keys [gzipped? file-type]}
          (merge
           (when (string? output)
-            (ds-parse/str->file-info output))
+            (ds-io/str->file-info output))
           options)
          columns (vals ds)
          headers (into-array String
@@ -289,12 +289,12 @@
    (write-csv! ds output {})))
 
 
-(defmethod ds-parse/dataset->data! :csv
+(defmethod ds-io/dataset->data! :csv
   [dataset output options]
   (write-csv! dataset output options))
 
 
-(defmethod ds-parse/dataset->data! :tsv
+(defmethod ds-io/dataset->data! :tsv
   [dataset output options]
   (write-csv! dataset output options))
 
@@ -306,7 +306,7 @@
 ;;       (cons past-ds (lazy-seq
 ;;                      (lazy-cons-csv->dataset-seq
 ;;                       input-stream
-;;                       (ds-parse/rows->dataset options (first row-seq))
+;;                       (ds-io/rows->dataset options (first row-seq))
 ;;                       (rest row-seq)
 ;;                       options)))
 ;;       (do
@@ -340,7 +340,7 @@
 ;;                                   (io/gzip-input-stream input)
 ;;                                   (io/input-stream input)))]
 ;;        (try
-;;          (let [row-seq (ds-parse/csv->rows input options)
+;;          (let [row-seq (ds-io/csv->rows input options)
 ;;                row-seq (if header-row?
 ;;                          (let [hr (first row-seq)]
 ;;                            (->> (partition-all num-rows-per-batch
@@ -349,7 +349,7 @@
 ;;                          (partition-all num-rows-per-batch row-seq))
 ;;                first-ds (first row-seq)
 ;;                row-seq (rest row-seq)
-;;                first-ds (ds-parse/rows->dataset options first-ds)
+;;                first-ds (ds-io/rows->dataset options first-ds)
 ;;                ;;Setup parse-fn to explicitly set datatype of parsed columns
 ;;                ;;to ensure schema stays constant.
 ;;                parse-fn (merge (->> (vals first-ds)

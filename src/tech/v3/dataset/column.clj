@@ -3,7 +3,7 @@
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.string-table :as str-table]
-            [tech.v3.dataset.parse.column-parsers :as column-parsers]
+            [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.parallel.for :as pfor])

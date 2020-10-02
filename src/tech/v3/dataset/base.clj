@@ -11,14 +11,16 @@
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.datatype.array-buffer :as array-buffer]
+            [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
-            [tech.v3.dataset.dynamic-int-list :as dyn-int-list])
+            [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
+            [primitive-math :as pmath])
   (:import [java.io InputStream File]
-           [tech.v3.datatype Buffer ObjectReader]
+           [tech.v3.datatype Buffer ObjectReader PrimitiveList]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
@@ -577,21 +579,49 @@ This is an interface change and we do apologize!"))))
         (if (instance? StringTable coldata)
           coldata
           (str-table/string-table-from-strings coldata))
-        int->str-data (dtype-cmc/->array
-                       (dtype/make-container
-                        :jvm-heap :string (.int->str str-table)))
+        ^PrimitiveList str-data-buf (dtype/make-container :list :int8 0)
+        ^PrimitiveList offset-buf (dtype/make-container :list :int32 0)
         data-ary (dtype-cmc/->array (.data str-table))]
-    {:string-table int->str-data
+    (pfor/consume!
+     #(do
+        (.addLong offset-buf (.lsize str-data-buf))
+        (let [str-bytes (.getBytes ^String %)]
+          (.addAll str-data-buf (dtype/->buffer str-bytes))))
+     (.int->str str-table))
+    ;;One extra long makes deserializing a bit less error prone.
+    (.addLong offset-buf (.lsize str-data-buf))
+    {:string-data (dtype/->array str-data-buf)
+     :offsets (dtype/->array offset-buf)
      ;;Between version 1 and 2 we changed the string table to be just
      ;;an array of strings intead of a hashmap.
-     :version 2
+     ;;For version 3, we had to serialize string data into byte arrays
+     ;;as java string serialization is considered a security risk
+     :version 3
      :entries data-ary}))
 
 
 (defn- string-data->column-data
-  [{:keys [string-table entries version]}]
+  [{:keys [string-table entries version] :as entry}]
   (let [int-data (dyn-int-list/make-from-container entries)]
-    (if (= version 2)
+    (cond
+      ;;Version
+      (= version 3)
+      (let [{:keys [string-data offsets]} entry
+            string-data ^bytes string-data
+            offsets (dtype/->buffer offsets)
+            n-elems (dec (.lsize offsets))
+            ^PrimitiveList int->str
+            (->> (dtype/make-reader
+                  :string n-elems
+                  (let [start-off (.readInt offsets idx)
+                        end-off (.readInt offsets (inc idx))]
+                    (String. string-data start-off (pmath/- end-off start-off))))
+                 (dtype/make-container :list :string))
+            str->int (HashMap. (dtype/ecount int->str))]
+        (dotimes [idx n-elems]
+          (.put str->int (.get int->str idx) idx))
+        (StringTable. int->str str->int int-data))
+      (= version 2)
       (let [^List int->str (dtype-list/wrap-container string-table)
             str->int (HashMap. (dtype/ecount int->str))
             n-elems (.size int->str)]
@@ -599,6 +629,7 @@ This is an interface change and we do apologize!"))))
         (dotimes [idx n-elems]
           (.put str->int (.get int->str idx) idx))
         (StringTable. int->str str->int int-data))
+      :else
       (let [^Map str->int string-table
             int->str-ary-list (ArrayList. (count str->int))
             _ (doseq [[k v] str->int]
@@ -613,18 +644,18 @@ This is an interface change and we do apologize!"))))
 (defn dataset->data
   "Convert a dataset to a pure clojure datastructure.  Returns a map with two keys:
   {:metadata :columns}.
-
   :columns is a vector of column definitions appropriate for passing directly back
   into new-dataset.
-
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
    :columns (->> (columns ds)
                  (mapv (fn [col]
-                         (let [dtype (dtype/get-datatype col)]
+                         ;;Only store packed data.  This can sidestep serialization issues
+                         (let [col (packing/pack col)
+                               dtype (dtype/get-datatype col)]
                            {:metadata (meta col)
-                            :missing (ds-col/missing col)
+                            :missing (bitmap/bitmap->efficient-random-access-reader (ds-col/missing col))
                             :name (:name (meta col))
                             :data (cond
                                     (= :string (dtype/get-datatype col))
@@ -633,23 +664,26 @@ This is an interface change and we do apologize!"))))
                                     ;;very well.
                                     (= :object (casting/flatten-datatype dtype))
                                     (vec col)
+                                    ;;Store the data as a jvm-native array
                                     :else
-                                    (dtype-cmc/->array col))}))))})
+                                    (dtype-cmc/->array dtype col))}))))})
 
 
 (defn data->dataset
   "Convert a data-ized dataset created via dataset->data back into a
   full dataset"
-  [{:keys [metadata columns]}]
+  [{:keys [metadata columns] :as input}]
   (->> columns
        (map (fn [{:keys [metadata] :as coldata}]
-              (->
-               (cond
-                 (= :string (:datatype metadata))
-                 (update coldata :data string-data->column-data)
-                 (not= :object (:datatype metadata))
-                 (update coldata :data array-buffer/array-buffer (:datatype metadata))
-                 :else
-                 coldata)
-               (clojure.core/assoc :force-datatype? true))))
+              (let [datatype (:datatype metadata)]
+                (->
+                 (cond
+                   (= :string datatype)
+                   (update coldata :data string-data->column-data)
+                   (= :object (casting/flatten-datatype datatype))
+                   (update coldata :data dtype/elemwise-cast datatype)
+                   :else
+                   (update coldata :data array-buffer/array-buffer datatype))
+                 (clojure.core/assoc :force-datatype? true)
+                 (clojure.core/update :missing bitmap/->bitmap)))))
        (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))

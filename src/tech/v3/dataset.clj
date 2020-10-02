@@ -17,11 +17,11 @@
             ;;            [tech.v3.dataset.pipeline.column-filters :as col-filters]
 
             ;;csv/tsv load/save provided by default
-            [tech.v3.dataset.parse.univocity]
+            [tech.v3.dataset.io.univocity]
+            [tech.v3.dataset.io.nippy]
             ;; [tech.v3.dataset.modelling]
             ;; [tech.v3.dataset.math]
             [tech.v3.libs.smile.data :as smile-data]
-            [taoensso.nippy :as nippy]
             [clojure.set :as set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [java.util HashSet Map List Iterator Collection ArrayList HashMap
@@ -91,7 +91,7 @@
                 mapseq-reader)
 
 
-(export-symbols tech.v3.dataset.parse
+(export-symbols tech.v3.dataset.io
                 ->dataset
                 ->>dataset
                 write!)
@@ -115,8 +115,8 @@
 (export-symbols tech.v3.dataset.impl.dataset
                 new-dataset)
 
-#_(par-util/export-symbols tech.v3.dataset.missing
-                           select-missing drop-missing replace-missing)
+(export-symbols tech.v3.dataset.missing
+                select-missing drop-missing replace-missing)
 
 
 (defn head
@@ -627,16 +627,3 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ^smile.data.DataFrame [ds]
   (-> (ensure-array-backed ds)
       (smile-data/dataset->dataframe)))
-
-
-(nippy/extend-freeze
- Dataset :tech.ml/dataset
- [ds out]
- (nippy/-freeze-without-meta! (dataset->data ds) out))
-
-
-(nippy/extend-thaw
- :tech.ml/dataset
- [in]
- (-> (nippy/thaw-from-in! in)
-     (data->dataset)))

@@ -3,8 +3,8 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.dataset.parse.spreadsheet :as parse-spreadsheet]
-            [tech.v3.dataset.parse :as ds-parse])
+            [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
+            [tech.v3.dataset.io :as ds-io])
   (:import [org.dhatim.fastexcel.reader ReadableWorkbook
             Sheet Row Cell CellType]
            [tech.v3.dataset Spreadsheet$Workbook Spreadsheet$Sheet
@@ -118,7 +118,7 @@
    (workbook->datasets workbook {})))
 
 
-(defmethod ds-parse/data->dataset :xlsx
+(defmethod ds-io/data->dataset :xlsx
   [data options]
   (let [datasets (workbook->datasets data options)
         n-datasets (count datasets)]

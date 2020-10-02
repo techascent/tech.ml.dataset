@@ -6,7 +6,7 @@
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
             [tech.v3.libs.fastexcel]
-            ;; [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.tensor :as ds-tens]
             [tech.io :as tech-io]
             [clojure.test :refer :all]
             [tech.v3.datatype :as dtype]
@@ -114,6 +114,38 @@
 ;;     (is (every? :fruit-name
 ;;                 (->> (ds/n-feature-permutations 3 ds)
 ;;                      (map (comp set ds/column-names)))))))
+
+;; (deftest fill-range-replace
+;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+;;                               :b [2 2 nil  4  8]})
+;;                (ds-math/fill-range-replace :a 2))]
+;;     (is (dfn/equals
+;;          [1.0 3.0 5.0 6.66 8.33 10.0
+;;           11.66 13.33 15.0 16.66 18.33 20.0]
+;;          (vec (ds :a))
+;;          0.1))
+;;     (is (= [2 2 2 2 2 2 2 2 4 4 4 8]
+;;            (vec (ds :b)))))
+;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+;;                               :b [2 2 nil  4  8]})
+;;                (ds-math/fill-range-replace :a 2 nil))]
+;;     (is (= [2 nil 2 nil nil nil nil nil 4 nil nil 8]
+;;            (vec (ds :b)))))
+;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
+;;                               :b [2 2 nil  4  8]})
+;;                (ds-math/fill-range-replace :a 2 :value 20))]
+;;     (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
+;;            (vec (ds :b)))))
+;;   (let [ds (-> (ds/->dataset {:a (->> [1 5  10 15 20]
+;;                                       (dtype-dt-ops/plus-days
+;;                                        (dtype-dt/local-date)))
+;;                               :b [2 2 nil  4  8]})
+;;                (ds-math/fill-range-replace :a (* 2
+;;                                                  (dtype-dt/milliseconds-in-day))
+;;                                            :value 20))]
+;;     (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
+;;            (vec (ds :b))))))
+
 
 
 (deftest iterable
@@ -257,17 +289,6 @@
     (is (= [:mandarin :mandarin :mandarin :mandarin]
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
 
-
-;; (deftest remove-missing-persistent-vec-data
-;;   (let [ds (ds/->dataset {:a [1 nil 2 nil 3]
-;;                           :b (list 1 nil 2 nil 3)})
-;;         rec (ds-pipe/replace-missing ds :all 5)]
-;;     (is (= #{:int64}
-;;            (set (map dtype/get-datatype (vals ds)))))
-;;     (is (= [1 5 2 5 3]
-;;            (vec (rec :a))))
-;;     (is (= [1 5 2 5 3]
-;;            (vec (rec :b))))))
 
 
 (deftest simple-select-test
@@ -689,7 +710,7 @@
 
 (deftest serialize-datetime
   (let [ds (ds/->dataset "test/data/stocks.csv")
-        _ (ds/write-csv! ds "test.tsv.gz")
+        _ (ds/write! ds "test.tsv.gz")
         save-ds (ds/->dataset "test.tsv.gz")
         fdata (java.io.File. "test.tsv.gz")]
     (is (= (ds/row-count ds) (ds/row-count save-ds)))
@@ -708,17 +729,17 @@
 
 
 (deftest stocks-to-from-nippy
-  (let [fname (format "%s.nippy" (java.util.UUID/randomUUID))
-        stocks (ds/->dataset "test/data/stocks.csv")
-        _ (tech-io/put-nippy! fname stocks)
-        nip-stocks (tech-io/get-nippy fname)]
+  (let [fname (format "%s.nippy" (java.util.UUID/randomUUID))]
     (try
-      (is (= (ds/row-count stocks) (ds/row-count nip-stocks)))
-      (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
-      (is (= (vec (stocks "date"))
-             (vec (nip-stocks "date"))))
-      (is (= (mapv meta (vals stocks))
-             (mapv meta (vals nip-stocks))))
+      (let [stocks (ds/->dataset "test/data/stocks.csv")
+            _ (tech-io/put-nippy! fname stocks)
+            nip-stocks (tech-io/get-nippy fname)]
+        (is (= (ds/row-count stocks) (ds/row-count nip-stocks)))
+        (is (= (ds/column-count stocks) (ds/column-count nip-stocks)))
+        (is (= (vec (stocks "date"))
+               (vec (nip-stocks "date"))))
+        (is (= (mapv meta (vals stocks))
+               (mapv meta (vals nip-stocks)))))
       (finally
         (let [file (java.io.File. fname)]
           (when (.exists file)
@@ -753,38 +774,6 @@
            (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
 
 
-(deftest fill-range-replace
-  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-                              :b [2 2 nil  4  8]})
-               (ds-math/fill-range-replace :a 2))]
-    (is (dfn/equals
-         [1.0 3.0 5.0 6.66 8.33 10.0
-          11.66 13.33 15.0 16.66 18.33 20.0]
-         (vec (ds :a))
-         0.1))
-    (is (= [2 2 2 2 2 2 2 2 4 4 4 8]
-           (vec (ds :b)))))
-  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-                              :b [2 2 nil  4  8]})
-               (ds-math/fill-range-replace :a 2 nil))]
-    (is (= [2 nil 2 nil nil nil nil nil 4 nil nil 8]
-           (vec (ds :b)))))
-  (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-                              :b [2 2 nil  4  8]})
-               (ds-math/fill-range-replace :a 2 :value 20))]
-    (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
-           (vec (ds :b)))))
-  (let [ds (-> (ds/->dataset {:a (->> [1 5  10 15 20]
-                                      (dtype-dt-ops/plus-days
-                                       (dtype-dt/local-date)))
-                              :b [2 2 nil  4  8]})
-               (ds-math/fill-range-replace :a (* 2
-                                                 (dtype-dt/milliseconds-in-day))
-                                           :value 20))]
-    (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
-           (vec (ds :b))))))
-
-
 (deftest replace-missing-ldt
   (let [dtds (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 1 1 1 1 1)
                                  nil nil nil
@@ -809,10 +798,10 @@
 
 
 (deftest select-range-intersection
-  (let [ds (-> (tech.ml.dataset/->dataset [{:a 1} {:a 3}])
-               (tech.ml.dataset/select-rows (range -100 100)))]
-    (is (= 2 (tech.ml.dataset/row-count ds))))
-  (let [range-ds (tech.ml.dataset/->dataset {:a (range 100)})]
+  (let [ds (-> (ds/->dataset [{:a 1} {:a 3}])
+               (ds/select-rows (range -100 100)))]
+    (is (= 2 (ds/row-count ds))))
+  (let [range-ds (ds/->dataset {:a (range 100)})]
     (is (= (vec (range 80 -1 -20))
            (vec (-> (ds/select-rows range-ds (range 100 -100 -20))
                     (ds/column :a)))))
@@ -824,7 +813,7 @@
 (deftest unique-by-nil-regression
   (-> (ds/->dataset [])
       (ds/add-column (ds-col/new-column :abc [nil nil]))
-      (->> (ds/unique-by-column :abc))))
+      (ds/unique-by-column :abc)))
 
 
 (deftest missing-values-and-tensors

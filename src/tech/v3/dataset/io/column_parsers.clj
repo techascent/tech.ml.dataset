@@ -1,6 +1,6 @@
-(ns tech.v3.dataset.parse.column-parsers
+(ns tech.v3.dataset.io.column-parsers
   "Per-column parsers."
-  (:require [tech.v3.dataset.parse.datetime :as parse-dt]
+  (:require [tech.v3.dataset.io.datetime :as parse-dt]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype :as dtype]
@@ -115,9 +115,10 @@
                                          #(if (= k (dtype/elemwise-datatype %))
                                             %
                                             (v %)))]
+                    ;;packing is now done at the container level.
                     (if (packing/unpacked-datatype? k)
                       [[k unpacked-parser]
-                       [(packing/pack-datatype k) (packed-parser k v)]]
+                       [(packing/pack-datatype k) unpacked-parser]]
                       [[k unpacked-parser]]))))
         (into {}))))
 

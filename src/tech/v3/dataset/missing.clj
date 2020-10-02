@@ -1,13 +1,12 @@
-(ns ^:no-doc tech.ml.dataset.missing
+(ns ^:no-doc tech.v3.dataset.missing
   "Functions for dealing with missing data.  Taken (with permission) nearly verbatim
   from https://github.com/scicloj/tablecloth"
-  (:require [tech.ml.dataset.base :as ds-base]
-            [tech.ml.dataset.column :as col]
-            [tech.v2.datatype.readers.update :as update-rdr]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.datetime.operations :as dto])
+  (:require [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.column :as col]
+            [tech.v3.datatype.update-reader :as update-rdr]
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.datetime :as dtype-dt])
   (:import [org.roaringbitmap RoaringBitmap]))
 
 
@@ -92,10 +91,10 @@
 (defn- lerp
   [coerce-type-fn mn mx steps]
   (let [steps+ (inc steps)]
-    (dtype/object-reader
-     steps
-     #(+ mn (coerce-type-fn (* (unchecked-inc (long %))
-                               (/ (- mx mn) steps+)))))))
+    (dtype/emap #(+ mn (coerce-type-fn (* (unchecked-inc (long %))
+                                          (/ (- mx mn) steps+))))
+                :object
+                (range steps))))
 
 (def ^:private lerp-double (partial lerp double))
 (def ^:private lerp-float (partial lerp float))
@@ -106,8 +105,10 @@
 
 (defn- lerp-time
   [datatype mn mx steps]
-  (let [vs (lerp-long (dto/->milliseconds mn) (dto/->milliseconds mx) steps)
-        retval (dto/milliseconds->datetime datatype vs)]
+  (let [vs (lerp-long (dtype-dt/datetime->milliseconds mn)
+                      (dtype-dt/datetime->milliseconds mx)
+                      steps)
+        retval (dtype-dt/milliseconds->datetime datatype vs)]
     retval))
 
 (defn- lerp-object

@@ -1,9 +1,9 @@
-(ns ^:no-doc tech.v3.dataset.parse.spreadsheet
+(ns ^:no-doc tech.v3.dataset.io.spreadsheet
   "Spreadsheets in general are stored in a cell-based format.  This means that any cell
   could have data of any type.  Commonalities around parsing spreadsheet-type systems
   are captured here."
-  (:require [tech.v3.dataset.parse.context :as parse-context]
-            [tech.v3.dataset.parse.column-parsers :as column-parsers]
+  (:require [tech.v3.dataset.io.context :as parse-context]
+            [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype])
   (:import [tech.v3.dataset Spreadsheet$Sheet Spreadsheet$Row Spreadsheet$Cell]
            [java.util.function Function]

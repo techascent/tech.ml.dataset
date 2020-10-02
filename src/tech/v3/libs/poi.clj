@@ -4,8 +4,8 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.dataset.parse.spreadsheet :as parse-spreadsheet]
-            [tech.v3.dataset.parse :as ds-parse])
+            [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
+            [tech.v3.dataset.io :as ds-io])
   (:import [java.lang AutoCloseable]
            [org.apache.poi.ss.usermodel Workbook Sheet Cell
             CellType Row]
@@ -138,7 +138,7 @@
    (workbook->datasets workbook {})))
 
 
-(defmethod ds-parse/data->dataset :xls
+(defmethod ds-io/data->dataset :xls
   [data options]
   (let [datasets (workbook->datasets data options)
         n-datasets (count datasets)]

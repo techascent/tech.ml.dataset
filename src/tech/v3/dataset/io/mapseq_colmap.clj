@@ -1,10 +1,10 @@
-(ns ^:no-doc tech.v3.dataset.parse.mapseq-colmap
+(ns ^:no-doc tech.v3.dataset.io.mapseq-colmap
   "Sequences of maps are maybe the most basic pure datastructure for data.
   Converting them into a more structured form (and back) is a key component of
   dealing with datasets"
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.dataset.parse.column-parsers :as column-parsers]
-            [tech.v3.dataset.parse.context :as parse-context]
+            [tech.v3.dataset.io.column-parsers :as column-parsers]
+            [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [java.util HashMap Map]
