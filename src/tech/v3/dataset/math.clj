@@ -1,26 +1,25 @@
-(ns ^:no-doc tech.ml.dataset.math
-  (:require [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
-            [tech.v2.datatype.bitmap :as bitmap]
-            [tech.v2.datatype.writers.indexed :as indexed-wtr]
-            [tech.ml.dataset.utils :as ml-utils]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.base
+(ns ^:no-doc tech.v3.dataset.math
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.base
              :refer [columns-with-missing-seq
                      columns select update-column]
              :as base]
-            [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.missing :as ds-missing]
-            [tech.parallel.for :as parallel-for]
-            [tech.parallel.require :as parallel-req]
+            [tech.v3.tensor :as dtt]
+            [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.missing :as ds-missing]
+            [tech.v3.parallel.for :as parallel-for]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
-           [tech.v2.datatype DoubleReader]
+           [tech.v3.datatype DoubleReader]
            [org.roaringbitmap RoaringBitmap]))
 
 
@@ -45,8 +44,8 @@
             (println "WARNING - excluding columns with missing values:\n"
                      (vec missing-columns)))
         non-numeric (->> (columns dataset)
-                         (map ds-col/metadata)
-                         (remove #(ml-utils/numeric-datatype?
+                         (map meta)
+                         (remove #(casting/numeric-type?
                                    (:datatype %)))
                          (map :name)
                          seq)
@@ -79,7 +78,7 @@
                         (when-not rhs
                           (throw (ex-info "Failed" {})))
                         (let [corr (ds-col/correlation lhs rhs correlation-type)]
-                          (if (dfn/valid? corr)
+                          (if (dfn/finite? corr)
                             [(ds-col/column-name rhs) corr]
                             (do
                               (log/warnf "Correlation failed: %s-%s"
@@ -91,13 +90,25 @@
          (into {}))))
 
 
+(defn tensor->double-array-of-arrays
+  "Convert a tensor into array of double-arrays arrays.  This is needed in order to
+  satisfy some of smile's inefficient interfaces."
+  ^"[[D" [tens]
+  (->> (dtt/slice tens 1)
+       (map dtype/->double-array)
+       (into-array)))
+
+
+(defn to-row-major-double-array-of-arrays
+  ^"[[D" [dataset]
+  (-> (ds-tens/dataset->row-major-tensor dataset :float64)
+      (tensor->double-array-of-arrays)))
+
+
 (defn to-column-major-double-array-of-arrays
-  "Convert a dataset to a row major array of arrays.
-  Note that if error-on-missing is false, missing values will appear as NAN."
-  ^"[[D" [dataset & [error-on-missing?]]
-  (into-array (Class/forName "[D")
-              (->> (columns dataset)
-                   (map #(ds-col/to-double-array % error-on-missing?)))))
+  ^"[[D" [dataset]
+  (-> (ds-tens/dataset->column-major-tensor dataset :float64)
+      (tensor->double-array-of-arrays)))
 
 
 (defn transpose-double-array-of-arrays
@@ -110,85 +121,33 @@
      row-idx
      n-rows
      (let [^doubles target-row (aget retval row-idx)]
-       (parallel-for/serial-for
-        col-idx n-cols
+       (dotimes [col-idx n-cols]
         (aset target-row col-idx (aget ^doubles (aget input-data col-idx)
                                        row-idx)))))
     retval))
 
 
-(defn to-row-major-double-array-of-arrays
-    "Convert a dataset to a column major array of arrays.
-  Note that if error-on-missing is false, missing values will appear as NAN."
-  ^"[[D" [dataset & [error-on-missing?]]
-  (-> (to-column-major-double-array-of-arrays dataset error-on-missing?)
-      transpose-double-array-of-arrays))
-
-
 (defn k-means
   "Nan-aware k-means.
   Returns array of centroids in row-major array-of-array-of-doubles format."
-  ^"[[D" [dataset & [k max-iterations num-runs error-on-missing?
-                     tolerance]]
+  ^"[[D" [dataset & [k max-iterations num-runs tolerance]]
   ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
   ;;values will throw exceptions and it won't be as efficient as if we build the
   ;;datastructure with a-priori knowledge
   (let [num-runs (int (or num-runs 1))
         tolerance (double (or tolerance 1E-4))]
     (if true ;;(= num-runs 1)
-      (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset error-on-missing?)
+      (-> (KMeans/lloyd (to-row-major-double-array-of-arrays dataset)
                         (int (or k 5)))
           (.centroids))
       ;;This fails as the initial distortion calculation returns nan
       (-> (KMeans/fit
-           (to-row-major-double-array-of-arrays dataset error-on-missing?)
+           (to-row-major-double-array-of-arrays dataset)
            (int (or k 5))
            (int (or max-iterations 100))
            (int num-runs)
            tolerance)
           (.centroids)))))
-
-
-(defn- ensure-no-missing!
-  [dataset msg-begin]
-  (when-let [cols-miss (columns-with-missing-seq dataset)]
-    (throw (ex-info msg-begin
-                    {:missing-columns cols-miss}))))
-
-
-(defn g-means
-  "g-means. Not NAN aware, missing is an error.
-  Returns array of centroids in row-major array-of-array-of-doubles format."
-  ^"[[D" [dataset & [max-k error-on-missing?]]
-  ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
-  ;;values will throw exceptions and it won't be as efficient as if we build the
-  ;;datastructure with a-priori knowledge
-  (ensure-no-missing! dataset "G-Means - dataset cannot have missing values")
-  (-> (GMeans/fit (to-row-major-double-array-of-arrays dataset error-on-missing?)
-                  (int (or max-k 5)))
-      (.centroids)))
-
-
-(defn x-means
-  "x-means. Not NAN aware, missing is an error.
-  Returns array of centroids in row-major array-of-array-of-doubles format."
-  ^"[[D" [dataset & [max-k error-on-missing?]]
-  ;;Smile expects data in row-major format.  If we use ds/->row-major, then NAN
-  ;;values will throw exceptions and it won't be as efficient as if we build the
-  ;;datastructure with a-priori knowledge
-  (ensure-no-missing! dataset "X-Means - dataset cannot have missing values")
-  (-> (XMeans/fit (to-row-major-double-array-of-arrays dataset error-on-missing?)
-                  (int (or max-k 5)))
-      (.centroids)))
-
-
-(def find-static
-  (parallel-req/memoize
-   (fn [^Class cls ^String fn-name & fn-arg-types]
-     (let [method (doto (.getDeclaredMethod cls fn-name (into-array ^Class fn-arg-types))
-                    (.setAccessible true))]
-       (fn [& args]
-         (.invoke method nil (into-array ^Object args)))))))
 
 
 (defn nan-aware-mean
@@ -216,11 +175,14 @@
 (defn nan-aware-squared-distance
   "Nan away squared distance."
   ^double [lhs rhs]
-  ;;Wrap find-static so we have good type hinting.
-  ((find-static PartitionClustering "squaredDistance"
-                (Class/forName "[D")
-                (Class/forName "[D"))
-   lhs rhs))
+  (dtype/emap (fn ^double [^double lhs ^double rhs]
+                (let [distance (if (and (Double/isFinite lhs)
+                                        (Double/isFinite rhs))
+                                 (- lhs rhs)
+                                 0.0)]
+                  (* distance distance)))
+              :float64
+              lhs rhs))
 
 
 (defn group-rows-by-nearest-centroid
@@ -273,7 +235,8 @@
   {:centroid-means
    (->> (group-rows-by-nearest-centroid dataset row-major-centroids false)
         (map (fn [[centroid-idx grouping]]
-               [centroid-idx (->> (map :row-data grouping)
+               [centroid-idx (->> (mapv :row-data grouping)
+                                  (dtt/->tensor)
                                   (into-array (Class/forName "[D"))
                                   ;;Make column major
                                   transpose-double-array-of-arrays
@@ -336,7 +299,7 @@
                                   new-col (ds-col/new-column
                                            old-column :float64
                                            (dtype/ecount old-column)
-                                           (ds-col/metadata old-column))
+                                           (meta old-column))
                                   ^doubles col-doubles (dtype/->array new-col)]
                               (parallel-for/parallel-for
                                row-idx
@@ -376,17 +339,17 @@
          x-col (ds x-colname)
          y-col (ds y-colname)
          spline (.interpolate interp
-                              (dtype/make-container :java-array :float64 x-col)
-                              (dtype/make-container :java-array :float64 y-col))
+                              (dtype/->double-array x-col)
+                              (dtype/->double-array y-col))
          new-col-name (or result-name
                           (keyword (str (key-sym->str y-colname) "-loess")))
          n-elems (base/row-count ds)
-         x-rdr (typecast/datatype->reader :float64 x-col)]
+         x-rdr (dtype/->buffer x-col)]
      (-> (base/add-or-update-column ds new-col-name
                                     (reify DoubleReader
                                       (lsize [rdr] n-elems)
-                                      (read [rdr idx]
-                                        (.value spline (.read x-rdr idx)))))
+                                      (readDouble [rdr idx]
+                                        (.value spline (.readDouble x-rdr idx)))))
          (base/update-column new-col-name
                              #(with-meta % (assoc (meta %)
                                                   :interpolator spline))))))
@@ -408,7 +371,7 @@
 (defn fill-range-replace
   "Given an in-order column of a numeric or datetime type, fill in spans that are
   larger than the given max-span.  The source column must not have missing values.
-  For more documentation on fill-range, see tech.v2.datatype.function.fill-range.
+  For more documentation on fill-range, see tech.v3.datatype.function.fill-range.
 
   If the column is a datetime type the operation happens in millisecond space and
   max-span may be a datetime type convertible to milliseconds.
@@ -418,7 +381,7 @@
   After the operation, if missing strategy is not nil the newly produced missing
   values along with the existing missing values will be replaced using the given
   missing strategy for all other columns.  See
-  `tech.ml.dataset.missing/replace-missing` for documentation on missing strategies.
+  `tech.v3.dataset.missing/replace-missing` for documentation on missing strategies.
   The missing strategy defaults to :down unless explicity set.
 
   Returns a new dataset."
@@ -432,22 +395,23 @@
              (throw (Exception. "Fill-range column must not have missing values")))
          target-dtype (dtype/get-datatype target-col)
          target-col (if (dtype-dt/datetime-datatype? target-dtype)
-                      (dtype-dt-ops/->milliseconds target-col)
+                      (dtype-dt/datetime->milliseconds target-col)
                       target-col)
          max-span (if (dtype-dt/datetime-datatype? max-span)
-                    (dtype-dt/to-milliseconds max-span (dtype/get-datatype max-span))
+                    (dtype-dt/datetime->milliseconds max-span)
                     max-span)
          {:keys [result missing]} (dfn/fill-range target-col max-span)
          ;;This is the set of values that have not changed.  Iterating through it and
          ;;and a source vector in parallel allow us to scatter the original data into
          ;;a new storage container.
-         original-indexes (-> (doto  (dtype/->bitmap-set
+         original-indexes (-> (doto  (bitmap/->bitmap
                                       (range (dtype/ecount result)))
                                 (.andNot ^RoaringBitmap missing))
                               (bitmap/bitmap->efficient-random-access-reader))
          result (if (dtype-dt/datetime-datatype? target-dtype)
-                  (dtype-dt-ops/milliseconds->datetime target-dtype result)
+                  (dtype-dt/milliseconds->datetime target-dtype result)
                   result)]
+
      (->> (base/columns ds)
           (pmap
            (fn [col]
@@ -455,7 +419,7 @@
                (ds-col/new-column colname result)
                (let [new-colname (ds-col/column-name col)
                      new-data (dtype/make-container
-                               :java-array
+                               :jvm-heap
                                (dtype/get-datatype col)
                                (dtype/ecount result))
                      ^RoaringBitmap col-missing (ds-col/missing col)
@@ -463,11 +427,11 @@
                      updated-missing (if any-missing?
                                        (scatter-missing original-indexes col-missing)
                                        (bitmap/->bitmap))
-                     total-missing (dtype/set-or updated-missing missing)
+                     total-missing (dtype-proto/set-or updated-missing missing)
                      ;;Scatter original data into new locations
                      _ (dtype/copy! col
-                                    (indexed-wtr/make-indexed-writer
-                                     original-indexes new-data {}))
+                                    (dtype/indexed-buffer original-indexes new-data))
+                     ;;Use col-impl as it skips the scanning of the data and we know that it is dense
                      new-col (ds-col/new-column new-colname new-data
                                                 (meta col)
                                                 total-missing)]

@@ -137,12 +137,20 @@ Implementations should check their metadata before doing calculations."
 
 
 (defn new-column
-  ([name data] (new-column name data nil nil))
-  ([name data metadata] (new-column name data metadata nil))
-  ([name data metadata missing]
+  "Create a new column.  Data will scanned for missing values
+  unless the full 4-argument pathway is used."
+  ([name data]
    (let [{coldata :data
-          scanned-missing :missing} (column-data-process/scan-data-for-missing data)]
-     (col-impl/new-column name coldata metadata (or missing scanned-missing)))))
+          scanned-missing :missing}
+         (column-data-process/scan-data-for-missing data)]
+     (new-column name coldata nil scanned-missing)))
+  ([name data metadata]
+   (let [{coldata :data
+          scanned-missing :missing}
+         (column-data-process/scan-data-for-missing data)]
+     (new-column name coldata metadata scanned-missing)))
+  ([name data metadata missing]
+   (col-impl/new-column name data metadata missing)))
 
 
 (defn extend-column-with-empty

@@ -115,37 +115,6 @@
 ;;                 (->> (ds/n-feature-permutations 3 ds)
 ;;                      (map (comp set ds/column-names)))))))
 
-;; (deftest fill-range-replace
-;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-;;                               :b [2 2 nil  4  8]})
-;;                (ds-math/fill-range-replace :a 2))]
-;;     (is (dfn/equals
-;;          [1.0 3.0 5.0 6.66 8.33 10.0
-;;           11.66 13.33 15.0 16.66 18.33 20.0]
-;;          (vec (ds :a))
-;;          0.1))
-;;     (is (= [2 2 2 2 2 2 2 2 4 4 4 8]
-;;            (vec (ds :b)))))
-;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-;;                               :b [2 2 nil  4  8]})
-;;                (ds-math/fill-range-replace :a 2 nil))]
-;;     (is (= [2 nil 2 nil nil nil nil nil 4 nil nil 8]
-;;            (vec (ds :b)))))
-;;   (let [ds (-> (ds/->dataset {:a [1 5  10 15 20]
-;;                               :b [2 2 nil  4  8]})
-;;                (ds-math/fill-range-replace :a 2 :value 20))]
-;;     (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
-;;            (vec (ds :b)))))
-;;   (let [ds (-> (ds/->dataset {:a (->> [1 5  10 15 20]
-;;                                       (dtype-dt-ops/plus-days
-;;                                        (dtype-dt/local-date)))
-;;                               :b [2 2 nil  4  8]})
-;;                (ds-math/fill-range-replace :a (* 2
-;;                                                  (dtype-dt/milliseconds-in-day))
-;;                                            :value 20))]
-;;     (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
-;;            (vec (ds :b))))))
-
 
 
 (deftest iterable
@@ -431,18 +400,18 @@
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds1)))))
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds2))))))
   (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
                           {:b (float 2)}])
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds1)))))
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds2)))))
     (is (= [1 nil 2]
            (vec (cds1 :a))))))
@@ -453,18 +422,18 @@
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat ds ds2)
         cds2 (ds/concat ds2 ds)]
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds1)))))
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds2))))))
   (let [ds (ds/->dataset [{:a (int 1) :b (float 1)}
                           {:b (float 2)}])
         ds2 (ds/->dataset [{:a (byte 2) :b 2}])
         cds1 (ds/concat-copying ds ds2)
         cds2 (ds/concat-copying ds2 ds)]
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds1)))))
-    (is (= #{:int32 :float64}
+    (is (= #{:int64 :float64}
            (set (map dtype/get-datatype (vals cds2)))))
     (is (= [1 nil 2]
            (vec (cds1 :a))))))

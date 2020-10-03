@@ -7,6 +7,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.argtypes :refer [arg-type]]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.protocols :as dtype-proto]
@@ -371,7 +372,10 @@
   (add-value! [p idx value]
     (when-not (missing-value? value)
       (let [idx (long idx)
-            org-datatype (dtype/elemwise-datatype value)
+            arg-type (arg-type value)
+            org-datatype (if (= :scalar arg-type)
+                           (dtype/elemwise-datatype value)
+                           :object)
             packed-dtype (packing/pack-datatype org-datatype)
             container-ecount (dtype/ecount container)]
         (if (or (== 0 container-ecount)

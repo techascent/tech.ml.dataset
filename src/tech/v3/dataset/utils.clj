@@ -1,7 +1,6 @@
-(ns ^:no-doc tech.ml.dataset.utils
-  (:require [tech.parallel.require :as parallel-req]
-            [tech.parallel.next-item-fn :as parallel-nfn]
-            [tech.v2.datatype.casting :as casting])
+(ns ^:no-doc tech.v3.dataset.utils
+  (:require [tech.v3.parallel.next-item-fn :as parallel-nfn]
+            [tech.v3.datatype.casting :as casting])
   (:import [java.util Iterator NoSuchElementException]))
 
 
@@ -57,11 +56,12 @@
   "Set the slf4j log level.  Safe to call if slf4j is not in the
   classpath."
   [level]
-  (try
-    ((parallel-req/require-resolve
-      'tech.ml.dataset.utils.slf4j-log-level/set-log-level) level)
-    (catch Throwable e
-      :exception)))
+  (locking #'sequence->iterator
+    (try
+      ((requiring-resolve
+        'tech.ml.dataset.utils.slf4j-log-level/set-log-level) level)
+      (catch Throwable e
+        :exception))))
 
 
 (defn column-safe-name

@@ -394,7 +394,13 @@ This is an interface change and we do apologize!"))))
                       (let [columns (map :column columns)
                             final-dtype (if (== 1 (count columns))
                                           (dtype/get-datatype (first columns))
-                                          (reduce casting/widest-datatype
+                                          (reduce (fn [lhs-dtype rhs-dtype]
+                                                    ;;Exact matches don't need to be widening/promotion
+                                                    (if-not (= lhs-dtype rhs-dtype)
+                                                      (casting/simple-operation-space
+                                                       (packing/unpack lhs-dtype)
+                                                       (packing/unpack rhs-dtype))
+                                                      lhs-dtype))
                                                   (map dtype/get-datatype columns)))
                             column-values (reader-concat-fn final-dtype columns)
                             missing
