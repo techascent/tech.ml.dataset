@@ -22,14 +22,14 @@
                                org.slf4j/slf4j-api]]
                  [ch.qos.logback/logback-classic   "1.2.3"]
                  ;;Many things require guava, so we may as well have latest version
-                 [com.google.guava/guava "28.0-jre"]]
+                 [com.google.guava/guava "28.0-jre"]
+                 [org.bytedeco/openblas "0.3.10-1.5.4"]
+                 [org.bytedeco/openblas-platform "0.3.10-1.5.4"]]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [org.bytedeco/openblas "0.3.10-1.5.4"]
-                             [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
-                             ;; [uncomplicate/neanderthal "0.35.0"]
+                             [uncomplicate/neanderthal "0.35.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
                              [org.apache.parquet/parquet-hadoop "1.10.1"]
                              [org.apache.hadoop/hadoop-common
@@ -47,6 +47,19 @@
                              [org.apache.arrow/arrow-vector "1.0.0"
                               :exclusions [commons-codec]]]
               :test-paths ["test" "neanderthal"]}
+             :codox
+             {:dependencies [[codox-theme-rdash "0.1.2"]]
+              :plugins [[lein-codox "0.10.7"]]
+              :codox {:project {:name "tech.ml.dataset"}
+                      :metadata {:doc/format :markdown}
+                      :themes [:rdash]
+                      :source-paths ["src"]
+                      :output-path "docs"
+                      :doc-paths ["topics"]
+                      :source-uri "https://github.com/techascent/tech.ml.dataset/blob/master/{filepath}#L{line}"
+                      :namespaces [tech.v3.dataset
+                                   tech.v3.dataset.math
+                                   tech.v3.dataset.io.datetime]}}
              ;;No neanderthal on travis
              :travis {:dependencies [[criterium "0.4.5"]
                                      [http-kit "2.3.0"]
@@ -70,4 +83,5 @@
                        :source-paths ["src"]
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
-  :java-source-paths ["java"])
+  :java-source-paths ["java"]
+  :aliases {"codox" ["with-profile" "codox,dev" "codox"]})
