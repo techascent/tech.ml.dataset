@@ -5,19 +5,19 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [cnuernber/dtype-next             "0.4.5"]
+                 [cnuernber/dtype-next             "0.4.7"]
                  [techascent/tech.io               "3.19"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]
                  [org.apache.poi/poi-ooxml         "4.1.2"]
                  [org.dhatim/fastexcel-reader      "0.10.12"
                   :exclusions [org.apache.poi/poi-ooxml]]
-                 [com.github.haifengl/smile-core   "2.5.0"
+                 [com.github.haifengl/smile-core   "2.5.3"
                   :exclusions [org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-io     "2.5.0"
+                 [com.github.haifengl/smile-io     "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-nlp    "2.5.0"
+                 [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
                  [ch.qos.logback/logback-classic   "1.2.3"]
@@ -27,6 +27,8 @@
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
+                             [org.bytedeco/openblas "0.3.10-1.5.4"]
+                             [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
                              ;; [uncomplicate/neanderthal "0.35.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
                              [org.apache.parquet/parquet-hadoop "1.10.1"]

@@ -1,9 +1,14 @@
 (ns tech.v3.dataset.math-test
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.math :as ds-math]
+            [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.datatype :as dtype]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.functional :as dfn]
-            [clojure.test :refer [deftest is]]))
+            [tech.v3.tensor :as dtt]
+            [clojure.test :refer [deftest is]])
+  (:import  [smile.projection PCA]))
+
 
 (deftest basic-interp
   (let [interp-ds (-> (ds/->dataset "test/data/stocks.csv")
@@ -45,3 +50,48 @@
                                            :value 20))]
     (is (= [2 20 2 20 20 20 20 20 4 20 20 8]
            (vec (ds :b))))))
+
+
+(comment
+  (def test-ds (ds/->dataset {:a [7 4 6 8 8 7 5 9 7 8]
+                              :b [4 1 3 6 5 2 3 5 4 2]
+                              :c [3 8 5 1 7 9 3 8 5 2]}))
+
+  (def test-data (dtt/->tensor [[10  8  6 20  9]
+                                [11 21 23 18  4]
+                                [12  7  5 13 19]
+                                [ 3 14 15 22 17]
+                                [24  1  2  0 16]] :datatype :float64))
+  (def test-data (dtt/transpose (dtt/->tensor [[7 4 6 8 8 7 5 9 7 8]
+                                               [4 1 3 6 5 2 3 5 4 2]
+                                               [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
+                                [1 0]))
+  )
+
+
+;;PCA is broken on travis.
+(deftest ^:travis-broken pca
+  (let [test-data (dtt/transpose
+                   (dtt/->tensor [[7 4 6 8 8 7 5 9 7 8]
+                                  [4 1 3 6 5 2 3 5 4 2]
+                                  [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
+                   [1 0])
+        test-ds (ds-tens/row-major-tensor->dataset test-data)
+        pca-info (ds-math/pca-dataset test-ds)
+        transformed-ds (ds-math/pca-transform-dataset test-ds pca-info 2 :float64)
+        trans-tens (ds-tens/dataset->row-major-tensor transformed-ds :float64)
+        smile-svd-pca (doto (PCA/fit (->> test-data
+                                          dtt/rows
+                                          (map dtype/->double-array)
+                                          (into-array (Class/forName "[D"))))
+                        (.setProjection (int 2)))
+        smile-transformed-ds (-> (.project smile-svd-pca
+                                           (->> test-data
+                                                (dtt/rows)
+                                                (map dtype/->double-array)
+                                                (into-array (Class/forName "[D"))))
+                                 (dtt/->tensor))]
+    ;;Make sure we get the same answer as smile.
+    (is (dfn/equals trans-tens
+                    smile-transformed-ds
+                    0.01))))

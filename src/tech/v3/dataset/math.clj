@@ -5,6 +5,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base
              :refer [columns-with-missing-seq
@@ -13,6 +14,7 @@
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.missing :as ds-missing]
             [tech.v3.parallel.for :as parallel-for]
             [clojure.tools.logging :as log]
@@ -20,7 +22,11 @@
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
            [tech.v3.datatype DoubleReader]
+           [smile.projection PCA]
            [org.roaringbitmap RoaringBitmap]))
+
+(set! *warn-on-reflection* true)
+(set! *unchecked-math* true)
 
 
 (defn correlation-table
@@ -440,3 +446,52 @@
                     new-col total-missing missing-strategy missing-value)
                    new-col)))))
           (ds-impl/new-dataset (meta ds))))))
+
+
+(defn pca-dataset
+  "Run PCA on the dataset.  Dataset must not have missing values
+  or non-numeric string columns. Returns pca-info:
+  {:means - vec of means
+   :eigenvalues - vec of eigenvalues
+   :eigenvectors - matrix of eigenvectors
+  }"
+  [dataset & {:keys [method]
+              :or {method :svd}}]
+  (errors/when-not-error
+   (== 0 (dtype/ecount (ds-base/missing dataset)))
+   "Cannot pca a dataset with missing entries.  See replace-missing.")
+  (errors/when-not-errorf
+   (= method :svd)
+   "Only SVD-based PCA supported at this time")
+  (let [tensor (ds-tens/dataset->column-major-tensor dataset :float64)
+        {:keys [means tensor]} (ds-tens/mean-center! tensor {:nan-strategy :keep})
+        smile-matrix (ds-tens/tensor->smile-dense tensor)
+        svd-data (.svd smile-matrix true true)]
+    {:means means
+     :eigenvalues (.-s svd-data)
+     :eigenvectors (ds-tens/smile-dense->tensor (.-V svd-data))}))
+
+
+(defn pca-transform-dataset
+  "PCA transform the dataset returning a new dataset."
+  [dataset pca-info n-components result-datatype]
+  (let [dataset-tens (ds-tens/dataset->column-major-tensor dataset result-datatype)
+        [n-cols _n-rows] (dtype/shape dataset-tens)
+        eigenvectors (:eigenvectors pca-info)
+        [_n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
+        _ (when-not (= (long n-cols) (long n-eig-cols))
+            (throw (ex-info "Things aren't lining up."
+                            {:eigenvectors (dtype/shape (:eigenvectors pca-info))
+                             :dataset (dtype/shape dataset-tens)})))
+        _ (when-not (<= (long n-components) (long n-cols))
+            (throw (ex-info (format "Num components %s must be <= num cols %s"
+                                    n-components n-cols)
+                            {:n-components n-components
+                             :n-cols n-cols})))
+        project-matrix (-> (dtt/transpose eigenvectors [1 0])
+                           (dtt/select (range n-components) :all))]
+    ;;in-place mean center the dataset
+    _ (ds-tens/mean-center! dataset-tens (select-keys pca-info [:means]))
+
+    (-> (ds-tens/matrix-multiply project-matrix dataset-tens)
+        (ds-tens/column-major-tensor->dataset dataset "pca-result"))))
