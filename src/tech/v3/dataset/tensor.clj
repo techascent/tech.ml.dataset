@@ -13,7 +13,8 @@
   (:import [smile.math.matrix Matrix]
            [smile.math.blas BLAS]
            [tech.v3.datatype DoubleReader Buffer NDBuffer]
-           [java.util List]))
+           [java.util List]
+           [java.nio DoubleBuffer]))
 
 
 (set! *warn-on-reflection* true)
@@ -81,6 +82,17 @@
       (dtt/reshape mdata [(.nrows dense-mat)
                           (.ncols dense-mat)]))))
 
+(defn- externally-safe
+  "Can we expose this tensor to outside systems - means
+  no broadcasting and no offsetting (rotation)"
+  ([tens datatype]
+   (if (and (= datatype (dtype/elemwise-datatype tens))
+            (dtt/dims-suitable-for-desc? tens))
+     tens
+     (dtt/clone tens :datatype datatype)))
+  ([tens]
+   (externally-safe tens :float64)))
+
 
 (defn tensor->smile-dense
   ^Matrix [tens-data]
@@ -88,11 +100,24 @@
     (throw (ex-info "Data is not right shape" {})))
   (let [[n-rows n-cols] (dtype/shape tens-data)
         ;;Smile blas sometimes crashes with column major tensors
-        retval (Matrix/of smile.math.blas.Layout/COL_MAJOR n-cols n-rows)]
-    ;;This should hit the optimized pathways if the datatypes line up.
-    ;;If they don't, at least it will still work.
-    (dtype/copy! tens-data (matrix-data retval))
-    retval))
+        [high-stride low-stride] (:strides (dtt/tensor->dimensions tens-data))
+        high-stride (long high-stride)
+        low-stride (long low-stride)
+        ^smile.math.blas.Layout layout (if (> high-stride low-stride)
+                                         smile.math.blas.Layout/ROW_MAJOR
+                                         smile.math.blas.Layout/COL_MAJOR)
+        leading-dimension (if (= layout smile.math.blas.Layout/ROW_MAJOR)
+                            n-cols n-rows)
+        ;;Force computations and coalesce into one buffer
+        tens-data (externally-safe tens-data)
+        array-buf (dtype/->array-buffer :float64 {:nan-strategy :keep}
+                                        (dtt/tensor->buffer tens-data))
+        ^doubles ary-data (.ary-data array-buf)
+        nio-buf (DoubleBuffer/wrap ary-data
+                                   (.offset array-buf)
+                                   (.n-elems array-buf))]
+    (Matrix/of layout n-rows n-cols
+               leading-dimension nio-buf)))
 
 
 (defn- mmul-check
@@ -148,14 +173,6 @@
 
 (defonce blas* (delay (try (BLAS/getInstance)
                            (catch Throwable e))))
-
-(defn- externally-safe
-  "Can we expose this tensor to outside systems - means
-  no broadcasting and no offsetting (rotation)"
-  [tens]
-  (if (dtt/dims-suitable-for-desc? tens)
-    tens
-    (dtt/clone tens)))
 
 (defn- smile-transpose
   ^smile.math.blas.Transpose [trans?]

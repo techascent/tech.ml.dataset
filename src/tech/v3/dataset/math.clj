@@ -22,7 +22,6 @@
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
            [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
            [tech.v3.datatype DoubleReader]
-           [smile.projection PCA]
            [org.roaringbitmap RoaringBitmap]))
 
 (set! *warn-on-reflection* true)
@@ -454,7 +453,9 @@
   {:means - vec of means
    :eigenvalues - vec of eigenvalues
    :eigenvectors - matrix of eigenvectors
-  }"
+  }
+  Use pca-transform-dataset with a dataset and the the returned value to perform
+  PCA on a dataset."
   [dataset & {:keys [method]
               :or {method :svd}}]
   (errors/when-not-error
@@ -465,7 +466,8 @@
    "Only SVD-based PCA supported at this time")
   (let [tensor (ds-tens/dataset->column-major-tensor dataset :float64)
         {:keys [means tensor]} (ds-tens/mean-center! tensor {:nan-strategy :keep})
-        smile-matrix (ds-tens/tensor->smile-dense tensor)
+        smile-matrix (ds-tens/tensor->smile-dense
+                      (dtt/transpose tensor [1 0]))
         svd-data (.svd smile-matrix true true)]
     {:means means
      :eigenvalues (.-s svd-data)

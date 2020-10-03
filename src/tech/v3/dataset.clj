@@ -23,17 +23,9 @@
             ;; [tech.v3.dataset.math]
             [tech.v3.libs.smile.data :as smile-data]
             [clojure.set :as set])
-  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [java.util HashSet Map List Iterator Collection ArrayList HashMap
-            Map$Entry]
-           [it.unimi.dsi.fastutil.longs LongArrayList]
-           [it.unimi.dsi.fastutil.ints IntArrayList]
+  (:import [java.util List Iterator Collection ArrayList ]
            [org.roaringbitmap RoaringBitmap]
-           [java.io InputStream]
-           [tech.v3.dataset.impl.column Column]
-           [tech.v3.dataset.impl.dataset Dataset]
-           [tech.v3.dataset.string_table StringTable]
-           [tech.v3.dataset.dynamic_int_list DynamicIntList])
+           [tech.v3.datatype PrimitiveList])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth]))
 
@@ -417,10 +409,11 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
          (pfor/indexed-map-reduce
           (dtype/ecount coldata)
           (fn [^long start-idx ^long len]
-            (let [^List container (col-base/make-container result-datatype)
-                  indexes (LongArrayList.)
-                  ^List idx-container (when idx-colname
-                                        (IntArrayList.))]
+            (let [container (col-base/make-container result-datatype)
+                  indexes (dtype/make-list :int64)
+                  ^PrimitiveList idx-container
+                  (when idx-colname
+                    (dtype/make-list :int32))]
               (dotimes [iter len]
                 (let [idx (+ iter start-idx)]
                   (when-not (.contains missing idx)
@@ -436,18 +429,17 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                  inner-idx 0]
                             (when continue?
                               (.add container (cast-fn (.next src-iter)))
-                              (.add indexes idx)
+                              (.addLong indexes idx)
                               (when idx-colname
-                                (.add idx-container (unchecked-int
-                                                     inner-idx)))
+                                (.addLong idx-container inner-idx))
                               (recur (.hasNext src-iter)
                                      (unchecked-inc inner-idx)))))
                         ;;Else treat value as scalar
                         (do
                           (.add container (cast-fn data-item))
-                          (.add indexes idx)
+                          (.addLong indexes idx)
                           (when idx-colname
-                            (.add idx-container (unchecked-int 0)))))))))
+                            (.addLong idx-container 0))))))))
               [indexes container idx-container]))
           (partial clojure.core/reduce
                    (fn [[lhs-indexes lhs-container lhs-idx-container]
@@ -484,17 +476,6 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 ;;                          k-fold-datasets
 ;;                          train-test-split
 ;;                          row-major)
-
-
-;; (par-util/export-symbols tech.v3.dataset.math
-;;                         correlation-table
-;;                         k-means
-;;                         g-means
-;;                         x-means
-;;                         compute-centroid-and-global-means
-;;                         impute-missing-by-centroid-averages
-;;                         interpolate-loess
-;;                         fill-range-replace)
 
 
 (defn all-descriptive-stats-names
