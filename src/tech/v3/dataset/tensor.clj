@@ -1,15 +1,18 @@
 (ns tech.v3.dataset.tensor
   "Conversion mechanisms from dataset to tensor and back"
   (:require [tech.v3.tensor :as dtt]
-            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.tensor.dimensions :as dims]
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.parallel.for :as pfor]
-            [primitive-math :as pmath]
-            [clojure.tools.logging :as log])
+            [primitive-math :as pmath])
   (:import [smile.math.matrix Matrix]
            [smile.math.blas BLAS]
            [tech.v3.datatype DoubleReader Buffer NDBuffer]
@@ -21,66 +24,87 @@
 (set! *unchecked-math* true)
 
 
-(defn column-major-tensor->dataset
+(defn tensor->dataset
+  "Convert a tensor to a dataset.  Columns of the tensor will be converted to
+  columns of the dataset."
   [dtt & [table-name]]
   (when-not (= 2 (count (dtype/shape dtt)))
     (throw (ex-info "Tensors must be 2 dimensional to transform to datasets" {})))
-  (let [[n-cols n-rows] (dtype/shape dtt)
+  (let [[_n-rows n-cols] (dtype/shape dtt)
         table-name (or table-name :_unnamed)]
     (ds/new-dataset table-name (->> (range n-cols)
                                     (map
                                      #(ds-col/new-column
                                        %
-                                       (dtt/select dtt % :all)))))))
+                                       (dtt/select dtt :all %)))))))
 
 
-(defn row-major-tensor->dataset
-  [dtt & [table-name]]
-  (when-not (= 2 (count (dtype/shape dtt)))
-    (throw (ex-info "Tensors must be 2 dimensional to transform to datasets" {})))
-  (column-major-tensor->dataset (-> (dtt/transpose dtt [1 0])
-                                    (dtt/clone))
-                                table-name))
+(defn dataset->tensor
+  "Convert a dataset to a tensor.  Columns of the dataset will be converted
+  to columns of the tensor.  Default datatype is :float64."
+  ([dataset datatype]
+   (let [retval (dtt/new-tensor (dtype/shape dataset)
+                                :datatype datatype
+                                :init-value nil)]
+     (dtype/coalesce! retval
+                      (->> (ds/columns dataset)
+                           (map #(dtype/elemwise-cast % datatype))))
+     (dtt/transpose retval [1 0])))
+  ([dataset]
+   (dataset->tensor dataset :float64)))
 
 
-(defn dataset->column-major-tensor
-  [dataset datatype]
-  (let [retval (dtt/new-tensor (dtype/shape dataset)
-                               :datatype datatype
-                               :init-value nil)]
-    (dtype/copy-raw->item!
-     (->> (ds/columns dataset)
-          (map #(dtype/elemwise-cast % datatype)))
-     retval)
-    retval))
-
-
-
-(defn dataset->row-major-tensor
-  [dataset datatype]
-  (-> (dataset->column-major-tensor dataset datatype)
-      ;;transpose is in-place
-      (dtt/transpose [1 0])
-      ;;clone makes it real.
-      (dtt/clone)))
-
-
-(def matrix-data
+(def ^:private matrix-data
   (let [data-field (doto (.getDeclaredField Matrix "A")
                      (.setAccessible true))]
     (fn [^Matrix mat]
       (.get data-field mat))))
 
 
-(defn smile-dense->tensor
-  "Smile matrixes are row-major."
+(defn smile-matrix-as-tensor
+  "Zero-copy convert a smile matrix to a tensor."
   [^Matrix dense-mat]
-  (let [mdata (matrix-data dense-mat)]
+  (let [mdata (matrix-data dense-mat)
+        ld (.ld dense-mat)]
+    ;;Current smile matrices are assuming their lowest dimension
+    ;;is packed and the upper dimension is indicated by ld
     (if (= (.layout dense-mat) smile.math.blas.Layout/COL_MAJOR)
-      (dtt/reshape mdata [(.ncols dense-mat)
-                          (.nrows dense-mat)])
-      (dtt/reshape mdata [(.nrows dense-mat)
-                          (.ncols dense-mat)]))))
+      (dtt/construct-tensor mdata
+                            (dims/dimensions [(.nrows dense-mat)
+                                              (.ncols dense-mat)]
+                                             [1 ld]))
+      (dtt/construct-tensor mdata
+                            (dims/dimensions [(.nrows dense-mat)
+                                              (.ncols dense-mat)]
+                                             [ld 1])))))
+
+
+(extend-type Matrix
+  dtype-proto/PElemwiseDatatype
+  (elemwise-datatype [mat] :float64)
+  dtype-proto/PECount
+  (ecount [mat] (* (.ncols mat) (.nrows mat)))
+  dtype-proto/PToTensor
+  (as-tensor [mat] (smile-matrix-as-tensor mat))
+  dtype-proto/PShape
+  (shape [mat] (dtype-proto/shape (dtype-proto/as-tensor mat)))
+  dtype-proto/PToArrayBuffer
+  (convertible-to-array-buffer? [mat]
+    (dtype-proto/convertible-to-array-buffer?
+     (dtype-proto/as-tensor mat)))
+  (->array-buffer [mat]
+    (dtype-proto/->array-buffer (dtype-proto/as-tensor mat)))
+  dtype-proto/PToNativeBuffer
+  (convertible-to-native-buffer? [mat]
+    (dtype-proto/convertible-to-native-buffer?
+     (dtype-proto/as-tensor mat)))
+  (->native-buffer [mat]
+    (dtype-proto/->native-buffer (dtype-proto/as-tensor mat)))
+  dtype-proto/PClone
+  (clone [mat] (.clone mat)))
+
+(dtype-pp/implement-tostring-print Matrix)
+
 
 (defn- externally-safe
   "Can we expose this tensor to outside systems - means
@@ -94,30 +118,47 @@
    (externally-safe tens :float64)))
 
 
-(defn tensor->smile-dense
+(defn tensor->smile-matrix
+  "Convert a tensor into a smile matrix.  If the tensor is backed by a concrete buffer
+  and has a dimensions transformations that are supported by smile (no rotation, no broadcast,
+  no complex striding),
+  the conversion will be in place.  Else the tensor is first copied to a new tensor and
+  then the conversion takes place."
   ^Matrix [tens-data]
   (when-not (= 2 (count (dtype/shape tens-data)))
     (throw (ex-info "Data is not right shape" {})))
   (let [[n-rows n-cols] (dtype/shape tens-data)
-        ;;Smile blas sometimes crashes with column major tensors
+        ;;Force computations and coalesce into one buffer
+        tens-data (externally-safe tens-data)
+        ;;Smile blas sometimes crashes with row major tensors
         [high-stride low-stride] (:strides (dtt/tensor->dimensions tens-data))
         high-stride (long high-stride)
         low-stride (long low-stride)
-        ^smile.math.blas.Layout layout (if (> high-stride low-stride)
-                                         smile.math.blas.Layout/ROW_MAJOR
-                                         smile.math.blas.Layout/COL_MAJOR)
-        leading-dimension (if (= layout smile.math.blas.Layout/ROW_MAJOR)
-                            n-cols n-rows)
-        ;;Force computations and coalesce into one buffer
-        tens-data (externally-safe tens-data)
-        array-buf (dtype/->array-buffer :float64 {:nan-strategy :keep}
-                                        (dtt/tensor->buffer tens-data))
+        ;;Lower striding to what smile currently supports.  Smile can only handle packed
+        ;;striding.
+        [tens-data high-stride low-stride]
+        (if-not (== 1 (min high-stride low-stride))
+          (let [new-tens (dtt/clone tens-data :datatype :float64)
+                [high-stride low-stride] (:strides (dtt/tensor->dimensions tens-data))]
+            [new-tens high-stride low-stride])
+          [tens-data high-stride low-stride])
+
+        high-stride (long high-stride)
+        low-stride (long low-stride)
+        leading-dimension (max high-stride low-stride)
+        ;;TODO - handle native buffer pathway
+        array-buf (dtype/->array-buffer :float64 (dtt/tensor->buffer tens-data))
         ^doubles ary-data (.ary-data array-buf)
         nio-buf (DoubleBuffer/wrap ary-data
                                    (.offset array-buf)
                                    (.n-elems array-buf))]
-    (Matrix/of layout n-rows n-cols
-               leading-dimension nio-buf)))
+    (if (= leading-dimension high-stride)
+      (Matrix/of smile.math.blas.Layout/ROW_MAJOR n-rows n-cols
+                 leading-dimension nio-buf)
+      (->
+       (Matrix/of smile.math.blas.Layout/ROW_MAJOR n-cols n-rows
+                  leading-dimension nio-buf)
+       (.transpose)))))
 
 
 (defn- mmul-check
@@ -138,6 +179,7 @@
 
 
 (defn- jvm-matrix-multiply
+  "**SLOW** fallback for when openblas/mkl aren't available."
   [lhs rhs]
   (let [_ (mmul-check lhs rhs)
         ;;Slice is lazy, so we make it concrete and perform all the
@@ -191,8 +233,6 @@
           ;;O(N^3).
           lhs (externally-safe lhs)
           rhs (externally-safe rhs)
-          alpha 1.0
-          beta 0.0
           op-space (if (and (= lhs-dtype :float32)
                             (= (dtype/elemwise-datatype rhs) :float32))
                      :float32
@@ -256,7 +296,7 @@
 
 
 
-(defn mean-center!
+(defn mean-center-columns!
   "in-place nan-aware mean-center the rows of the tensor.  Tensor must be writable and return value
   is {:means :tensor}.
 
@@ -267,25 +307,120 @@
     (== 2 (count (dtype/shape tens)))
     "Tensor must have 2 dimensional shape: %s"
     (dtype/shape tens))
-   (let [^List rows (mapv dtype/->buffer (dtt/slice tens 1))
+   (let [^List columns (mapv dtype/->buffer (dtt/slice-right tens 1))
          means (or means
                    (-> (reify DoubleReader
-                         (lsize [rdr] (long (.size rows)))
+                         (lsize [rdr] (long (.size columns)))
                          (readDouble [rdr idx]
-                           (let [^Buffer data (.get rows idx)]
+                           (let [^Buffer data (.get columns idx)]
                              (stats/mean {:nan-strategy nan-strategy} data))))
                        (dtype/clone)))
          mean-buf (dtype/->buffer means)
-         n-rows (.size rows)]
+         n-columns (.size columns)]
      (pfor/parallel-for
-      idx n-rows
-      (let [^Buffer row (.get rows idx)
+      idx n-columns
+      (let [^Buffer column (.get columns idx)
             mean (.readDouble mean-buf idx)]
-        (dotimes [elem-idx (.lsize row)]
-          (.writeDouble row elem-idx
-                        (pmath/- (.readDouble row elem-idx)
+        (dotimes [elem-idx (.lsize column)]
+          (.writeDouble column elem-idx
+                        (pmath/- (.readDouble column elem-idx)
                                  mean)))))
      {:means means
       :tensor tens}))
   ([tens]
-   (mean-center! tens nil)))
+   (mean-center-columns! tens nil)))
+
+
+(defn pca-fit!
+  "Run Principle Component Analysis on a tensor.
+
+  Keep in mind that PCA may be highly influenced by outliers in the dataset
+  and a probabilistic or some level of auto-encoder dimensionality reduction
+  more effective for your problem.
+
+
+  Returns pca-info:
+  {:means - vec of means
+   :eigenvalues - vec of eigenvalues
+   :eigenvectors - matrix of eigenvectors
+  }
+
+  Options
+   - method - choose method, one of [:svd :corr].  Defaults to
+     (if (>= n-rows n-columns) :svd :corr).
+   - covariance-bias? - When using :corr, divide by n-cols if true and (dec n-cols) if false.
+     defaults to false."
+  ([tensor {:keys [method
+                   covariance-bias?]
+            :or {method :svd
+                 covariance-bias? true}
+            :as options}]
+   (errors/when-not-errorf
+    (= 2 (count (dtype/shape tensor)))
+    "PCA only applies to tensors with rank 2; rank %d passed in"
+    (count (dtype/shape tensor)))
+   (let [{:keys [means tensor]} (mean-center-columns! tensor {:nan-strategy :keep})
+         [n-rows n-cols] (dtype/shape tensor)
+         n-rows (long n-rows)
+         n-cols (long n-cols)
+         method (or method
+                    (if (>= n-rows n-cols)
+                      :svd
+                      :corr))
+         smile-matrix (tensor->smile-matrix tensor)]
+     (case method
+       :svd
+       (let [svd-data (.svd smile-matrix true true)]
+         {:means means
+          :method :svd
+          :eigenvalues (.-s svd-data)
+          :eigenvectors (dtt/ensure-tensor (.-V svd-data))})
+       :corr
+       (let [;;Because we have subtracted out the means above, the covariance matrix
+             ;;is defined by (/ (Xt*X) (- n-rows 1))
+             cov-mat (-> (matrix-multiply (dtt/transpose tensor [1 0]) tensor)
+                         (dfn// (double (if covariance-bias?
+                                          n-rows
+                                          (dec n-rows))))
+                         (tensor->smile-matrix))
+             ;;Indicate this is an lower-triangular matrix.  This measn the eigenvalues
+             ;;calculation is much cheaper.
+             _ (.uplo cov-mat smile.math.blas.UPLO/LOWER)
+             ;;And here is a bug in smile.  For svd, the eigenvectors are sorted
+             ;;ascending - greatest to least.  In smile's implementation when doing corr,
+             ;;the result is sorted least to greatest (end result of EIG/sort method).
+             ;;This means you would be screwed if you need to, for instance, decide n-columns
+             ;;by keeping variances until a threshold was met.
+             eig-data (.eigen cov-mat false true true)
+             eigenvalues (.-wr eig-data)
+             ;;Sort ASCENDING to match svd decomposition.
+             eig-order (argops/argsort :> eigenvalues)]
+         {:means means
+          :method :corr
+          :eigenvalues (dtype/indexed-buffer eig-order (.-wr eig-data))
+          :eigenvectors (-> (.-Vr eig-data)
+                            ;;select implicitly does an in-place transformation into a tensor
+                            ;;from a smile matrix.
+                            (dtt/select :all eig-order))}))))
+  ([tensor]
+   (pca-fit! tensor nil)))
+
+
+(defn pca-transform!
+  "PCA transform the dataset returning a new tensor.  Mean-centers
+  the tensor in-place."
+  [tensor pca-info n-components]
+  (let [[_n-row n-cols] (dtype/shape tensor)
+        eigenvectors (:eigenvectors pca-info)
+        [_n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
+        _ (errors/when-not-errorf
+           (= (long n-cols) (long n-eig-cols))
+           "Column count of dataset (%d) does not match column count of eigenvectors (%d)"
+           n-cols n-eig-cols)
+        _ (errors/when-not-errorf
+           (<= (long n-components) (long n-cols))
+           "Num components (%d) must be <= num cols (%d)"
+           n-components n-cols)
+        tensor (:tensor (mean-center! tensor (select-keys pca-info [:means])))
+        project-matrix (dtt/select eigenvectors :all (range n-components))]
+    (matrix-multiply tensor project-matrix)))

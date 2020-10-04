@@ -106,13 +106,15 @@
 
 (defn to-row-major-double-array-of-arrays
   ^"[[D" [dataset]
-  (-> (ds-tens/dataset->row-major-tensor dataset :float64)
+  (-> (ds-tens/dataset->tensor dataset :float64)
       (tensor->double-array-of-arrays)))
 
 
 (defn to-column-major-double-array-of-arrays
+  "to a sequence of double arrays of the columns of the tensor"
   ^"[[D" [dataset]
-  (-> (ds-tens/dataset->column-major-tensor dataset :float64)
+  (-> (ds-tens/dataset->tensor dataset :float64)
+      (dtt/transpose [1 0])
       (tensor->double-array-of-arrays)))
 
 
@@ -447,53 +449,38 @@
           (ds-impl/new-dataset (meta ds))))))
 
 
-(defn pca-dataset
+(defn pca-fit
   "Run PCA on the dataset.  Dataset must not have missing values
-  or non-numeric string columns. Returns pca-info:
+  or non-numeric string columns.
+
+  Keep in mind that PCA may be highly influenced by outliers in the dataset
+  and a probabilistic or some level of auto-encoder dimensionality reduction
+  more effective for your problem.
+
+
+  Returns pca-info:
   {:means - vec of means
    :eigenvalues - vec of eigenvalues
    :eigenvectors - matrix of eigenvectors
   }
   Use pca-transform-dataset with a dataset and the the returned value to perform
   PCA on a dataset."
-  [dataset & {:keys [method]
-              :or {method :svd}}]
-  (errors/when-not-error
-   (== 0 (dtype/ecount (ds-base/missing dataset)))
-   "Cannot pca a dataset with missing entries.  See replace-missing.")
-  (errors/when-not-errorf
-   (= method :svd)
-   "Only SVD-based PCA supported at this time")
-  (let [tensor (ds-tens/dataset->column-major-tensor dataset :float64)
-        {:keys [means tensor]} (ds-tens/mean-center! tensor {:nan-strategy :keep})
-        smile-matrix (ds-tens/tensor->smile-dense
-                      (dtt/transpose tensor [1 0]))
-        svd-data (.svd smile-matrix true true)]
-    {:means means
-     :eigenvalues (.-s svd-data)
-     :eigenvectors (ds-tens/smile-dense->tensor (.-V svd-data))}))
+  ([dataset options]
+   (errors/when-not-error
+    (== 0 (dtype/ecount (ds-base/missing dataset)))
+    "Cannot pca a dataset with missing entries.  See replace-missing.")
+   (ds-tens/pca-fit! (ds-tens/dataset->tensor dataset :float64) options))
+  ([dataset]
+   (pca-fit dataset nil)))
 
 
-(defn pca-transform-dataset
-  "PCA transform the dataset returning a new dataset."
-  [dataset pca-info n-components result-datatype]
-  (let [dataset-tens (ds-tens/dataset->column-major-tensor dataset result-datatype)
-        [n-cols _n-rows] (dtype/shape dataset-tens)
-        eigenvectors (:eigenvectors pca-info)
-        [_n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
-        _ (when-not (= (long n-cols) (long n-eig-cols))
-            (throw (ex-info "Things aren't lining up."
-                            {:eigenvectors (dtype/shape (:eigenvectors pca-info))
-                             :dataset (dtype/shape dataset-tens)})))
-        _ (when-not (<= (long n-components) (long n-cols))
-            (throw (ex-info (format "Num components %s must be <= num cols %s"
-                                    n-components n-cols)
-                            {:n-components n-components
-                             :n-cols n-cols})))
-        project-matrix (-> (dtt/transpose eigenvectors [1 0])
-                           (dtt/select (range n-components) :all))]
-    ;;in-place mean center the dataset
-    _ (ds-tens/mean-center! dataset-tens (select-keys pca-info [:means]))
-
-    (-> (ds-tens/matrix-multiply project-matrix dataset-tens)
-        (ds-tens/column-major-tensor->dataset dataset "pca-result"))))
+(defn pca-transform
+  "PCA transform the dataset returning a new dataset.  The method used to generate the pca information
+  is indicated in the metadata of the dataset."
+  ([dataset pca-info n-components result-datatype]
+   (-> (ds-tens/dataset->tensor dataset result-datatype)
+       (ds-tens/pca-transform! pca-info n-components)
+       (ds-tens/tensor->dataset dataset :pca-result)
+       (vary-meta assoc :pca-method (:method pca-info))))
+  ([dataset pca-info n-components]
+   (pca-transform dataset pca-info n-components :float64)))

@@ -76,10 +76,18 @@
                                   [4 1 3 6 5 2 3 5 4 2]
                                   [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
                    [1 0])
-        test-ds (ds-tens/row-major-tensor->dataset test-data)
-        pca-info (ds-math/pca-dataset test-ds)
-        transformed-ds (ds-math/pca-transform-dataset test-ds pca-info 2 :float64)
-        trans-tens (ds-tens/dataset->row-major-tensor transformed-ds :float64)
+        test-ds (ds-tens/tensor->dataset test-data)
+        svd-fit (ds-math/pca-fit test-ds {:method :svd})
+        svd-transformed-ds (ds-math/pca-transform
+                            test-ds
+                            svd-fit
+                            2)
+        corr-fit (ds-math/pca-fit test-ds {:method :corr})
+        corr-transformed-ds (ds-math/pca-transform
+                             test-ds
+                             corr-fit
+                             2)
+        ;;Slow, partially correct smile method (only correct for n-rows > n-cols)
         smile-svd-pca (doto (PCA/fit (->> test-data
                                           dtt/rows
                                           (map dtype/->double-array)
@@ -92,6 +100,11 @@
                                                 (into-array (Class/forName "[D"))))
                                  (dtt/->tensor))]
     ;;Make sure we get the same answer as smile.
-    (is (dfn/equals trans-tens
-                    smile-transformed-ds
+    (is (= :svd (:method svd-fit)))
+    (is (dfn/equals smile-transformed-ds
+                    (ds-tens/dataset->tensor svd-transformed-ds)
+                    0.01))
+    (is (= :corr (:method corr-fit)))
+    (is (dfn/equals smile-transformed-ds
+                    (ds-tens/dataset->tensor corr-transformed-ds)
                     0.01))))
