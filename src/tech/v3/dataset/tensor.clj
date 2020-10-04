@@ -421,6 +421,6 @@
            (<= (long n-components) (long n-cols))
            "Num components (%d) must be <= num cols (%d)"
            n-components n-cols)
-        tensor (:tensor (mean-center! tensor (select-keys pca-info [:means])))
+        tensor (:tensor (mean-center-columns! tensor (select-keys pca-info [:means])))
         project-matrix (dtt/select eigenvectors :all (range n-components))]
     (matrix-multiply tensor project-matrix)))
