@@ -348,7 +348,7 @@
   Options
    - method - choose method, one of [:svd :corr].  Defaults to
      (if (>= n-rows n-columns) :svd :corr).
-   - covariance-bias? - When using :corr, divide by n-cols if true and (dec n-cols) if false.
+   - covariance-bias? - When using :corr, divide by n-rows if true and (dec n-rows) if false.
      defaults to false."
   ([tensor {:keys [method
                    covariance-bias?]
