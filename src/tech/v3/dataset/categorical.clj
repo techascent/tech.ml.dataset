@@ -1,33 +1,25 @@
-(ns  ^:no-doc tech.ml.dataset.categorical
-  "Dealing with categorical dataset data involves having two mapping systems.
-  The first is a map of category to integer within the same column.
-  The second is a 'one-hot' encoding where you generate more columns but those have
-  a reduced number of possible categories, usually one categorical value per
-  column."
-  (:require [tech.ml.protocols.dataset :as ds]
-            [tech.ml.dataset.base :as ds-base]
-            [tech.ml.protocols.column :as ds-col]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.v2.datatype :as dtype]
-            [clojure.set :as c-set]
-            [tech.ml.dataset.utils :as utils]
-            [tech.parallel.for :as parallel-for])
+(ns ^:no-doc tech.v3.dataset.categorical
+  "String->number and string->one-hot conversions and their inverses."
+  (:require [tech.v3.dataset.base :as ds-base]
+            [tech.v3.protocols.column :as ds-col]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.column-base :as col-base]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.errors :as errors]
+            [clojure.set :as set])
   (:import [java.util HashMap Map]
            [java.util.function Function BiFunction BiConsumer]))
 
 
-(def ^:private known-values
-  {"true" 1
-   "positive" 1
-   "false" 0
-   "negative" 0})
-
-
-(defn make-string-table-from-table-args
+;;This file uses categorical-map loosely.  Really they are lookup tables
+;;from categorical object value to integer.
+(defn- make-categorical-map-from-table-args
   "Make a mapping of value->index from a list of either string values or [valname idx]
   pairs.
   Returns map of value->index."
-  [table-value-list]
+  ^Map [table-value-list]
   ;; First, any explicit mappings are respected.
   (let [[str-table value-list]
         (reduce (fn [[str-table value-list] item]
@@ -38,18 +30,7 @@
                      value-list]
                     [str-table (conj value-list item)]))
                 [{} []]
-                table-value-list)
-        ;;Second, known values map so that true and false map reasonably.
-        [str-table value-list]
-        (reduce (fn [[str-table value-list] item]
-                  (let [known-value (get known-values item)]
-                    (if (and known-value
-                             (not (contains? (set (vals str-table)) known-value)))
-                      [(assoc str-table item known-value)
-                       value-list]
-                      [str-table (conj value-list item)])))
-                [str-table []]
-                value-list)]
+                table-value-list)]
     ;;Finally, auto-generate values for anything not mapped yet.
     (->> value-list
          (reduce (fn [str-table item]
@@ -59,255 +40,192 @@
                  str-table))))
 
 
-(defn make-string-table-from-column
+(defn categorical->number-fit
+  "Given a column, map it into an numeric space via a discrete map of values
+  to integers.  This function returns a single map of column values into integers.
+
+  table-args may be a list of either specific values in order or a list of tuples of
+  value to integer.  Unexpected values get integers after everything else."
+  [dataset colname & [table-args res-dtype]]
+  {:label-map (reduce (fn [label-map col-val]
+                        (if (get label-map col-val)
+                          label-map
+                          (assoc label-map col-val (count label-map))))
+                      (make-categorical-map-from-table-args table-args)
+                      (ds-col/unique (ds-base/column dataset colname)))
+   :src-column colname
+   :label-datatype (or res-dtype :float64)})
+
+
+(defn categorical->number-transform
+  [dataset fit-data]
+  (let [colname (:src-column fit-data)
+        label-datatype (or (:label-datatype fit-data) :float64)
+        label-map (:label-map fit-data)
+        column (ds-base/column dataset colname)
+        missing (ds-col/missing column)
+        col-meta (meta column)
+        missing-value (col-base/datatype->missing-value label-datatype)]
+    (assoc dataset colname
+           (col-impl/new-column
+            (:name col-meta)
+            (dtype/emap (fn [col-val]
+                          (if-not (nil? col-val)
+                            (let [numeric (get label-map col-val)]
+                              (errors/when-not-errorf
+                               numeric
+                               "Failed to find label entry for column value %s"
+                               col-val)
+                              numeric)
+                            missing-value))
+                        label-datatype
+                        column)
+            (assoc col-meta :label-map label-map)
+            missing))))
+
+
+(defn column-has-categorical-map?
   [column]
-  (let [rdr (dtype/->reader column)
-        final-map (HashMap.)
-        final-combiner (reify Function
-                         (apply [_ key]
-                           (unchecked-long (.size final-map))))
-        final-consumer (reify BiConsumer
-                         (accept [_ key val]
-                           (.computeIfAbsent final-map
-                                             key final-combiner)))]
-    (parallel-for/indexed-map-reduce
-     (dtype/ecount rdr)
-     (fn [^long start-idx ^long len]
-       (let [retval (HashMap.)
-             compute-op (reify Function
-                          (apply [_ key]
-                            (unchecked-long (.size retval))))]
-         (dotimes [iter len]
-           (.computeIfAbsent retval (rdr (unchecked-add iter start-idx))
-                             compute-op))
-         retval))
-     ;;mapv here for side effects
-     (partial mapv (fn [^Map lhs] (.forEach lhs final-consumer))))
-    ;;Keep things as persistent maps so writing/reading to/from edn is good.
-    (into {} final-map)))
+  (boolean (:label-map (meta column))))
 
 
-(defn build-categorical-map
-  "Given a dataset and these columns, produce a label-map of
-  column-name to specific categorical label-map."
-  [dataset column-name-seq & [table-value-list]]
-  (let [provided-table (when (seq table-value-list)
-                         (make-string-table-from-table-args table-value-list))]
-    (->> column-name-seq
-         (map (fn [column-name]
-                [column-name (if provided-table
-                               provided-table
-                               (make-string-table-from-column
-                                (ds/column
-                                 dataset column-name)))]))
-         (into {}))))
 
-
-(defn column-categorical-map
-  "Given a categorical map for a given column, produce a new column
-  of the desired datatype with the values mapped to the table values."
-  [categorical-map new-dtype old-column]
-  (let [column-name (ds-col/column-name old-column)
-        ^Map categorical-map (get categorical-map column-name)
-        data-values
-        (dtype/make-array-of-type
-         new-dtype
-         (dtype/reader-map
-          #(let [val (.getOrDefault categorical-map % ::missing-value)]
-             (when (= val ::missing-value)
-               (throw (ex-info (format "Failed to find lookup for value %s"
-                                       %)
-                               {:item-value %
-                                :possible-values (set (keys categorical-map))
-                                :column-name column-name})))
-             val)
-          old-column)
-         {:unchecked? true})]
-    (col-impl/new-column column-name data-values
-                         (assoc (ds-col/metadata old-column)
-                                :label-map categorical-map))))
-
-
-(defn inverse-map-categorical-col-fn
-  [_src-column column-categorical-map]
-  (let [inverse-map (c-set/map-invert column-categorical-map)]
-    (fn [col-val]
-      (if-let [col-label (get inverse-map (long col-val))]
-        col-label
-        (throw (ex-info
-                (format "Failed to find label for column value %s"
-                        col-val)
-                {:inverse-label-map inverse-map}))))))
-
-
-(defn inverse-map-categorical-columns
-  [dataset src-column column-categorical-map]
-  (let [column-values (-> (ds/column dataset src-column)
-                          (dtype/->reader))]
-    (->> column-values
-         (mapv (inverse-map-categorical-col-fn
-                src-column column-categorical-map)))))
-
-
-(defn is-one-hot-label-map?
-  [label-map]
-  (let [[_col-val col-entry] (first label-map)]
-    (not (number? col-entry))))
-
-
-(defn build-one-hot-map
-  [dataset column-name-seq & [one-hot-table-args]]
-  (->> column-name-seq
-       (map (fn [colname]
-              (when-not (#{:string :keyword :symbol}
-                         (dtype/get-datatype (ds/column dataset colname)))
-                (throw (ex-info (format "One hot applied to non string column: %s(%s)"
-                                        colname (dtype/get-datatype
-                                                 (ds/column dataset colname)))
-                                {})))
-              (let [col-vals (ds-col/unique (ds/column dataset colname))
-                    one-hot-arg (or one-hot-table-args (vec col-vals))]
-                [colname
-                 (cond
-                   (sequential? one-hot-arg)
-                   (->> one-hot-arg
-                        (map (fn [argval]
-                               [argval [(utils/extend-column-name colname argval) 1]]))
-                        (into {}))
-                   (map? one-hot-arg)
-                   (let [valseq (->> (vals one-hot-arg)
-                                     (mapcat (fn [arglist]
-                                               (if (keyword? arglist)
-                                                 [arglist]
-                                                 arglist))))
-                         contains-rest? (->> valseq
-                                             (filter #(= :rest %))
-                                             first)
-                         stated-vals (->> valseq
-                                          (clojure.core/remove #(= :rest %))
-                                          set)
-                         leftover (c-set/difference col-vals stated-vals)]
-                     (when-not (or (not= (count leftover) 0)
-                                   contains-rest?)
-                       (throw (ex-info (format "Column values not accounted for: %s"
-                                               (vec leftover))
-                                       {:stated-values stated-vals
-                                        :leftover leftover})))
-                     (->> one-hot-arg
-                          (mapcat (fn [[arg-key argval-seq]]
-                                    (let [argval-seq (->> (if (= :rest argval-seq)
-                                                            [argval-seq]
-                                                            argval-seq)
-                                                          (mapcat (fn [argval]
-                                                                    (if (= :rest argval)
-                                                                      (vec leftover)
-                                                                      [argval]))))
-                                          local-colname (utils/extend-column-name
-                                                         colname arg-key)]
-                                      (->> argval-seq
-                                           (map-indexed (fn [idx argval]
-                                                          [argval [local-colname
-                                                                   (inc idx)]]))))))
-                          (into {})))
-                   :else
-                   (throw (ex-info (format "Unrecognized one hot argument: %s"
-                                           one-hot-arg) {})))])))
+(defn dataset->categorical-maps
+  "Given a dataset, return a map of column names to categorical label maps.
+  This aids in inverting all of the label maps in a dataset."
+  [dataset]
+  (->> (vals dataset)
+       (map meta)
+       (filter :label-map)
+       (map (fn [lmap]
+              [(:name lmap) (:label-map lmap)]))
        (into {})))
 
 
-(defn column-one-hot-map
-  "Using one hot map, produce Y new columns while removing existing column."
-  [one-hot-map new-dtype dataset column-name]
-  (let [column (ds/column dataset column-name)
-        dataset (ds/remove-column dataset column-name)
-        context (get one-hot-map column-name)
-        col-values (dtype/->reader column)
-        new-column-map (->> context
-                            (map (fn [[_argval [new-column-name _colval]]]
-                                   [new-column-name
-                                    (dtype/make-array-of-type
-                                     new-dtype (dtype/ecount column))]))
-                            (into {}))]
-    (->> col-values
-         (map-indexed vector)
-         (pmap
-          (fn [[idx col-val]]
-            (if-let [table-entry (get context col-val)]
-              (let [[new-column-name new-colval] table-entry]
-                (if-let [new-col (get new-column-map new-column-name)]
-                  (dtype/set-value! new-col idx new-colval)
-                  (throw (ex-info (format "Failed to find new column: %s"
-                                          new-column-name)
-                                  {:new-columns (keys new-column-map)}))))
-              (throw (ex-info (format "Failed to find string table value: %s"
-                                      col-val)
-                              {:column-value col-val
-                               :column-one-hot-table context})))))
-         dorun)
-    (->> new-column-map
-         (reduce (fn [dataset [column-name column-data]]
-                   (ds/add-column
-                    dataset
-                    (col-impl/new-column column-name column-data
-                                       (assoc
-                                        (ds-col/metadata column)
-                                        :label-map context))))
-                 dataset))))
+
+(defn categorical->number-invert
+  [dataset colname]
+  (let [column (ds-base/column dataset colname)
+        label-map (:label-map (meta column))
+        _ (errors/when-not-errorf
+           label-map
+           "Column has no label map for inversion: %s"
+           (:name (meta column)))
+        col-meta (meta column)
+        res-dtype (reduce casting/widest-datatype
+                          (keys label-map))
+        inv-map (set/map-invert label-map)
+        missing-val (col-base/datatype->missing-value res-dtype)]
+    (col-impl/new-column
+     (:name col-meta)
+     (dtype/emap (fn [col-val]
+                   (if-not (nil? col-val)
+                     (let [src-val (get inv-map (long col-val))]
+                       (errors/when-not-errorf
+                        src-val
+                        "Unable to find src value for numeric value %s"
+                        col-val)
+                       src-val)
+                     missing-val))
+                 res-dtype
+                 column)
+     col-meta
+     (ds-col/missing column))))
 
 
-(defn- inverse-map-one-hot-column-values-fn
-  [src-column column-label-map]
-  (let [inverse-map (c-set/map-invert column-label-map)
-        colname-seq (->> inverse-map
-                         keys
-                         (map first)
-                         distinct)]
-    (fn [& col-values]
-      (let [nonzero-entries
-            (->> (map (fn [col-name col-val]
-                        (when-not (= 0 (long col-val))
-                          [col-name (long col-val)]))
-                      colname-seq col-values)
-                 (remove nil?))]
-        (when-not (= 1 (count nonzero-entries))
-          (throw (ex-info
-                  (format "Multiple (or zero) nonzero entries detected:[%s]%s"
-                          src-column nonzero-entries)
-                  {:column-name src-column
-                   :label-map column-label-map})))
-        (if-let [colval (get inverse-map (first nonzero-entries))]
-          colval
-          (throw (ex-info (format "Failed to find column entry %s: %s"
-                                  (first nonzero-entries)
-                                  (keys inverse-map))
-                          {:entry-label (first nonzero-entries)
-                           :label-map column-label-map})))))))
+(defn- safe-str
+  [data]
+  (if (keyword? data) (name data)
+      (.replace (str data) " " "-")))
 
 
-(defn- inverse-map-one-hot-columns
-  [dataset src-column column-label-map]
-  (let [colname-seq (->> column-label-map
-                         vals
-                         (map first)
-                         distinct)]
-    (->> (ds/select dataset colname-seq :all)
-         (ds-base/value-reader)
-         (map #(apply (inverse-map-one-hot-column-values-fn
-                       src-column column-label-map)
-                      %)))))
+(defn one-hot-fit
+  [dataset colname & [table-args res-dtype]]
+  (let [{:keys [label-map label-datatype]}
+        (categorical->number-fit dataset colname table-args res-dtype)
+        column (ds-base/column dataset colname)
+        src-meta (meta column)
+        src-name (:name src-meta)
+        name-fn (if (= (dtype/datatype src-name) :keyword)
+                  (let [src-name (name src-name)]
+                    #(keyword (str src-name "-" (safe-str %))))
+                  #(str src-name "-" (safe-str %)))
+        one-hot-map (->> label-map
+                         (map (fn [[k v]]
+                                [k (name-fn v)]))
+                         (into {}))]
+    {:one-hot-map one-hot-map
+     :src-column src-name
+     :label-datatype label-datatype}))
 
 
-(defn column-values->categorical
-  "Given a column encoded via either string->number or one-hot, reverse
-  map to the a sequence of the original string column values."
-  [dataset src-column categorical-map]
-  (when-not (contains? categorical-map src-column)
-    (throw (ex-info (format "Failed to find column %s in label map %s"
-                            src-column categorical-map)
-                    {:column-name src-column
-                     :label-map categorical-map})))
+(defn one-hot-transform
+  [dataset one-hot-fit-data]
+  (let [{:keys [one-hot-map src-column label-datatype]}
+        one-hot-fit-data
+        column (ds-base/column dataset src-column)
+        missing (ds-col/missing column)
+        dataset (dissoc dataset src-column)]
+    (->> one-hot-map
+         (mapcat
+          (fn [[k v]]
+            [v (col-impl/new-column
+                v
+                (dtype/emap
+                 #(if (= % k)
+                    1
+                    0)
+                 label-datatype
+                 column)
+                (assoc (meta column)
+                       :one-hot-src-value k
+                       :one-hot-src-column src-column)
+                missing)]))
+         (apply assoc dataset))))
 
-  (let [label-map (get categorical-map src-column)]
-    (if (is-one-hot-label-map? label-map)
-      (inverse-map-one-hot-columns dataset src-column label-map)
-      (inverse-map-categorical-columns dataset src-column label-map))))
+
+(defn dataset->one-hot-maps
+  "Given a dataset, return a map of source column names to one-hot maps.
+  This aids in inverting all of the one hot maps in a dataset."
+  [dataset]
+  (->> (vals dataset)
+       (map meta)
+       (filter :one-hot-src-column)
+       (group-by :one-hot-src-column)
+       (map (fn [[src-colname one-hot-col-meta]]
+              [src-colname
+               (->> (map (fn [colmeta]
+                           [(:one-hot-src-value colmeta)
+                            (:name colmeta)])
+                         one-hot-col-meta)
+                    (into {}))]))
+       (into {})))
+
+
+(defn one-hot-invert
+  [dataset one-hot-map res-colname]
+  (let [cast-fn (get @casting/*cast-table* :boolean)
+        invert-map (set/map-invert one-hot-map)
+        colnames (vec (keys invert-map))
+        one-hot-ds (ds-base/select-columns dataset colnames)
+        rev-mapped-cols (->> invert-map
+                             (map (fn [[colname colval]]
+                                    (dtype/emap #(if (cast-fn %)
+                                                   colval
+                                                   nil)
+                                                :object
+                                                (ds-base/column one-hot-ds colname)))))
+        dataset (apply dissoc dataset colnames)
+        missing (reduce dtype-proto/set-or
+                        (map ds-col/missing (vals one-hot-ds)))
+        res-dtype (reduce casting/widest-datatype (keys one-hot-map))]
+    (assoc dataset
+           res-colname
+           (col-impl/new-column
+            res-colname
+            (apply dtype/emap (fn [& colvals]
+                                (first (remove nil? colvals)))
+                   res-dtype
+                   rev-mapped-cols)
+            (meta (first (vals one-hot-ds)))
+            missing))))

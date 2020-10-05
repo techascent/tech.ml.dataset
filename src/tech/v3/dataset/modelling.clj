@@ -1,20 +1,23 @@
-(ns ^:no-doc tech.ml.dataset.modelling
+(ns ^:no-doc tech.v3.dataset.modelling
   "Methods related specifically to machine learning such as setting
   the inference target."
-  (:require [tech.v2.datatype :as dtype]
-            [tech.ml.dataset.base
+  (:require [tech.v3.datatype :as dtype]
+            [tech.v3.dataset.base
              :refer [column-names update-columns
-                     ->dataset select
-                     metadata maybe-column]
+                     select]
              :as ds-base]
-            [tech.ml.dataset.pipeline.column-filters :as col-filters]
-            [tech.ml.dataset.column :as ds-col]
+            [tech.v3.dataset.column :as ds-col]
             [clojure.set :as c-set]
-            [tech.ml.dataset.categorical :as categorical])
-  (:import [tech.v2.datatype ObjectReader]))
+            [tech.v3.dataset.categorical :as categorical])
+  (:import [tech.v3.datatype ObjectReader]))
 
 
 (declare dataset-label-map reduce-column-names)
+
+
+(defn inference-column?
+  [col]
+  (= :inference (:column-type (meta col))))
 
 
 (defn set-inference-target
@@ -35,13 +38,10 @@
                     set)]
     (update-columns dataset (column-names dataset)
                     (fn [col]
-                      (ds-col/set-metadata
-                       col
-                       (assoc (ds-col/metadata col)
-                              :column-type
-                              (if (contains? target (ds-col/column-name col))
-                                :inference
-                                :feature)))))))
+                      (vary-meta col assoc
+                                 :column-type (if (contains? target (ds-col/column-name col))
+                                                :inference
+                                                :feature))))))
 
 (defn inference-target-column-names
   [ds]

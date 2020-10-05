@@ -63,12 +63,14 @@
                     (or (.equalsIgnoreCase "t" data)
                         (.equalsIgnoreCase "y" data)
                         (.equalsIgnoreCase "yes" data)
-                        (.equalsIgnoreCase "True" data))
+                        (.equalsIgnoreCase "True" data)
+                        (.equalsIgnoreCase "positive" data))
                     true
                     (or (.equalsIgnoreCase "f" data)
                         (.equalsIgnoreCase "n" data)
                         (.equalsIgnoreCase "no" data)
-                        (.equalsIgnoreCase "false" data))
+                        (.equalsIgnoreCase "false" data)
+                        (.equalsIgnoreCase "negative" data))
                     false
                     :else
                     parse-failure))

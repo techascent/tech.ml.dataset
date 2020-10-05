@@ -393,7 +393,7 @@
              ;;by keeping variances until a threshold was met.
              eig-data (.eigen cov-mat false true true)
              eigenvalues (.-wr eig-data)
-             ;;Sort ASCENDING to match svd decomposition.
+             ;;Sort DESCENDING to match svd decomposition.
              eig-order (argops/argsort :> eigenvalues)]
          {:means means
           :method :corr
