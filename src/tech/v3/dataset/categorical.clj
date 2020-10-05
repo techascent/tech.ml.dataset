@@ -40,28 +40,31 @@
                  str-table))))
 
 
-(defn categorical->number-fit
+(defrecord CategoricalMap [lookup-table src-column label-datatype])
+
+
+(defn fit-categorical-map
   "Given a column, map it into an numeric space via a discrete map of values
-  to integers.  This function returns a single map of column values into integers.
+  to integers.  This fits the categorical transformation onto the column and returns
+  the transformation."
+  ^CategoricalMap [dataset colname & [table-args res-dtype]]
+  (map->CategoricalMap
+   {:lookup-table (reduce (fn [categorical-map col-val]
+                            (if (get categorical-map col-val)
+                              categorical-map
+                              (assoc categorical-map col-val
+                                     (long (count categorical-map)))))
+                          (make-categorical-map-from-table-args table-args)
+                          (ds-col/unique (ds-base/column dataset colname)))
+    :src-column colname
+    :label-datatype (or res-dtype :float64)}))
 
-  table-args may be a list of either specific values in order or a list of tuples of
-  value to integer.  Unexpected values get integers after everything else."
-  [dataset colname & [table-args res-dtype]]
-  {:label-map (reduce (fn [label-map col-val]
-                        (if (get label-map col-val)
-                          label-map
-                          (assoc label-map col-val (count label-map))))
-                      (make-categorical-map-from-table-args table-args)
-                      (ds-col/unique (ds-base/column dataset colname)))
-   :src-column colname
-   :label-datatype (or res-dtype :float64)})
 
-
-(defn categorical->number-transform
+(defn transform-categorical-map
   [dataset fit-data]
   (let [colname (:src-column fit-data)
         label-datatype (or (:label-datatype fit-data) :float64)
-        label-map (:label-map fit-data)
+        lookup-table (:lookup-table fit-data)
         column (ds-base/column dataset colname)
         missing (ds-col/missing column)
         col-meta (meta column)
@@ -71,7 +74,7 @@
             (:name col-meta)
             (dtype/emap (fn [col-val]
                           (if-not (nil? col-val)
-                            (let [numeric (get label-map col-val)]
+                            (let [numeric (get lookup-table col-val)]
                               (errors/when-not-errorf
                                numeric
                                "Failed to find label entry for column value %s"
@@ -80,14 +83,13 @@
                             missing-value))
                         label-datatype
                         column)
-            (assoc col-meta :label-map label-map)
+            (assoc col-meta :categorical-map fit-data)
             missing))))
 
 
 (defn column-has-categorical-map?
   [column]
-  (boolean (:label-map (meta column))))
-
+  (boolean (:categorical-map (meta column))))
 
 
 (defn dataset->categorical-maps
@@ -95,42 +97,33 @@
   This aids in inverting all of the label maps in a dataset."
   [dataset]
   (->> (vals dataset)
-       (map meta)
-       (filter :label-map)
-       (map (fn [lmap]
-              [(:name lmap) (:label-map lmap)]))
-       (into {})))
+       (map (comp :categorical-map meta))
+       (remove nil?)))
 
 
-
-(defn categorical->number-invert
-  [dataset colname]
-  (let [column (ds-base/column dataset colname)
-        label-map (:label-map (meta column))
-        _ (errors/when-not-errorf
-           label-map
-           "Column has no label map for inversion: %s"
-           (:name (meta column)))
-        col-meta (meta column)
+(defn invert-categorical-map
+  [dataset {:keys [src-column lookup-table]}]
+  (let [column (ds-base/column dataset src-column)
         res-dtype (reduce casting/widest-datatype
-                          (keys label-map))
-        inv-map (set/map-invert label-map)
+                          (map dtype/datatype (keys lookup-table)))
+        inv-map (set/map-invert lookup-table)
         missing-val (col-base/datatype->missing-value res-dtype)]
-    (col-impl/new-column
-     (:name col-meta)
-     (dtype/emap (fn [col-val]
-                   (if-not (nil? col-val)
-                     (let [src-val (get inv-map (long col-val))]
-                       (errors/when-not-errorf
-                        src-val
-                        "Unable to find src value for numeric value %s"
-                        col-val)
-                       src-val)
-                     missing-val))
-                 res-dtype
-                 column)
-     col-meta
-     (ds-col/missing column))))
+    (assoc dataset src-column
+           (col-impl/new-column
+            (:name src-column)
+            (dtype/emap (fn [col-val]
+                          (if-not (nil? col-val)
+                            (let [src-val (get inv-map (long col-val))]
+                              (errors/when-not-errorf
+                                  src-val
+                                "Unable to find src value for numeric value %s"
+                                col-val)
+                              src-val)
+                            missing-val))
+                        res-dtype
+                        column)
+            (dissoc (meta column) :categorical-map)
+            (ds-col/missing column)))))
 
 
 (defn- safe-str
@@ -139,10 +132,10 @@
       (.replace (str data) " " "-")))
 
 
-(defn one-hot-fit
+(defn fit-one-hot
   [dataset colname & [table-args res-dtype]]
-  (let [{:keys [label-map label-datatype]}
-        (categorical->number-fit dataset colname table-args res-dtype)
+  (let [{:keys [lookup-table label-datatype]}
+        (fit-categorical-map dataset colname table-args res-dtype)
         column (ds-base/column dataset colname)
         src-meta (meta column)
         src-name (:name src-meta)
@@ -150,7 +143,7 @@
                   (let [src-name (name src-name)]
                     #(keyword (str src-name "-" (safe-str %))))
                   #(str src-name "-" (safe-str %)))
-        one-hot-map (->> label-map
+        one-hot-map (->> lookup-table
                          (map (fn [[k v]]
                                 [k (name-fn v)]))
                          (into {}))]
@@ -159,7 +152,7 @@
      :label-datatype label-datatype}))
 
 
-(defn one-hot-transform
+(defn transform-one-hot
   [dataset one-hot-fit-data]
   (let [{:keys [one-hot-map src-column label-datatype]}
         one-hot-fit-data
@@ -178,8 +171,7 @@
                  label-datatype
                  column)
                 (assoc (meta column)
-                       :one-hot-src-value k
-                       :one-hot-src-column src-column)
+                       :one-hot-map one-hot-fit-data)
                 missing)]))
          (apply assoc dataset))))
 
@@ -189,17 +181,9 @@
   This aids in inverting all of the one hot maps in a dataset."
   [dataset]
   (->> (vals dataset)
-       (map meta)
-       (filter :one-hot-src-column)
-       (group-by :one-hot-src-column)
-       (map (fn [[src-colname one-hot-col-meta]]
-              [src-colname
-               (->> (map (fn [colmeta]
-                           [(:one-hot-src-value colmeta)
-                            (:name colmeta)])
-                         one-hot-col-meta)
-                    (into {}))]))
-       (into {})))
+       (map (comp :one-hot-map meta))
+       (remove nil?)
+       (distinct)))
 
 
 (defn one-hot-invert
