@@ -1,5 +1,7 @@
-(ns ^:no-doc tech.v3.dataset.categorical
-  "String->number and string->one-hot conversions and their inverses."
+(ns tech.v3.dataset.categorical
+  "Mapping categorical columns either with a single lookup table directly to
+  a number or using a hot-hot mapping.  Both systems have an invert pathway to get
+  back the original column."
   (:require [tech.v3.dataset.base :as ds-base]
             [tech.v3.protocols.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
@@ -9,8 +11,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [clojure.set :as set])
-  (:import [java.util HashMap Map]
-           [java.util.function Function BiFunction BiConsumer]))
+  (:import [java.util HashMap Map]))
 
 
 ;;This file uses categorical-map loosely.  Really they are lookup tables
@@ -19,7 +20,7 @@
   "Make a mapping of value->index from a list of either string values or [valname idx]
   pairs.
   Returns map of value->index."
-  ^Map [table-value-list]
+  [table-value-list]
   ;; First, any explicit mappings are respected.
   (let [[str-table value-list]
         (reduce (fn [[str-table value-list] item]
@@ -40,7 +41,7 @@
                  str-table))))
 
 
-(defrecord CategoricalMap [lookup-table src-column label-datatype])
+(defrecord CategoricalMap [lookup-table src-column result-datatype])
 
 
 (defn fit-categorical-map
@@ -57,18 +58,19 @@
                           (make-categorical-map-from-table-args table-args)
                           (ds-col/unique (ds-base/column dataset colname)))
     :src-column colname
-    :label-datatype (or res-dtype :float64)}))
+    :result-datatype (or res-dtype :float64)}))
 
 
 (defn transform-categorical-map
+  "Apply a categorical mapping transformation fit with fit-categorical-map."
   [dataset fit-data]
   (let [colname (:src-column fit-data)
-        label-datatype (or (:label-datatype fit-data) :float64)
+        result-datatype (or (:result-datatype fit-data) :float64)
         lookup-table (:lookup-table fit-data)
         column (ds-base/column dataset colname)
         missing (ds-col/missing column)
         col-meta (meta column)
-        missing-value (col-base/datatype->missing-value label-datatype)]
+        missing-value (col-base/datatype->missing-value result-datatype)]
     (assoc dataset colname
            (col-impl/new-column
             (:name col-meta)
@@ -81,20 +83,16 @@
                                col-val)
                               numeric)
                             missing-value))
-                        label-datatype
+                        result-datatype
                         column)
             (assoc col-meta :categorical-map fit-data)
             missing))))
 
 
-(defn column-has-categorical-map?
-  [column]
-  (boolean (:categorical-map (meta column))))
-
-
 (defn dataset->categorical-maps
   "Given a dataset, return a map of column names to categorical label maps.
-  This aids in inverting all of the label maps in a dataset."
+  This aids in inverting all of the label maps in a dataset.
+  The source column name is src-column."
   [dataset]
   (->> (vals dataset)
        (map (comp :categorical-map meta))
@@ -102,6 +100,7 @@
 
 
 (defn invert-categorical-map
+  "Invert a categorical map returning the column to the original set of values."
   [dataset {:keys [src-column lookup-table]}]
   (let [column (ds-base/column dataset src-column)
         res-dtype (reduce casting/widest-datatype
@@ -122,7 +121,9 @@
                             missing-val))
                         res-dtype
                         column)
-            (dissoc (meta column) :categorical-map)
+            (-> (meta column)
+                (dissoc :categorical-map)
+                (assoc :categorical? true))
             (ds-col/missing column)))))
 
 
@@ -132,9 +133,15 @@
       (.replace (str data) " " "-")))
 
 
+(defrecord OneHotMap [one-hot-table src-column result-datatype])
+
+
 (defn fit-one-hot
-  [dataset colname & [table-args res-dtype]]
-  (let [{:keys [lookup-table label-datatype]}
+  "Fit a one hot transformation to a column.  Returns a reusable transformation.
+  Maps each unique value to a column with 1 every time the value appears in the
+  original column and 0 otherwise."
+  ^OneHotMap [dataset colname & [table-args res-dtype]]
+  (let [{:keys [lookup-table result-datatype]}
         (fit-categorical-map dataset colname table-args res-dtype)
         column (ds-base/column dataset colname)
         src-meta (meta column)
@@ -147,19 +154,21 @@
                          (map (fn [[k v]]
                                 [k (name-fn v)]))
                          (into {}))]
-    {:one-hot-map one-hot-map
-     :src-column src-name
-     :label-datatype label-datatype}))
+    (map->OneHotMap
+     {:one-hot-table one-hot-map
+      :src-column src-name
+      :result-datatype result-datatype})))
 
 
 (defn transform-one-hot
+  "Apply a one-hot transformation to a dataset"
   [dataset one-hot-fit-data]
-  (let [{:keys [one-hot-map src-column label-datatype]}
+  (let [{:keys [one-hot-table src-column result-datatype]}
         one-hot-fit-data
         column (ds-base/column dataset src-column)
         missing (ds-col/missing column)
         dataset (dissoc dataset src-column)]
-    (->> one-hot-map
+    (->> one-hot-table
          (mapcat
           (fn [[k v]]
             [v (col-impl/new-column
@@ -168,7 +177,7 @@
                  #(if (= % k)
                     1
                     0)
-                 label-datatype
+                 result-datatype
                  column)
                 (assoc (meta column)
                        :one-hot-map one-hot-fit-data)
@@ -177,8 +186,7 @@
 
 
 (defn dataset->one-hot-maps
-  "Given a dataset, return a map of source column names to one-hot maps.
-  This aids in inverting all of the one hot maps in a dataset."
+  "Given a dataset, return a sequence of applied on-hot transformations."
   [dataset]
   (->> (vals dataset)
        (map (comp :one-hot-map meta))
@@ -187,9 +195,11 @@
 
 
 (defn one-hot-invert
-  [dataset one-hot-map res-colname]
+  "Invert a one-hot transformation removing the one-hot columns and adding back the
+  original column."
+  [dataset {:keys [one-hot-table src-column]}]
   (let [cast-fn (get @casting/*cast-table* :boolean)
-        invert-map (set/map-invert one-hot-map)
+        invert-map (set/map-invert one-hot-table)
         colnames (vec (keys invert-map))
         one-hot-ds (ds-base/select-columns dataset colnames)
         rev-mapped-cols (->> invert-map
@@ -202,14 +212,17 @@
         dataset (apply dissoc dataset colnames)
         missing (reduce dtype-proto/set-or
                         (map ds-col/missing (vals one-hot-ds)))
-        res-dtype (reduce casting/widest-datatype (keys one-hot-map))]
+        res-dtype (reduce casting/widest-datatype
+                          (map dtype/datatype (keys one-hot-table)))]
     (assoc dataset
-           res-colname
+           src-column
            (col-impl/new-column
-            res-colname
+            src-column
             (apply dtype/emap (fn [& colvals]
                                 (first (remove nil? colvals)))
                    res-dtype
                    rev-mapped-cols)
-            (meta (first (vals one-hot-ds)))
+            (-> (meta (first (vals one-hot-ds)))
+                (dissoc :one-hot-map)
+                (assoc :categorical? true))
             missing))))
