@@ -1,104 +1,28 @@
 (ns tech.ml.dataset-test
-  (:require [tech.v3.dataset :as ds]
-            [tech.v3.dataset.column :as ds-col]
-            [tech.v3.tensor :as tens]
+  (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
+            [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.test-utils :as test-utils]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
             [tech.v3.libs.fastexcel]
-            [tech.v3.dataset.tensor :as ds-tens]
             [tech.io :as tech-io]
-            [clojure.test :refer :all]
-            [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.datetime :as dtype-dt]
             [taoensso.nippy :as nippy]
-            [clojure.java.io :as io]
-            [clojure.string :as s]
-            [clojure.tools.logging :as log]
-            [camel-snake-kebab.core :refer [->kebab-case]])
-  (:import [smile.projection PCA]
-           [java.util List HashSet UUID]
+            [clojure.test :refer [deftest is]])
+  (:import [java.util List HashSet UUID]
            [java.io File]))
 
 
-(defn load-mapseq-fruit-dataset
-  []
-  (let [fruit-ds (slurp (io/input-stream "test/data/fruit_data_with_colors.txt"))
-        dataset (->> (s/split fruit-ds #"\n")
-                     (mapv #(s/split % #"\s+")))
-        ds-keys (->> (first dataset)
-                     (mapv (comp keyword ->kebab-case)))]
-    (->> (rest dataset)
-         (map (fn [ds-line]
-                (->> ds-line
-                     (map (fn [ds-val]
-                            (try
-                              (Double/parseDouble ^String ds-val)
-                              (catch Throwable e
-                                (-> (->kebab-case ds-val)
-                                    keyword)))))
-                     (zipmap ds-keys))))
-         (ds/->dataset))))
-
-(def mapseq-fruit-dataset (memoize load-mapseq-fruit-dataset))
-
-
-;; (deftest k-fold-sanity
-;;   (let [dataset-seq (ds/k-fold-datasets (mapseq-fruit-dataset) 5 {})]
-;;     (is (= 5 (count dataset-seq)))
-;;     (is (= [[7 47] [7 47] [7 47] [7 47] [7 48]]
-;;            (->> dataset-seq
-;;                 (mapv (comp dtype/shape :train-ds)))))
-;;     (is (= [[7 12] [7 12] [7 12] [7 12] [7 11]]
-;;            (->> dataset-seq
-;;                 (mapv (comp dtype/shape :test-ds)))))))
-
-
-;; (deftest train-test-split-sanity
-;;   (let [dataset (ds/->train-test-split (mapseq-fruit-dataset) {})]
-;;     (is (= [7 41]
-;;            (dtype/shape (:train-ds dataset))))
-;;     (is (= [7 18]
-;;            (dtype/shape (:test-ds dataset))))))
-
-
-
-;; (deftest tensor-and-back
-;;   (let [test-tensor (tens/->tensor (->> (range 25)
-;;                                         shuffle
-;;                                         (partition 5)))
-;;         ds (ds-tens/row-major-tensor->dataset test-tensor)
-
-;;         ;; _ (println test-tensor)
-;;         ;; _ (clojure.pprint/print-table (ds/->flyweight ds))
-
-;;         result-tens (ds-tens/dataset->row-major-tensor ds :float64)]
-;;     (is (= (tens/->jvm test-tensor :datatype :int32)
-;;            (tens/->jvm result-tens :datatype :int32)))))
-
-
-;; (deftest n-permutations
-;;   (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
-;;                (ds/set-inference-target :fruit-name))]
-;;     (is (= 35
-;;            (count (ds/n-permutations 3 ds))))
-;;     (is (= 20
-;;            (count (ds/n-feature-permutations 3 ds))))
-;;     ;;The label column shows up in every permutation.
-;;     (is (every? :fruit-name
-;;                 (->> (ds/n-feature-permutations 3 ds)
-;;                      (map (comp set ds/column-names)))))))
-
-
-
 (deftest iterable
-  (let [ds (ds/->dataset (mapseq-fruit-dataset))]
+  (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))]
     (is (= (ds/column-names ds)
            (map ds-col/column-name (vals ds))))))
 
 
 (deftest string-column-add-or-update
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/update-column :fruit-name (partial dtype/emap #(str (name %) "-fn") :string)))]
     (is (= ["apple-fn" "apple-fn" "apple-fn" "mandarin-fn" "mandarin-fn"
             "mandarin-fn" "mandarin-fn" "mandarin-fn" "apple-fn" "apple-fn"]
@@ -131,7 +55,7 @@
 
 
 (deftest unique-by-test
-  (let [ds (mapseq-fruit-dataset)]
+  (let [ds (test-utils/mapseq-fruit-dataset)]
     (is (= [7 4]
            (dtype/shape (ds/unique-by ds :fruit-name))))
     (is (= [7 4]
@@ -156,7 +80,7 @@
 
 
 (deftest ds-concat-nil-pun
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/select :all (range 10)))
         d1 (ds/concat nil ds)
         d2 (ds/concat ds nil nil)
@@ -169,7 +93,7 @@
 
 
 (deftest ds-concat-copying-nil-pun
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/select :all (range 10)))
         d1 (ds/concat-copying nil ds)
         d2 (ds/concat-copying ds nil nil)
@@ -182,7 +106,7 @@
 
 
 (deftest ds-concat-missing
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/select [:fruit-name] (range 10))
                (ds/update-column :fruit-name #(ds-col/set-missing % [3 6])))
         d1 (ds/concat ds ds)]
@@ -195,7 +119,7 @@
 
 
 (deftest concat-copying-missing
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/select [:fruit-name] (range 10))
                (ds/update-column :fruit-name #(ds-col/set-missing % [3 6])))
         d1 (ds/concat-copying ds ds)]
@@ -208,7 +132,7 @@
 
 
 (deftest update-column-datatype-detect
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/select :all (range 10)))
         updated (ds/update-column ds :width #(->> %
                                                   (map (fn [data]
@@ -228,14 +152,14 @@
 
 
 (deftest filter-fail-regression
-  (let [ds (ds/->dataset (mapseq-fruit-dataset))]
+  (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))]
     (is (= [:mandarin :mandarin :mandarin :mandarin]
            (vec (dtype/sub-buffer (ds :fruit-name) 4 4))))))
 
 
 
 (deftest simple-select-test
-  (let [ds (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))
         sel-col (ds-col/select (ds :fruit-name) (range 5 10))]
     (is (= [:mandarin :mandarin :mandarin :apple :apple]
            (vec sel-col)))
@@ -243,9 +167,9 @@
 
 
 (deftest generic-sort-numbers
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/sort-by-column :mass >))
-        ds2 (-> (ds/->dataset (mapseq-fruit-dataset))
+        ds2 (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                 (ds/sort-by-column :mass))]
 
     (is (= (vec (take 10 (ds :mass)))
@@ -253,7 +177,7 @@
 
 
 (deftest selection-map
-  (let [ds (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))
         colname-map (->> (take 3 (ds/column-names ds))
                          (map (juxt identity #(keyword (str (name %) "-selected"))))
                          (into {}))
@@ -282,7 +206,7 @@
 
 
 (deftest remove-rows
-  (let [d (ds/->dataset (mapseq-fruit-dataset))
+  (let [d (ds/->dataset (test-utils/mapseq-fruit-dataset))
         d2 (ds/remove-rows d (range 5))]
     (is (= (vec (drop 5 (d :fruit-name)))
            (vec (d2 :fruit-name))))))
@@ -297,7 +221,7 @@
 
 
 (deftest set-missing-range
-  (let [ds (-> (ds/->dataset (mapseq-fruit-dataset))
+  (let [ds (-> (ds/->dataset (test-utils/mapseq-fruit-dataset))
                (ds/update-column :fruit-name #(ds-col/set-missing % (range))))]
     (is (= (vec (range (ds/row-count ds)))
            (vec (dtype/->reader (ds-col/missing (ds :fruit-name))))))))
@@ -764,12 +688,7 @@
                           :b [1.0 nil 2.0]
                           :c [5 nil 6]})]
     (is (= 3
-           (->> (ds-tens/dataset->column-major-tensor ds :float64)
-                (dtype/->reader)
-                (filter #(Double/isNaN %))
-                (count))))
-    (is (= 3
-           (->> (ds-tens/dataset->row-major-tensor ds :float64)
+           (->> (ds-tens/dataset->tensor ds :float64)
                 (dtype/->reader)
                 (filter #(Double/isNaN %))
                 (count))))))

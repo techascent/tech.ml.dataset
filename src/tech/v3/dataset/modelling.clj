@@ -31,7 +31,8 @@
   [ds]
   (->> (map meta (vals ds))
        (filter #(= :inference (:column-type %)))
-       (map :name)))
+       (map :name)
+       (seq)))
 
 
 (defn inference-target-label-map
@@ -156,54 +157,21 @@
   back to the original dataset given the reverse mapping of label->number in
   the column's metadata."
   [dataset]
-  (->> (concat (categorical/dataset->categorical-maps dataset)
-               (categorical/dataset->one-hot-maps dataset))
-       (reduce (fn [dataset cat-map]
-                 ))
-       )
+  (->> (concat (map vector
+                    (categorical/dataset->categorical-maps dataset)
+                    (repeat categorical/invert-categorical-map))
+               (map vector
+                    (categorical/dataset->one-hot-maps dataset)
+                    (repeat categorical/invert-one-hot-map)))
+       (reduce (fn [dataset [cat-map invert-fn]]
+                 (invert-fn dataset cat-map))
+               dataset)))
 
 
-  (select-columns dataset column-name-seq))
-
-
-(defn ->flyweight
-  "Convert dataset to seq-of-maps dataset.  Flag indicates if errors should be thrown
-  on missing values or if nil should be inserted in the map.  If the dataset has a label
-  and number->string? is true then columns that have been converted from categorical to
-  numeric will be reverse-mapped back to string columns."
-  [dataset & {:keys [column-name-seq
-                     error-on-missing-values?
-                     number->string?]
-              :or {error-on-missing-values? true}}]
-  (let [column-name-seq (or column-name-seq
-                            (column-names dataset))
-        dataset (if number->string?
-                  (reverse-map-categorical-columns dataset {:column-name-seq
-                                                            column-name-seq})
-                  (select-columns dataset column-name-seq))]
-    (when-let [missing-columns
-               (when error-on-missing-values?
-                 (seq (columns-with-missing-seq dataset)))]
-      (throw (Exception. (format "Columns with missing data detected: %s"
-                                 missing-columns))))
-    (mapseq-reader dataset)))
-
-
-(defn labels
-  "Given a dataset and an options map, generate a sequence of label-values.
-  If label count is 1, then if there is a label-map associated with column
-  generate sequence of labels by reverse mapping the column(s) back to the original
-  dataset values.  If there are multiple label columns results are presented in
-  a dataset.
-  Return a reader of labels"
+(defn inference-target-ds
+  "Given a dataset return reverse-mapped inference target columns or nil
+  in the case where there are no inference targets."
   [dataset]
-  (when-not (seq (col-filters/target? dataset))
-    (throw (ex-info "No label columns indicated" {})))
-  (let [original-label-column-names (->> (col-filters/inference? dataset)
-                                         (reduce-column-names dataset))
-        dataset (reverse-map-categorical-columns
-                 dataset {:column-name-seq
-                          original-label-column-names})]
-    (if (= 1 (column-count dataset))
-      (dtype/->reader (first (vals dataset)))
-      dataset)))
+  (when-let [target-cols (inference-target-column-names dataset)]
+    (-> (ds-base/select-columns dataset target-cols)
+        (reverse-map-categorical-columns))))

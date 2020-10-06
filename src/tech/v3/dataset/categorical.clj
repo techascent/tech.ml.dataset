@@ -207,7 +207,7 @@
        (distinct)))
 
 
-(defn invert-one-hot
+(defn invert-one-hot-map
   "Invert a one-hot transformation removing the one-hot columns and adding back the
   original column."
   [dataset {:keys [one-hot-table src-column]}]
