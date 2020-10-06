@@ -1,13 +1,10 @@
 (ns ^:no-doc tech.v3.dataset.modelling
-  "Methods related specifically to machine learning such as setting
-  the inference target."
+  "Methods related specifically to machine learning such as setting the inference
+  target.  This file integrates tightly with tech.v3.dataset.categorical which provides
+  categorical -> number and one-hot transformation pathways"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.dataset.base
-             :refer [column-names update-columns
-                     select]
-             :as ds-base]
-            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.base :as ds-base]
             [clojure.set :as c-set]
             [tech.v3.dataset.categorical :as categorical])
   (:import [tech.v3.datatype ObjectReader]))
@@ -19,6 +16,8 @@
 
 
 (defn set-inference-target
+  "Set the inference target on the column.  This sets the :column-type member
+  of the column metadata to :inference."
   [dataset target-name-or-target-name-seq]
   (let [colnames (if (sequential? target-name-or-target-name-seq)
                    target-name-or-target-name-seq
@@ -28,6 +27,7 @@
 
 
 (defn inference-target-column-names
+  "Return the names of the columns that are inference targets."
   [ds]
   (->> (map meta (vals ds))
        (filter #(= :inference (:column-type %)))
@@ -44,15 +44,6 @@
     (-> (ds-base/column dataset (first label-columns))
         (meta)
         (get-in [:categorical-map :lookup-table]))))
-
-
-(defn dataset-label-map
-  [dataset]
-  (->> (vals dataset)
-       (map meta)
-       (filter :categorical-map)
-       (map (juxt :name #(get-in % [:categorical-map :lookup-table])))
-       (into {})))
 
 
 (defn inference-target-label-inverse-map
@@ -72,8 +63,8 @@
 
 
 (defn feature-ecount
-  "When columns aren't scalars then this will change.
-  For now, just the number of feature columns."
+  "Number of feature columns.  Feature columns are columns that are not
+  inference targets."
   ^long [dataset]
   (count (remove #(= :inference (:column-type (meta %)))
                  (vals dataset))))
@@ -110,10 +101,11 @@
     (if-let [one-hot-map (->> (categorical/dataset->one-hot-maps dataset)
                               (filter #(= src-column (:src-column %)))
                               (first))]
-      (-> (categorical/invert-one-hot dataset one-hot-map)
+      (-> (categorical/invert-one-hot-map dataset one-hot-map)
           (ds-base/column src-column))
-      (errors/throwf "Column %s does not appear to have either a categorical or one hot map"
-                     src-column))))
+      (errors/throwf
+       "Column %s does not appear to have either a categorical or one hot map"
+       src-column))))
 
 
 (defn k-fold-datasets
@@ -128,14 +120,17 @@
          fold-size (inc (quot (long n-rows) k))
          folds (vec (partition-all fold-size indexes))]
      (for [i (range k)]
-       {:test-ds (select dataset :all (nth folds i))
-        :train-ds (select dataset :all (->> (keep-indexed #(if (not= %1 i) %2) folds)
+       {:test-ds (ds-base/select-rows dataset
+                                      (nth folds i))
+        :train-ds (ds-base/select-rows dataset
+                                       (->> (keep-indexed #(if (not= %1 i) %2) folds)
                                             (apply concat )))})))
   ([dataset k]
    (k-fold-datasets dataset k {})))
 
 
 (defn train-test-split
+  "Probabilistically split the dataset returning a map of `{:train-ds :test-ds}`."
   ([dataset {:keys [randomize-dataset? train-fraction]
              :or {randomize-dataset? true
                   train-fraction 0.7}}]
@@ -145,27 +140,10 @@
          n-elems (long n-rows)
          n-training (long (Math/round (* n-elems
                                          (double train-fraction))))]
-     {:train-ds (select dataset :all (take n-training indexes))
-      :test-ds (select dataset :all (drop n-training indexes))}))
+     {:train-ds (ds-base/select-rows dataset (take n-training indexes))
+      :test-ds (ds-base/select-rows dataset (drop n-training indexes))}))
   ([dataset]
    (train-test-split dataset {})))
-
-
-(defn reverse-map-categorical-columns
-  "Given a dataset where we have converted columns from a categorical representation
-  to either a numeric reprsentation or a one-hot representation, reverse map
-  back to the original dataset given the reverse mapping of label->number in
-  the column's metadata."
-  [dataset]
-  (->> (concat (map vector
-                    (categorical/dataset->categorical-maps dataset)
-                    (repeat categorical/invert-categorical-map))
-               (map vector
-                    (categorical/dataset->one-hot-maps dataset)
-                    (repeat categorical/invert-one-hot-map)))
-       (reduce (fn [dataset [cat-map invert-fn]]
-                 (invert-fn dataset cat-map))
-               dataset)))
 
 
 (defn inference-target-ds
@@ -174,4 +152,16 @@
   [dataset]
   (when-let [target-cols (inference-target-column-names dataset)]
     (-> (ds-base/select-columns dataset target-cols)
-        (reverse-map-categorical-columns))))
+        (categorical/reverse-map-categorical-xforms))))
+
+
+(defn labels
+  "Return the labels.  The labels sequence is the reverse mapped inference
+  column.  This returns a single column of data or errors out."
+  [dataset]
+  (let [rev-mapped (vals (inference-target-ds dataset))]
+    (errors/when-not-errorf
+        (== 1 (count rev-mapped))
+      "Incorrect number of columns (%d) in dataset for labels transformation"
+      (count rev-mapped))
+    (first rev-mapped)))

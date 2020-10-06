@@ -239,3 +239,19 @@
                 (dissoc :one-hot-map)
                 (assoc :categorical? true))
             missing))))
+
+(defn reverse-map-categorical-xforms
+  "Given a dataset where we have converted columns from a categorical representation
+  to either a numeric reprsentation or a one-hot representation, reverse map
+  back to the original dataset given the reverse mapping of label->number in
+  the column's metadata."
+  [dataset]
+  (->> (concat (map vector
+                    (dataset->categorical-maps dataset)
+                    (repeat invert-categorical-map))
+               (map vector
+                    (dataset->one-hot-maps dataset)
+                    (repeat invert-one-hot-map)))
+       (reduce (fn [dataset [cat-map invert-fn]]
+                 (invert-fn dataset cat-map))
+               dataset)))
