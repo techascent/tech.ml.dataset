@@ -383,7 +383,7 @@
                                           n-rows
                                           (dec n-rows))))
                          (tensor->smile-matrix))
-             ;;Indicate this is an lower-triangular matrix.  This measn the eigenvalues
+             ;;Indicate this is an lower-triangular matrix.  This means the eigenvalues
              ;;calculation is much cheaper.
              _ (.uplo cov-mat smile.math.blas.UPLO/LOWER)
              ;;And here is a bug in smile.  For svd, the eigenvectors are sorted
