@@ -297,17 +297,25 @@
 
 
 (defn mean-center-columns!
-  "in-place nan-aware mean-center the rows of the tensor.  Tensor must be writable and return value
-  is {:means :tensor}.
+  "in-place nan-aware mean-center the rows of the tensor.  If tensor is writeable then this
+  writes the result directly to the tensor else it clones the tensor.
+  Return value is `{:means :tensor}`.
 
-  Per-column means may be provided if pre-calculated"
+  Pre-calculated per-column means may be provided."
   ([tens {:keys [nan-strategy means]
           :or {nan-strategy :remove}}]
    (errors/when-not-errorf
     (== 2 (count (dtype/shape tens)))
     "Tensor must have 2 dimensional shape: %s"
     (dtype/shape tens))
-   (let [^List columns (mapv dtype/->buffer (dtt/slice-right tens 1))
+   ;;Transpose tensor so our calculation can be in row-major form
+   (let [tens (dtt/transpose tens [1 0])
+         ;;Note I reversed the shape result to be column-major due to the
+         ;;transpose above.
+         [_n-cols n-rows] (dtype/shape tens)
+         n-rows (long n-rows)
+         ;;Remember the tensor is transposed, so the rows are the columns.
+         ^List columns (mapv dtype/->buffer (dtt/slice tens 1))
          means (or means
                    (-> (reify DoubleReader
                          (lsize [rdr] (long (.size columns)))
@@ -316,22 +324,28 @@
                              (stats/mean {:nan-strategy nan-strategy} data))))
                        (dtype/clone)))
          mean-buf (dtype/->buffer means)
-         n-columns (.size columns)]
+         tens-buf (dtype/->buffer tens)
+         ^Buffer tens-buf (if-not (.allowsWrite tens-buf)
+                            (dtype/->buffer (dtype/clone tens))
+                            tens-buf)
+         n-elems (.lsize tens-buf)]
+     ;;Now with the transposed tensor, we can iterate and get full
+     ;;parallelism but still have each thread run through the tensor
+     ;;column by column.
      (pfor/parallel-for
-      idx n-columns
-      (let [^Buffer column (.get columns idx)
-            mean (.readDouble mean-buf idx)]
-        (dotimes [elem-idx (.lsize column)]
-          (.writeDouble column elem-idx
-                        (pmath/- (.readDouble column elem-idx)
-                                 mean)))))
+      idx n-elems
+      (let [col-idx (quot idx n-rows)
+            mean (.readDouble mean-buf col-idx)]
+        (.writeDouble tens-buf idx
+                      (pmath/- (.readDouble tens-buf idx)
+                               mean))))
      {:means means
-      :tensor tens}))
+      :tensor (dtt/transpose tens [1 0])}))
   ([tens]
    (mean-center-columns! tens nil)))
 
 
-(defn pca-fit!
+(defn fit-pca!
   "Run Principle Component Analysis on a tensor.
 
   Keep in mind that PCA may be highly influenced by outliers in the dataset
@@ -403,10 +417,10 @@
                             ;;from a smile matrix.
                             (dtt/select :all eig-order))}))))
   ([tensor]
-   (pca-fit! tensor nil)))
+   (fit-pca! tensor nil)))
 
 
-(defn pca-transform!
+(defn transform-pca!
   "PCA transform the dataset returning a new tensor.  Mean-centers
   the tensor in-place."
   [tensor pca-info n-components]

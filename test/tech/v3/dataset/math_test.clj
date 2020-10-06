@@ -77,16 +77,10 @@
                                   [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
                    [1 0])
         test-ds (ds-tens/tensor->dataset test-data)
-        svd-fit (ds-math/pca-fit test-ds {:method :svd})
-        svd-transformed-ds (ds-math/pca-transform
-                            test-ds
-                            svd-fit
-                            2)
-        corr-fit (ds-math/pca-fit test-ds {:method :corr})
-        corr-transformed-ds (ds-math/pca-transform
-                             test-ds
-                             corr-fit
-                             2)
+        svd-fit (ds-math/fit-pca test-ds {:method :svd :n-components 2})
+        svd-transformed-ds (ds-math/transform-pca test-ds svd-fit)
+        corr-fit (ds-math/fit-pca test-ds {:method :corr :n-components 2})
+        corr-transformed-ds (ds-math/transform-pca test-ds corr-fit)
         ;;Slow, partially correct smile method (only correct for n-rows > n-cols)
         smile-svd-pca (doto (PCA/fit (->> test-data
                                           dtt/rows

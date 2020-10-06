@@ -2,6 +2,7 @@
   "Methods related specifically to machine learning such as setting
   the inference target."
   (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.base
              :refer [column-names update-columns
                      select]
@@ -12,9 +13,6 @@
   (:import [tech.v3.datatype ObjectReader]))
 
 
-(declare dataset-label-map reduce-column-names)
-
-
 (defn inference-column?
   [col]
   (= :inference (:column-type (meta col))))
@@ -22,56 +20,38 @@
 
 (defn set-inference-target
   [dataset target-name-or-target-name-seq]
-  (let [label-map (dataset-label-map dataset)
-        target (->> (if (sequential? target-name-or-target-name-seq)
-                      target-name-or-target-name-seq
-                      [target-name-or-target-name-seq])
-                    ;;expand column names after 1-hot mapping
-                    (mapcat (fn [colname]
-                              (let [col-label-map (get label-map colname)]
-                                (if (and col-label-map
-                                         (categorical/is-one-hot-label-map?
-                                          col-label-map))
-                                  (->> (vals col-label-map)
-                                       (map first))
-                                  [colname]))))
-                    set)]
-    (update-columns dataset (column-names dataset)
-                    (fn [col]
-                      (vary-meta col assoc
-                                 :column-type (if (contains? target (ds-col/column-name col))
-                                                :inference
-                                                :feature))))))
+  (let [colnames (if (sequential? target-name-or-target-name-seq)
+                   target-name-or-target-name-seq
+                   [target-name-or-target-name-seq])]
+    (ds-base/update-columns dataset colnames
+                            #(vary-meta % assoc :column-type :inference))))
+
 
 (defn inference-target-column-names
   [ds]
-  (->> (map meta ds)
+  (->> (map meta (vals ds))
        (filter #(= :inference (:column-type %)))
        (map :name)))
 
 
-(defn column-label-map
-  [dataset column-name]
-  (get-in (metadata dataset) [:label-map column-name]))
-
-
-(defn has-column-label-map?
-  [dataset column-name]
-  (boolean (column-label-map dataset column-name)))
-
-
 (defn inference-target-label-map
   [dataset & [label-columns]]
-  (let [label-columns (or label-columns (col-filters/inference? dataset))]
-    (when-not (= 1 (count label-columns))
-      (throw (ex-info (format "Multiple label columns found: %s" label-columns)
-                      {:label-columns label-columns})))
-    (column-label-map dataset (first label-columns))))
+  (let [label-columns (or label-columns (inference-target-column-names dataset))]
+    (errors/when-not-errorf
+     (= 1 (count label-columns))
+     "Multiple label columns found: %s" label-columns)
+    (-> (ds-base/column dataset (first label-columns))
+        (meta)
+        (get-in [:categorical-map :lookup-table]))))
 
 
 (defn dataset-label-map
   [dataset]
-  (get (metadata dataset) :label-map))
+  (->> (vals dataset)
+       (map meta)
+       (filter :categorical-map)
+       (map (juxt :name #(get-in % [:categorical-map :lookup-table])))
+       (into {})))
 
 
 (defn inference-target-label-inverse-map
@@ -94,7 +74,8 @@
   "When columns aren't scalars then this will change.
   For now, just the number of feature columns."
   ^long [dataset]
-  (count (col-filters/feature? dataset)))
+  (count (remove #(= :inference (:column-type (meta %)))
+                 (vals dataset))))
 
 
 (defn model-type
@@ -103,66 +84,44 @@
   :regression
   :classification"
   [dataset & [column-name-seq]]
-  (let [col-label-map (dataset-label-map dataset)]
-    (->> (or column-name-seq (col-filters/inference? dataset))
-         (reduce-column-names dataset)
-         (map (juxt identity
-                    (fn [colname]
-                      (if-let [column-data (maybe-column dataset colname)]
-                        (let [col-metadata (ds-col/metadata column-data)]
-                          (cond
-                            (:categorical? col-metadata) :classification
-                            :else
-                            :regression))
-                        (if (contains? col-label-map colname)
-                          :classification
-                          :regression)))))
-         (into {}))))
+  (if (->> (or column-name-seq
+               (inference-target-column-names dataset))
+           (ds-base/select-columns dataset)
+           (vals)
+           (map meta)
+           (filter :categorical?)
+           seq)
+    :classification
+    :regression))
 
 
 (defn column-values->categorical
   "Given a column encoded via either string->number or one-hot, reverse
-  map to the a sequence of the original string column values."
+  map to the a sequence of the original string column values.
+  In the case of one-hot mappings, src-column must be the original
+  column name before the one-hot map"
   [dataset src-column]
-  (categorical/column-values->categorical
-   dataset src-column (dataset-label-map dataset)))
+  (if-let [cmap (->> (categorical/dataset->categorical-maps dataset)
+                     (filter #(= src-column (:src-column %)))
+                     (first))]
+    (-> (categorical/invert-categorical-map dataset cmap)
+        (ds-base/column src-column))
+    (if-let [one-hot-map (->> (categorical/dataset->one-hot-maps dataset)
+                              (filter #(= src-column (:src-column %)))
+                              (first))]
+      (-> (categorical/invert-one-hot dataset one-hot-map)
+          (ds-base/column src-column))
+      (errors/throwf "Column %s does not appear to have either a categorical or one hot map"
+                     src-column))))
 
 
-(defn reduce-column-names
-  "Reverse map from the one-hot encoded columns
-  to the original source column."
-  [dataset colname-seq]
-  (let [colname-set (set colname-seq)
-        reverse-map
-        (->> (dataset-label-map dataset)
-             (mapcat (fn [[colname colmap]]
-                       ;;If this is one hot *and* every one hot is represented in the
-                       ;;column name sequence, then we can recover the original column.
-                       (when (and (categorical/is-one-hot-label-map? colmap)
-                                  (every? colname-set (->> colmap
-                                                           vals
-                                                           (map first))))
-                         (->> (vals colmap)
-                              (map (fn [[derived-col _col-idx]]
-                                     [derived-col colname]))))))
-             (into {}))]
-    (->> colname-seq
-         (map (fn [derived-name]
-                (if-let [original-name (get reverse-map derived-name)]
-                  original-name
-                  derived-name)))
-         distinct)))
-
-
-(defn ->k-fold-datasets
+(defn k-fold-datasets
   "Given 1 dataset, prepary K datasets using the k-fold algorithm.
   Randomize dataset defaults to true which will realize the entire dataset
   so use with care if you have large datasets."
   ([dataset k {:keys [randomize-dataset?]
-               :or {randomize-dataset? true}
-               :as options}]
-   (let [dataset (->dataset dataset options)
-         [_n-cols n-rows] (dtype/shape dataset)
+               :or {randomize-dataset? true}}]
+   (let [[_n-cols n-rows] (dtype/shape dataset)
          indexes (cond-> (range n-rows)
                    randomize-dataset? shuffle)
          fold-size (inc (quot (long n-rows) k))
@@ -172,16 +131,14 @@
         :train-ds (select dataset :all (->> (keep-indexed #(if (not= %1 i) %2) folds)
                                             (apply concat )))})))
   ([dataset k]
-   (->k-fold-datasets dataset k {})))
+   (k-fold-datasets dataset k {})))
 
 
-(defn ->train-test-split
+(defn train-test-split
   ([dataset {:keys [randomize-dataset? train-fraction]
              :or {randomize-dataset? true
-                  train-fraction 0.7}
-             :as options}]
-   (let [dataset (->dataset dataset options)
-         [_n-cols n-rows] (dtype/shape dataset)
+                  train-fraction 0.7}}]
+   (let [[_n-cols n-rows] (dtype/shape dataset)
          indexes (cond-> (range n-rows)
                    randomize-dataset? shuffle)
          n-elems (long n-rows)
@@ -190,67 +147,23 @@
      {:train-ds (select dataset :all (take n-training indexes))
       :test-ds (select dataset :all (drop n-training indexes))}))
   ([dataset]
-   (->train-test-split dataset {})))
+   (train-test-split dataset {})))
 
-
-(defn ->row-major
-  "Given a dataset and a map of desired key names to sequences of columns,
-  produce a sequence of maps where each key name points to contiguous vector
-  composed of the column values concatenated.
-  If colname-seq-map is not provided then each row defaults to
-  {:features [feature-columns]
-   :label [label-columns]}"
-  ([dataset key-colname-seq-map {:keys [datatype]
-                                 :or {datatype :float64}}]
-   (let [key-reader-seq
-         (->> (seq key-colname-seq-map)
-              (map (fn [[k v]]
-                     (when (seq v)
-                       [k (->> v
-                               (mapv #(-> (ds-base/column dataset %)
-                                          (dtype/->reader datatype))))])))
-              (remove nil?)
-              vec)
-         n-elems (long (ds-base/row-count dataset))]
-     (reify ObjectReader
-       (lsize [rdr] n-elems)
-       (read [rdr idx]
-         (->> key-reader-seq
-              (map (fn [[k v]]
-                     [k (dtype/make-container
-                         :java-array datatype
-                         (mapv #(% idx) v))]))
-              (into {}))))))
-  ([dataset options]
-   (->row-major dataset (merge
-                         {:features (col-filters/feature? dataset)}
-                         (when-let [label-colnames (col-filters/inference? dataset)]
-                           {:label label-colnames}))
-                options))
-  ([dataset]
-   (->row-major dataset {})))
 
 (defn reverse-map-categorical-columns
   "Given a dataset where we have converted columns from a categorical representation
   to either a numeric reprsentation or a one-hot representation, reverse map
   back to the original dataset given the reverse mapping of label->number in
   the column's metadata."
-  [dataset {:keys [column-name-seq]}]
-  (let [label-map (dataset-label-map dataset)
-        column-name-seq (or column-name-seq
-                            (column-names dataset))
-        column-name-seq (reduce-column-names dataset column-name-seq)
-        dataset
-        (clojure.core/reduce
-         (fn [dataset colname]
-           (if (contains? label-map colname)
-             (add-or-update-column dataset colname
-                                   (categorical/column-values->categorical
-                                    dataset colname label-map))
-             dataset))
-         dataset
-         column-name-seq)]
-    (select-columns dataset column-name-seq)))
+  [dataset]
+  (->> (concat (categorical/dataset->categorical-maps dataset)
+               (categorical/dataset->one-hot-maps dataset))
+       (reduce (fn [dataset cat-map]
+                 ))
+       )
+
+
+  (select-columns dataset column-name-seq))
 
 
 (defn ->flyweight

@@ -49,18 +49,18 @@
   ([options column-map]
    (let [parse-context (parse-context/options->parser-fn options :object)]
      (->> column-map
-          (map (fn [[colname coldata]]
-                 ;;Fastpath for non-object already-niceified data
-                 (if (and (dtype/reader? coldata)
-                          (not= :object (dtype/elemwise-datatype coldata)))
-                   {:name colname
-                    :data coldata}
-                   (let [parser (parse-context colname)]
-                     (pfor/consume!
-                      #(column-parsers/add-value! parser (first %) (second %))
-                      (map-indexed vector coldata))
-                     (assoc (column-parsers/finalize! parser (dtype/ecount parser))
-                            :name colname)))))
+          (pmap (fn [[colname coldata]]
+                  ;;Fastpath for non-object already-niceified data
+                  (if (and (dtype/reader? coldata)
+                           (not= :object (dtype/elemwise-datatype coldata)))
+                    {:name colname
+                     :data coldata}
+                    (let [parser (parse-context colname)]
+                      (pfor/consume!
+                       #(column-parsers/add-value! parser (first %) (second %))
+                       (map-indexed vector coldata))
+                      (assoc (column-parsers/finalize! parser (dtype/ecount parser))
+                             :name colname)))))
           (ds-impl/new-dataset options))))
   ([column-map]
    (column-map->dataset nil column-map)))

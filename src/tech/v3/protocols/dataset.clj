@@ -21,3 +21,7 @@ index-seq - either keyword :all or list of indexes.  May contain duplicates.")
   (supported-column-stats [dataset]
     "Return the set of natively supported stats for the dataset.  This must be at least
 #{:mean :variance :median :skew}."))
+
+
+(defprotocol PDatasetTransform
+  (transform [t dataset]))

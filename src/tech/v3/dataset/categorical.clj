@@ -3,7 +3,8 @@
   a number or using a hot-hot mapping.  Both systems have an invert pathway to get
   back the original column."
   (:require [tech.v3.dataset.base :as ds-base]
-            [tech.v3.protocols.column :as ds-col]
+            [tech.v3.protocols.column :as col-proto]
+            [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.datatype :as dtype]
@@ -56,7 +57,7 @@
                               (assoc categorical-map col-val
                                      (long (count categorical-map)))))
                           (make-categorical-map-from-table-args table-args)
-                          (ds-col/unique (ds-base/column dataset colname)))
+                          (col-proto/unique (ds-base/column dataset colname)))
     :src-column colname
     :result-datatype (or res-dtype :float64)}))
 
@@ -68,7 +69,7 @@
         result-datatype (or (:result-datatype fit-data) :float64)
         lookup-table (:lookup-table fit-data)
         column (ds-base/column dataset colname)
-        missing (ds-col/missing column)
+        missing (col-proto/missing column)
         col-meta (meta column)
         missing-value (col-base/datatype->missing-value result-datatype)]
     (assoc dataset colname
@@ -87,6 +88,12 @@
                         column)
             (assoc col-meta :categorical-map fit-data)
             missing))))
+
+
+(extend-type CategoricalMap
+  ds-proto/PDatasetTransform
+  (transform [t dataset]
+    (transform-categorical-map dataset t)))
 
 
 (defn dataset->categorical-maps
@@ -124,7 +131,7 @@
             (-> (meta column)
                 (dissoc :categorical-map)
                 (assoc :categorical? true))
-            (ds-col/missing column)))))
+            (col-proto/missing column)))))
 
 
 (defn- safe-str
@@ -166,7 +173,7 @@
   (let [{:keys [one-hot-table src-column result-datatype]}
         one-hot-fit-data
         column (ds-base/column dataset src-column)
-        missing (ds-col/missing column)
+        missing (col-proto/missing column)
         dataset (dissoc dataset src-column)]
     (->> one-hot-table
          (mapcat
@@ -185,6 +192,12 @@
          (apply assoc dataset))))
 
 
+(extend-type OneHotMap
+  ds-proto/PDatasetTransform
+  (transform [t dataset]
+    (transform-one-hot dataset t)))
+
+
 (defn dataset->one-hot-maps
   "Given a dataset, return a sequence of applied on-hot transformations."
   [dataset]
@@ -194,7 +207,7 @@
        (distinct)))
 
 
-(defn one-hot-invert
+(defn invert-one-hot
   "Invert a one-hot transformation removing the one-hot columns and adding back the
   original column."
   [dataset {:keys [one-hot-table src-column]}]
@@ -211,7 +224,7 @@
                                                 (ds-base/column one-hot-ds colname)))))
         dataset (apply dissoc dataset colnames)
         missing (reduce dtype-proto/set-or
-                        (map ds-col/missing (vals one-hot-ds)))
+                        (map col-proto/missing (vals one-hot-ds)))
         res-dtype (reduce casting/widest-datatype
                           (map dtype/datatype (keys one-hot-table)))]
     (assoc dataset
