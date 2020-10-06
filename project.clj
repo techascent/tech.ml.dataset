@@ -59,6 +59,8 @@
                       :source-uri "https://github.com/techascent/tech.ml.dataset/blob/master/{filepath}#L{line}"
                       :namespaces [tech.v3.dataset
                                    tech.v3.dataset.math
+                                   tech.v3.dataset.modelling
+                                   tech.v3.dataset.categorical
                                    tech.v3.dataset.io.datetime]}}
              ;;No neanderthal on travis
              :travis {:dependencies [[criterium "0.4.5"]
