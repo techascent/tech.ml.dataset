@@ -1,16 +1,16 @@
-(ns tech.libs.arrow
-  (:require [tech.parallel.utils :refer [export-symbols]]
-            [tech.v2.datatype.mmap :as mmap]))
+(ns tech.v3.libs.arrow
+  (:require [tech.v3.datatype.export-symbols :refer [export-symbols]]
+            [tech.v3.datatype.mmap :as mmap]))
 
 
-(export-symbols tech.libs.arrow.copying
+(export-symbols tech.v3.libs.arrow.copying
                 write-dataset-to-stream!
                 write-dataset-seq-to-stream!
                 stream->dataset-seq-copying
                 read-stream-dataset-copying)
 
 
-(export-symbols tech.libs.arrow.in-place
+(export-symbols tech.v3.libs.arrow.in-place
                 message-seq
                 parse-message
                 read-stream-dataset-inplace

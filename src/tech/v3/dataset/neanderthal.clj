@@ -1,11 +1,12 @@
-(ns tech.ml.dataset.neanderthal
+(ns tech.v3.dataset.neanderthal
   "Conversion of a dataset to/from a neanderthal dense matrix"
   (:require [uncomplicate.neanderthal.core :as n-core]
             [uncomplicate.neanderthal.native :as n-native]
-            [tech.libs.neanderthal]
-            [tech.ml.dataset.base :as ds-base]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.tensor :as dtt]))
+            [tech.v3.libs.neanderthal]
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.tensor :as dtt]))
 
 
 (defn dataset->dense
@@ -40,7 +41,5 @@
   the neanderthal matrix into JVM arrays, then after method use dtype/clone."
   [matrix]
   (->> (n-core/cols matrix)
-       (map-indexed (fn [idx col]
-                      [(format "column-%d" idx) (dtt/ensure-tensor col)]))
-       (into {})
-       (ds-base/->dataset)))
+       (map dtt/ensure-tensor)
+       (ds-impl/new-dataset :neandtheral)))

@@ -1,14 +1,17 @@
-(ns tech.libs.arrow.in-place
-  (:require [tech.v2.datatype.mmap :as mmap]
-            [tech.libs.arrow.copying :as arrow]
-            [tech.v2.datatype :as dtype]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.base :as ds-base]
+(ns tech.v3.libs.arrow.in-place
+  (:require [tech.v3.datatype.mmap :as mmap]
+            [tech.v3.libs.arrow.copying :as arrow]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.native-buffer :as native-buffer]
+            [tech.v3.datatype.nio-buffer :as nio-buffer]
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
+            [tech.v3.dataset.base :as ds-base]
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]])
-  (:import [tech.v2.datatype.mmap NativeBuffer]
-           [org.apache.arrow.vector.ipc.message MessageSerializer
+  (:import [org.apache.arrow.vector.ipc.message MessageSerializer
             MessageMetadataResult]
            [org.apache.arrow.vector TypeLayout Float8Vector]
            [org.apache.arrow.flatbuf Message MessageHeader DictionaryBatch RecordBatch]
@@ -17,8 +20,9 @@
             ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
             ArrowType$Duration DictionaryEncoding]
-           [tech.ml.dataset.dynamic_int_list DynamicIntList]
-           [tech.ml.dataset.string_table StringTable]
+           [tech.v3.dataset.string_table StringTable]
+           [tech.v3.datatype.native_buffer NativeBuffer]
+           [tech.v3.datatype ObjectReader]
            [java.util ArrayList HashMap List]))
 
 
@@ -45,18 +49,18 @@
 
 (defn read-message
   "returns a pair of offset-data and message."
-  [^NativeBuffer data]
-  (when-not (== 0 (.n-elems data))
-    (let [msg-size (mmap/read-int data)
+  [data]
+  (when-not (== 0 (dtype/ecount data))
+    (let [msg-size (native-buffer/read-int data)
           [msg-size offset] (if (== -1 msg-size)
-                              [(mmap/read-int data 4) 8]
+                              [(native-buffer/read-int data 4) 8]
                               [msg-size 4])
           offset (long offset)
           msg-size (long msg-size)]
       (when (> msg-size 0)
         (let [new-msg (Message/getRootAsMessage
                        (-> (dtype/sub-buffer data offset msg-size)
-                           (dtype/->buffer-backing-store)))
+                           (nio-buffer/native-buf->nio-buf)))
               next-buf (dtype/sub-buffer data (+ offset msg-size))
               body-length (.bodyLength new-msg)
               aligned-offset (align-offset (+ offset msg-size body-length))]
@@ -212,16 +216,16 @@
   ^List [offsets data n-elems]
   (let [n-elems (long n-elems)
         offsets (dtype/->reader offsets)]
-    (dtype/object-reader
-     n-elems
-     (fn [^long idx]
-       (let [start-off (long (offsets idx))
-             end-off (long (offsets (inc idx)))
-             ^bytes byte-data (-> (dtype/sub-buffer data start-off
-                                                    (- end-off start-off))
-                                  (dtype/->array-copy))]
-         (String. byte-data)))
-     :string)))
+    (reify ObjectReader
+      (elemwiseDatatype [rdr] :string)
+      (lsize [rdr] n-elems)
+      (readObject [rdr idx]
+        (let [start-off (long (offsets idx))
+              end-off (long (offsets (inc idx)))]
+          (-> (dtype/sub-buffer data start-off
+                                (- end-off start-off))
+              (dtype/->byte-array)
+              (String.)))))))
 
 
 (defn dictionary->strings
@@ -234,9 +238,9 @@
         node (first nodes)
         [bitwise offsets databuf] buffers
         n-elems (long (:n-elems node))
-        offsets (-> (mmap/set-native-datatype offsets :int32)
+        offsets (-> (native-buffer/set-native-datatype offsets :int32)
                     (dtype/sub-buffer 0 n-elems))
-        data (mmap/set-native-datatype databuf :int8)
+        data (native-buffer/set-native-datatype databuf :int8)
         str-data (dtype/make-container :list :string
                    (offsets-data->string-reader offsets data n-elems))]
     {:id id
@@ -248,14 +252,13 @@
   (if encoding
     (let [str-list (get-in dict-map [(:id encoding) :strings])
           index-data (-> (first buffers)
-                         (mmap/set-native-datatype
+                         (native-buffer/set-native-datatype
                           (get-in encoding [:index-type :datatype]))
-                         (dtype/sub-buffer 0 n-elems)
-                         (dtype/->reader :int32))
-          retval (StringTable. str-list nil (DynamicIntList. index-data index-data))]
+                         (dtype/sub-buffer 0 n-elems))
+          retval (StringTable. str-list nil (dyn-int-list/make-from-container index-data))]
       retval)
     (let [[offsets varchar-data] buffers]
-      (offsets-data->string-reader (mmap/set-native-datatype offsets :int32)
+      (offsets-data->string-reader (native-buffer/set-native-datatype offsets :int32)
                                    varchar-data n-elems))))
 
 
@@ -277,7 +280,7 @@
                                                (+ buf-idx n-buffers))
                          n-elems (long (:n-elems node))
                          missing (if (== 0 (long (:n-null-entries node)))
-                                   (dtype/->bitmap-set)
+                                   (bitmap/->bitmap)
                                    (arrow/int8-buf->missing (first specific-bufs)
                                                             n-elems))
                          metadata (into col-metadata (:metadata field))]
@@ -290,7 +293,7 @@
                                         n-elems)
                                :boolean (arrow/bitbuffer->boolean-reader
                                          (second specific-bufs) n-elems)
-                               (-> (mmap/set-native-datatype
+                               (-> (native-buffer/set-native-datatype
                                     (second specific-bufs) field-dtype)
                                    (dtype/sub-buffer 0 n-elems)))
                              metadata
@@ -330,7 +333,7 @@
   available RAM.
   This method is expected to be called from within a stack resource context
   unless options include {:resource-type :gc}.  See documentation for
-  tech.v2.datatype.mmap/mmap-file."
+  tech.v3.datatype.mmap/mmap-file."
   [fname & [options]]
   (let [fdata (mmap/mmap-file fname options)
         messages (mapv parse-message (message-seq fdata))
@@ -387,10 +390,10 @@ Please use stream->dataset-seq-inplace.")))
   (def inplace-ds (records->ds schema dict-map record))
 
   (require '[criterium.core :as crit])
-  (require '[tech.v2.datatype.functional :as dfn])
+  (require '[tech.v3.datatype.functional :as dfn])
   (require '[tech.resource :as resource])
   (require '[tech.parallel.for :as parallel-for])
-  (require '[tech.v2.datatype.typecast :as typecast])
+  (require '[tech.v3.datatype.typecast :as typecast])
 
   (defn fast-reduce-plus
     ^double [rdr]

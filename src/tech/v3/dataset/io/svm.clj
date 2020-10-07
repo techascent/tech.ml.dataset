@@ -1,4 +1,4 @@
-(ns tech.v3.dataset.svm
+(ns tech.v3.dataset.io.svm
   (:require [clojure.string :as s]))
 
 

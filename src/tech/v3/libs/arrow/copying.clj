@@ -1,18 +1,19 @@
-(ns tech.libs.arrow.copying
-  (:require [tech.ml.dataset.base :as ds-base]
-            [tech.ml.protocols.column :as col-proto]
-            [tech.ml.dataset.impl.dataset :as ds-impl]
-            [tech.ml.dataset.impl.column :as col-impl]
-            [tech.ml.dataset.string-table :as str-table]
-            [tech.v2.datatype.casting :as casting]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.protocols :as dtype-proto]
-            [tech.v2.datatype.typecast :as typecast]
-            [tech.v2.datatype.mmap :as mmap]
+(ns tech.v3.libs.arrow.copying
+  (:require [tech.v3.dataset.base :as ds-base]
+            [tech.v3.protocols.column :as col-proto]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.native-buffer :as native-buffer]
+            [tech.v3.datatype.bitmap :as bitmap]
             [clojure.edn :as edn]
-            [tech.ml.dataset.utils :as ml-utils]
+            [tech.v3.dataset.utils :as ml-utils]
             [tech.io :as io]
             [primitive-math :as pmath])
   (:import [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
@@ -37,23 +38,17 @@
            [org.roaringbitmap RoaringBitmap]
            [java.util Map ArrayList List HashMap]
            [java.io InputStream RandomAccessFile]
-           [tech.ml.dataset.impl.column Column]
-           [tech.v2.datatype ObjectWriter]
-           [tech.ml.dataset.string_table StringTable]
-           [tech.ml.dataset.dynamic_int_list DynamicIntList]
+           [tech.v3.dataset.impl.column Column]
+           [tech.v3.datatype ObjectWriter]
+           [tech.v3.dataset.string_table StringTable]
+           [tech.v3.dataset.dynamic_int_list DynamicIntList]
            [java.time ZoneId]
-           [java.nio ByteBuffer Buffer ByteOrder]
-           [tech.v2.datatype.typed_buffer TypedBuffer]
-           [tech.v2.datatype BooleanWriter]
+           [tech.v3.datatype Buffer ObjectReader BooleanWriter]
            [it.unimi.dsi.fastutil.bytes ByteArrayList]
            [it.unimi.dsi.fastutil.ints IntArrayList]
-           [com.sun.jna Pointer]
            [sun.misc Unsafe]
            [org.apache.arrow.memory.util MemoryUtil]
-           [tech.v2.datatype.mmap NativeBuffer]))
-
-
-;;TODO - check out gandiva
+           [tech.v3.datatype.native_buffer NativeBuffer]))
 
 
 (set! *warn-on-reflection* true)
@@ -91,39 +86,42 @@
 ;; Base datatype bindings
 (defn arrow-buffer->typed-buffer
   ^NativeBuffer [datatype ^ArrowBuf buf]
-  (let [native-buf (NativeBuffer. (.memoryAddress buf)
-                                  (.capacity buf) :int8)]
+  (let [native-buf (native-buffer/wrap-address
+                    (.memoryAddress buf)
+                    (.capacity buf) :int8
+                    :little-endian buf)]
     (if (= datatype :int8)
       native-buf
-      (mmap/set-native-datatype native-buf datatype))))
+      (native-buffer/set-native-datatype native-buf datatype))))
 
 
 (defn int8-buf->missing
   ^RoaringBitmap [data-buf n-elems]
-  (let [data-buf (typecast/datatype->reader :int8 data-buf)
-        ^RoaringBitmap missing (dtype/->bitmap-set)
+  (let [data-buf (dtype/->reader data-buf)
+        ^RoaringBitmap missing (bitmap/->bitmap)
         n-bytes (quot (+ n-elems 7) 8)]
     (dotimes [idx n-bytes]
       (let [offset (pmath/* 8 idx)
-            data (unchecked-int (.read data-buf idx))]
-        ;;TODO - find more elegant way of pulling this off
-        (when (== 0 (pmath/bit-and data 1))
-          (.add missing offset))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 1)))
-          (.add missing (pmath/+ offset 1)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 2)))
-          (.add missing (pmath/+ offset 2)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 3)))
-          (.add missing (pmath/+ offset 3)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 4)))
-          (.add missing (pmath/+ offset 4)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 5)))
-          (.add missing (pmath/+ offset 5)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 6)))
-          (.add missing (pmath/+ offset 6)))
-        (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
-          (.add missing (pmath/+ offset 7)))))
-    (dtype/set-and missing (range n-elems))))
+            data (unchecked-int (.readByte data-buf idx))]
+        (when-not (== data -1)
+          ;;TODO - find more elegant way of pulling this off
+          (when (== 0 (pmath/bit-and data 1))
+            (.add missing offset))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 1)))
+            (.add missing (pmath/+ offset 1)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 2)))
+            (.add missing (pmath/+ offset 2)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 3)))
+            (.add missing (pmath/+ offset 3)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 4)))
+            (.add missing (pmath/+ offset 4)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 5)))
+            (.add missing (pmath/+ offset 5)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 6)))
+            (.add missing (pmath/+ offset 6)))
+          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
+            (.add missing (pmath/+ offset 7))))))
+    (dtype-proto/set-and missing (range n-elems))))
 
 
 (defn valid-buf->missing
@@ -145,15 +143,10 @@
   ^ArrowBuf [^RoaringBitmap bitmap ^ArrowBuf buffer ^long n-elems]
   (reset! t buffer)
   (let [nio-buf (arrow-buffer->typed-buffer :int8 buffer)
-        ^RoaringBitmap missing (dtype/->bitmap-set)
         n-bytes (quot (+ n-elems 7) 8)
-        writer (typecast/datatype->writer :int8 nio-buf)]
-    (if (.isEmpty bitmap)
-      ;;Common case
-      (dtype/set-constant! nio-buf 0 (byte -1) n-bytes)
-      ;;Tedious case.  It may be better here to iterate and find next missing
-      ;;some similar pathway so we have a fastpath when there are no missing
-      ;;elements
+        writer (dtype/->buffer nio-buf)]
+    (dtype/set-constant! nio-buf 0 (byte -1) n-bytes)
+    (when-not (.isEmpty bitmap)
       (dotimes [idx n-bytes]
         (let [offset (pmath/* 8 idx)
               data (-> (unchecked-long 0)
@@ -165,7 +158,7 @@
                        (add-bit 5 bitmap offset)
                        (add-bit 6 bitmap offset)
                        (add-bit 7 bitmap offset))]
-          (.write writer idx (unchecked-byte data)))))
+          (.writeByte writer idx (unchecked-byte data)))))
     buffer))
 
 
@@ -176,15 +169,15 @@
         value-buf (arrow-buffer->typed-buffer :int8 (.getDataBuffer fv))
         offset-buf (arrow-buffer->typed-buffer :int32 (.getOffsetBuffer fv))
         offset-rdr (dtype/->reader offset-buf)]
-    (dtype/object-reader
-     n-elems
-     (fn [^long idx]
-       (let [cur-offset (offset-rdr idx)
-             next-offset (offset-rdr (inc idx))]
-         (String. ^bytes (dtype/->array-copy
+    (reify ObjectReader
+      (elemwiseDatatype [rdr] :string)
+      (lsize [rdr] n-elems)
+      (readObject [rdr idx]
+        (let [cur-offset (offset-rdr idx)
+              next-offset (offset-rdr (inc idx))]
+         (String. ^bytes (dtype/->byte-array
                           (dtype/sub-buffer value-buf cur-offset
-                                            (- next-offset cur-offset))))))
-     :string)))
+                                            (- next-offset cur-offset)))))))))
 
 
 (defn varchar->strings
@@ -201,7 +194,7 @@
   ^VarCharVector [string-reader ^RoaringBitmap missing ^VarCharVector fv]
   (let [byte-list (ByteArrayList.)
         offsets (IntArrayList.)
-        ^RoaringBitmap missing (or missing (dtype/->bitmap-set))
+        ^RoaringBitmap missing (or missing (bitmap/->bitmap))
         str-rdr (dtype/->reader string-reader)
         n-elems (dtype/ecount str-rdr)]
     (.add offsets 0)
@@ -224,11 +217,11 @@
 
 (defn bitbuffer->boolean-reader
   [bitbuffer ^long n-elems]
-  (let [rdr (typecast/datatype->reader :int8 bitbuffer)]
+  (let [rdr (dtype/->reader bitbuffer)]
     (dtype/make-reader
      :boolean n-elems
      ;;idx is the indexing variable that is implicitly defined in scope.
-     (let [data (.read rdr (quot idx 8))]
+     (let [data (.readByte rdr (quot idx 8))]
        (if (pmath/== 1 (pmath/bit-and data (pmath/bit-shift-left 1 (rem idx 8))))
          true
          false)))))
@@ -243,26 +236,24 @@
 
 (defn bitwise-vec->boolean-writer
   [^BitVector data]
-  (let [rdr (typecast/datatype->reader
-             :int8
+  (let [rdr (dtype/->reader
              (arrow-buffer->typed-buffer
               :int8 (.getDataBuffer data)))
-        src-wtr (typecast/datatype->writer
-                 :int8
+        src-wtr (dtype/->writer
                  (arrow-buffer->typed-buffer
                   :int8 (.getDataBuffer data)))
         n-elems (dtype/ecount data)]
     (reify BooleanWriter
       (lsize [wtr] n-elems)
-      (write [wtr idx value]
+      (writeBoolean [wtr idx value]
         (locking src-wtr
           (let [byte-idx (quot idx 8)
-                byte-data (unchecked-int (.read rdr byte-idx))
+                byte-data (unchecked-int (.readByte rdr byte-idx))
                 bitmask (unchecked-int (pmath/bit-shift-left 1 (rem idx 8)))
                 byte-data (if value
                             (pmath/bit-or byte-data bitmask)
                             (pmath/bit-and byte-data (pmath/bit-not bitmask)))]
-            (.write src-wtr byte-idx (unchecked-byte byte-data))))))))
+            (.writeByte src-wtr byte-idx (unchecked-byte byte-data))))))))
 
 
 (defn primitive-vec->typed-buffer
@@ -350,50 +341,36 @@
                     extension-datatypes)
             (map (fn [[dtype vectype]]
                    `(extend-type ~vectype
-                      dtype-proto/PDatatype
-                      (get-datatype [item#] ~dtype)
-                      dtype-proto/PCountable
+                      dtype-proto/PElemwiseDatatype
+                      (elemwise-datatype [item#] ~dtype)
+                      dtype-proto/PECount
                       (ecount [item#] (.getValueCount item#))
-                      dtype-proto/PToNioBuffer
-                      (convertible-to-nio-buffer? [item#] ~(primitive-datatype? dtype))
-                      (->buffer-backing-store [item#]
-                        (-> (primitive-vec->typed-buffer item#)
-                            (dtype-proto/->buffer-backing-store)))
-                      dtype-proto/PToJNAPointer
-                      (convertible-to-data-ptr? [item#] ~(primitive-datatype? dtype))
-                      (->jna-ptr [item#]
-                        (let [arrow-buf# (.getDataBuffer item#)]
-                          (Pointer. (.memoryAddress arrow-buf#))))
-                      dtype-proto/PClone
+                      dtype-proto/PToNativeBuffer
+                      (convertible-to-native-buffer? [item#] ~(primitive-datatype? dtype))
+                      (->native-buffer [item#]
+                        (primitive-vec->typed-buffer item#))
                       (clone [~'item]
                         (dtype/make-container
-                         ~(if (or (casting/unsigned-integer-type? dtype)
-                                  (= dtype :epoch-milliseconds))
-                            :typed-buffer
-                            :java-array)
+                         :jvm-heap
                          ~dtype
                          ~'item))
                       dtype-proto/PToReader
                       (convertible-to-reader? [item#] true)
-                      (->reader [~'item options#]
-                        (->
-                         ~(case dtype
-                            :boolean `(bitwise-vec->boolean-reader ~'item)
-                            :string `(varchar->string-reader ~'item)
-                            :text `(varchar->string-reader ~'item)
-                            :encoded-text `(varchar->string-reader ~'item)
-                            `(primitive-vec->typed-buffer ~'item))
-                         (dtype-proto/->reader options#)))
+                      (->reader [~'item]
+                        ~(case dtype
+                           :boolean `(bitwise-vec->boolean-reader ~'item)
+                           :string `(varchar->string-reader ~'item)
+                           :text `(varchar->string-reader ~'item)
+                           :encoded-text `(varchar->string-reader ~'item)
+                           `(primitive-vec->typed-buffer ~'item)))
                       dtype-proto/PToWriter
                       (convertible-to-writer? [item#] ~(if (= dtype :string)
                                                          `false
                                                          `true))
-                      (->writer [~'item options#]
-                        (->
-                         ~(if (= dtype :boolean)
-                            `(bitwise-vec->boolean-writer ~'item)
-                            `(primitive-vec->typed-buffer ~'item))
-                         (dtype-proto/->writer options#)))))))))
+                      (->writer [~'item]
+                        ~(if (= dtype :boolean)
+                           `(bitwise-vec->boolean-writer ~'item)
+                           `(primitive-vec->typed-buffer ~'item)))))))))
 
 
 (implement-datatype-protos)
@@ -427,7 +404,7 @@
          metadata (->str-str-meta metadata)
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
-         datatype (dtype-dt/unpack-datatype datatype)]
+         datatype (packing/unpack-datatype datatype)]
      (case (if (= :epoch-milliseconds datatype)
              datatype
              (casting/un-alias-datatype datatype))
@@ -548,7 +525,6 @@
               ^BaseFixedWidthVector field-vec field-vec
               _ (do (.allocateNew field-vec n-elems)
                     (.setValueCount field-vec n-elems))
-              data-buf (.getDataBuffer field-vec)
               valid-buf (.getValidityBuffer field-vec)
               data (if (= :string dtype)
                      (-> (ds-base/column->string-table col)
@@ -575,29 +551,17 @@
   (let [timezone (->timezone timezone)]
     (reduce
      (fn [ds col]
-       (let [col-dt (dtype-dt/unpack-datatype (dtype/get-datatype col))]
+       (let [col-dt (dtype/get-datatype col)]
          (if (dtype-dt/datetime-datatype? col-dt)
-           (let [timezone (if (or (= :local-date col-dt)
-                              (= :local-date-time col-dt))
-                            timezone
-                            nil)]
-             (assoc ds
-                    (col-proto/column-name col)
-                    (col-impl/new-column
-                     (col-proto/column-name col)
-                     (cond
-                       (= :local-date col-dt)
-                       (dtype-dt-ops/local-date->milliseconds-since-epoch
-                        col 0 timezone)
-                       (= :local-date-time col-dt)
-                       (dtype-dt-ops/local-date-time->milliseconds-since-epoch
-                        col timezone)
-                       :else
-                       (dtype-dt-ops/->milliseconds col))
-                     (assoc (meta col)
-                            :timezone (str timezone)
-                            :source-datatype (dtype/get-datatype col))
-                     (col-proto/missing col))))
+           (assoc ds
+                  (col-proto/column-name col)
+                  (col-impl/new-column
+                   (col-proto/column-name col)
+                   (dtype-dt/datetime->milliseconds timezone col)
+                   (assoc (meta col)
+                          :timezone (str timezone)
+                          :source-datatype (dtype/get-datatype col))
+                   (col-proto/missing col)))
            ds)))
      ds
      (ds-base/columns ds))))
@@ -611,7 +575,7 @@
         (fn [^long idx col]
           (let [field-vec (.getVector vec-root idx)
                 vec-type (.getType (.getField field-vec))
-                coldata (dtype-dt/unpack col)
+                coldata (packing/unpack col)
                 col-type (dtype/get-datatype coldata)
                 missing (col-proto/missing col)]
             (cond
@@ -754,7 +718,6 @@
                                   e
                                   (.getMetadata field))))))
         valid-buf (.getValidityBuffer fv)
-        value-buf (.getDataBuffer fv)
         offset-buf (when (instance? BaseVariableWidthVector fv)
                      (.getOffsetBuffer fv))
         missing (valid-buf->missing valid-buf n-elems)
@@ -765,11 +728,7 @@
         (cond
           dict
           (let [strs (dictionary->strings dict)
-                n-dict-elems (dtype/ecount strs)
-                data (DynamicIntList. (dtype/->list-backing-store (dtype/clone fv))
-                                      nil)
-                _ (when-not (== 0 (dtype/ecount data))
-                    (.getInt data 0))
+                data (dyn-int-list/make-from-container (dtype/clone fv))
                 n-table-elems (dtype/ecount strs)
                 str->int (HashMap. n-table-elems)]
             (dotimes [idx n-table-elems]
@@ -784,20 +743,8 @@
                (:source-datatype metadata)
                (dtype-dt/datetime-datatype? (:source-datatype metadata))
                (not= (:source-datatype metadata) (dtype/get-datatype fv)))
-          (let [src-dt (:source-datatype metadata)]
-            (->
-             (case (dtype-dt/unpack-datatype src-dt)
-               :local-date
-               (dtype-dt-ops/milliseconds-since-epoch->local-date
-                fv (ZoneId/of (str (:timezone metadata))))
-               :local-date-time
-               (dtype-dt-ops/milliseconds-since-epoch->local-date-time
-                fv (ZoneId/of (str (:timezone metadata))))
-               (dtype-dt-ops/milliseconds->datetime src-dt fv))
-             (#(if (dtype-dt/packed-datatype? src-dt)
-                 (dtype-dt/pack %)
-                 %))
-             (dtype/clone)))
+          (dtype-dt/milliseconds->datetime (:source-datatype metadata)
+                                           (:timezone metadata) fv)
           :else
           (dtype/clone fv))]
     (col-impl/new-column (or (:name metadata) colname) coldata metadata missing)))
@@ -854,7 +801,7 @@ Please use `stream->dataset-seq-copying`")))
 
 
 (comment
-  (require '[tech.ml.dataset :as ds])
+  (require '[tech.v3.dataset :as ds])
   (def stocks (ds/->dataset "test/data/stocks.csv"))
   (write-dataset-to-stream! stocks "test.arrow" {:timezone "US/Eastern"})
   (def big-stocks (apply ds/concat-copying (repeat 10000 stocks)))

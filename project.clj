@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [cnuernber/dtype-next             "0.4.9"]
+                 [cnuernber/dtype-next             "0.4.11"]
                  [techascent/tech.io               "3.20"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]
@@ -81,7 +81,7 @@
                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
                                      [org.apache.arrow/arrow-vector "1.0.0"
                                       :exclusions [commons-codec]]]}
-             :uberjar {:aot [tech.v3.dataset.column tech.io]
+             :uberjar {:aot [tech.v3.dataset]
                        :source-paths ["src"]
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
