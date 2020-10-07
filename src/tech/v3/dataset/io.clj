@@ -59,14 +59,17 @@
 
 (defn ->dataset
   "Create a dataset from either csv/tsv or a sequence of maps.
-   *  A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
-   ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
-   is csv or tsv and then engineering around detecting datatypes all of which can
-   be overridden.
+
+   * A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
+     ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
+     is csv or tsv and then engineering around detecting datatypes all of which can
+     be overridden.
+
    *  A sequence of maps may be passed in in which case the first N maps are scanned in
-   order to derive the column datatypes before the actual columns are created.
+     order to derive the column datatypes before the actual columns are created.
 
   Options:
+
   - `:dataset-name` - set the name of the dataset.
   - `:file-type` - Override filetype discovery mechanism for strings or force a particular
       parser for an input stream.  Note that arrow and parquet must have paths on disk
