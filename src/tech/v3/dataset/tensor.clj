@@ -353,21 +353,20 @@
   more effective for your problem.
 
 
-  Returns pca-info:
-  {:means - vec of means
-   :eigenvalues - vec of eigenvalues
-   :eigenvectors - matrix of eigenvectors
-  }
+  Returns a map of:
+    * :means - vec of means
+    * :eigenvalues - vec of eigenvalues.  These are the variance of columns of the the post-projected
+        tensor if :corr is used.
+    * :eigenvectors - matrix of eigenvectors
 
   Options
-   - method - choose method, one of [:svd :corr].  Defaults to
-     (if (>= n-rows n-columns) :svd :corr).
+   - method - choose method, one of [:svd :corr].  Defaults to :corr
    - covariance-bias? - When using :corr, divide by n-rows if true and (dec n-rows) if false.
      defaults to false."
   ([tensor {:keys [method
                    covariance-bias?]
-            :or {method :svd
-                 covariance-bias? true}
+            :or {method :corr
+                 covariance-bias? false}
             :as options}]
    (errors/when-not-errorf
     (= 2 (count (dtype/shape tensor)))
@@ -377,10 +376,6 @@
          [n-rows n-cols] (dtype/shape tensor)
          n-rows (long n-rows)
          n-cols (long n-cols)
-         method (or method
-                    (if (>= n-rows n-cols)
-                      :svd
-                      :corr))
          smile-matrix (tensor->smile-matrix tensor)]
      (case method
        :svd
