@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.v3.dataset.modelling
+(ns tech.v3.dataset.modelling
   "Methods related specifically to machine learning such as setting the inference
   target.  This file integrates tightly with tech.v3.dataset.categorical which provides
   categorical -> number and one-hot transformation pathways"

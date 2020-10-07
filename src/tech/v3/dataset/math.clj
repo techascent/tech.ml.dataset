@@ -1,4 +1,4 @@
-(ns ^:no-doc tech.v3.dataset.math
+(ns tech.v3.dataset.math
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
