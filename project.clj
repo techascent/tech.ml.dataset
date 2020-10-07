@@ -1,11 +1,11 @@
 (defproject techascent/tech.ml.dataset "5.0.0-SNAPSHOT"
-  :description "Clojure data processing system"
+  :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [cnuernber/dtype-next             "0.4.11"]
+                 [cnuernber/dtype-next             "0.4.13"]
                  [techascent/tech.io               "3.20"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.7.5"]
@@ -22,13 +22,13 @@
                                org.slf4j/slf4j-api]]
                  [ch.qos.logback/logback-classic   "1.2.3"]
                  ;;Many things require guava, so we may as well have latest version
-                 [com.google.guava/guava "28.0-jre"]
-                 [org.bytedeco/openblas "0.3.10-1.5.4"]
-                 [org.bytedeco/openblas-platform "0.3.10-1.5.4"]]
+                 [com.google.guava/guava "28.0-jre"]]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
+                             [org.bytedeco/openblas "0.3.10-1.5.4"]
+                             [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
                              [uncomplicate/neanderthal "0.35.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
                              [org.apache.parquet/parquet-hadoop "1.10.1"]
