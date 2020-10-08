@@ -12,25 +12,25 @@
 
 (defn inference-column?
   [col]
-  (= :inference (:column-type (meta col))))
+  (:inference-target? (meta col)))
 
 
 (defn set-inference-target
   "Set the inference target on the column.  This sets the :column-type member
-  of the column metadata to :inference."
+  of the column metadata to :inference-target?."
   [dataset target-name-or-target-name-seq]
   (let [colnames (if (sequential? target-name-or-target-name-seq)
                    target-name-or-target-name-seq
                    [target-name-or-target-name-seq])]
     (ds-base/update-columns dataset colnames
-                            #(vary-meta % assoc :column-type :inference))))
+                            #(vary-meta % assoc :inference-target? true))))
 
 
 (defn inference-target-column-names
   "Return the names of the columns that are inference targets."
   [ds]
   (->> (map meta (vals ds))
-       (filter #(= :inference (:column-type %)))
+       (filter :inference-target?)
        (map :name)
        (seq)))
 
@@ -66,7 +66,7 @@
   "Number of feature columns.  Feature columns are columns that are not
   inference targets."
   ^long [dataset]
-  (count (remove #(= :inference (:column-type (meta %)))
+  (count (remove #(= :inference-target? (meta %))
                  (vals dataset))))
 
 

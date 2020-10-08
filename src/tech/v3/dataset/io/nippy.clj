@@ -2,6 +2,8 @@
   (:require [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.datatype.errors :as errors]
+            ;;Support for tensor/array buffers in nippy
+            [tech.v3.datatype.nippy]
             [tech.io :as io]
             [taoensso.nippy :as nippy])
   (:import [tech.v3.dataset.impl.dataset Dataset]))

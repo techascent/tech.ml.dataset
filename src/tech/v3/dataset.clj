@@ -13,14 +13,9 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
-;;            [tech.v3.dataset.categorical :as categorical]
-            ;;            [tech.v3.dataset.pipeline.column-filters :as col-filters]
-
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
-            ;; [tech.v3.dataset.modelling]
-            ;; [tech.v3.dataset.math]
             [tech.v3.libs.smile.data :as smile-data]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList ]
@@ -78,6 +73,7 @@
                 dataset->data
                 data->dataset)
 
+
 (export-symbols tech.v3.dataset.readers
                 value-reader
                 mapseq-reader)
@@ -96,12 +92,12 @@
   (dtype/shape dataset))
 
 
-#_(par-util/export-symbols tech.v3.dataset.join
-                         hash-join
-                         inner-join
-                         right-join
-                         left-join
-                         left-join-asof)
+(export-symbols tech.v3.dataset.join
+                hash-join
+                inner-join
+                right-join
+                left-join
+                left-join-asof)
 
 
 (export-symbols tech.v3.dataset.impl.dataset
@@ -460,24 +456,6 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 
 
-;; (par-util/export-symbols tech.v3.dataset.modelling
-;;                          set-inference-target
-;;                          inference-target-column-names
-;;                          column-label-map
-;;                          inference-target-label-map
-;;                          dataset-label-map
-;;                          inference-target-label-inverse-map
-;;                          num-inference-classes
-;;                          feature-ecount
-;;                          model-type
-;;                          column-values->categorical
-;;                          reduce-column-names
-;;                          has-column-label-map?
-;;                          k-fold-datasets
-;;                          train-test-split
-;;                          row-major)
-
-
 (defn all-descriptive-stats-names
   "Returns the names of all descriptive stats in the order they will be returned
   in the resulting dataset of descriptive stats.  This allows easy filtering
@@ -576,22 +554,6 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ([ds]
    (brief ds {:stat-names (all-descriptive-stats-names)
               :n-categorical-values nil})))
-
-
-(defn invert-string->number
-  "When ds-pipe/string->number is called it creates label maps.  This reverts
-  the dataset back to those labels.  Currently results in object columns
-  so a cast operation may be needed to convert to desired datatype."
-  [ds]
-  (->> (map meta ds)
-       (clojure.core/filter :label-map)
-       (reduce (fn [ds {:keys [name label-map]}]
-                 (let [inv-map (set/map-invert label-map)
-                       res-dtype (dtype/elemwise-datatype (first (vals inv-map)))]
-                   (assoc
-                    ds name
-                    (ds-col/column-map #(get inv-map (long %)) res-dtype (ds name)))))
-               ds)))
 
 
 (defn dataset->smile-dataframe

@@ -3,7 +3,6 @@
              :refer [m= col int-map]
              :as dsp]
             [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline :as ds-pipe]
             [tech.ml.dataset.pipeline.base
              :refer [with-ds]]
             [tech.ml.dataset :as ds]
@@ -207,75 +206,76 @@
 
 (defn full-ames-pt-1
   [dataset]
-  (-> (missing-pipeline dataset)
-      (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-      (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-      (dsp/string->number ["ExterQual"
-                               "ExterCond"
-                               "BsmtQual"
-                               "BsmtCond"
-                               "HeatingQC"
-                               "KitchenQual"
-                               "FireplaceQu"
-                               "GarageQual"
-                               "GarageCond"
-                               "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-      (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
-                              :categorical? true)
-      (dsp/string->number "MasVnrType" {"BrkCmn" 1
-                                            "BrkFace" 1
-                                            "CBlock" 1
-                                            "Stone" 1
-                                            "None" 0
-                                            "NA" -1})
-      (dsp/string->number "SaleCondition" {"Abnorml" 0
-                                               "Alloca" 0
-                                               "AdjLand" 0
-                                               "Family" 0
-                                               "Normal" 0
-                                               "Partial" 1
-                                               "NA" -1})
-      ;; ;;Auto convert the rest that are still string columns
-      (dsp/string->number)
-      (dsp/update-column "SalePrice" dfn/log1p)
-      (ds/set-inference-target "SalePrice")
-      (m= "OverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
-      ;; Overall quality of the garage
-      (m= "GarageGrade"  #(dfn/* (col "GarageQual") (col "GarageCond")))
-      ;; Overall quality of the exterior
-      (m= "ExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
-      ;; Overall kitchen score
-      (m=  "KitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
-      ;; Overall fireplace score
-      (m= "FireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
-      ;; Overall garage score
-      (m= "GarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
-      ;; Overall pool score
-      (m= "PoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
-      ;; Simplified overall quality of the house
-      (m= "SimplOverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
-      ;; Simplified overall quality of the exterior
-      (m= "SimplExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
-      ;; Simplified overall pool score
-      (m= "SimplPoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
-      ;; Simplified overall garage score
-      (m= "SimplGarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
-      ;; Simplified overall fireplace score
-      (m= "SimplFireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
-      ;; Simplified overall kitchen score
-      (m= "SimplKitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
-      ;; Total number of bathrooms
-      (m= "TotalBath" #(dfn/+ (col "BsmtFullBath")
-                                   (dfn/* 0.5 (col "BsmtHalfBath"))
-                                   (col "FullBath")
-                                   (dfn/* 0.5 (col "HalfBath"))))
-      ;; Total SF for house (incl. basement)
-      (m= "AllSF" #(dfn/+ (col "GrLivArea") (col "TotalBsmtSF")))
-      ;; Total SF for 1st + 2nd floors
-      (m= "AllFlrsSF" #(dfn/+ (col "1stFlrSF") (col "2ndFlrSF")))
-      ;; Total SF for porch
-      (m= "AllPorchSF" #(dfn/+ (col "OpenPorchSF") (col "EnclosedPorch")
-                                    (col "3SsnPorch") (col "ScreenPorch")))))
+  (bind->
+   (missing-pipeline dataset) ds
+   (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+   (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
+   (dsp/string->number ["ExterQual"
+                        "ExterCond"
+                        "BsmtQual"
+                        "BsmtCond"
+                        "HeatingQC"
+                        "KitchenQual"
+                        "FireplaceQu"
+                        "GarageQual"
+                        "GarageCond"
+                        "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
+   (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+                       :categorical? true)
+   (dsp/string->number "MasVnrType" {"BrkCmn" 1
+                                     "BrkFace" 1
+                                     "CBlock" 1
+                                     "Stone" 1
+                                     "None" 0
+                                     "NA" -1})
+   (dsp/string->number "SaleCondition" {"Abnorml" 0
+                                        "Alloca" 0
+                                        "AdjLand" 0
+                                        "Family" 0
+                                        "Normal" 0
+                                        "Partial" 1
+                                        "NA" -1})
+   ;; ;;Auto convert the rest that are still string columns
+   (dsp/string->number)
+   (dsp/update-column "SalePrice" dfn/log1p)
+   (ds/set-inference-target "SalePrice")
+   (assoc "OverallGrade" #(dfn/* (ds "OverallQual") (ds "OverallCond")))
+   ;; Overall quality of the garage
+   (assoc "GarageGrade"  #(dfn/* (col "GarageQual") (col "GarageCond")))
+   ;; Overall quality of the exterior
+   (m= "ExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
+   ;; Overall kitchen score
+   (m=  "KitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
+   ;; Overall fireplace score
+   (m= "FireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
+   ;; Overall garage score
+   (m= "GarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
+   ;; Overall pool score
+   (m= "PoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
+   ;; Simplified overall quality of the house
+   (m= "SimplOverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
+   ;; Simplified overall quality of the exterior
+   (m= "SimplExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
+   ;; Simplified overall pool score
+   (m= "SimplPoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
+   ;; Simplified overall garage score
+   (m= "SimplGarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
+   ;; Simplified overall fireplace score
+   (m= "SimplFireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
+   ;; Simplified overall kitchen score
+   (m= "SimplKitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
+   ;; Total number of bathrooms
+   (m= "TotalBath" #(dfn/+ (col "BsmtFullBath")
+                           (dfn/* 0.5 (col "BsmtHalfBath"))
+                           (col "FullBath")
+                           (dfn/* 0.5 (col "HalfBath"))))
+   ;; Total SF for house (incl. basement)
+   (m= "AllSF" #(dfn/+ (col "GrLivArea") (col "TotalBsmtSF")))
+   ;; Total SF for 1st + 2nd floors
+   (m= "AllFlrsSF" #(dfn/+ (col "1stFlrSF") (col "2ndFlrSF")))
+   ;; Total SF for porch
+   (m= "AllPorchSF" #(dfn/+ (col "OpenPorchSF") (col "EnclosedPorch")
+                            (col "3SsnPorch") (col "ScreenPorch")))))
 
 
 (def ames-top-columns
