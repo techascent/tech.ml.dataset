@@ -107,10 +107,12 @@
     :symbol #(if-let [retval (symbol %)]
                retval
                parse-failure)
-    :string #(if (string? %)
-               (if (< (count %) 1024)
-                 parse-failure)
-               (str %))
+    :string #(let [str-val (or (if (string? %)
+                                 %
+                                 (str %)))]
+               (if (< (count str-val) 1024)
+                 str-val
+                 parse-failure))
     :text #(str %)}
    (->> parse-dt/datatype->general-parse-fn-map
         (mapcat (fn [[k v]]
@@ -168,7 +170,8 @@
                           missing-value parse-fn
                           ^RoaringBitmap missing
                           ^PrimitiveList failed-values
-                          ^RoaringBitmap failed-indexes]
+                          ^RoaringBitmap failed-indexes
+                          column-name]
   dtype-proto/PECount
   (ecount [this] (.lsize container))
   PParser
@@ -245,7 +248,7 @@
 
 
 (defn make-fixed-parser
-  [parser-kwd]
+  [cname parser-kwd]
   (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
         [failed-values failed-indexes] (when relaxed?
                                          [(dtype/make-container :list :object 0)
@@ -254,7 +257,8 @@
         missing-value (column-base/datatype->missing-value dtype)
         missing (bitmap/->bitmap)]
     (FixedTypeParser. container dtype missing-value parse-fn
-                      missing failed-values failed-indexes)))
+                      missing failed-values failed-indexes
+                      cname)))
 
 
 (defn parser-kwd-list->parser-tuples
@@ -293,7 +297,8 @@
                                   ^{:unsynchronized-mutable true} parse-fn
                                   ^RoaringBitmap missing
                                   ;;List of datatype,parser-fn tuples
-                                  ^List promotion-list]
+                                  ^List promotion-list
+                                  column-name]
   dtype-proto/PECount
   (ecount [this] (.lsize container))
   PParser
@@ -350,7 +355,7 @@
 
 
 (defn promotional-string-parser
-  ([parser-datatype-sequence]
+  ([column-name parser-datatype-sequence]
    (let [first-dtype (first parser-datatype-sequence)]
      (PromotionalStringParser. (column-base/make-container first-dtype)
                                first-dtype
@@ -358,16 +363,18 @@
                                (default-coercers first-dtype)
                                (bitmap/->bitmap)
                                (mapv (juxt identity default-coercers)
-                                     parser-datatype-sequence))))
-  ([]
-   (promotional-string-parser default-parser-datatype-sequence)))
+                                     parser-datatype-sequence)
+                               column-name)))
+  ([column-name]
+   (promotional-string-parser column-name default-parser-datatype-sequence)))
 
 
 (deftype PromotionalObjectParser [^{:unsynchronized-mutable true
                                     :tag PrimitiveList} container
                                   ^{:unsynchronized-mutable true} container-dtype
                                   ^{:unsynchronized-mutable true} missing-value
-                                  ^RoaringBitmap missing]
+                                  ^RoaringBitmap missing
+                                  column-name]
   dtype-proto/PECount
   (ecount [this] (.lsize container))
   PParser
@@ -405,8 +412,9 @@
 
 
 (defn promotional-object-parser
-  []
+  [column-name]
   (PromotionalObjectParser. (dtype/make-container :list :boolean 0)
                             :boolean
                             false
-                            (bitmap/->bitmap)))
+                            (bitmap/->bitmap)
+                            column-name))

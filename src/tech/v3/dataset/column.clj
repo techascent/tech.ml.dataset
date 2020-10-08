@@ -41,7 +41,7 @@
 
 (defn missing
   "Indexes of missing values.  Both iterable and reader."
-  [col]
+  ^RoaringBitmap [col]
   (col-proto/missing col))
 
 

@@ -2,17 +2,20 @@
   "Column major dataset abstraction for efficiently manipulating
   in memory datasets."
   (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.update-reader :as update-reader]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
@@ -20,9 +23,10 @@
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList ]
            [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype PrimitiveList])
+           [tech.v3.datatype PrimitiveList]
+           [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth]))
+                            rand-nth update]))
 
 
 (set! *warn-on-reflection* true)
@@ -189,11 +193,89 @@
    (column->dataset dataset colname transform-fn {})))
 
 
+(defn- ->column-seq
+  [c-seq-or-ds]
+  (if (sequential? c-seq-or-ds)
+    c-seq-or-ds
+    (columns c-seq-or-ds)))
+
+
 (defn append-columns
   [dataset column-seq]
   (new-dataset (dataset-name dataset)
                (meta dataset)
-               (clojure.core/concat (columns dataset) column-seq)))
+               (clojure.core/concat (columns dataset)
+                                    (->column-seq column-seq))))
+
+
+(defn- filter-ds
+  [dataset filter-fn-or-ds]
+  (cond
+    (ds-impl/dataset? filter-fn-or-ds)
+    filter-fn-or-ds
+    (sequential? filter-fn-or-ds)
+    (select-columns dataset filter-fn-or-ds)
+    (= :all filter-fn-or-ds)
+    dataset
+    (instance? IFn filter-fn-or-ds)
+    (filter-fn-or-ds dataset)
+    :else
+    (errors/throwf "Unrecoginzed filter mechanism: %s" filter-fn-or-ds)))
+
+
+
+
+(defn update
+  "Update this dataset.  Filters this dataset into a new dataset,
+  applies update-fn, then merges the result into original dataset.
+
+  * `filter-fn-or-ds` is a generalized parameter.  May be a function,
+     a dataset or a sequence of columns
+  *  update-fn must take the dataset as the first argument and must return
+     a dataset."
+  [lhs-ds filter-fn-or-ds update-fn & args]
+  (let [filtered-ds (filter-ds lhs-ds filter-fn-or-ds)]
+    (merge lhs-ds (apply update-fn filtered-ds args))))
+
+
+(defn update-columnwise
+  "Call update-fn on each column of the dataset.  Returns the dataset.
+  See arguments to update"
+  [dataset filter-fn-or-ds cwise-update-fn & args]
+  (update dataset filter-fn-or-ds
+          (fn [filtered-ds]
+            (reduce (fn [filtered-ds filter-col]
+                      (assoc filtered-ds (:name (meta filter-col))
+                             (apply cwise-update-fn filter-col args)))
+                    filtered-ds
+                    (columns filtered-ds)))))
+
+
+(defn replace-missing-value
+  ([dataset filter-fn-or-ds scalar-value]
+   (update-columnwise dataset filter-fn-or-ds
+                      (fn [col]
+                        (let [missing (ds-col/missing col)]
+                          (if (.isEmpty missing)
+                            col
+                            (update-reader/update-reader
+                             col (bitmap/bitmap-value->bitmap-map
+                                  missing scalar-value)))))))
+  ([dataset scalar-value]
+   (replace-missing-value dataset identity scalar-value)))
+
+
+(defn update-elemwise
+  "Replace all elements in selected columns by calling selected function on each element.
+  column-name-seq must be a sequence of column names if provided.
+  filter-fn-or-ds has same rules as update.  Implicitly clears the missing set so function
+  must deal with type-specific missing values correctly.
+  Returns new dataset"
+  ([dataset filter-fn-or-ds map-fn]
+   (update-columnwise dataset filter-fn-or-ds
+                      #(dtype/emap map-fn (dtype/elemwise-datatype %) %)))
+  ([dataset map-fn]
+   (update-elemwise dataset identity map-fn)))
 
 
 (defn column-map

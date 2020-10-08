@@ -6,8 +6,19 @@
   is safe to call 'select-columns' with the result and the order of columns will not change."
   (:require [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.dataset.base :as ds-base]
-            [clojure.set :as set]))
+            [clojure.set :as set])
+  (:import [clojure.lang IFn])
+  (:refer-clojure :exclude [boolean update]))
+
+
+(defn column-filter
+  [dataset filter-fn]
+  (->> (ds-base/columns dataset)
+       (filter filter-fn)
+       (map (comp :name meta))
+       (ds-base/select-columns dataset)))
 
 
 (defn metadata-filter
@@ -25,7 +36,9 @@
 
 (defn numeric
   [dataset]
-  (metadata-filter dataset (comp casting/numeric-type? :datatype)))
+  (metadata-filter dataset (comp casting/numeric-type?
+                                 packing/unpack-datatype
+                                 :datatype)))
 
 
 (defn datatype

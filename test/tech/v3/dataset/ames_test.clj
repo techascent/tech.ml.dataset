@@ -1,17 +1,11 @@
-(ns tech.ml.dataset.ames-test
-  (:require [tech.ml.dataset.pipeline
-             :refer [m= col int-map]
-             :as dsp]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.base
-             :refer [with-ds]]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.pipeline.column-filters
-             :as cf]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dfn]
+(ns tech.v3.dataset.ames-test
+  (:require [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column-filters :as cf]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.functional :as dfn]
             [clojure.set :as c-set]
-            [clojure.test :refer :all]
+            [clojure.test :refer [deftest is]]
             [clojure.tools.logging :as log]))
 
 
@@ -23,26 +17,26 @@
            (dtype/->vector new-col)))))
 
 
-(def src-ds (ds/->dataset "data/ames-house-prices/train.csv"))
+(def src-ds (ds/->dataset "test/data/ames-house-prices/train.csv"))
 
 
 (defn missing-pipeline
   [dataset]
-  (-> (ds/->dataset dataset)
-      (ds/remove-column "Id")
-      (dsp/replace-missing cf/string? "NA")
-      (dsp/replace cf/string? {"" "NA"})
-      (dsp/replace-missing cf/numeric? 0)
-      (dsp/replace-missing cf/boolean? false)
-      (dsp/->datatype #(cf/or cf/numeric?
-                              cf/boolean?))))
+  (ds/bind-> (ds/->dataset dataset) ds
+             (ds/remove-column "Id")
+             (ds/update cf/string ds/replace-missing-value "NA")
+             (ds/update-elemwise cf/string #(get {"" "NA"} % %))
+             (ds/update cf/numeric ds/replace-missing-value 0)
+             (ds/update cf/boolean ds/replace-missing-value false)
+             (ds/update-columnwise (cf/union (cf/numeric ds) (cf/boolean ds))
+                                   #(dtype/elemwise-cast % :float64))))
 
 
 (deftest basic-pipeline-test
   (let [dataset (missing-pipeline src-ds)]
     (is (= 19 (count (ds/columns-with-missing-seq src-ds))))
     (is (= 0 (count (ds/columns-with-missing-seq dataset))))
-    (is (= 42 (count (cf/categorical? dataset))))
+    (is (= 42 (ds/column-count (cf/categorical dataset))))
     (is (= #{:string :float64}
            (->> (ds/columns dataset)
                 (map dtype/get-datatype)
@@ -59,29 +53,20 @@
                    12.317171167298682
                    11.849404844423074
                    12.429220196836383]
-                  (->> (dsp/m= src-ds "SalePrice" #(dfn/log1p (col)))
-                       (#(ds/column % "SalePrice"))
-                       (take 5)
-                       (vec)))))
+                  (-> (ds/update-columnwise src-ds ["SalePrice"] dfn/log1p)
+                      (ds/select-rows (range 5))
+                      (ds/column "SalePrice")
+                      (vec)))))
 
 
 (defn skew-column-filter
   [dataset]
-  (with-ds dataset
-    (cf/and cf/numeric-and-non-categorical-and-not-target
-            #(cf/not "SalePrice")
-            (fn []
-              (cf/> #(let [skewness (dfn/skewness
-                                     (dtype/->reader (col)
-                                                     :float64
-                                                     {:missing-policy :elide}))]
-                       (dfn/abs skewness))
-                    0.5)))))
+  (-> (dissoc dataset "SalePrice")
+      (cf/column-filter #(> (dfn/skew %)
+                            0.5))))
 
 
-;;This test fails if col-filters/and (intersection) isn't
-;;implemented correctly
-(deftest and-is-lazy
+(deftest custom-colfilter-test
   (is (= 29 (count (skew-column-filter src-ds)))))
 
 

@@ -18,19 +18,19 @@
         key-fn (or (:key-fn options) identity)
         parser-descriptor (:parser-fn options)]
     (fn [cname-or-index]
-      (cond
-        (nil? parser-descriptor)
-        (default-parse-fn)
-        (map? parser-descriptor)
-        (let [cname (if (number? cname-or-index)
+      (let [cname (if (number? cname-or-index)
                       (long cname-or-index)
                       (key-fn cname-or-index))]
+        (cond
+          (nil? parser-descriptor)
+          (default-parse-fn cname)
+          (map? parser-descriptor)
           (if-let [col-parser-desc (or (get parser-descriptor cname)
                                        (get parser-descriptor cname-or-index))]
-            (column-parsers/make-fixed-parser col-parser-desc)
-            (default-parse-fn)))
-        :else
-        (column-parsers/make-fixed-parser parser-descriptor)))))
+            (column-parsers/make-fixed-parser cname col-parser-desc)
+            (default-parse-fn cname))
+          :else
+          (column-parsers/make-fixed-parser parser-descriptor cname))))))
 
 
 (defn- make-colname

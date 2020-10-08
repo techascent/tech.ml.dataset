@@ -6,8 +6,10 @@
             [tech.v3.datatype.update-reader :as update-rdr]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt])
-  (:import [org.roaringbitmap RoaringBitmap]))
+  (:import [org.roaringbitmap RoaringBitmap]
+           [clojure.lang IFn]))
 
 
 (defn- iterable-sequence?
@@ -158,8 +160,7 @@
 (defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
-                (value (dtype/->reader col (dtype/get-datatype col)
-                                       {:missing-policy :elide}))
+                (value (dtype/->reader col))
                 value)]
     (condp = strategy
       :down (replace-missing-with-direction
@@ -189,20 +190,28 @@
   be used to as the filler."
   ([ds] (replace-missing ds :mid))
   ([ds strategy] (replace-missing ds :all strategy))
-  ([ds columns-selector strategy] (replace-missing ds columns-selector strategy nil))
+  ([ds columns-selector strategy]
+   (replace-missing ds columns-selector strategy nil))
   ([ds columns-selector strategy value]
    (let [strategy (or strategy :mid)
          row-cnt (ds-base/row-count ds)]
      (->> (ds-base/select-columns ds columns-selector)
           (ds-base/columns)
-          (filter #(not= 0 (dtype/ecount (col/missing %))))
           (reduce (fn [ds col]
                     (let [^RoaringBitmap missing (col/missing col)]
-                      (if-not (or (empty? missing)
-                                  (and (= row-cnt (.getCardinality missing))
-                                       (not (and (= :value strategy)
-                                                 (not (fn? value))))))
+                      (cond
+                        (.isEmpty missing)
+                        ds
+                        (== row-cnt (.getCardinality missing))
+                        (do
+                          (errors/when-not-errorf
+                           (and (= :value strategy)
+                                (not (instance? IFn value)))
+                           "Column has no values and strategy (%s) is dependent upon existing values"
+                           strategy)
+                          (ds-base/add-or-update-column
+                           ds (replace-missing-with-strategy col missing strategy value)))
+                        :else
                         (ds-base/add-or-update-column
-                         ds (replace-missing-with-strategy col missing strategy value))
-                        ds)))
+                         ds (replace-missing-with-strategy col missing strategy value)))))
                   ds)))))

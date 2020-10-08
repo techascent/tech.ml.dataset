@@ -12,15 +12,16 @@
             [tech.v3.dataset.impl.column-base :as column-base]
             [clojure.pprint :as pprint])
   (:import [java.io Writer]
-           [clojure.lang IPersistentMap IObj IFn Counted Indexed]
+           [clojure.lang IPersistentMap IObj IFn Counted Indexed MapEntry]
            [java.util Map List LinkedHashSet]
+           [tech.v3.datatype ObjectReader]
            [org.roaringbitmap RoaringBitmap]))
 
 
 (set! *warn-on-reflection* true)
 
 
-(declare new-dataset)
+(declare new-dataset map-entries)
 
 ;;ported from clojure.lang.APersistentMap
 (defn- map-equiv [this o]
@@ -102,6 +103,15 @@
                      increment)))))))
 
 
+(defn- map-entries
+  ^List [^List columns]
+  (reify ObjectReader
+    (lsize [rdr] (.size columns))
+    (readObject [rdr idx]
+      (let [col (.get columns idx)]
+        (MapEntry. (:name (meta col)) col)))))
+
+
 
 (deftype Dataset [^List columns
                   colmap
@@ -119,9 +129,9 @@
   (clear [this]    (throw (UnsupportedOperationException.)))
   (keySet [this]
     (let [retval (LinkedHashSet.)]
-      (.addAll retval (map #(:name (meta %)) columns))
+      (.addAll retval (map-entries columns))
       retval))
-  (values [this]    columns)
+  (values [this] columns)
   (entrySet [this]
     (let [retval (LinkedHashSet.)]
       (.addAll retval (map #(clojure.lang.MapEntry. (:name (meta %)) %)
@@ -359,7 +369,7 @@
 
   Iterable
   (iterator [item]
-    (.iterator (.entrySet item)))
+    (.iterator (map-entries columns)))
 
   Object
   (toString [item]
@@ -432,3 +442,8 @@
 
 (defmethod pprint/simple-dispatch
   tech.v3.dataset.impl.dataset.Dataset [f] (pr f))
+
+
+(defn dataset?
+  [ds]
+  (instance? Dataset ds))
