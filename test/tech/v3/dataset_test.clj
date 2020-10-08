@@ -694,6 +694,28 @@
                 (count))))))
 
 
+(deftest bind->-test
+  (is (= 42
+         (ds/bind-> 41 x inc)))
+  (is (= 82
+         (ds/bind->
+          41 x
+          (+ x))))
+  (is (= 31
+         (ds/bind->
+          41 x
+          (- 10))))
+
+  (is (dfn/equals
+       [39.81 3.709 7.418]
+       (ds/bind-> (ds/->dataset "test/data/stocks.csv") ds
+                  (assoc :logprice2 (dfn/log1p (ds "price")))
+                  (assoc :logp3 (dfn/* 2 (ds :logprice2)))
+                  (ds/select-columns ["price" :logprice2 :logp3])
+                  (ds-tens/dataset->tensor)
+                  (first)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

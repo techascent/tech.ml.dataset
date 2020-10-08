@@ -85,6 +85,20 @@
                 write!)
 
 
+(defmacro bind->
+  "Threads like `->` but binds name to expr like `as->`
+```clojure
+
+```"
+  [expr name & forms]
+  `(as-> ~expr ~name
+     ~@(map (fn [form]
+              (if (seq? form)
+                (with-meta `(~(first form) ~name ~@(next form)) (meta form))
+                (list form name)))
+            forms)))
+
+
 
 (defn shape
   "Returns shape in column-major format of [n-columns n-rows]."
