@@ -86,9 +86,16 @@
 
 
 (defmacro bind->
-  "Threads like `->` but binds name to expr like `as->`
-```clojure
+  "Threads like `->` but binds name to expr like `as->`:
 
+
+```clojure
+(ds/bind-> (ds/->dataset \"test/data/stocks.csv\") ds
+           (assoc :logprice2 (dfn/log1p (ds \"price\")))
+           (assoc :logp3 (dfn/* 2 (ds :logprice2)))
+           (ds/select-columns [\"price\" :logprice2 :logp3])
+           (ds-tens/dataset->tensor)
+           (first))
 ```"
   [expr name & forms]
   `(as-> ~expr ~name
