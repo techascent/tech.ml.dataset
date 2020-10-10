@@ -36,12 +36,14 @@
                                  int-width))
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [item]
-    (dtype-proto/convertible-to-array-buffer? backing-store))
+    (and (= :int32 (dtype/elemwise-datatype backing-store))
+         (dtype-proto/convertible-to-array-buffer? backing-store)))
   (->array-buffer [item]
     (dtype-proto/->array-buffer backing-store))
   dtype-proto/PToNativeBuffer
   (convertible-to-native-buffer? [item]
-    (dtype-proto/convertible-to-native-buffer? backing-store))
+    (and (= :int32 (dtype/elemwise-datatype backing-store))
+         (dtype-proto/convertible-to-native-buffer? backing-store)))
   (->native-buffer [item]
     (dtype-proto/->native-buffer backing-store))
   PrimitiveList

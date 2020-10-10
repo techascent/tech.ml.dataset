@@ -47,7 +47,7 @@
   (let [str-t (ds-base/ensure-column-string-table col)
         indices (str-table/indices str-t)
         int->str (str-table/int->string str-t)
-        bit-width (casting/int-width (dtype/get-datatype indices))
+        bit-width (casting/int-width (dtype/elemwise-datatype indices))
         metadata (meta col)
         colname (:name metadata)
         dict-id (.hashCode ^Object colname)
@@ -55,7 +55,7 @@
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
         ftype (arrow-schema/datatype->field-type :text true)
         varchar-vec (arrow-dtype/strings->varchar!
-                     (dtype/->reader int->str :string)
+                     (dtype/->reader int->str)
                      nil
                      (VarCharVector. "unnamed" (arrow-alloc/allocator)))]
     (Dictionary. varchar-vec encoding)))
@@ -108,11 +108,10 @@
 
 (defn copy-column->arrow!
   ^FieldVector [col missing ^FieldVector field-vec]
-  (let [dtype (dtype/get-datatype col)
+  (let [dtype (dtype/elemwise-datatype col)
         ft (-> (.getField field-vec)
                (.getType))]
     (if (or (= dtype :text)
-            (= dtype :encoded-text)
             (instance? ArrowType$Utf8 ft))
       (arrow-dtype/strings->varchar! col missing field-vec)
       (do
@@ -148,7 +147,7 @@
   (let [timezone (->timezone timezone)]
     (reduce
      (fn [ds col]
-       (let [col-dt (dtype/get-datatype col)]
+       (let [col-dt (dtype/elemwise-datatype col)]
          (if (dtype-dt/datetime-datatype? col-dt)
            (assoc ds
                   (col-proto/column-name col)
@@ -157,7 +156,7 @@
                    (dtype-dt/datetime->milliseconds timezone col)
                    (assoc (meta col)
                           :timezone (str timezone)
-                          :source-datatype (dtype/get-datatype col))
+                          :source-datatype (dtype/elemwise-datatype col))
                    (col-proto/missing col)))
            ds)))
      ds
@@ -173,7 +172,7 @@
           (let [field-vec (.getVector vec-root idx)
                 vec-type (.getType (.getField field-vec))
                 coldata (packing/unpack col)
-                col-type (dtype/get-datatype coldata)
+                col-type (dtype/elemwise-datatype coldata)
                 missing (col-proto/missing col)]
             (cond
               (and (= :string col-type)
@@ -325,7 +324,7 @@
         (cond
           dict
           (let [strs (arrow-dtype/dictionary->strings dict)
-                data (dyn-int-list/make-from-container fv)
+                data (dyn-int-list/make-from-container (dtype/->array-buffer fv))
                 n-table-elems (dtype/ecount strs)
                 str->int (HashMap. n-table-elems)]
             (dotimes [idx n-table-elems]
@@ -339,11 +338,12 @@
                (:timezone metadata)
                (:source-datatype metadata)
                (dtype-dt/datetime-datatype? (:source-datatype metadata))
-               (not= (:source-datatype metadata) (dtype/get-datatype fv)))
-          (dtype-dt/milliseconds->datetime (:source-datatype metadata)
-                                           (:timezone metadata) fv)
+               (not= (:source-datatype metadata) (dtype/elemwise-datatype fv)))
+          (dtype/clone
+           (dtype-dt/milliseconds->datetime (:source-datatype metadata)
+                                            (:timezone metadata) fv))
           :else
-          fv)]
+          (dtype/->array-buffer fv))]
     (col-impl/new-column (or (:name metadata) colname) coldata metadata missing)))
 
 

@@ -84,7 +84,7 @@
   (let [nio-buf (arrow-buffer->native-buffer :int8 buffer)
         n-bytes (quot (+ n-elems 7) 8)
         writer (dtype/->buffer nio-buf)]
-    (dtype/set-constant! nio-buf 0 (byte -1) n-bytes)
+    (dtype/set-constant! nio-buf 0 n-bytes (byte -1))
     (when-not (.isEmpty bitmap)
       (dotimes [idx n-bytes]
         (let [offset (pmath/* 8 idx)
@@ -149,8 +149,12 @@
           data-buf (.getDataBuffer fv)
           offset-buf (.getOffsetBuffer fv)]
       (missing->valid-buf missing valid-buf n-elems)
-      (dtype/copy! offsets (arrow-buffer->native-buffer :int32 offset-buf))
-      (dtype/copy! byte-list (arrow-buffer->native-buffer :int8 data-buf)))
+      (dtype/copy! offsets
+                   (dtype/sub-buffer (arrow-buffer->native-buffer :int32 offset-buf)
+                                     0 (dtype/ecount offsets)))
+      (dtype/copy! byte-list
+                   (dtype/sub-buffer (arrow-buffer->native-buffer :int8 data-buf)
+                                     0 (dtype/ecount byte-list))))
     fv))
 
 
@@ -276,7 +280,8 @@
                       (ecount [item#] (.getValueCount item#))
                       dtype-proto/PToNativeBuffer
                       (convertible-to-native-buffer? [item#]
-                        ~(primitive-datatype? dtype))
+                        ~(and (not= :boolean dtype)
+                              (primitive-datatype? dtype)))
                       (->native-buffer [item#]
                         (primitive-vec->native-buffer item#))
                       (clone [~'item]
@@ -290,7 +295,8 @@
                         ~(case dtype
                            :boolean `(bitwise-vec->boolean-buffer ~'item)
                            :string `(varchar->string-reader ~'item)
-                           `(primitive-vec->native-buffer ~'item)))))))))
+                           `(-> (primitive-vec->native-buffer ~'item)
+                                (dtype/->buffer))))))))))
 
 
 (implement-datatype-protos)

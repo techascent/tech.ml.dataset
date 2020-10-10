@@ -1,14 +1,14 @@
 (ns tech.libs.arrow-test
-  (:require [tech.libs.arrow :as arrow]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype :as dtype]
+  (:require [tech.v3.libs.arrow :as arrow]
+            [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype :as dtype]
             [tech.resource :as resource]
             [clojure.test :refer [deftest is]]))
 
 
-(tech.ml.dataset.utils/set-slf4j-log-level :info)
+(tech.v3.dataset.utils/set-slf4j-log-level :info)
 
 (deftest simple-stocks
   (try
@@ -41,7 +41,7 @@
 (deftest ames-house-prices
   (try
     (resource/stack-resource-context
-     (let [ames (ds/->dataset "data/ames-house-prices/train.csv")
+     (let [ames (ds/->dataset "test/data/ames-house-prices/train.csv")
            _ (arrow/write-dataset-to-stream! ames "temp.ames.arrow")
            ames-copying (arrow/read-stream-dataset-copying "temp.ames.arrow")
            ames-inplace (arrow/read-stream-dataset-inplace

@@ -1,6 +1,5 @@
 (ns tech.v3.libs.arrow.in-place
   (:require [tech.v3.datatype.mmap :as mmap]
-            [tech.v3.libs.arrow.schema :as arrow-schema]
             [tech.v3.libs.arrow.datatype :as arrow-dtype]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.native-buffer :as native-buffer]
@@ -10,7 +9,6 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
-            [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer
             MessageMetadataResult]
@@ -162,6 +160,20 @@
          :message-type (:message-type msg)))
 
 
+(defn parse-message-printable
+  [msg]
+  (let [retval (parse-message msg)]
+    (cond
+      (contains? retval :records)
+      (update-in retval [:records :buffers]
+                 #(mapv native-buffer/native-buffer->map %))
+      (contains? retval :buffers)
+      (update-in retval [:buffers]
+                 #(mapv native-buffer/native-buffer->map %))
+      :else
+      retval)))
+
+
 (def fixed-type-layout [:validity :data])
 (def variable-type-layout [:validity :int32 :int8])
 (def large-variable-type-layout [:validity :int64 :int8])
@@ -194,7 +206,7 @@
         [bitwise offsets databuf] buffers
         n-elems (long (:n-elems node))
         offsets (-> (native-buffer/set-native-datatype offsets :int32)
-                    (dtype/sub-buffer 0 n-elems))
+                    (dtype/sub-buffer 0 (inc n-elems)))
         data (native-buffer/set-native-datatype databuf :int8)
         str-data (dtype/make-container :list :string
                    (offsets-data->string-reader offsets data n-elems))]

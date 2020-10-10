@@ -1,6 +1,7 @@
 (ns tech.v3.libs.arrow
   (:require [tech.v3.datatype.export-symbols :refer [export-symbols]]
-            [tech.v3.datatype.mmap :as mmap]))
+            [tech.v3.datatype.mmap :as mmap]
+            [tech.v3.datatype.native-buffer :as native-buffer]))
 
 
 (export-symbols tech.v3.libs.arrow.copying
@@ -13,6 +14,7 @@
 (export-symbols tech.v3.libs.arrow.in-place
                 message-seq
                 parse-message
+                parse-message-printable
                 read-stream-dataset-inplace
                 stream->dataset-seq-inplace)
 
@@ -27,5 +29,5 @@
   for explorational purposes."
   [fname & [options]]
   (let [file-data (mmap/mmap-file fname (merge {:resource-type :gc} options))]
-    {:file-data file-data
-     :arrow-data (map parse-message (message-seq file-data))}))
+    {:file-data (native-buffer/native-buffer->map file-data)
+     :arrow-data (map parse-message-printable (message-seq file-data))}))
