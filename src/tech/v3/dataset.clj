@@ -641,10 +641,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                       (let [n-missing (dtype/ecount (ds-col/missing ds-col))
                             n-valid (- (dtype/ecount ds-col)
                                        n-missing)
-                            col-dtype (dtype/get-datatype ds-col)
-                            col-reader (dtype/->reader ds-col
-                                                       col-dtype
-                                                       {:missing-policy :elide})]
+                            col-dtype (dtype/get-datatype ds-col)]
                         (merge
                          {:col-name (ds-col/column-name ds-col)
                           :datatype col-dtype
@@ -654,12 +651,13 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                            (dtype-dt/datetime-datatype? col-dtype)
                            (dtype-dt/millisecond-descriptive-statistics
                             numeric-stats
-                            col-reader)
+                            nil
+                            ds-col)
                            (and (not (:categorical? (meta ds-col)))
                                 (casting/numeric-type? col-dtype))
-                           (dfn/descriptive-statistics col-reader numeric-stats)
+                           (dfn/descriptive-statistics numeric-stats ds-col)
                            :else
-                           (let [histogram (->> (frequencies col-reader)
+                           (let [histogram (->> (frequencies ds-col)
                                                 (clojure.core/sort-by second >))
                                  max-categorical-values (or (:n-categorical-values
                                                              options) 21)]

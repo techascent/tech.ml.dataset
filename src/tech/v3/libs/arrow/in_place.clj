@@ -1,6 +1,7 @@
 (ns tech.v3.libs.arrow.in-place
   (:require [tech.v3.datatype.mmap :as mmap]
-            [tech.v3.libs.arrow.copying :as arrow]
+            [tech.v3.libs.arrow.schema :as arrow-schema]
+            [tech.v3.libs.arrow.datatype :as arrow-dtype]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.native-buffer :as native-buffer]
             [tech.v3.datatype.nio-buffer :as nio-buffer]
@@ -77,52 +78,6 @@
   [^NativeBuffer data]
   (when-let [msg (read-message data)]
     (cons msg (lazy-seq (message-seq (:next-data msg))))))
-
-
-(extend-protocol clj-proto/Datafiable
-  ArrowType$Int
-  (datafy [this]
-    (let [signed? (.getIsSigned this)
-          bit-width (.getBitWidth this)]
-      {:datatype (if signed?
-                   (case bit-width
-                     8 :int8
-                     16 :int16
-                     32 :int32
-                     64 :int64)
-                   (case bit-width
-                     8 :uint8
-                     16 :uint16
-                     32 :uint32
-                     64 :uint64))}))
-  ArrowType$Utf8
-  (datafy [this]
-    {:datatype :string
-     :encoding :utf-8})
-  ArrowType$FloatingPoint
-  (datafy [this]
-    {:datatype (condp = (.getPrecision this)
-                 FloatingPointPrecision/HALF :float16
-                 FloatingPointPrecision/SINGLE :float32
-                 FloatingPointPrecision/DOUBLE :float64)})
-  ArrowType$Timestamp
-  (datafy [this]
-    (merge
-     (if (= (.getUnit this) TimeUnit/MILLISECOND)
-       {:datatype :epoch-milliseconds}
-       {:datatype :int64 :time-unit (condp = (.getUnit this)
-                                      TimeUnit/MICROSECOND :microsecond
-                                      TimeUnit/NANOSECOND :nanosecond
-                                      TimeUnit/SECOND :second)})
-     (when (and (.getTimezone this)
-                (not= 0 (count (.getTimezone this))))
-       {:timezone (.getTimezone this)})))
-  ArrowType$Bool
-  (datafy [this] {:datatype :boolean})
-  DictionaryEncoding
-  (datafy [this] {:id (.getId this)
-                  :ordered? (.isOrdered this)
-                  :index-type (datafy (.getIndexType this))}))
 
 
 (defn read-schema
@@ -255,7 +210,8 @@
                          (native-buffer/set-native-datatype
                           (get-in encoding [:index-type :datatype]))
                          (dtype/sub-buffer 0 n-elems))
-          retval (StringTable. str-list nil (dyn-int-list/make-from-container index-data))]
+          retval (StringTable. str-list nil (dyn-int-list/make-from-container
+                                             index-data))]
       retval)
     (let [[offsets varchar-data] buffers]
       (offsets-data->string-reader (native-buffer/set-native-datatype offsets :int32)
@@ -281,8 +237,9 @@
                          n-elems (long (:n-elems node))
                          missing (if (== 0 (long (:n-null-entries node)))
                                    (bitmap/->bitmap)
-                                   (arrow/int8-buf->missing (first specific-bufs)
-                                                            n-elems))
+                                   (arrow-dtype/int8-buf->missing
+                                    (first specific-bufs)
+                                    n-elems))
                          metadata (into col-metadata (:metadata field))]
                      [(conj retval
                             (col-impl/new-column
@@ -291,8 +248,9 @@
                                :string (string-data->column-data
                                         dict-map encoding (drop 1 specific-bufs)
                                         n-elems)
-                               :boolean (arrow/bitbuffer->boolean-reader
-                                         (second specific-bufs) n-elems)
+                               :boolean
+                               (arrow-dtype/byte-buffer->bitwise-boolean-buffer
+                                (second specific-bufs) n-elems)
                                (-> (native-buffer/set-native-datatype
                                     (second specific-bufs) field-dtype)
                                    (dtype/sub-buffer 0 n-elems)))
