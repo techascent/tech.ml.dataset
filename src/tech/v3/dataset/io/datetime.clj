@@ -1,4 +1,5 @@
-(ns ^:no-doc tech.v3.dataset.io.datetime
+(ns tech.v3.dataset.io.datetime
+  "Helpful and well tested string->datetime pathways."
   (:require [clojure.string :as s]
             [tech.v3.datatype.datetime :as dtype-dt])
   (:import [java.time LocalDate LocalDateTime LocalTime
