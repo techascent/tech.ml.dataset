@@ -16,6 +16,7 @@
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.categorical :as ds-cat]
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
@@ -208,7 +209,14 @@
                                     (->column-seq column-seq))))
 
 
-(defn- filter-ds
+(defn filter-dataset
+  "Filter the columns of the dataset returning a new dataset.  This pathway is
+  designed to work with the tech.v3.dataset.column-filters namespace.
+
+  * If filter-fn-or-ds is a dataset, it is returned.
+  * If filter-fn-or-ds is sequential, then select-columns is called.
+  * If filter-fn-or-ds is :all, all columns are returned
+  * If filter-fn-or-ds is an instance of IFn, the dataset is passed into it."
   [dataset filter-fn-or-ds]
   (cond
     (ds-impl/dataset? filter-fn-or-ds)
@@ -223,18 +231,18 @@
     (errors/throwf "Unrecoginzed filter mechanism: %s" filter-fn-or-ds)))
 
 
-
-
 (defn update
   "Update this dataset.  Filters this dataset into a new dataset,
   applies update-fn, then merges the result into original dataset.
+
+  This pathways is designed to work with the tech.v3.dataset.column-filters namespace.
 
   * `filter-fn-or-ds` is a generalized parameter.  May be a function,
      a dataset or a sequence of columns
   *  update-fn must take the dataset as the first argument and must return
      a dataset."
   [lhs-ds filter-fn-or-ds update-fn & args]
-  (let [filtered-ds (filter-ds lhs-ds filter-fn-or-ds)]
+  (let [filtered-ds (filter-dataset lhs-ds filter-fn-or-ds)]
     (merge lhs-ds (apply update-fn filtered-ds args))))
 
 
@@ -266,10 +274,10 @@
 
 
 (defn update-elemwise
-  "Replace all elements in selected columns by calling selected function on each element.
-  column-name-seq must be a sequence of column names if provided.
-  filter-fn-or-ds has same rules as update.  Implicitly clears the missing set so function
-  must deal with type-specific missing values correctly.
+  "Replace all elements in selected columns by calling selected function on each
+  element.  column-name-seq must be a sequence of column names if provided.
+  filter-fn-or-ds has same rules as update.  Implicitly clears the missing set so
+  function must deal with type-specific missing values correctly.
   Returns new dataset"
   ([dataset filter-fn-or-ds map-fn]
    (update-columnwise dataset filter-fn-or-ds
@@ -278,20 +286,54 @@
    (update-elemwise dataset identity map-fn)))
 
 
-(defn column-map
-  "Produce a new column as the result of mapping a fn over other columns.
-  The result column will have a datatype of the widened combination of all
-  the input column datatypes.
-  The result column's missing indexes is the union of all input columns."
-  [dataset map-fn result-colname result-datatype colname & colnames]
-  (let [all-colnames (->> (clojure.core/concat [colname]
-                                               colnames)
-                          (remove nil?)
-                          vec)
-        ;;Select the src columns to generate an error.
-        src-cols (vals (select-columns dataset all-colnames))]
-    (assoc dataset result-colname
-           (apply ds-col/column-map map-fn result-datatype src-cols))))
+(defn assoc-metadata
+  "Set metadata across a set of columns."
+  [dataset filter-fn-or-ds k v & args]
+  (let [n-args (count args)
+        _ (errors/when-not-error (== 0 (rem n-args 2))
+            "Assoc must have an even number of arguments")]
+    (apply update-columnwise dataset filter-fn-or-ds
+           vary-meta assoc k v args)))
+
+
+(defn string->number
+  "Convert string columns to numeric columns.
+  See tech.v3.dataset.categorical/fit-categorical-map."
+  ([dataset filter-fn-or-ds]
+   (string->number dataset filter-fn-or-ds nil nil))
+  ([dataset filter-fn-or-ds table-args]
+   (string->number dataset filter-fn-or-ds table-args nil))
+  ([dataset filter-fn-or-ds table-args result-datatype]
+   (update dataset filter-fn-or-ds
+           (fn [filtered-ds]
+             (reduce
+              (fn [filtered-ds colname]
+                (let [fit-data
+                      (ds-cat/fit-categorical-map
+                       filtered-ds colname table-args result-datatype)]
+                  (ds-cat/transform-categorical-map filtered-ds fit-data)))
+              filtered-ds
+              (column-names filtered-ds))))))
+
+
+(defn string->one-hot
+  "Convert string columns to numeric columns.
+  See tech.v3.dataset.categorical/fit-one-hot"
+  ([dataset filter-fn-or-ds]
+   (string->number dataset filter-fn-or-ds nil nil))
+  ([dataset filter-fn-or-ds table-args]
+   (string->number dataset filter-fn-or-ds table-args nil))
+  ([dataset filter-fn-or-ds table-args result-datatype]
+   (update dataset filter-fn-or-ds
+           (fn [filtered-ds]
+             (reduce
+              (fn [filtered-ds colname]
+                (let [fit-data
+                      (ds-cat/fit-one-hot
+                       filtered-ds colname table-args result-datatype)]
+                  (ds-cat/transform-one-hot filtered-ds fit-data)))
+              filtered-ds
+              (column-names filtered-ds))))))
 
 
 (defn column-cast

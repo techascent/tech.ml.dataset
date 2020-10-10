@@ -165,6 +165,12 @@
       (and (string? value) (.equalsIgnoreCase value "na"))))
 
 
+(defn- not-missing?
+  [parsed-value missing-value]
+  (or (not= parsed-value missing-value)
+      (= parsed-value false)))
+
+
 (deftype FixedTypeParser [^PrimitiveList container
                           container-dtype
                           missing-value parse-fn
@@ -192,7 +198,7 @@
                     (.add failed-indexes (unchecked-int idx)))
                   (errors/throwf "Failed to parse value %s as datatype %s on row %d"
                                  value container-dtype idx))
-                (not= parsed-value missing-value)
+                (not-missing? parsed-value missing-value)
                 (do
                   (add-missing-values! container missing missing-value idx)
                   (.addObject container parsed-value)))))))))
@@ -205,7 +211,7 @@
   [kwd]
   (if (or (= kwd :string)
           (= kwd :text))
-    [kwd str]
+    str
     (if-let [retval (get default-coercers kwd)]
       retval
       (errors/throwf "Failed to find parser for keyword %s" kwd))))
@@ -315,13 +321,15 @@
             (let [parsed-value (parse-fn value)]
               (cond
                 (= parsed-value parse-failure)
-                (let [start-idx (argops/index-of container-dtype (mapv first promotion-list))
+                (let [start-idx (argops/index-of container-dtype
+                                                 (mapv first promotion-list))
                       n-elems (.size promotion-list)
                       next-idx (if (== start-idx -1)
                                  -1
                                  (long (loop [idx (inc start-idx)]
                                          (if (< idx n-elems)
-                                           (let [[_container-datatype parser-fn] (.get promotion-list idx)
+                                           (let [[_container-datatype parser-fn]
+                                                 (.get promotion-list idx)
                                                  parsed-value (parser-fn value)]
                                              (if (= parsed-value parse-failure)
                                                (recur (inc idx))
@@ -333,15 +341,17 @@
                       parsed-value (if new-parser-fn
                                      (new-parser-fn value)
                                      value)
-                      new-container (promote-container container missing parser-datatype)
-                      new-missing-value (column-base/datatype->missing-value parser-datatype)]
+                      new-container (promote-container container missing
+                                                       parser-datatype)
+                      new-missing-value (column-base/datatype->missing-value
+                                         parser-datatype)]
                   (set! container new-container)
                   (set! container-dtype parser-datatype)
                   (set! missing-value new-missing-value)
                   (set! parse-fn new-parser-fn)
                   (add-missing-values! new-container missing new-missing-value idx)
                   (.add new-container parsed-value))
-                (not= parsed-value missing-value)
+                (not-missing? parsed-value missing-value)
                 (do
                   (add-missing-values! container missing missing-value idx)
                   (.addObject container parsed-value))))
@@ -399,10 +409,12 @@
             (.addObject container value))
           (let [widest-datatype (casting/widest-datatype container-dtype packed-dtype)]
             (when-not (= widest-datatype container-dtype)
-              (let [new-container (promote-container container missing widest-datatype)]
+              (let [new-container (promote-container container
+                                                     missing widest-datatype)]
                 (set! container new-container)
                 (set! container-dtype widest-datatype)
-                (set! missing-value (column-base/datatype->missing-value widest-datatype))))
+                (set! missing-value (column-base/datatype->missing-value
+                                     widest-datatype))))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
             (.addObject container value))))))

@@ -2,9 +2,13 @@
   (:require [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column-filters :as cf]
+            [tech.v3.dataset.modelling :as ds-mod]
+            [tech.v3.dataset.math :as ds-math]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
             [clojure.set :as c-set]
+            [clojure.pprint :as pp]
+            [clojure.data :as data]
             [clojure.test :refer [deftest is]]
             [clojure.tools.logging :as log]))
 
@@ -31,10 +35,23 @@
              (ds/update-columnwise (cf/union (cf/numeric ds) (cf/boolean ds))
                                    #(dtype/elemwise-cast % :float64))))
 
+(def original-missing
+  #{"LotFrontage" "Alley" "MasVnrType" "MasVnrArea"
+    "BsmtQual" "BsmtCond" "BsmtExposure" "BsmtFinType1"
+    "BsmtFinType2" "Electrical" "FireplaceQu" "GarageType"
+    "GarageYrBlt" "GarageFinish" "GarageQual" "GarageCond"
+    "PoolQC" "Fence" "MiscFeature"})
+
 
 (deftest basic-pipeline-test
   (let [dataset (missing-pipeline src-ds)]
-    (is (= 19 (count (ds/columns-with-missing-seq src-ds))))
+    (is (= original-missing
+           (set (map :column-name (ds/columns-with-missing-seq src-ds))))
+        (with-out-str
+          (pp/pprint
+           (data/diff
+            original-missing
+            (set (map :column-name (ds/columns-with-missing-seq src-ds)))))))
     (is (= 0 (count (ds/columns-with-missing-seq dataset))))
     (is (= 42 (ds/column-count (cf/categorical dataset))))
     (is (= #{:string :float64}
@@ -62,52 +79,64 @@
 (defn skew-column-filter
   [dataset]
   (-> (dissoc dataset "SalePrice")
-      (cf/column-filter #(> (dfn/skew %)
+      (cf/numeric)
+      (cf/column-filter #(> (Math/abs (dfn/skew %))
                             0.5))))
+
+(def old-cols
+  #{"TotalBsmtSF" "YearRemodAdd" "LotFrontage" "PoolArea" "BsmtFinSF2" "YearBuilt"
+  "LowQualFinSF" "GrLivArea" "MSSubClass" "WoodDeckSF" "KitchenAbvGr" "Fireplaces"
+  "3SsnPorch" "OverallCond" "1stFlrSF" "EnclosedPorch" "MiscVal" "2ndFlrSF"
+  "TotRmsAbvGrd" "GarageYrBlt" "BsmtHalfBath" "OpenPorchSF" "BsmtFinSF1" "LotArea"
+  "MasVnrArea" "ScreenPorch" "BsmtFullBath" "BsmtUnfSF" "HalfBath"})
 
 
 (deftest custom-colfilter-test
-  (is (= 29 (count (skew-column-filter src-ds)))))
+  (is (= old-cols
+         (-> (skew-column-filter src-ds)
+             (ds/column-names)
+             (set)))))
 
 
 (defn string-and-math
   [dataset]
   (let [initial-ds
         (-> dataset
-            (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-            (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-            (dsp/string->number ["ExterQual"
-                                 "ExterCond"
-                                 "BsmtQual"
-                                 "BsmtCond"
-                                 "HeatingQC"
-                                 "KitchenQual"
-                                 "FireplaceQu"
-                                 "GarageQual"
-                                 "GarageCond"
-                                 "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-            (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
-                                :categorical? true)
-            (dsp/string->number "MasVnrType" {"BrkCmn" 1
-                                              "BrkFace" 1
-                                              "CBlock" 1
-                                              "Stone" 1
-                                              "None" 0
-                                              "NA" -1})
-            (dsp/string->number "SaleCondition" {"Abnorml" 0
-                                                 "Alloca" 0
-                                                 "AdjLand" 0
-                                                 "Family" 0
-                                                 "Normal" 0
-                                                 "Partial" 1
-                                                 "NA" -1})
+            (ds/string->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa"
+                                              "NoSewr" "AllPub"])
+            (ds/string->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
+            (ds/string->number ["ExterQual"
+                                "ExterCond"
+                                "BsmtQual"
+                                "BsmtCond"
+                                "HeatingQC"
+                                "KitchenQual"
+                                "FireplaceQu"
+                                "GarageQual"
+                                "GarageCond"
+                                "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
+            (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+                               :categorical? true)
+            (ds/string->number ["MasVnrType"] {"BrkCmn" 1
+                                                "BrkFace" 1
+                                                "CBlock" 1
+                                                "Stone" 1
+                                                "None" 0
+                                                "NA" -1})
+            (ds/string->number ["SaleCondition"] {"Abnorml" 0
+                                                   "Alloca" 0
+                                                   "AdjLand" 0
+                                                   "Family" 0
+                                                   "Normal" 0
+                                                   "Partial" 1
+                                                   "NA" -1})
             ;; ;;Auto convert the rest that are still string columns
-            (dsp/string->number))]
+            (ds/string->number cf/string))]
     (if (ds/has-column? initial-ds "SalePrice")
       (-> initial-ds
-          (dsp/new-column "SalePriceDup" #(ds/column % "SalePrice"))
-          (dsp/update-column "SalePrice" dfn/log1p)
-          (ds/set-inference-target "SalePrice"))
+          (assoc "SalePriceDup" (initial-ds "SalePrice"))
+          (ds/update-column "SalePrice" dfn/log1p)
+          (ds-mod/set-inference-target "SalePrice"))
       initial-ds)))
 
 
@@ -121,7 +150,7 @@
         inference-dataset (-> (ds/select src-dataset
                                          inference-columns
                                          (range 10))
-                              (ds/->flyweight :error-on-missing-values? false))
+                              (ds/mapseq-reader))
 
         dataset (-> src-ds
                     missing-pipeline
@@ -131,20 +160,19 @@
         sane-dataset-for-flyweight (ds/select dataset post-pipeline-columns
                                                     (range 10))
         final-flyweight (-> sane-dataset-for-flyweight
-                            (ds/->flyweight))]
+                            (ds/mapseq-reader))]
     (is (= [81 1460] (dtype/shape src-dataset)))
     (is (= [81 1460] (dtype/shape dataset)))
 
-    (is (= 45 (count (cf/categorical? dataset))))
+    (is (= 45 (ds/column-count (cf/categorical dataset))))
     (is (= #{"MSSubClass" "OverallQual" "OverallCond"}
            (c-set/intersection #{"MSSubClass" "OverallQual" "OverallCond"}
-                               (set (cf/categorical? dataset)))))
-    (is (= []
-           (vec (cf/string? dataset))))
+                               (set (ds/column-names (cf/categorical dataset))))))
+    (is (= 0 (ds/column-count (cf/string dataset))))
     (is (= ["SalePrice"]
-           (vec (cf/target? dataset))))
+           (vec (ds/column-names (cf/target dataset)))))
     (is (= []
-           (vec (cf/not cf/numeric? dataset))))
+           (vec (ds/column-names (cf/difference dataset (cf/numeric dataset))))))
     (let [sale-price (ds/column dataset "SalePriceDup")
           sale-price-l1p (ds/column dataset "SalePrice")
           sp-stats (ds-col/stats sale-price [:mean :min :max])
@@ -160,7 +188,7 @@
     (is (= 10 (count final-flyweight)))
 
 
-    (let [pre-pipeline (map ds-col/metadata (ds/columns src-ds))
+    (let [pre-pipeline (map meta (ds/columns src-ds))
           col-dtype-map (->> pre-pipeline
                              (map (fn [{:keys [name datatype]}]
                                     [name datatype]))
@@ -191,76 +219,76 @@
 
 (defn full-ames-pt-1
   [dataset]
-  (bind->
+  (ds/bind->
    (missing-pipeline dataset) ds
-   (dsp/string->number "Utilities" [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-   (dsp/string->number "LandSlope" ["Gtl" "Mod" "Sev" "NA"])
-   (dsp/string->number ["ExterQual"
-                        "ExterCond"
-                        "BsmtQual"
-                        "BsmtCond"
-                        "HeatingQC"
-                        "KitchenQual"
-                        "FireplaceQu"
-                        "GarageQual"
-                        "GarageCond"
-                        "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-   (dsp/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
-                       :categorical? true)
-   (dsp/string->number "MasVnrType" {"BrkCmn" 1
-                                     "BrkFace" 1
-                                     "CBlock" 1
-                                     "Stone" 1
-                                     "None" 0
-                                     "NA" -1})
-   (dsp/string->number "SaleCondition" {"Abnorml" 0
-                                        "Alloca" 0
-                                        "AdjLand" 0
-                                        "Family" 0
-                                        "Normal" 0
-                                        "Partial" 1
-                                        "NA" -1})
+   (ds/string->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+   (ds/string->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
+   (ds/string->number ["ExterQual"
+                       "ExterCond"
+                       "BsmtQual"
+                       "BsmtCond"
+                       "HeatingQC"
+                       "KitchenQual"
+                       "FireplaceQu"
+                       "GarageQual"
+                       "GarageCond"
+                       "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
+   (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+                      :categorical? true)
+   (ds/string->number ["MasVnrType"] {"BrkCmn" 1
+                                      "BrkFace" 1
+                                      "CBlock" 1
+                                      "Stone" 1
+                                      "None" 0
+                                      "NA" -1})
+   (ds/string->number ["SaleCondition"] {"Abnorml" 0
+                                         "Alloca" 0
+                                         "AdjLand" 0
+                                         "Family" 0
+                                         "Normal" 0
+                                         "Partial" 1
+                                         "NA" -1})
    ;; ;;Auto convert the rest that are still string columns
-   (dsp/string->number)
-   (dsp/update-column "SalePrice" dfn/log1p)
-   (ds/set-inference-target "SalePrice")
+   (ds/string->number cf/string)
+   (ds/update-column "SalePrice" dfn/log1p)
+   (ds-mod/set-inference-target "SalePrice")
    (assoc "OverallGrade" #(dfn/* (ds "OverallQual") (ds "OverallCond")))
    ;; Overall quality of the garage
-   (assoc "GarageGrade"  #(dfn/* (col "GarageQual") (col "GarageCond")))
+   (assoc "GarageGrade"  #(dfn/* (ds "GarageQual") (ds "GarageCond")))
    ;; Overall quality of the exterior
-   (m= "ExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
+   (assoc "ExterGrade" #(dfn/* (ds "ExterQual") (ds "ExterCond")))
    ;; Overall kitchen score
-   (m=  "KitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
+   (assoc  "KitchenScore" #(dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
    ;; Overall fireplace score
-   (m= "FireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
+   (assoc "FireplaceScore" #(dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
    ;; Overall garage score
-   (m= "GarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
+   (assoc "GarageScore" #(dfn/* (ds "GarageArea") (ds "GarageQual")))
    ;; Overall pool score
-   (m= "PoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
+   (assoc "PoolScore" #(dfn/* (ds "PoolArea") (ds "PoolQC")))
    ;; Simplified overall quality of the house
-   (m= "SimplOverallGrade" #(dfn/* (col "OverallQual") (col "OverallCond")))
+   (assoc "SimplOverallGrade" #(dfn/* (ds "OverallQual") (ds "OverallCond")))
    ;; Simplified overall quality of the exterior
-   (m= "SimplExterGrade" #(dfn/* (col "ExterQual") (col "ExterCond")))
+   (assoc "SimplExterGrade" #(dfn/* (ds "ExterQual") (ds "ExterCond")))
    ;; Simplified overall pool score
-   (m= "SimplPoolScore" #(dfn/* (col "PoolArea") (col "PoolQC")))
+   (assoc "SimplPoolScore" #(dfn/* (ds "PoolArea") (ds "PoolQC")))
    ;; Simplified overall garage score
-   (m= "SimplGarageScore" #(dfn/* (col "GarageArea") (col "GarageQual")))
+   (assoc "SimplGarageScore" #(dfn/* (ds "GarageArea") (ds "GarageQual")))
    ;; Simplified overall fireplace score
-   (m= "SimplFireplaceScore" #(dfn/* (col "Fireplaces") (col "FireplaceQu")))
+   (assoc "SimplFireplaceScore" #(dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
    ;; Simplified overall kitchen score
-   (m= "SimplKitchenScore" #(dfn/* (col "KitchenAbvGr") (col "KitchenQual")))
+   (assoc "SimplKitchenScore" #(dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
    ;; Total number of bathrooms
-   (m= "TotalBath" #(dfn/+ (col "BsmtFullBath")
-                           (dfn/* 0.5 (col "BsmtHalfBath"))
-                           (col "FullBath")
-                           (dfn/* 0.5 (col "HalfBath"))))
+   (assoc "TotalBath" #(dfn/+ (ds "BsmtFullBath")
+                           (dfn/* 0.5 (ds "BsmtHalfBath"))
+                           (ds "FullBath")
+                           (dfn/* 0.5 (ds "HalfBath"))))
    ;; Total SF for house (incl. basement)
-   (m= "AllSF" #(dfn/+ (col "GrLivArea") (col "TotalBsmtSF")))
+   (assoc "AllSF" #(dfn/+ (ds "GrLivArea") (ds "TotalBsmtSF")))
    ;; Total SF for 1st + 2nd floors
-   (m= "AllFlrsSF" #(dfn/+ (col "1stFlrSF") (col "2ndFlrSF")))
+   (assoc "AllFlrsSF" #(dfn/+ (ds "1stFlrSF") (ds "2ndFlrSF")))
    ;; Total SF for porch
-   (m= "AllPorchSF" #(dfn/+ (col "OpenPorchSF") (col "EnclosedPorch")
-                            (col "3SsnPorch") (col "ScreenPorch")))))
+   (assoc "AllPorchSF" #(dfn/+ (ds "OpenPorchSF") (ds "EnclosedPorch")
+                            (ds "3SsnPorch") (ds "ScreenPorch")))))
 
 
 (def ames-top-columns
@@ -282,106 +310,101 @@
   ;;Drop SalePrice column of course.
   (->> (rest ames-top-columns)
        (reduce (fn [dataset colname]
-                 (-> dataset
-                     (m= (str colname "-s2") #(dfn/pow (col colname) 2))
-                     (m= (str colname "-s3") #(dfn/pow (col colname) 3))
-                     (m= (str colname "-sqrt") #(dfn/sqrt (col colname)))))
+                 (ds/bind-> dataset ds
+                     (assoc (str colname "-s2") #(dfn/pow (ds colname) 2))
+                     (assoc (str colname "-s3") #(dfn/pow (ds colname) 3))
+                     (assoc (str colname "-sqrt") #(dfn/sqrt (ds colname)))))
                dataset)))
 
 
 (defn full-ames-pt-3
   [dataset]
-  (-> dataset
-      (m= (skew-column-filter dataset)
-          #(dfn/log1p (col)))
-      (dsp/std-scale)))
+  (let [feature-ds (cf/difference dataset (cf/target dataset))
+        numeric-feature-ds (cf/difference feature-ds (cf/categorical feature-ds))
+        skew-fixed (ds/update-columnwise numeric-feature-ds skew-column-filter
+                                         dfn/log1p)
+        std-scale-fit (ds-math/fit-std-scale skew-fixed)]
+    (merge dataset (ds-math/transform-std-scale skew-fixed std-scale-fit))))
 
 
 (deftest full-ames-pipeline-test
   (let [src-dataset src-ds]
-    (testing "Pathway through ames pt one is sane.  Checking skew."
-      (let [dataset (full-ames-pt-1 src-dataset)]
-       (is (= ames-top-columns
-               (->> (get (ds/correlation-table dataset) "SalePrice")
-                    (take 11)
-                    (mapv first))))
-       (let [[n-cols n-rows] (dtype/shape src-dataset)
-             [n-new-cols n-new-rows] (-> (dsp/filter src-dataset
-                                                         "GrLivArea"
-                                                         #(dfn/< (col) 4000))
-                                         dtype/shape)
-             num-over-the-line (->> (ds/column src-dataset "GrLivArea")
-                                    (dtype/->reader)
-                                    (filter #(>= (int %) 4000))
-                                    count)]
-         ;;Ensure our test isn't pointless.
-         (is (not= 0 num-over-the-line))
-         (is (= n-new-rows
-                (- n-rows num-over-the-line))))
-       (let [new-ds (m= src-dataset "SimplOverallQual"
-                        #(int-map {1 1 2 1 3 1
-                                   4 2 5 2 6 2
-                                   7 3 8 3 9 3 10 3}
-                                  (col "OverallQual")))]
-         (is (= #{1 2 3}
-                (->> (ds/column new-ds "SimplOverallQual")
-                     (ds-col/unique)
-                     (map int)
-                     set))))))
-    (testing "Pathway through ames pt 2 is sane.  Checking skew."
-      (let [dataset (-> src-ds
-                        full-ames-pt-1
-                        full-ames-pt-2)
-            skewed-set (set (skew-column-filter dataset))]
-        ;;This count seems rather high...a diff against the python stuff would be wise.
-        (is (= 64 (count skewed-set)))
-        (is (= 45 (count (cf/categorical? dataset))))
-        ;;Sale price cannot be in the set as it was explicitly removed.
-        (is (not (contains? skewed-set "SalePrice")))))))
+    (let [dataset (full-ames-pt-1 src-dataset)]
+      (is (= ames-top-columns
+             (->> (get (ds-math/correlation-table dataset) "SalePrice")
+                  (take 11)
+                  (mapv first))))
+      (let [[n-cols n-rows] (dtype/shape src-dataset)
+            [n-new-cols n-new-rows] (-> (ds/filter-column src-dataset
+                                                          "GrLivArea"
+                                                          #(< % 4000))
+                                        dtype/shape)
+            num-over-the-line (->> (ds/column src-dataset "GrLivArea")
+                                   (dtype/->reader)
+                                   (filter #(>= (int %) 4000))
+                                   count)]
+        ;;Ensure our test isn't pointless.
+        (is (not= 0 num-over-the-line))
+        (is (= n-new-rows
+               (- n-rows num-over-the-line))))
+      (let [new-ds
+            (assoc src-dataset "SimplOverallQual"
+                   #(dtype/emap {1 1 2 1 3 1
+                                 4 2 5 2 6 2
+                                 7 3 8 3 9 3 10 3}
+                                :int64
+                                (src-dataset "OverallQual")))]
+        (is (= #{1 2 3}
+               (->> (ds/column new-ds "SimplOverallQual")
+                    (ds-col/unique)
+                    (map int)
+                    set)))))
+    (let [dataset (-> src-ds
+                      full-ames-pt-1
+                      full-ames-pt-2)
+          skewed-set (set (skew-column-filter dataset))]
+      ;;This count seems rather high...a diff against the python stuff would be wise.
+      (is (= 64 (count skewed-set)))
+      (is (= 45 (count (ds/column-count (cf/categorical dataset)))))
+      ;;Sale price cannot be in the set as it was explicitly removed.
+      (is (not (contains? skewed-set "SalePrice"))))))
 
 
 (deftest ^:travis-broken full-ames-pipeline-pca
-  (testing "Full ames pathway is sane"
-    (let [dataset (-> src-ds
-                      full-ames-pt-1
-                      full-ames-pt-2
-                      full-ames-pt-3)
-          std-set (set (cf/numeric-and-non-categorical-and-not-target dataset))
-          mean-var-seq (->> std-set
-                            (map (comp #(ds-col/stats % [:mean :variance])
-                                       (partial ds/column dataset))))]
-      ;;Are means 0?
-      (is (dfn/equals (mapv :mean mean-var-seq)
-                      (vec (repeat (count mean-var-seq) 0))
-                      0.001))
-      (try
-        (let [pca-ds (dsp/pca dataset)]
-          (is (= 127 (count (ds/columns dataset))))
-          (is (= 45 (count (cf/categorical? pca-ds))))
-          (is (= 75 (count (ds/columns pca-ds))))
-          (is (= 1 (count (cf/target? pca-ds)))))
-        (let [pca-ds (dsp/pca dataset
-                              cf/numeric-and-non-categorical-and-not-target
-                              :n-components 10)]
-          (is (= 45 (count (cf/categorical? dataset))))
-          (is (= 45 (count (cf/categorical? pca-ds))))
-          (is (= 127 (count (ds/columns dataset))))
-          (is (= 56 (count (ds/columns pca-ds))))
-          (is (= 1 (count (cf/target? pca-ds)))))
-        (catch Throwable e
-          (log/warnf e "Skiping tests due to exception in pca pathway"))))))
+  (let [dataset (-> src-ds
+                    full-ames-pt-1
+                    full-ames-pt-2
+                    full-ames-pt-3)
+        numeric-ds (cf/difference
+                    (cf/numeric dataset)
+                    (cf/union (cf/categorical dataset)
+                              (cf/target dataset)))
+        std-set (set (ds/column-names numeric-ds))
+        mean-var-seq (->> std-set
+                          (map (comp #(ds-col/stats % [:mean :variance])
+                                     (partial ds/column dataset))))]
+    ;;Are means 0?
+    (is (dfn/equals (mapv :mean mean-var-seq)
+                    (vec (repeat (count mean-var-seq) 0))
+                    0.001))
+    (let [cat-ds (cf/categorical dataset)
+          pca-fit (ds-math/fit-pca numeric-ds {:n-components 10})
+          pca-ds (ds-math/transform-pca numeric-ds pca-fit)]
+      (is (= 127 (count (ds/columns dataset))))
+      (is (= 45 (count (ds/columns cat-ds))))
+      (is (= 75 (count (ds/columns numeric-ds))))
+      (is (= 10 (count (ds/columns pca-ds)))))))
 
 
 (deftest tostring-regression
-  (testing "tostring has to work with missing values"
-    (is (string?
-         (.toString ^Object src-ds)))))
+  (is (string?
+       (.toString ^Object src-ds))))
 
 
 (deftest desc-stats-and-correlation
   []
   (let [stats-data (ds/descriptive-stats src-ds)
-        corr-data (ds-pipe/correlation-table src-ds :colname-seq ["SalePrice"])]
+        corr-data (ds-math/correlation-table src-ds :colname-seq ["SalePrice"])]
     (is (= #{:min :n-missing :col-name :mean :datatype :skew :mode
              :standard-deviation :n-valid :max}
            (set (ds/column-names stats-data))))
