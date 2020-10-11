@@ -406,7 +406,8 @@
                                                 (ds-col-proto/set-name column idx)
                                                 column)))))
              sizes (->> (map dtype/ecount column-seq)
-                        distinct)
+                        distinct
+                        vec)
              column-seq (if (== (count sizes) 1)
                           column-seq
                           (let [max-size (long (apply max 0 sizes))]

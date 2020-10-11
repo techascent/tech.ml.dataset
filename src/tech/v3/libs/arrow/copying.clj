@@ -287,7 +287,6 @@
                             :timezone (timezone-from-field-vec fv)}))
 
 
-
 (defn field-vec->column
   [{:keys [fix-date-types?]}
    dict-map
@@ -343,8 +342,11 @@
            (dtype-dt/milliseconds->datetime (:source-datatype metadata)
                                             (:timezone metadata) fv))
           :else
-          (dtype/->array-buffer fv))]
-    (col-impl/new-column (or (:name metadata) colname) coldata metadata missing)))
+          (dtype/->array-buffer fv))
+        new-col
+        (col-impl/new-column (or (:name metadata) colname)
+                             coldata metadata missing)]
+    new-col))
 
 
 (defn arrow->ds

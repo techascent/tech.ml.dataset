@@ -44,12 +44,11 @@
      (let [ames (ds/->dataset "test/data/ames-house-prices/train.csv")
            _ (arrow/write-dataset-to-stream! ames "temp.ames.arrow")
            ames-copying (arrow/read-stream-dataset-copying "temp.ames.arrow")
-           ames-inplace (arrow/read-stream-dataset-inplace
-                         "temp.ames.arrow" {:resource-type :gc})
+           ames-inplace (arrow/read-stream-dataset-inplace "temp.ames.arrow")
            pyames-copying (arrow/read-stream-dataset-copying
                            "test/data/ames.pyarrow.stream")
            pyames-inplace (arrow/read-stream-dataset-inplace
-                           "test/data/ames.pyarrow.stream" {:resource-type :gc})]
+                           "test/data/ames.pyarrow.stream")]
        (System/gc)
        (is (dfn/equals (ames "SalePrice") (ames-copying "SalePrice")))
        (is (dfn/equals (ames "SalePrice") (ames-inplace "SalePrice")))
@@ -65,20 +64,4 @@
        (is (= (ds-col/missing (ames "LotFrontage"))
               (ds-col/missing (pyames-inplace "LotFrontage"))))))
     (finally
-      (.delete (java.io.File. "temp.stocks.arrow")))))
-
-
-(deftest write-dataset-seq
-  (let [temp-fname (str (java.util.UUID/randomUUID) ".arrow")]
-    (try
-      (is (nil? (-> (ds/csv->dataset-seq "data/ames-house-prices/train.csv"
-                                         {:num-rows-per-batch 200})
-                    (arrow/write-dataset-seq-to-stream! "test.arrow"))))
-      (finally
-        (.delete (java.io.File. temp-fname))))
-    (try
-      (is (nil? (-> (ds/csv->dataset-seq "test/data/stocks.csv"
-                                         {:num-rows-per-batch 50})
-                    (arrow/write-dataset-seq-to-stream! "test.arrow"))))
-      (finally
-        (.delete (java.io.File. temp-fname))))))
+      (.delete (java.io.File. "temp.ames.arrow")))))

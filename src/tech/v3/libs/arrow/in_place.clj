@@ -9,6 +9,7 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
+            [tech.resource :as resource]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer
             MessageMetadataResult]
@@ -291,7 +292,7 @@
            ;;Assoc on the file data so the gc doesn't release the source memory map
            ;;until no one is accessing the dataset any more in the case where
            ;;the file was opened with {:resource-type :gc}
-           (vary-meta assoc :source-mmap fdata))
+           (resource/track (constantly fdata)))
        (lazy-seq (parse-next-dataset fdata schema (rest rest-messages)
                                      fname (inc (long idx))))))))
 
@@ -340,9 +341,8 @@
 Please use stream->dataset-seq-inplace.")))
     (-> (records->ds schema dict-map data-record)
         (ds-base/set-dataset-name fname)
-        ;;We have to be sure that the dataset keeps a reference to the file data
-        ;;else the GC may clean up our mmap before we are ready.
-        (vary-meta assoc :source-mmap fdata))))
+        ;;Ensure the file data is linked via gc to the dataset.
+        (resource/track (constantly fdata)))))
 
 
 (comment
