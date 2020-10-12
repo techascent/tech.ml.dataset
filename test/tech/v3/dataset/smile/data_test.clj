@@ -1,6 +1,6 @@
-(ns tech.ml.dataset.smile.data-test
-  (:require [tech.ml.dataset :as ds]
-            [tech.v2.datatype.functional :as dfn]
+(ns tech.v3.dataset.smile.data-test
+  (:require [tech.v3.dataset :as ds]
+            [tech.v3.datatype.functional :as dfn]
             [clojure.test :refer [deftest is]])
   (:import [smile.data DataFrame]))
 
@@ -17,24 +17,6 @@
            (vec (new-val "symbol"))))
     (is (dfn/equals (stocks "price")
                     (new-val "price")))))
-
-
-(deftest encoded-text-test
-  (let [stocks (ds/->dataset "test/data/stocks.csv"
-                             {:parser-fn {"symbol" :encoded-text}})
-        df-stocks (ds/dataset->smile-dataframe stocks)
-        new-val (ds/->dataset df-stocks)]
-    (is (instance? DataFrame df-stocks))
-    ;;Datetime types included
-    (is (= (vec ((ds/ensure-array-backed stocks) "date"))
-           (vec (new-val "date"))))
-    (is (= (vec ((ds/ensure-array-backed stocks) "symbol"))
-           (vec (new-val "symbol"))))
-    (is (= (vec ((ds/ensure-array-backed stocks) "symbol"))
-           (vec (new-val "symbol"))))
-    (is (dfn/equals (stocks "price")
-                    (new-val "price")))))
-
 
 
 (deftest ames-test

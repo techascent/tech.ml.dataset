@@ -1,4 +1,4 @@
-(ns tech.libs.fastexcel-test
+(ns tech.v3.libs.fastexcel-test
   (:require [tech.libs.fastexcel :as xlsx-parse]
             [tech.ml.dataset :as ds]
             [tech.ml.dataset.column :as ds-col]

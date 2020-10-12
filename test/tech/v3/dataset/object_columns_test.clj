@@ -1,25 +1,22 @@
-(ns tech.ml.dataset.object-columns-test
-  (:require [clojure.test :refer :all]
-            [tech.ml.dataset :as ds]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.tensor :as dtt]))
-
+(ns tech.v3.dataset.object-columns-test
+  (:require [clojure.test :refer [deftest is]]
+            [tech.v3.dataset :as ds]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.tensor :as dtt]))
 
 
 (deftest basic-object-columns
-  (let [src-ds (ds/name-values-seq->dataset
-                {:a (range 10)
-                 :b (repeat 10 {:a 1 :b 2})})]
+  (let [src-ds (ds/->dataset {:a (range 10)
+                              :b (repeat 10 {:a 1 :b 2})})]
     (is (= :object
            (dtype/get-datatype (src-ds :b))))
     (is (= (vec (repeat 10 {:a 1 :b 2}))
            (vec (dtype/->reader (src-ds :b)))))))
 
 
-
 (deftest involved-object-columns
-  (let [src-ds (ds/name-values-seq->dataset
+  (let [src-ds (ds/->dataset
                 {:dates (list "2000-01-01" "2000-02-01" "2000-03-01"
                               "2000-04-01" "2000-05-01")
                  :integers (range 5)

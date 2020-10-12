@@ -1,8 +1,7 @@
-(ns tech.ml.dataset.neanderthal-test
-  (:require [tech.ml.dataset :as ds]
-            [tech.ml.dataset.neanderthal :as ds-neanderthal]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype :as dtype]
+(ns tech.v3.dataset.neanderthal-test
+  (:require [tech.v3.dataset :as ds]
+            [tech.v3.dataset.neanderthal :as ds-neanderthal]
+            [tech.v3.datatype.functional :as dfn]
             [clojure.test :refer [deftest is testing]]))
 
 
@@ -13,7 +12,6 @@
     (testing "Column major conversion"
       (let [n-mat (ds-neanderthal/dataset->dense test-ds :column)
             res-ds (ds-neanderthal/dense->dataset n-mat)]
-
         (is (= 3 (ds/column-count res-ds)))
         (is (every? #(dfn/equals (first %) (second %))
                     (map vector
@@ -22,7 +20,6 @@
     (testing "Row major conversion"
       (let [n-mat (ds-neanderthal/dataset->dense test-ds :row)
             res-ds (ds-neanderthal/dense->dataset n-mat)]
-
         (is (= 3 (ds/column-count res-ds)))
         (is (every? #(dfn/equals (first %) (second %))
                     (map vector

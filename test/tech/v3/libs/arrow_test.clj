@@ -1,4 +1,4 @@
-(ns tech.libs.arrow-test
+(ns tech.v3.libs.arrow-test
   (:require [tech.v3.libs.arrow :as arrow]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
