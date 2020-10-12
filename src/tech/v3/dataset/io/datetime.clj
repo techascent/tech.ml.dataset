@@ -11,7 +11,8 @@
 
 
 ;;Assumping is that the string will have /,-. replaced with /space
-(def date-parser-patterns
+(def ^{:doc "Local date parser patterns used to generate the local date
+formatter."} local-date-parser-patterns
   ["yyyy MM dd"
    "yyyyMMdd"
    "MM dd yyyy"
@@ -23,27 +24,31 @@
    "MMM d yyyy"])
 
 
-(defn date-preparse
+(defn- date-preparse
   ^String [^String data]
   (.replaceAll data "[/,-. ]+" " "))
 
 
-(def base-local-date-formatter
+(def ^{:doc "DateTimeFormatter that runs through a set of options in order to
+parse a wide variety of local date formats."
+       :tag DateTimeFormatter}
+  local-date-formatter
   (let [builder (DateTimeFormatterBuilder.)]
     (.parseCaseInsensitive builder)
-    (doseq [pattern date-parser-patterns]
+    (doseq [pattern local-date-parser-patterns]
       (.appendOptional builder (DateTimeFormatter/ofPattern pattern)))
     (.appendOptional builder DateTimeFormatter/ISO_LOCAL_DATE)
     (.toFormatter builder)))
 
 
 (defn parse-local-date
+  "Convert a string into a local date attempting a wide variety of format types."
   ^LocalDate [^String str-data]
-  (LocalDate/parse (date-preparse str-data)
-                   base-local-date-formatter))
+  (LocalDate/parse (date-preparse str-data) local-date-formatter))
 
 
-(def time-parser-patterns
+(def ^{:doc "Parser patterns to parse a wide variety of time strings"}
+  time-parser-patterns
   ["HH:mm:ss:SSS"
    "hh:mm:ss a"
    "HH:mm:ss"
@@ -56,7 +61,9 @@
    "H:mm"])
 
 
-(def base-local-time-formatter
+(def ^{:doc "DateTimeFormatter built to help parse a wide variety of time strings"
+       :tag DateTimeFormatter}
+  local-time-formatter
   (let [builder (DateTimeFormatterBuilder.)]
     (.parseCaseInsensitive builder)
     (doseq [pattern time-parser-patterns]
@@ -65,18 +72,21 @@
     (.toFormatter builder)))
 
 
-(defn local-time-preparse
+(defn- local-time-preparse
   ^String [^String data]
   (.replaceAll data "[._]" ":"))
 
 
 (defn parse-local-time
+  "Convert a string into a local time attempting a wide variety of
+  possible parser patterns."
   ^LocalTime [^String str-data]
-  (LocalTime/parse (local-time-preparse str-data)
-                   base-local-time-formatter))
+  (LocalTime/parse (local-time-preparse str-data) local-time-formatter))
 
 
 (defn parse-local-date-time
+  "Parse a local-date-time by first splitting the string and then separately
+  parsing the local-date portion and the local-time portions."
   ^LocalDateTime [^String str-data]
   (let [split-data (s/split str-data #"[ T]+")]
     (cond
@@ -94,6 +104,7 @@
 
 
 (defn parse-duration
+  "Attempt a few ways to parse a duration."
   ^Duration [^String str-data]
   (try
     (Duration/parse str-data)
@@ -122,7 +133,8 @@
         (Duration/ofNanos (* (long mult) (long nanos)))))))
 
 
-(def datatype->general-parse-fn-map
+(def ^{:doc "Map of datetime datatype to generalized parse fn."}
+  datatype->general-parse-fn-map
   {:local-date parse-local-date
    :local-date-time parse-local-date-time
    :duration parse-duration
@@ -132,6 +144,8 @@
 
 
 (defn datetime-formatter-parse-str-fn
+  "Given a datatype and a formatter return a function that
+  attempts to parse that specific datatype."
   [datatype formatter]
   (case datatype
     :local-date

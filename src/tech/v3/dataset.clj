@@ -118,14 +118,6 @@
   (dtype/shape dataset))
 
 
-(export-symbols tech.v3.dataset.join
-                hash-join
-                inner-join
-                right-join
-                left-join
-                left-join-asof)
-
-
 (export-symbols tech.v3.dataset.impl.dataset
                 new-dataset)
 
@@ -237,10 +229,23 @@
 
   This pathways is designed to work with the tech.v3.dataset.column-filters namespace.
 
+
   * `filter-fn-or-ds` is a generalized parameter.  May be a function,
      a dataset or a sequence of columns
   *  update-fn must take the dataset as the first argument and must return
-     a dataset."
+     a dataset.
+
+```clojure
+(ds/bind-> (ds/->dataset dataset) ds
+           (ds/remove-column \"Id\")
+           (ds/update cf/string ds/replace-missing-value \"NA\")
+           (ds/update-elemwise cf/string #(get {\"\" \"NA\"} % %))
+           (ds/update cf/numeric ds/replace-missing-value 0)
+           (ds/update cf/boolean ds/replace-missing-value false)
+           (ds/update-columnwise (cf/union (cf/numeric ds) (cf/boolean ds))
+                                 #(dtype/elemwise-cast % :float64)))
+```
+"
   [lhs-ds filter-fn-or-ds update-fn & args]
   (let [filtered-ds (filter-dataset lhs-ds filter-fn-or-ds)]
     (merge lhs-ds (apply update-fn filtered-ds args))))

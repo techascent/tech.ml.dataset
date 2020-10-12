@@ -48,17 +48,9 @@
   ^long [dataset]
   (second (dtype/shape dataset)))
 
-(defn ds-row-count
-  [dataset]
-  (row-count dataset))
-
 (defn column-count
   ^long [dataset]
   (first (dtype/shape dataset)))
-
-(defn ds-column-count
-  [dataset]
-  (column-count dataset))
 
 
 (defn columns
@@ -121,9 +113,14 @@
 
 
 (defn remove-column
-  "Fails quietly"
+  "Same as:
+
+```clojure
+(dissoc dataset col-name)
+```
+  "
   [dataset col-name]
-  (ds-proto/remove-column dataset col-name))
+  (dissoc dataset col-name))
 
 
 (defn remove-columns
@@ -313,6 +310,8 @@ This is an interface change and we do apologize!"))))
 
 
 (defn group-by->indexes
+  "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
+  is an in-order contiguous group of indexes."
   ([dataset key-fn]
    (->> (ds-readers/mapseq-reader dataset)
         (argops/arggroup-by key-fn {:unordered? false}))))
@@ -329,6 +328,8 @@ This is an interface change and we do apologize!"))))
 
 
 (defn group-by-column->indexes
+    "(Non-lazy) - Group a dataset by a column return a map of column-val->indexes
+  where indexes is an in-order contiguous group of indexes."
   [dataset colname]
   (->> (column dataset colname)
        (argops/arggroup {:unordered? false})))

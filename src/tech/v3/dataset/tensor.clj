@@ -1,5 +1,7 @@
 (ns tech.v3.dataset.tensor
-  "Conversion mechanisms from dataset to tensor and back"
+  "Conversion mechanisms from dataset to tensor and back as will as zerocopy
+  bindings to smile dense matrixes.  Smile has full BLAS/LAPACK bindings so this
+  makes it easy to move from a dataset into transformations such as PCA and back."
   (:require [tech.v3.tensor :as dtt]
             [tech.v3.tensor.dimensions :as dims]
             [tech.v3.datatype.statistics :as stats]
@@ -213,8 +215,9 @@
         (dtt/reshape [n-rows n-cols]))))
 
 
-(defonce blas* (delay (try (BLAS/getInstance)
-                           (catch Throwable e))))
+(defonce ^{:doc "Delay that loads the smile blas implementation when dereferenced."}
+  blas* (delay (try (BLAS/getInstance)
+                    (catch Throwable e))))
 
 (defn- smile-transpose
   ^smile.math.blas.Transpose [trans?]
@@ -285,6 +288,8 @@
 
 
 (defn matrix-multiply
+  "Matrix multiply using BLAS if available with an extremely slow fallback
+  on the JVM if BLAS isn't available."
   ([lhs rhs {:keys [force-jvm?]}]
    (mmul-check lhs rhs)
    (if (and @blas*
@@ -354,18 +359,23 @@
 
 
   Returns a map of:
+
     * :means - vec of means
-    * :eigenvalues - vec of eigenvalues.  These are the variance of columns of the the post-projected
-        tensor if :corr is used.
+    * :eigenvalues - vec of eigenvalues.  These are the variance of columns of the
+       post-projected tensor if :cov is used.
     * :eigenvectors - matrix of eigenvectors
 
-  Options
-   - method - choose method, one of [:svd :corr].  Defaults to :corr
-   - covariance-bias? - When using :corr, divide by n-rows if true and (dec n-rows) if false.
-     defaults to false."
+  Options:
+
+  - method - svd, cov - Either use SVD or covariance based method.  SVD is faster
+    but covariance method means the post-projection variances are accurate.  Both
+    methods produce an identical or extremely similar projection matrix. Defaults
+    to `:cov`.
+  - covariance-bias? - When using :cov, divide by n-rows if true and (dec n-rows)
+    if false. defaults to false."
   ([tensor {:keys [method
                    covariance-bias?]
-            :or {method :corr
+            :or {method :cov
                  covariance-bias? false}
             :as options}]
    (errors/when-not-errorf
@@ -384,7 +394,7 @@
           :method :svd
           :eigenvalues (.-s svd-data)
           :eigenvectors (dtt/ensure-tensor (.-V svd-data))})
-       :corr
+       :cov
        (let [;;Because we have subtracted out the means above, the covariance matrix
              ;;is defined by (/ (Xt*X) (- n-rows 1))
              cov-mat (-> (matrix-multiply (dtt/transpose tensor [1 0]) tensor)
@@ -396,20 +406,20 @@
              ;;calculation is much cheaper.
              _ (.uplo cov-mat smile.math.blas.UPLO/LOWER)
              ;;And here is a bug in smile.  For svd, the eigenvectors are sorted
-             ;;ascending - greatest to least.  In smile's implementation when doing corr,
-             ;;the result is sorted least to greatest (end result of EIG/sort method).
-             ;;This means you would be screwed if you need to, for instance, decide n-columns
-             ;;by keeping variances until a threshold was met.
+             ;;ascending - greatest to least.  In smile's implementation when doing
+             ;;corr, the result is sorted least to greatest (end result of EIG/sort
+             ;;method).  This means you would be screwed if you need to, for instance,
+             ;;decide n-columns by keeping variances until a threshold was met.
              eig-data (.eigen cov-mat false true true)
              eigenvalues (.-wr eig-data)
              ;;Sort DESCENDING to match svd decomposition.
              eig-order (argops/argsort :> eigenvalues)]
          {:means means
-          :method :corr
+          :method :cov
           :eigenvalues (dtype/indexed-buffer eig-order (.-wr eig-data))
           :eigenvectors (-> (.-Vr eig-data)
-                            ;;select implicitly does an in-place transformation into a tensor
-                            ;;from a smile matrix.
+                            ;;select implicitly does an in-place transformation into a
+                            ;;tensor from a smile matrix.
                             (dtt/select :all eig-order))}))))
   ([tensor]
    (fit-pca! tensor nil)))

@@ -1,4 +1,6 @@
 (ns tech.v3.dataset.math
+  "Various mathematic transformations of datasets such as building correlation tables,
+  pca, and normalizing columns to have mean of 0 and variance of 1."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
@@ -8,14 +10,10 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.column :as ds-col]
-            [tech.v3.dataset.base
-             :refer [columns-with-missing-seq
-                     columns select update-column]
-             :as base]
+            [tech.v3.dataset.base :as ds-base]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.dataset.base :as ds-base]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
             [tech.v3.parallel.for :as parallel-for]
@@ -47,11 +45,11 @@
   :pearson is the default."
   [dataset & {:keys [correlation-type
                      colname-seq]}]
-  (let [missing-columns (columns-with-missing-seq dataset)
+  (let [missing-columns (ds-base/columns-with-missing-seq dataset)
         _ (when missing-columns
             (println "WARNING - excluding columns with missing values:\n"
-                     (vec missing-columns)))
-        non-numeric (->> (columns dataset)
+                     (mapv :column-name  missing-columns)))
+        non-numeric (->> (ds-base/columns dataset)
                          (map meta)
                          (remove #(casting/numeric-type?
                                    (:datatype %)))
@@ -67,17 +65,17 @@
                                     selected-non-numeric)
                             {:selected-columns colname-seq
                              :non-numeric-columns non-numeric})))
-        dataset (select dataset
-                        (->> (columns dataset)
+        dataset (ds-base/select dataset
+                        (->> (ds-base/columns dataset)
                              (map ds-col/column-name)
                              (remove (set (concat
                                            (map :column-name  missing-columns)
                                            non-numeric))))
                         :all)
         lhs-colseq (if (seq colname-seq)
-                     (map (partial base/column dataset) colname-seq)
-                     (columns dataset))
-        rhs-colseq (columns dataset)
+                     (map (partial ds-base/column dataset) colname-seq)
+                     (ds-base/columns dataset))
+        rhs-colseq (ds-base/columns dataset)
         correlation-type (or :pearson correlation-type)]
     (->> (for [lhs lhs-colseq]
            [(ds-col/column-name lhs)
@@ -125,14 +123,14 @@
                               (dtype/->double-array y-col))
          new-col-name (or result-name
                           (keyword (str (key-sym->str y-colname) "-loess")))
-         n-elems (base/row-count ds)
+         n-elems (ds-base/row-count ds)
          x-rdr (dtype/->buffer x-col)]
-     (-> (base/add-or-update-column ds new-col-name
+     (-> (ds-base/add-or-update-column ds new-col-name
                                     (reify DoubleReader
                                       (lsize [rdr] n-elems)
                                       (readDouble [rdr idx]
                                         (.value spline (.readDouble x-rdr idx)))))
-         (base/update-column new-col-name
+         (ds-base/update-column new-col-name
                              #(with-meta % (assoc (meta %)
                                                   :interpolator spline))))))
   ([ds x-colname y-colname]
@@ -194,7 +192,7 @@
                   (dtype-dt/milliseconds->datetime target-dtype result)
                   result)]
 
-     (->> (base/columns ds)
+     (->> (ds-base/columns ds)
           (pmap
            (fn [col]
              (if (= colname (ds-col/column-name col))
@@ -213,7 +211,8 @@
                      ;;Scatter original data into new locations
                      _ (dtype/copy! col
                                     (dtype/indexed-buffer original-indexes new-data))
-                     ;;Use col-impl as it skips the scanning of the data and we know that it is dense
+                     ;;Use col-impl as it skips the scanning of the data and we know
+                     ;;that it is dense
                      new-col (ds-col/new-column new-colname new-data
                                                 (meta col)
                                                 total-missing)]
@@ -248,17 +247,22 @@
 
   Options:
 
-    - result-datatype - defaults to float64
+    - method - svd, cov - Either use SVD or covariance based method.  SVD is faster
+      but covariance method means the post-projection variances are accurate.
+      Defaults to cov.  Both methods produce similar projection matrixes.
     - variance-amount - fractional amount of variance to keep.  Defaults to 0.95.
-    - n-components - If provided overrides variance amount and sets the number of components to keep.
-      This controls the number of result columns directly as an integer."
-  (^PCATransform [dataset {:keys [result-datatype n-components variance-amount]
-                           :or {result-datatype :float64
-                                variance-amount 0.95} :as options}]
+    - n-components - If provided overrides variance amount and sets the number of
+      components to keep. This controls the number of result columns directly as an
+      integer.
+    - covariance-bias? - When using :cov, divide by n-rows if true and (dec n-rows)
+      if false. defaults to false."
+  (^PCATransform [dataset {:keys [n-components variance-amount]
+                           :or {variance-amount 0.95} :as options}]
    (errors/when-not-error
     (== 0 (dtype/ecount (ds-base/missing dataset)))
     "Cannot pca a dataset with missing entries.  See replace-missing.")
-   (let [{:keys [eigenvalues] :as pca-result}
+   (let [result-datatype :float64
+         {:keys [eigenvalues] :as pca-result}
          (ds-tens/fit-pca! (ds-tens/dataset->tensor dataset :float64) options)
          ;;The eigenvalues are the variance.
          variance-amount (double variance-amount)
@@ -288,13 +292,11 @@
 (defn transform-pca
   "PCA transform the dataset returning a new dataset.  The method used to generate the pca information
   is indicated in the metadata of the dataset."
-  ([dataset {:keys [n-components result-datatype] :as pca-transform}]
-   (-> (ds-tens/dataset->tensor dataset result-datatype)
-       (ds-tens/transform-pca! pca-transform n-components)
-       (ds-tens/tensor->dataset dataset :pca-result)
-       (vary-meta assoc :pca-method (:method pca-transform))))
-  ([dataset pca-info n-components]
-   (transform-pca dataset pca-info n-components :float64)))
+  [dataset {:keys [n-components result-datatype] :as pca-transform}]
+  (-> (ds-tens/dataset->tensor dataset result-datatype)
+      (ds-tens/transform-pca! pca-transform n-components)
+      (ds-tens/tensor->dataset dataset :pca-result)
+      (vary-meta assoc :pca-method (:method pca-transform))))
 
 
 (extend-type PCATransform
@@ -381,6 +383,8 @@
 
 
 (defn transform-minmax
+  "Scale columns listed in the min-max transform to the mins and maxes dictated
+  by that transform."
   [dataset {:keys [min max column-data]}]
   (let [min (double min)
         max (double max)

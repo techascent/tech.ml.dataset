@@ -1,7 +1,6 @@
 (ns tech.v3.dataset.categorical
-  "Mapping categorical columns either with a single lookup table directly to
-  a number or using a hot-hot mapping.  Both systems have an invert pathway to get
-  back the original column."
+  "Conversions of categorical values into numbers and back.  Two forms of conversions
+  are supported, a straight value->integer map and one-hot encoding."
   (:require [tech.v3.dataset.base :as ds-base]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.protocols.dataset :as ds-proto]

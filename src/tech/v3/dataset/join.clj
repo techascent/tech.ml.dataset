@@ -345,7 +345,7 @@
                          (.readDouble rhs-rdr rhs-idx)))))))
 
 
-(defn asof-lt
+(defn- asof-lt
   [asof-op lhs rhs]
   (let [lhs-rdr (dtype/->reader lhs)
         rhs-rdr (dtype/->reader rhs)
@@ -370,7 +370,7 @@
      [0 retval]))
 
 
-(defn asof-gt
+(defn- asof-gt
   [asof-op lhs rhs]
   (let [lhs-rdr (dtype/->reader lhs)
         rhs-rdr (dtype/->reader rhs)
@@ -411,7 +411,7 @@
       (Math/abs (- rhs lhs)))))
 
 
-(defn abs-diff-bin-pred
+(defn- abs-diff-bin-pred
   ^BinaryPredicate
   [^Buffer lhs-rdr
    ^Buffer rhs-rdr]
@@ -440,7 +440,7 @@
             (< asof-diff 0)))))))
 
 
-(defn asof-nearest
+(defn- asof-nearest
   [lhs rhs]
   (let [lhs-rdr (dtype/->reader lhs)
         rhs-rdr (dtype/->reader rhs)
@@ -470,12 +470,12 @@
 
 (defn left-join-asof
   "Perform a left join asof.  Similar to left join except this will join on nearest
-  value.  lhs and rhs must be sorted by join-column.
-  join columns must be either datetime columns in which
-  the join happens in millisecond space or they must be numeric - integer or floating
-  point datatypes.
+  value.  lhs and rhs must be sorted by join-column.  join columns must be either
+  datetime columns in which the join happens in millisecond space or they must be
+  numeric - integer or floating point datatypes.
 
-  options:
+  Options:
+
   - `asof-op`- may be [:< :<= :nearest :>= :>] - type of join operation.  Defaults to
      <=."
   ([colname lhs rhs {:keys [asof-op]
