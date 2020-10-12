@@ -1,31 +1,34 @@
-(ns tech.ml.dataset.mapseq-test
-  (:require [tech.ml.dataset.pipeline :as ds-pipe]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.ml.dataset.pipeline.column-filters :as cf]
-            [tech.ml.dataset-test
-             :refer [mapseq-fruit-dataset]
-             :as ds-test]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dtype-fn]
-            [tech.v2.tensor :as dtt]
-            [clojure.set :as c-set]
-            [clojure.test :refer :all]))
+(ns tech.v3.dataset.mapseq-test
+  (:require [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.column-filters :as cf]
+            [tech.v3.dataset.math :as ds-math]
+            [tech.v3.dataset.modelling :as ds-mod]
+            [tech.v3.dataset.categorical :as ds-cat]
+            [tech.v3.dataset.test-utils :as test-utils]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.functional :as dtype-fn]
+            [tech.v3.tensor :as dtt]
+            [clojure.set :as set]
+            [clojure.test :refer [deftest is]]))
 
 
 (deftest mapseq-classification-test
-  (let [src-ds (ds/->dataset (mapseq-fruit-dataset) {})
+  (let [src-ds (test-utils/mapseq-fruit-dataset)
+        dataset (ds/bind-> src-ds ds
+                  (ds/remove-columns [:fruit-subtype :fruit-label])
+                  (ds/string->number cf/categorical)
+                  (ds/update (cf/difference ds (cf/categorical ds))
+                             #(ds-math/transform-minmax % (ds-math/fit-minmax %)))
+                  (ds-mod/set-inference-target :fruit-name))
+        mapseq-ds (ds/mapseq-reader (test-utils/mapseq-fruit-dataset))
 
-        dataset (-> src-ds
-                  (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                  (ds-pipe/string->number)
-                  (ds-pipe/range-scale)
-                  (ds/set-inference-target :fruit-name))
-
-        src-keys (set (keys (first (mapseq-fruit-dataset))))
-        result-keys (set (->> (ds/columns dataset)
-                              (map ds-col/column-name)))
-        non-categorical (cf/not cf/categorical? dataset)]
+        src-keys (set (keys (first mapseq-ds)))
+        result-keys (->> (ds/columns dataset)
+                         (map ds-col/column-name)
+                         (set))
+        non-categorical (ds/column-names
+                         (cf/difference dataset (cf/categorical dataset)))]
 
 
     (is (= #{59}
@@ -35,73 +38,60 @@
 
 
       ;;Column names can be keywords.
-    (is (= (set (keys (first (mapseq-fruit-dataset))))
+    (is (= src-keys
            (set (->> (ds/columns src-ds)
                      (map ds-col/column-name)))))
 
-    (is (= (c-set/difference src-keys #{:fruit-subtype :fruit-label})
+    (is (= (set/difference src-keys #{:fruit-subtype :fruit-label})
            result-keys))
 
     ;; Map back from values to keys for labels.  For tablesaw, column values
     ;; are never keywords.
-    (is (= (mapv :fruit-name (mapseq-fruit-dataset))
-           (ds/labels dataset)))
+    (is (= (mapv :fruit-name mapseq-ds)
+           (ds-mod/labels dataset)))
 
     (is (= {:fruit-name :classification}
-           (ds/model-type dataset)))
+           (ds-mod/model-type dataset)))
 
     (is (= {:fruit-name :classification,
             :mass :regression,
             :width :regression,
             :height :regression,
             :color-score :regression}
-           (ds/model-type dataset (ds/column-names dataset))))
+           (ds-mod/model-type dataset (ds/column-names dataset))))
 
     ;;Does the post-transformation value of fruit-name map to the
     ;;pre-transformation value of fruit-name?
-    (is (= (mapv :fruit-name (mapseq-fruit-dataset))
-           (->> (ds/->flyweight dataset :number->string? true)
+    (is (= (mapv :fruit-name mapseq-ds)
+           (->> (ds-cat/reverse-map-categorical-xforms dataset)
+                (ds/mapseq-reader)
                 (mapv :fruit-name))))
 
 
     (is (= (as-> (ds/select dataset :all (range 10)) dataset
-             (ds/->flyweight dataset)
+             (ds/mapseq-reader dataset)
              (group-by :fruit-name dataset))
-           (->> (ds/select dataset :all (range 10))
-                (ds/group-by :fruit-name)
-                (map (fn [[k group-ds]]
-                       [k (vec (ds/->flyweight group-ds))]))
-                (into {}))))
+           (as-> (ds/select dataset :all (range 10)) ds
+             (ds/group-by-column ds :fruit-name)
+             (map (fn [[k group-ds]]
+                    [k (vec (ds/mapseq-reader group-ds))])
+                  ds)
+             (into {} ds))))
 
     ;;forward map from input value to encoded value.
     ;;After ETL, column values are all doubles
-    (let [apple-value (-> (get (ds/inference-target-label-map dataset) :apple)
+    (let [apple-value (-> (get (ds-mod/inference-target-label-map dataset) :apple)
                           double)]
       (is (= #{:apple}
-             (->> dataset
-                  (ds/filter #(= apple-value (:fruit-name %)))
+             (as-> dataset ds
+                 (ds/filter ds #(= apple-value (:fruit-name %)))
                   ;;Use full version of ->flyweight to do reverse mapping of numeric
-                  ;;fruit name back to input label.
-                  (#(ds/->flyweight % :number->string? true))
-                  (map :fruit-name)
-                  set))))
+                 ;;fruit name back to input label.
+                 (ds-cat/reverse-map-categorical-xforms ds)
+                 (ds/mapseq-reader ds)
+                 (map :fruit-name ds)
+                 (set ds)))))
 
-    ;;dataset starts with apple apple apple mandarin mandarin
-    (let [apple-v (double (get (ds/inference-target-label-map dataset) :apple))
-          mand-v (double (get (ds/inference-target-label-map dataset) :mandarin))]
-      (is (= [apple-v apple-v apple-v mand-v mand-v]
-             ;;Order columns
-             (->> (ds/select dataset [:mass :fruit-name :width] :all)
-                  (vals)
-                  (take 2)
-                  (drop 1)
-                  (ds/from-prototype dataset "new-table")
-                  (#(ds/select % :all (range 5)))
-                  ;;Note the backward conversion failed in this case because we
-                  ;;change the column names.
-                  (#(ds/->flyweight % :number->string? true))
-                  (map #(get % :fruit-name))
-                  vec))))
 
 
 
@@ -116,19 +106,16 @@
 
     ;;Concatenation should work
     (is (= (mapv :fruit-name
-                 (concat (mapseq-fruit-dataset)
-                         (mapseq-fruit-dataset)))
+                 (concat mapseq-ds mapseq-ds))
            (->> (-> (ds/concat dataset dataset)
-                    (ds/->flyweight :number->string? true))
+                    (ds-cat/reverse-map-categorical-xforms)
+                    (ds/mapseq-reader))
                 (mapv :fruit-name))))
 
     (let [new-ds (as-> (ds/->dataset (map hash-map (repeat :mass) (range 20))) dataset
                    ;;The mean should happen in double or floating point space.
-                   (ds-pipe/->datatype dataset)
-                   (ds/new-column dataset :mass-avg
-                                  (->> (ds/column dataset :mass)
-                                       (dtype-fn/fixed-rolling-window
-                                        5 dtype-fn/mean))))]
+                   (assoc dataset :mass-avg
+                          (dtype-fn/fixed-rolling-window (dataset :mass) 5 dtype-fn/mean )))]
       (is (= [{:mass 0.0, :mass-avg 0.6}
               {:mass 1.0, :mass-avg 1.2}
               {:mass 2.0, :mass-avg 2.0}
@@ -140,7 +127,7 @@
               {:mass 8.0, :mass-avg 8.0}
               {:mass 9.0, :mass-avg 9.0}]
              (-> (ds/select new-ds [:mass :mass-avg] (range 10))
-                 ds/->flyweight)))
+                 ds/mapseq-reader)))
       (let [sorted-ds (ds/sort-by :mass-avg > new-ds)]
         (is (= [{:mass 19.0, :mass-avg 18.4}
                 {:mass 18.0, :mass-avg 17.8}
@@ -153,7 +140,7 @@
                 {:mass 11.0, :mass-avg 11.0}
                 {:mass 10.0, :mass-avg 10.0}]
                (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
-                   ds/->flyweight)))))
+                   ds/mapseq-reader)))))
     (let [nth-db (ds/take-nth 5 src-ds)]
       (is (= [7 12] (dtype/shape nth-db)))
       (is (= [{:mass 192.0, :width 8}
@@ -167,10 +154,10 @@
               {:mass 154.0, :width 7}
               {:mass 186.0, :width 7}]
              (->> (-> (ds/select nth-db [:mass :width] (range 10))
-                      ds/->flyweight)
+                      ds/mapseq-reader)
                   (map #(update % :width int))))))))
 
-(deftest one-hot
+#_(deftest one-hot
   (testing "Testing one-hot into multiple column groups"
     (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
 

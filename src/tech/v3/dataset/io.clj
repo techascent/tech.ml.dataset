@@ -4,7 +4,8 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.libs.smile.data :as smile-data]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap])
+            [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
+            [tech.v3.dataset.readers :as readers])
   (:import [java.io InputStream File]
            [smile.data DataFrame]))
 
@@ -45,9 +46,35 @@
                  (:file-type options)))
 
 
+(defmethod data->dataset :json
+  [data options]
+  (->> (apply io/get-json data (apply concat (seq options)))
+       (parse-mapseq-colmap/mapseq->dataset options)))
+
+
+(defmethod data->dataset :edn
+  [data options]
+  (->> (apply io/get-edn data (apply concat (seq options)))
+       (parse-mapseq-colmap/mapseq->dataset options)))
+
+
 (defmulti dataset->data!
   (fn [ds output options]
     (:file-type options)))
+
+
+(defmethod dataset->data! :json
+  [data options]
+  (apply io/put-json! data
+         (readers/mapseq-reader data)
+         (apply concat (seq options))))
+
+
+(defmethod dataset->data! :edn
+  [data options]
+  (apply io/put-edn! data
+         (readers/mapseq-reader data)
+         (apply concat (seq options))))
 
 
 (defmethod dataset->data! :default

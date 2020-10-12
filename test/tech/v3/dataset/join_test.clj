@@ -1,42 +1,42 @@
-(ns tech.ml.dataset.join-test
-  (:require [tech.ml.dataset :as ds]
-            [tech.ml.dataset.join :as ds-join]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype.datetime :as dtype-dt]
-            [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
+(ns tech.v3.dataset.join-test
+  (:require [tech.v3.dataset :as ds]
+            [tech.v3.dataset.join :as ds-join]
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
 
 (deftest simple-join-test
-  (let [lhs (ds/name-values-seq->dataset {:a (range 10)
-                                          :b (range 10)})
-        rhs (ds/name-values-seq->dataset {:a (->> (range 10)
-                                                  (mapcat (partial repeat 2)))
-                                          :c (->> (range 10)
-                                                  (mapcat (partial repeat 2)))})
+  (let [lhs (ds/->dataset {:a (range 10)
+                           :b (range 10)})
+        rhs (ds/->dataset {:a (->> (range 10)
+                                   (mapcat (partial repeat 2)))
+                           :c (->> (range 10)
+                                   (mapcat (partial repeat 2)))})
         {:keys [inner rhs-missing]} (ds-join/hash-join :a lhs rhs)]
     (is (dfn/equals (inner :a) (inner :b)))
     (is (dfn/equals (inner :b) (inner :c)))
     (is (empty? (seq rhs-missing))))
-  (let [lhs (ds/name-values-seq->dataset {:a (range 10)
-                                          :b (range 10)})
-        rhs (ds/name-values-seq->dataset {:a (->> (range 15)
-                                                  (mapcat (partial repeat 2)))
-                                          :c (->> (range 15)
-                                                  (mapcat (partial repeat 2)))})
+  (let [lhs (ds/->dataset {:a (range 10)
+                           :b (range 10)})
+        rhs (ds/->dataset {:a (->> (range 15)
+                                   (mapcat (partial repeat 2)))
+                           :c (->> (range 15)
+                                   (mapcat (partial repeat 2)))})
         {:keys [inner rhs-missing]} (ds-join/hash-join [:b :c] lhs rhs
                                                        {:rhs-missing? true})]
     (is (dfn/equals (inner :a) (inner :b)))
     (is (dfn/equals (inner :b) (inner :right.a)))
     (is (= [20 21 22 23 24 25 26 27 28 29] (vec rhs-missing))))
-  (let [lhs (ds/name-values-seq->dataset {:a (range 15)
-                                          :b (range 15)})
-        rhs (ds/name-values-seq->dataset {:a (->> (range 10)
-                                                  (mapcat (partial repeat 2)))
-                                          :c (->> (range 10)
-                                                  (mapcat (partial repeat 2)))})
+  (let [lhs (ds/->dataset {:a (range 15)
+                           :b (range 15)})
+        rhs (ds/->dataset {:a (->> (range 10)
+                                   (mapcat (partial repeat 2)))
+                           :c (->> (range 10)
+                                   (mapcat (partial repeat 2)))})
         {:keys [inner lhs-missing]} (ds-join/hash-join :a lhs rhs
                                                        {:lhs-missing? true})]
     (is (dfn/equals (inner :a) (inner :b)))
@@ -149,14 +149,14 @@
 
 
 (deftest duplicate-column-test
-  (let [test-ds (ds/->dataset "data/ames-house-prices/train.csv"
+  (let [test-ds (ds/->dataset "test/data/ames-house-prices/train.csv"
                               {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                                :n-records 5
                                :parser-fn {:SalePrice :float32}})
         jt (ds-join/inner-join "1stFlrSF" test-ds test-ds)]
     (is (= (ds/column-count jt)
            (count (distinct (ds/column-names jt))))))
-  (let [test-ds (ds/->dataset "data/ames-house-prices/train.csv"
+  (let [test-ds (ds/->dataset "test/data/ames-house-prices/train.csv"
                               {:column-whitelist ["SalePrice" "1stFlrSF" "2ndFlrSF"]
                                :n-records 5
                                :parser-fn {:SalePrice :float32}})
@@ -167,9 +167,9 @@
 
 (deftest join-tuple-cname
   (let [DS (ds/->dataset [{:a 11 [:a :b] 2}])
-        lj (ds/left-join :a DS DS)
-        rj (ds/right-join :a DS DS)
-        ljt (ds/left-join [[:a :b][:a :b]] DS DS)]
+        lj (ds-join/left-join :a DS DS)
+        rj (ds-join/right-join :a DS DS)
+        ljt (ds-join/left-join [[:a :b][:a :b]] DS DS)]
     ;;no nil column names
     (is (every? identity (ds/column-names lj)))
     (is (every? identity (ds/column-names rj)))
@@ -197,22 +197,22 @@
 
   (let [cur-date (dtype-dt/local-date)
         date-fn #(when %
-                   (dtype-dt-ops/plus-days cur-date %))
+                   (dtype-dt/plus-temporal-amount cur-date % :days))
         ds-a (ds/->dataset {:a (date-fn (range 10))})
         ds-b (ds/->dataset {:a (date-fn (dfn/* 2 (range 10)))})
         ds-bm (ds/->dataset {:a (date-fn (dfn/- (dfn/* 2 (range 10)) 5))})
         ds-bmm (ds/->dataset {:a (date-fn (dfn/- (dfn/* 2 (range 10)) 14))})]
     (is (= (vec (date-fn [2 2 4 4 6 6 8 8 10 10]))
-           (vec (dtype-dt/unpack
+           (vec (packing/unpack
                  ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<}) :right.a)))))
     (is (= (date-fn [0 2 2 4 4 6 6 8 8 10])
-           (vec (dtype-dt/unpack
+           (vec (packing/unpack
                  ((ds-join/left-join-asof :a ds-a ds-b {:asof-op :<=}) :right.a)))))
     (is (= (date-fn [1 3 3 5 5 7 7 9 9 11])
-           (vec (dtype-dt/unpack
+           (vec (packing/unpack
                  ((ds-join/left-join-asof :a ds-a ds-bm {:asof-op :<}) :right.a)))))
     (is (= (date-fn [2 2 4 4])
-           (vec (dtype-dt/unpack
+           (vec (packing/unpack
                  ((drop-missing (ds-join/left-join-asof
                                  :a ds-a ds-bmm {:asof-op :<}))
                   :right.a)))))))

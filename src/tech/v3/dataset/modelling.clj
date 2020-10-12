@@ -76,15 +76,16 @@
   :regression
   :classification"
   [dataset & [column-name-seq]]
-  (if (->> (or column-name-seq
-               (inference-target-column-names dataset))
-           (ds-base/select-columns dataset)
-           (vals)
-           (map meta)
-           (filter :categorical?)
-           seq)
-    :classification
-    :regression))
+  (->> (or column-name-seq
+           (inference-target-column-names dataset))
+       (ds-base/select-columns dataset)
+       (vals)
+       (map (fn [column]
+              (let [colmeta (meta column)]
+                [(:name colmeta) (if (:categorical? colmeta)
+                                   :classification
+                                   :regression)])))
+       (into {})))
 
 
 (defn column-values->categorical

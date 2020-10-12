@@ -1,5 +1,5 @@
-(ns tech.ml.dataset.format-sequence-test
-  (:require [tech.ml.dataset.format-sequence :refer [format-sequence]]
+(ns tech.v3.dataset.format-sequence-test
+  (:require [tech.v3.dataset.format-sequence :refer [format-sequence]]
             [clojure.test :refer [deftest is]]))
 
 

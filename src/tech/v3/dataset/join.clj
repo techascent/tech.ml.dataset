@@ -4,7 +4,6 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.binary-pred :as binary-pred]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
@@ -326,7 +325,7 @@
   ^BinaryPredicate [asof-op
                     ^Buffer lhs-rdr
                     ^Buffer rhs-rdr]
-  (let [comp-op (binary-pred/->predicate asof-op)
+  (let [comp-op (argops/->binary-predicate asof-op)
         op-space (casting/simple-operation-space
                   (.elemwiseDatatype lhs-rdr)
                   (.elemwiseDatatype rhs-rdr))]

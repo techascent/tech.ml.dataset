@@ -136,10 +136,18 @@
 (defn add-missing-values!
   [^PrimitiveList container ^RoaringBitmap missing
    missing-value ^long idx]
-  (let [n-elems (.lsize container)]
+  (let [n-elems (.lsize container)
+        simple-dtype (casting/simple-operation-space
+                      (dtype/elemwise-datatype missing-value))]
     (loop [n-elems n-elems]
       (when (< n-elems idx)
-        (.addObject container missing-value)
+        (case simple-dtype
+          :int64
+          (.addLong container (long missing-value))
+          :float64
+          (.addDouble container (double missing-value))
+          :object
+          (.addObject container missing-value))
         (.add missing n-elems)
         (recur (unchecked-inc n-elems))))))
 
@@ -399,7 +407,7 @@
             container-ecount (dtype/ecount container)]
         (if (or (== 0 container-ecount)
                 (= container-dtype packed-dtype))
-          (let [value (packing/pack value)]
+          (do
             (when (== 0 container-ecount)
               (set! container (column-base/make-container packed-dtype))
               (set! container-dtype packed-dtype)
@@ -407,7 +415,9 @@
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
             (.addObject container value))
-          (let [widest-datatype (casting/widest-datatype container-dtype packed-dtype)]
+          (let [widest-datatype (casting/widest-datatype
+                                 (packing/unpack-datatype container-dtype)
+                                 org-datatype)]
             (when-not (= widest-datatype container-dtype)
               (let [new-container (promote-container container
                                                      missing widest-datatype)]
