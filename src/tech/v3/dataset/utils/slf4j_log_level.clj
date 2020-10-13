@@ -4,6 +4,9 @@
 
 
 (defn set-log-level
+  "This has to be a reflection call because no one knows what is returned
+  by the getLogger fn call.  If you are using logback classic, then a logback
+  classic logger is returned.  Else, you are on your own!"
   [log-level]
   (.setLevel
    (org.slf4j.LoggerFactory/getLogger

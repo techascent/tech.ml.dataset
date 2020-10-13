@@ -38,7 +38,7 @@
                 (map (comp set ds-col/missing ds) ["column-0" "a" "column-6"])))
     (is (= [1.0 1.0 1.0 "a" 2.0 23.0]
            (->> (ds/columns ds)
-                (mapcat #(dtype/->reader % :object {:missing-policy :elide}))
+                (mapcat (comp dtype/->reader ds/drop-missing))
                 vec)))))
 
 

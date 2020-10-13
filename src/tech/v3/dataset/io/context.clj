@@ -30,7 +30,7 @@
             (column-parsers/make-fixed-parser cname col-parser-desc)
             (default-parse-fn cname))
           :else
-          (column-parsers/make-fixed-parser parser-descriptor cname))))))
+          (column-parsers/make-fixed-parser cname parser-descriptor))))))
 
 
 (defn- make-colname
@@ -47,7 +47,7 @@
   {:parsers - parsers
    :col-idx->parser - given a column idx, get a parser.  Mutates parsers."
   [options parse-type col-idx->colname]
-  (let [parse-context (options->parser-fn options :string)
+  (let [parse-context (options->parser-fn options parse-type)
         parsers (HashMap.)
         key-fn (:key-fn options identity)
         colparser-compute-fn (reify Function
@@ -59,7 +59,7 @@
                                     :column-parser (parse-context colname)})))
         col-idx->parser (fn [col-idx]
                           (:column-parser
-                           (.computeIfAbsent parsers col-idx
+                           (.computeIfAbsent parsers (long col-idx)
                                              colparser-compute-fn)))]
     {:parsers parsers
      :col-idx->parser col-idx->parser}))

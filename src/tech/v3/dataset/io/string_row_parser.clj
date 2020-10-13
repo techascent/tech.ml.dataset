@@ -15,7 +15,7 @@
   See csv->columns.
   This method is useful if you have another way of generating sequences of
   string[] row data."
-  [{:keys [header-row?]
+  [{:keys [header-row? skip-bad-rows?]
     :or {header-row? true}
     :as options}
    row-seq]
@@ -37,9 +37,11 @@
          (map-indexed vector)
          (pfor/consume!
           (fn [[^long row-idx ^"[Ljava.lang.String;" row]]
-            (dotimes [col-idx (alength row)]
-              (let [parser (col-idx->parser col-idx)]
-                (column-parsers/add-value! parser row-idx (aget row col-idx)))))))
+            (when-not (and skip-bad-rows?
+                           (not= (alength row) n-header-cols))
+              (dotimes [col-idx (alength row)]
+                (let [parser (col-idx->parser col-idx)]
+                  (column-parsers/add-value! parser row-idx (aget row col-idx))))))))
     (parse-context/parsers->dataset options parsers)))
 
 

@@ -1,9 +1,7 @@
 (ns tech.v3.libs.fastexcel-test
-  (:require [tech.libs.fastexcel :as xlsx-parse]
-            [tech.ml.dataset :as ds]
-            [tech.ml.dataset.column :as ds-col]
-            [tech.v2.datatype.functional :as dfn]
-            [tech.v2.datatype :as dtype]
+  (:require [tech.v3.libs.fastexcel :as xlsx-parse]
+            [tech.v3.dataset :as ds]
+            [tech.v3.datatype :as dtype]
             [clojure.test :refer [deftest is]]))
 
 (def xls-file "test/data/file_example_XLS_1000.xls")
@@ -30,10 +28,10 @@
     (is (= 8 (ds/row-count ds)))
     (is (= 8 (ds/column-count ds)))
     (is (every? #(= (set (range 8)) %)
-                (map (comp set ds-col/missing ds) ["column-0" "a" "column-6"])))
+                (map (comp set ds/missing ds) ["column-0" "a" "column-6"])))
     (is (= [1.0 1.0 1.0 "a" 2.0 23.0]
            (->> (ds/columns ds)
-                (mapcat #(dtype/->reader % :object {:missing-policy :elide}))
+                (mapcat (comp dtype/->reader ds/drop-missing))
                 vec)))))
 
 (deftest datetime-test
@@ -57,15 +55,16 @@
                          {:n-initial-skip-rows 4
                           :parser-fn {"Identifier" :string
                                       "Weight" :float64}})]
-    (is (= #{:float64 :string}
+    ;;column-8 had no data
+    (is (= #{:float64 :string :boolean}
            (set (map dtype/get-datatype (vals ds)))))
     (is (= ["Name"
-	   "Ticker"
-	   "Identifier"
-	   "SEDOL"
-	   "Weight"
-	   "Sector"
-	   "Shares Held"
+            "Ticker"
+            "Identifier"
+            "SEDOL"
+            "Weight"
+            "Sector"
+            "Shares Held"
             "Local Currency"
             "column-8"]
            (vec (ds/column-names ds))))))

@@ -142,6 +142,8 @@
     (loop [n-elems n-elems]
       (when (< n-elems idx)
         (case simple-dtype
+          :boolean
+          (.addBoolean container false)
           :int64
           (.addLong container (long missing-value))
           :float64
@@ -192,7 +194,7 @@
   (add-value! [p idx value]
     (when-not (missing-value? value)
       (let [idx (long idx)]
-        (let [value-dtype (dtype/elemwise-datatype value)]
+        (let [value-dtype (dtype/datatype value)]
           (if (= value-dtype container-dtype)
             (do
               (add-missing-values! container missing missing-value idx)
@@ -230,9 +232,7 @@
   (let [unpacked-datatype (packing/unpack-datatype parser-datatype)
         parser-fn (parse-dt/datetime-formatter-parse-str-fn
                    unpacked-datatype formatter)]
-    [(make-safe-parse-fn
-      (packing/wrap-with-packing
-       parser-datatype parser-fn)) false]))
+    [(make-safe-parse-fn parser-fn) false]))
 
 
 (defn parser-entry->parser-tuple
@@ -343,9 +343,31 @@
                                                (recur (inc idx))
                                                idx))
                                            -1))))
-                      [parser-datatype new-parser-fn] (if (== -1 next-idx)
-                                                        [:object nil]
-                                                        (.get promotion-list next-idx))
+                      [parser-datatype new-parser-fn]
+                      (if (== -1 next-idx)
+                        [:object nil]
+                        (let [n-missing (dtype/ecount missing)
+                              n-valid (- (dtype/ecount container)
+                                         n-missing)
+                              [parser-datatype new-parser-fn :as
+                               parser-data]
+                              (.get promotion-list next-idx)]
+                          #_(println {:colname column-name
+                                      :value value
+                                      :column-dtype container-dtype
+                                      :parser-dtype parser-datatype
+                                      :n-missing n-missing
+                                      :n-valid n-valid} )
+                          (cond
+                            (== 0 n-valid)
+                            parser-data
+                            (and (or (= :boolean container-dtype)
+                                     (casting/numeric-type? container-dtype))
+                                 (casting/numeric-type?
+                                  (packing/unpack-datatype parser-datatype)))
+                            parser-data
+                            :else
+                            [:string (default-coercers :string)])))
                       parsed-value (if new-parser-fn
                                      (new-parser-fn value)
                                      value)
@@ -399,10 +421,7 @@
   (add-value! [p idx value]
     (when-not (missing-value? value)
       (let [idx (long idx)
-            arg-type (arg-type value)
-            org-datatype (if (= :scalar arg-type)
-                           (dtype/elemwise-datatype value)
-                           :object)
+            org-datatype (dtype/datatype value)
             packed-dtype (packing/pack-datatype org-datatype)
             container-ecount (dtype/ecount container)]
         (if (or (== 0 container-ecount)

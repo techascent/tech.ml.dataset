@@ -326,7 +326,7 @@
                          (lsize [rdr] (long (.size columns)))
                          (readDouble [rdr idx]
                            (let [^Buffer data (.get columns idx)]
-                             (stats/mean {:nan-strategy nan-strategy} data))))
+                             (stats/mean data {:nan-strategy nan-strategy}))))
                        (dtype/clone)))
          mean-buf (dtype/->buffer means)
          tens-buf (dtype/->buffer tens)

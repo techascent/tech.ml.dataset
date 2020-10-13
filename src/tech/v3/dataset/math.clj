@@ -14,6 +14,7 @@
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
             [tech.v3.parallel.for :as parallel-for]
@@ -96,15 +97,6 @@
          (into {}))))
 
 
-(defn- key-sym->str
-  ^String [item]
-  (cond
-    (keyword? item) (name item)
-    (symbol? item) (name item)
-    :else
-    (str item)))
-
-
 (defn interpolate-loess
   "Interpolate using the LOESS regression engine.  Useful for smoothing out graphs."
   ([ds x-colname y-colname
@@ -117,12 +109,17 @@
                                     (int iterations)
                                     (double accuracy))
          x-col (ds x-colname)
+         x-orig-datatype (dtype/elemwise-datatype x-col)
+         x-datetime? (dtype-dt/datetime-datatype? x-orig-datatype)
+         x-col (if x-datetime?
+                 (dtype-dt/datetime->milliseconds x-col)
+                 x-col)
          y-col (ds y-colname)
          spline (.interpolate interp
                               (dtype/->double-array x-col)
                               (dtype/->double-array y-col))
          new-col-name (or result-name
-                          (keyword (str (key-sym->str y-colname) "-loess")))
+                          (keyword (str (ds-utils/column-safe-name y-colname) "-loess")))
          n-elems (ds-base/row-count ds)
          x-rdr (dtype/->buffer x-col)]
      (-> (ds-base/add-or-update-column ds new-col-name

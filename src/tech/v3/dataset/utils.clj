@@ -1,14 +1,11 @@
 (ns ^:no-doc tech.v3.dataset.utils
-  (:require [tech.v3.parallel.next-item-fn :as parallel-nfn]
-            [tech.v3.datatype.casting :as casting])
-  (:import [java.util Iterator NoSuchElementException]))
+  (:import [java.util Iterator]))
 
 
 (defn nanos->millis
   ^long [^long nanos]
   (-> (/ nanos 1000000.0)
-      (Math/round)
-      long))
+      (Math/round)))
 
 
 (defmacro time-section
@@ -38,33 +35,25 @@
   "Java ml interfaces sometimes use iterators where they really should
   use sequences (iterators have state).  In any case, we do what we can."
   ^Iterator [item-seq]
-  (let [next-item-fn (parallel-nfn/create-next-item-fn item-seq)
-        next-item-atom (atom (next-item-fn))]
-    (proxy [Iterator] []
-      (hasNext []
-        (boolean @next-item-atom))
-      (next []
-        (locking this
-          (if-let [entry @next-item-atom]
-            (do
-              (reset! next-item-atom (next-item-fn))
-              entry)
-            (throw (NoSuchElementException.))))))))
+  (.iterator ^Iterable (seq item-seq)))
 
 
 (defn set-slf4j-log-level
   "Set the slf4j log level.  Safe to call if slf4j is not in the
-  classpath."
+  classpath.  Upon success, returns a keyword.  Upon failure, returns
+  a map with {:exception} pointing to the failure."
   [level]
   (locking #'sequence->iterator
     (try
       ((requiring-resolve
-        'tech.ml.dataset.utils.slf4j-log-level/set-log-level) level)
+        'tech.v3.dataset.utils.slf4j-log-level/set-log-level) level)
       (catch Throwable e
-        :exception))))
+        {:exception e}))))
 
 
 (defn column-safe-name
+  "Given a generic item (keyword, symbol) create a string that safe to be used
+  to name columns."
   ^String [item-name]
   (cond
     (and (or (keyword? item-name)
@@ -76,21 +65,3 @@
     (if item-name "true" "false")
     :else
     (str item-name)))
-
-
-(defn extend-column-name
-  [src-name dst-name]
-  (let [dst-name (if (or (keyword? dst-name)
-                         (symbol? dst-name))
-                   (name dst-name)
-                   (str dst-name))
-        new-name (str (column-safe-name src-name) "-" dst-name)]
-    (cond
-      (keyword? src-name) (keyword new-name)
-      (symbol? src-name) (symbol new-name)
-      :else src-name)))
-
-
-(defn numeric-datatype?
-  [dtype-enum]
-  (boolean (casting/numeric-type? dtype-enum)))

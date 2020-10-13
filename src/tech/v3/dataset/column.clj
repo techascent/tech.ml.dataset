@@ -126,7 +126,7 @@ Implementations should check their metadata before doing calculations."
   ([datatype col]
    (let [colname (column-name col)
          col-reader (dtype/emap #(when % (str %)) :string col)
-         col-parser (column-parsers/make-fixed-parser datatype)
+         col-parser (column-parsers/make-fixed-parser colname datatype)
          n-elems (dtype/ecount col-reader)]
      (dotimes [iter n-elems]
        (column-parsers/add-value! col-parser iter (col-reader iter)))

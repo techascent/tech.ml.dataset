@@ -10,7 +10,7 @@
             [tech.v3.datatype.functional :as dtype-fn]
             [tech.v3.tensor :as dtt]
             [clojure.set :as set]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is testing]]))
 
 
 (deftest mapseq-classification-test
@@ -48,7 +48,7 @@
     ;; Map back from values to keys for labels.  For tablesaw, column values
     ;; are never keywords.
     (is (= (mapv :fruit-name mapseq-ds)
-           (ds-mod/labels dataset)))
+           (vec (first (vals (ds-mod/labels dataset))))))
 
     (is (= {:fruit-name :classification}
            (ds-mod/model-type dataset)))
@@ -96,13 +96,13 @@
 
 
     ;; Ensure range map works
-    (is (= (vec (repeat (count non-categorical) [-1 1]))
+    (is (= (vec (repeat (count non-categorical) [-0.5 0.5]))
            (->> non-categorical
                 (mapv (fn [colname]
                         (let [{col-min :min
                                col-max :max} (-> (ds/column dataset colname)
                                                  (ds-col/stats [:min :max]))]
-                          [(long col-min) (long col-max)]))))))
+                          [col-min col-max]))))))
 
     ;;Concatenation should work
     (is (= (mapv :fruit-name
@@ -112,36 +112,38 @@
                     (ds/mapseq-reader))
                 (mapv :fruit-name))))
 
-    (let [new-ds (as-> (ds/->dataset (map hash-map (repeat :mass) (range 20))) dataset
-                   ;;The mean should happen in double or floating point space.
-                   (assoc dataset :mass-avg
-                          (dtype-fn/fixed-rolling-window (dataset :mass) 5 dtype-fn/mean )))]
-      (is (= [{:mass 0.0, :mass-avg 0.6}
-              {:mass 1.0, :mass-avg 1.2}
-              {:mass 2.0, :mass-avg 2.0}
-              {:mass 3.0, :mass-avg 3.0}
-              {:mass 4.0, :mass-avg 4.0}
-              {:mass 5.0, :mass-avg 5.0}
-              {:mass 6.0, :mass-avg 6.0}
-              {:mass 7.0, :mass-avg 7.0}
-              {:mass 8.0, :mass-avg 8.0}
-              {:mass 9.0, :mass-avg 9.0}]
+    (let [new-ds (ds/bind-> (ds/->dataset (map hash-map (repeat :mass) (range 20))) dataset
+                            ;;The mean should happen in double or floating point space.
+                            (assoc :mass-avg
+                                   (dtype-fn/fixed-rolling-window
+                                    (dtype/elemwise-cast (dataset :mass) :float64)
+                                    5 dtype-fn/mean)))]
+      (is (= [{:mass 0, :mass-avg 0.6}
+              {:mass 1, :mass-avg 1.2}
+              {:mass 2, :mass-avg 2.0}
+              {:mass 3, :mass-avg 3.0}
+              {:mass 4, :mass-avg 4.0}
+              {:mass 5, :mass-avg 5.0}
+              {:mass 6, :mass-avg 6.0}
+              {:mass 7, :mass-avg 7.0}
+              {:mass 8, :mass-avg 8.0}
+              {:mass 9, :mass-avg 9.0}]
              (-> (ds/select new-ds [:mass :mass-avg] (range 10))
                  ds/mapseq-reader)))
-      (let [sorted-ds (ds/sort-by :mass-avg > new-ds)]
-        (is (= [{:mass 19.0, :mass-avg 18.4}
-                {:mass 18.0, :mass-avg 17.8}
-                {:mass 17.0, :mass-avg 17.0}
-                {:mass 16.0, :mass-avg 16.0}
-                {:mass 15.0, :mass-avg 15.0}
-                {:mass 14.0, :mass-avg 14.0}
-                {:mass 13.0, :mass-avg 13.0}
-                {:mass 12.0, :mass-avg 12.0}
-                {:mass 11.0, :mass-avg 11.0}
-                {:mass 10.0, :mass-avg 10.0}]
+      (let [sorted-ds (ds/sort-by-column new-ds :mass-avg >)]
+        (is (= [{:mass 19, :mass-avg 18.4}
+                {:mass 18, :mass-avg 17.8}
+                {:mass 17, :mass-avg 17.0}
+                {:mass 16, :mass-avg 16.0}
+                {:mass 15, :mass-avg 15.0}
+                {:mass 14, :mass-avg 14.0}
+                {:mass 13, :mass-avg 13.0}
+                {:mass 12, :mass-avg 12.0}
+                {:mass 11, :mass-avg 11.0}
+                {:mass 10, :mass-avg 10.0}]
                (-> (ds/select sorted-ds [:mass :mass-avg] (range 10))
                    ds/mapseq-reader)))))
-    (let [nth-db (ds/take-nth 5 src-ds)]
+    (let [nth-db (ds/take-nth src-ds 5)]
       (is (= [7 12] (dtype/shape nth-db)))
       (is (= [{:mass 192.0, :width 8}
               {:mass 80.0, :width 5}
@@ -157,132 +159,49 @@
                       ds/mapseq-reader)
                   (map #(update % :width int))))))))
 
-#_(deftest one-hot
+(deftest one-hot
   (testing "Testing one-hot into multiple column groups"
-    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
-
+    (let [src-ds (test-utils/mapseq-fruit-dataset)
           dataset (-> src-ds
                       (ds/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :fruit-name
-                                       {:main [:apple :mandarin]
-                                        :other :rest})
-                      (ds-pipe/string->number)
-                      (ds/set-inference-target :fruit-name))]
-      (is (= {:fruit-name
-              {:apple [:fruit-name-main 1],
-               :mandarin [:fruit-name-main 2],
-               :orange [:fruit-name-other 1],
-               :lemon [:fruit-name-other 2]}}
-             (ds/dataset-label-map dataset)))
-      (is (= #{:mass :fruit-name-main :fruit-name-other :width :color-score :height}
+                      (ds-mod/set-inference-target :fruit-name)
+                      (ds/string->one-hot [:fruit-name]))]
+      (is (= {:one-hot-table
+              {:orange :fruit-name-0,
+               :mandarin :fruit-name-1,
+               :apple :fruit-name-2,
+               :lemon :fruit-name-3},
+              :src-column :fruit-name,
+              :result-datatype :float64}
+             (into {} (first (ds-cat/dataset->one-hot-maps dataset)))))
+      (is (= #{:mass :fruit-name-1 :fruit-name-0 :width :fruit-name-2 :color-score
+	     :fruit-name-3 :height}
              (->> (ds/columns dataset)
                   (map ds-col/column-name)
                   set)))
-      (is (= (->> (mapseq-fruit-dataset)
+      (is (= (->> (ds/mapseq-reader src-ds)
                   (take 20)
                   (mapv :fruit-name))
-             (->> (ds/labels dataset)
+             (->> (first (vals (ds-mod/labels dataset)))
                   (take 20)
                   vec)))
-      ;;Check that flyweight conversion is correct.
-      (is (= (->> (mapseq-fruit-dataset)
-                  (take 20)
-                  (mapv :fruit-name))
-             (->> (ds/->flyweight dataset :number->string? true)
-                  (map :fruit-name)
-                  (take 20)
-                  vec)))
-      (is (= {:fruit-name :classification
-              :mass :regression
-              :width :regression
+
+      (is (= {:color-score :regression,
+              :fruit-name-0 :classification,
+              :fruit-name-1 :classification,
+              :fruit-name-2 :classification,
+              :fruit-name-3 :classification,
               :height :regression
-              :color-score :regression}
-             (ds/model-type dataset (ds/column-names dataset))))))
-
-  (testing "one hot-figure it out"
-    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
-          dataset (-> src-ds
-                      (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :fruit-name)
-                      (ds-pipe/string->number))]
-      (is (= {:fruit-name
-              {:apple [:fruit-name-apple 1],
-               :orange [:fruit-name-orange 1],
-               :lemon [:fruit-name-lemon 1],
-               :mandarin [:fruit-name-mandarin 1]}}
-             (ds/dataset-label-map dataset)))
-      (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
-               :fruit-name-lemon :fruit-name-apple :height}
-             (->> (ds/columns dataset)
-                  (map ds-col/column-name)
-                  set)))
-      (is (= (->> (mapseq-fruit-dataset)
-                  (take 20)
-                  (mapv :fruit-name))
-             (->> (ds/column-values->categorical dataset :fruit-name)
-                  (take 20)
-                  vec)))
-
-      (is (= (->> (mapseq-fruit-dataset)
-                  (take 20)
-                  (mapv :fruit-name))
-             (->> (ds/->flyweight dataset :number->string? true)
-                  (map :fruit-name)
-                  (take 20)
-                  vec)))
-
-      (is (= {:fruit-name :classification
-              :mass :regression
-              :width :regression
-              :height :regression
-              :color-score :regression}
-             (ds/model-type dataset (ds/column-names dataset))))))
-
-  (testing "one hot - defined values"
-    (let [src-ds (ds/->dataset (mapseq-fruit-dataset))
-          dataset (-> src-ds
-                      (ds-pipe/remove-columns [:fruit-subtype :fruit-label])
-                      (ds-pipe/one-hot :fruit-name [:apple :mandarin
-                                                    :orange :lemon])
-                      (ds-pipe/string->number))]
-      (is (= {:fruit-name
-              {:apple [:fruit-name-apple 1],
-               :orange [:fruit-name-orange 1],
-               :lemon [:fruit-name-lemon 1],
-               :mandarin [:fruit-name-mandarin 1]}}
-             (ds/dataset-label-map dataset)))
-      (is (= #{:mass :fruit-name-mandarin :width :fruit-name-orange :color-score
-               :fruit-name-lemon :fruit-name-apple :height}
-             (->> (ds/columns dataset)
-                  (map ds-col/column-name)
-                  set)))
-      (is (= (->> (mapseq-fruit-dataset)
-                  (take 20)
-                  (mapv :fruit-name))
-             (->> (ds/column-values->categorical dataset :fruit-name)
-                  (take 20)
-                  vec)))
-
-      (is (= (->> (mapseq-fruit-dataset)
-                  (take 20)
-                  (mapv :fruit-name))
-             (->> (ds/->flyweight dataset :number->string? true)
-                  (map :fruit-name)
-                  (take 20)
-                  vec)))
-
-      (is (= {:fruit-name :classification
-              :mass :regression
-              :width :regression
-              :height :regression
-              :color-score :regression}
-             (ds/model-type dataset (ds/column-names dataset)))))))
+              :width :regression,
+              :mass :regression,
+              }
+             (ds-mod/model-type dataset (ds/column-names dataset)))))))
 
 
 (deftest generalized-mapseq-ds
   (let [ds (ds/->dataset [{:a 1 :b {:a 1 :b 2}}
                           {:a 2}])]
-    (is (= #{:int64 :object}
+    (is (= #{:int64 :persistent-map}
            (set (map dtype/get-datatype (vals ds)))))))
 
 
@@ -291,7 +210,7 @@
                            :b "hello"}
                           {:a (dtt/->tensor (partition 3 (range 9)))
                            :b "goodbye"}])]
-    (is (= #{:object :string}
+    (is (= #{:tensor :string}
            (set (map dtype/get-datatype (vals ds)))))))
 
 
@@ -299,5 +218,6 @@
   (let [ds (ds/->dataset [{:d "1971-01-01"}
                           {:d "1970-01-01"}
                           {:d nil}
-                          {:d "0001-01-01"}])]
+                          {:d "0001-01-01"}]
+                         {:parser-fn {:d :local-date}})]
     (is (= 1 (dtype/ecount (ds-col/missing (ds :d)))))))

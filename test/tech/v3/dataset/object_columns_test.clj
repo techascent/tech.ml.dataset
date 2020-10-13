@@ -9,7 +9,7 @@
 (deftest basic-object-columns
   (let [src-ds (ds/->dataset {:a (range 10)
                               :b (repeat 10 {:a 1 :b 2})})]
-    (is (= :object
+    (is (= :persistent-map
            (dtype/get-datatype (src-ds :b))))
     (is (= (vec (repeat 10 {:a 1 :b 2}))
            (vec (dtype/->reader (src-ds :b)))))))
@@ -23,7 +23,7 @@
                  :durations (repeat 5 (dtype-dt/duration))
                  :doubles (map double (range 5))
                  :tensors (repeat 5 (dtt/->tensor (partition 2 (range 4))))})]
-    (is (= #{:float64 :string :int64 :object
+    (is (= #{:float64 :string :int64 :tensor
              :packed-duration}
            (->> (map dtype/get-datatype (vals src-ds))
                 set)))))

@@ -23,12 +23,7 @@
 (defn select-missing
   "Select only rows with missing values"
   [ds]
-  (ds-base/select-rows (ds-base/missing ds)))
-
-(defn drop-missing
-  "Drop rows with missing entries"
-  [ds]
-  (ds-base/drop-rows (ds-base/missing ds)))
+  (ds-base/select-rows ds (ds-base/missing ds)))
 
 
 (defn- remove-from-rbitmap

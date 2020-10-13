@@ -44,9 +44,13 @@
   [dataset ds-name]
   (ds-proto/set-dataset-name dataset ds-name))
 
+
 (defn row-count
-  ^long [dataset]
-  (second (dtype/shape dataset)))
+  ^long [dataset-or-col]
+  (if (ds-impl/dataset? dataset-or-col)
+    (second (dtype/shape dataset-or-col))
+    (dtype/ecount dataset-or-col)))
+
 
 (defn column-count
   ^long [dataset]
@@ -231,36 +235,47 @@
 
 
 (defn select-rows
-  [dataset row-indexes]
-  (select dataset :all row-indexes))
+  "Select rows from the dataset or column."
+  [dataset-or-col row-indexes]
+  (if (ds-impl/dataset? dataset-or-col)
+    (select dataset-or-col :all row-indexes)
+    (ds-col/select dataset-or-col row-indexes)))
 
 
 (defn drop-rows
-  "Same as remove-rows."
-  [dataset row-indexes]
-  (let [n-rows (row-count dataset)
+  "Drop rows from dataset or column"
+  [dataset-or-col row-indexes]
+  (let [n-rows (row-count dataset-or-col)
         row-indexes (if (dtype/reader? row-indexes)
                       row-indexes
                       (take n-rows row-indexes))]
     (if (== 0 (dtype/ecount row-indexes))
-      dataset
-      (select dataset :all
-              (dtype-proto/set-and-not
-               (bitmap/->bitmap (range n-rows))
-               row-indexes)))))
+      dataset-or-col
+      (select-rows dataset-or-col (dtype-proto/set-and-not
+                                   (bitmap/->bitmap (range n-rows))
+                                   row-indexes)))))
 
 
 (defn remove-rows
   "Same as drop-rows."
-  [dataset row-indexes]
-  (drop-rows dataset row-indexes))
+  [dataset-or-col row-indexes]
+  (drop-rows dataset-or-col row-indexes))
 
 
 (defn missing
-  [dataset]
-  (reduce #(dtype-proto/set-or %1 (ds-col/missing %2))
-          (->bitmap)
-          (vals dataset)))
+  "Given a dataset or a column, return the missing set as a roaring bitmap"
+  ^RoaringBitmap [dataset-or-col]
+  (if (ds-impl/dataset? dataset-or-col)
+    (reduce #(dtype-proto/set-or %1 (ds-col/missing %2))
+            (->bitmap)
+            (columns dataset-or-col))
+    (ds-col/missing dataset-or-col)))
+
+
+(defn drop-missing
+  "Remove missing entries by simply selecting out the missing indexes"
+  [dataset-or-col]
+  (drop-rows dataset-or-col (missing dataset-or-col)))
 
 
 (defn supported-column-stats

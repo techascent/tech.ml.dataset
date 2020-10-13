@@ -80,7 +80,7 @@
         test-ds (ds-tens/tensor->dataset test-data)
         svd-fit (ds-math/fit-pca test-ds {:method :svd :n-components 2})
         svd-transformed-ds (ds-math/transform-pca test-ds svd-fit)
-        corr-fit (ds-math/fit-pca test-ds {:method :corr :n-components 2})
+        corr-fit (ds-math/fit-pca test-ds {:method :cov :n-components 2})
         corr-transformed-ds (ds-math/transform-pca test-ds corr-fit)
         ;;Slow, partially correct smile method (only correct for n-rows > n-cols)
         smile-svd-pca (doto (PCA/fit (->> test-data
@@ -99,7 +99,7 @@
     (is (dfn/equals smile-transformed-ds
                     (ds-tens/dataset->tensor svd-transformed-ds)
                     0.01))
-    (is (= :corr (:method corr-fit)))
+    (is (= :cov (:method corr-fit)))
     (is (dfn/equals smile-transformed-ds
                     (ds-tens/dataset->tensor corr-transformed-ds)
                     0.01))))

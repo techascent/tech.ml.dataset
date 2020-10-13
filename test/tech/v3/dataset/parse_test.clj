@@ -9,7 +9,7 @@
             [java.nio.charset StandardCharsets]))
 
 
-(def test-file "data/ames-house-prices/train.csv")
+(def test-file "test/data/ames-house-prices/train.csv")
 
 
 (def missing-data
@@ -308,7 +308,7 @@
 
 (deftest parse-empty-column-name
   (let [data (ds/->dataset "test/data/rcsv.csv")]
-    (is (= #{0 "Urban Female" "Urban Male" "Rural Female" "Rural Male"}
+    (is (= #{"column-0" "Urban Female" "Urban Male" "Rural Female" "Rural Male"}
            (set (ds/column-names data))))))
 
 
@@ -321,13 +321,15 @@
 (def parquet-file "test/data/parquet/userdata1.parquet")
 
 
-(deftest parse-parquet
-  (let [ds (ds/->dataset parquet-file)]
-    (is (= 13 (ds/column-count ds)))
-    (is (= 1000 (ds/row-count ds)))
-    (is (= #{:local-date-time :float64 :int32 :string}
-           (->> (map dtype/get-datatype (vals ds))
-                set)))))
+;;We will get back to this one.  Potentially there are good ways into this
+;;via arrow.
+#_(deftest parse-parquet
+    (let [ds (ds/->dataset parquet-file)]
+      (is (= 13 (ds/column-count ds)))
+      (is (= 1000 (ds/row-count ds)))
+      (is (= #{:local-date-time :float64 :int32 :string}
+             (->> (map dtype/get-datatype (vals ds))
+                  set)))))
 
 
 (deftest parse-ragged
@@ -354,31 +356,3 @@
     (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))
     (is (thrown? Throwable (ds/->dataset "test/data/double_parse_test.csv"
                                          {:separator ",n"})))))
-
-
-(deftest encoded-text
-  (let [tf "test/data/medical-text.csv"
-        base-ds (ds/->dataset tf)
-        first-abstract (first (base-ds "abstract"))]
-    ;;As encoded text
-    (let [default-ds (ds/->dataset
-                      tf {:parser-fn {"abstract" :encoded-text}})]
-      (is (= first-abstract (first (default-ds "abstract")))))
-    (let [charset-ds (ds/->dataset
-                      tf {:parser-fn {"abstract" [:encoded-text
-                                                  StandardCharsets/ISO_8859_1]}})]
-      (is (= first-abstract (first (charset-ds "abstract")))))
-    (let [encdec-ds (ds/->dataset
-                     tf {:parser-fn {"abstract"
-                                     [:encoded-text "UTF-16LE"]}})]
-      (is (= first-abstract (first (encdec-ds "abstract")))))))
-
-
-;; Failing due to apparently invalid iris.feather file
-;; (deftest parse-arrow
-;;   (let [ds (ds/->dataset arrow-file)]
-;;     (is (= 13 (ds/column-count ds)))
-;;     (is (= 1000 (ds/row-count ds)))
-;;     (is (= #{:local-date-time :float64 :int32 :string}
-;;            (->> (map dtype/get-datatype ds)
-;;                 set)))))

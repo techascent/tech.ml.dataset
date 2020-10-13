@@ -160,9 +160,10 @@
   "Return the labels.  The labels sequence is the reverse mapped inference
   column.  This returns a single column of data or errors out."
   [dataset]
-  (let [rev-mapped (vals (inference-target-ds dataset))]
+  (let [
+        rev-mapped (inference-target-ds dataset)]
     (errors/when-not-errorf
-        (== 1 (count rev-mapped))
+        (== 1 (ds-base/column-count rev-mapped))
       "Incorrect number of columns (%d) in dataset for labels transformation"
-      (count rev-mapped))
-    (first rev-mapped)))
+      (ds-base/column-count rev-mapped))
+    rev-mapped))

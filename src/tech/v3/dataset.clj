@@ -59,6 +59,7 @@
                 drop-rows
                 remove-rows
                 missing
+                drop-missing
                 add-or-update-column
                 group-by->indexes
                 group-by-column->indexes
@@ -122,7 +123,7 @@
                 new-dataset)
 
 (export-symbols tech.v3.dataset.missing
-                select-missing drop-missing replace-missing)
+                select-missing replace-missing)
 
 
 (defn head
@@ -325,20 +326,21 @@
   "Convert string columns to numeric columns.
   See tech.v3.dataset.categorical/fit-one-hot"
   ([dataset filter-fn-or-ds]
-   (string->number dataset filter-fn-or-ds nil nil))
+   (string->one-hot dataset filter-fn-or-ds nil nil))
   ([dataset filter-fn-or-ds table-args]
-   (string->number dataset filter-fn-or-ds table-args nil))
+   (string->one-hot dataset filter-fn-or-ds table-args nil))
   ([dataset filter-fn-or-ds table-args result-datatype]
-   (update dataset filter-fn-or-ds
-           (fn [filtered-ds]
-             (reduce
-              (fn [filtered-ds colname]
-                (let [fit-data
-                      (ds-cat/fit-one-hot
-                       filtered-ds colname table-args result-datatype)]
-                  (ds-cat/transform-one-hot filtered-ds fit-data)))
-              filtered-ds
-              (column-names filtered-ds))))))
+   (let [filtered-ds (filter-dataset dataset filter-fn-or-ds)
+         filtered-cnames (column-names filtered-ds)]
+     (merge (apply dissoc dataset filtered-cnames)
+            (reduce
+             (fn [filtered-ds colname]
+               (let [fit-data
+                     (ds-cat/fit-one-hot
+                      filtered-ds colname table-args result-datatype)]
+                 (ds-cat/transform-one-hot filtered-ds fit-data)))
+             filtered-ds
+             (column-names filtered-ds))))))
 
 
 (defn column-cast

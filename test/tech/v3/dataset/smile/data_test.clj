@@ -20,7 +20,7 @@
 
 
 (deftest ames-test
-  (let [ames (-> (ds/->dataset "data/ames-house-prices/train.csv")
+  (let [ames (-> (ds/->dataset "test/data/ames-house-prices/train.csv")
                  (ds/select-rows (range 10))
                  (ds/ensure-array-backed))
         df-ames (ds/dataset->smile-dataframe ames)

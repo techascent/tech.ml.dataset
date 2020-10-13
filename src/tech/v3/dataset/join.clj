@@ -8,6 +8,7 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.utils :as ds-utils]
             [primitive-math :as pmath])
   (:import [tech.v3.datatype ObjectReader PrimitiveList Buffer
             BinaryPredicate BinaryOperator
@@ -20,11 +21,7 @@
 
 (defn- colname->str
   ^String [item]
-  (cond
-    (string? item) item
-    (keyword? item) (name item)
-    (symbol? item) (name item)
-    :else (str item)))
+  (ds-utils/column-safe-name item))
 
 
 (defn- similar-colname-type
@@ -313,12 +310,12 @@
 
 (defn- ensure-numeric-reader
   "Column is either a float or integer reader."
-  [col]
+  ^Buffer [col]
   (let [col-dtype (casting/un-alias-datatype (dtype/get-datatype col))]
     (if (dtype-dt/datetime-datatype? col-dtype)
       (-> (dtype-dt/datetime->milliseconds col)
           (dtype/->reader))
-      (dtype/->reader col))))
+      (dtype/->reader col (casting/simple-operation-space col-dtype)))))
 
 
 (defn- asof-op->binary-pred
@@ -346,8 +343,11 @@
 
 (defn- asof-lt
   [asof-op lhs rhs]
-  (let [lhs-rdr (dtype/->reader lhs)
-        rhs-rdr (dtype/->reader rhs)
+  (let [op-space (casting/simple-operation-space
+                  (dtype/elemwise-datatype lhs)
+                  (dtype/elemwise-datatype rhs))
+        lhs-rdr (dtype/->reader lhs op-space)
+        rhs-rdr (dtype/->reader rhs op-space)
         n-elems (.lsize lhs-rdr)
         n-right (.lsize rhs-rdr)
         retval (dtype/make-list :int32)
@@ -371,8 +371,11 @@
 
 (defn- asof-gt
   [asof-op lhs rhs]
-  (let [lhs-rdr (dtype/->reader lhs)
-        rhs-rdr (dtype/->reader rhs)
+  (let [op-space (casting/simple-operation-space
+                  (dtype/elemwise-datatype lhs)
+                  (dtype/elemwise-datatype rhs))
+        lhs-rdr (dtype/->reader lhs op-space)
+        rhs-rdr (dtype/->reader rhs op-space)
         n-elems (.lsize lhs-rdr)
         n-right (.lsize rhs-rdr)
         n-right-dec (dec n-right)
@@ -441,8 +444,11 @@
 
 (defn- asof-nearest
   [lhs rhs]
-  (let [lhs-rdr (dtype/->reader lhs)
-        rhs-rdr (dtype/->reader rhs)
+  (let [op-space (casting/simple-operation-space
+                  (dtype/elemwise-datatype lhs)
+                  (dtype/elemwise-datatype rhs))
+        lhs-rdr (dtype/->reader lhs op-space)
+        rhs-rdr (dtype/->reader rhs op-space)
         n-elems (.lsize lhs-rdr)
         n-right (.lsize rhs-rdr)
         n-right-dec (dec n-right)

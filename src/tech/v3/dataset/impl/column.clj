@@ -48,7 +48,8 @@
   (let [^Buffer src (dtype-proto/->buffer data)
         dtype (.elemwiseDatatype src)
         {:keys [unpacking-read packing-write]}
-        (packing/buffer-packing-pair dtype)]
+        (packing/buffer-packing-pair dtype)
+        missing-value (column-base/datatype->missing-value dtype)]
     ;;Sometimes we can utilize a pure passthrough.
     (if (and (.isEmpty missing)
              (not unpacking-read))
@@ -60,35 +61,35 @@
         (allowsWrite [this] (.allowsWrite src))
         (readBoolean [this idx]
           (if (.contains missing idx)
-            false
+            (casting/datatype->boolean :unknown missing-value)
             (.readBoolean src idx)))
         (readByte [this idx]
           (if (.contains missing idx)
-            Byte/MIN_VALUE
+            (unchecked-byte missing-value)
             (.readByte src idx)))
         (readShort [this idx]
           (if (.contains missing idx)
-            Short/MIN_VALUE
+            (unchecked-short missing-value)
             (.readShort src idx)))
         (readChar [this idx]
           (if (.contains missing idx)
-            Character/MAX_VALUE
+            (char missing-value)
             (.readChar src idx)))
         (readInt [this idx]
           (if (.contains missing idx)
-            Integer/MIN_VALUE
+            (unchecked-int missing-value)
             (.readInt src idx)))
         (readLong [this idx]
           (if (.contains missing idx)
-            Long/MIN_VALUE
+            (unchecked-long missing-value)
             (.readLong src idx)))
         (readFloat [this idx]
           (if (.contains missing idx)
-            Float/NaN
+            (float missing-value)
             (.readFloat src idx)))
         (readDouble [this idx]
           (if (.contains missing idx)
-            Double/NaN
+            (double missing-value)
             (.readDouble src idx)))
         (readObject [this idx]
           (when-not (.contains missing idx)
