@@ -220,11 +220,11 @@ really complex datastructures.  That can be a big help for complex dataflows.
 Our implementation of save/load for this pathway goes through two public functions:
 
 
-* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L889) - Convert a dataset into a pure
+* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L666) - Convert a dataset into a pure
 clojure/java datastructure suitable for serialization.  Data is in arrays and string
 tables have been slightly deconstructed.
 
-* [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/343f93a775975ff02704dcbaa205580fbbed3ef5/src/tech/ml/dataset.clj#L916) - Given a data-description of a
+* [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L694) - Given a data-description of a
 dataset create a new dataset.  This is mainly a zero copy operation so it should be
 quite quick.
 

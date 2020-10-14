@@ -302,13 +302,13 @@
            vary-meta assoc k v args)))
 
 
-(defn string->number
+(defn categorical->number
   "Convert string columns to numeric columns.
   See tech.v3.dataset.categorical/fit-categorical-map."
   ([dataset filter-fn-or-ds]
-   (string->number dataset filter-fn-or-ds nil nil))
+   (categorical->number dataset filter-fn-or-ds nil nil))
   ([dataset filter-fn-or-ds table-args]
-   (string->number dataset filter-fn-or-ds table-args nil))
+   (categorical->number dataset filter-fn-or-ds table-args nil))
   ([dataset filter-fn-or-ds table-args result-datatype]
    (update dataset filter-fn-or-ds
            (fn [filtered-ds]
@@ -322,13 +322,13 @@
               (column-names filtered-ds))))))
 
 
-(defn string->one-hot
+(defn categorical->one-hot
   "Convert string columns to numeric columns.
   See tech.v3.dataset.categorical/fit-one-hot"
   ([dataset filter-fn-or-ds]
-   (string->one-hot dataset filter-fn-or-ds nil nil))
+   (categorical->one-hot dataset filter-fn-or-ds nil nil))
   ([dataset filter-fn-or-ds table-args]
-   (string->one-hot dataset filter-fn-or-ds table-args nil))
+   (categorical->one-hot dataset filter-fn-or-ds table-args nil))
   ([dataset filter-fn-or-ds table-args result-datatype]
    (let [filtered-ds (filter-dataset dataset filter-fn-or-ds)
          filtered-cnames (column-names filtered-ds)]

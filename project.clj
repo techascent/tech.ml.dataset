@@ -64,7 +64,10 @@
                                    tech.v3.dataset.modelling
                                    tech.v3.dataset.categorical
                                    tech.v3.dataset.column-filters
-                                   tech.v3.dataset.io.datetime]}}
+                                   tech.v3.dataset.io.datetime
+                                   tech.v3.dataset.io.univocity
+                                   tech.v3.dataset.io.string-row-parser
+                                   ]}}
              ;;No neanderthal on travis
              :travis {:dependencies [[criterium "0.4.5"]
                                      [http-kit "2.3.0"]

@@ -2,18 +2,19 @@
 
 
 In `tech.ml.dataset`, columns are composed of three things:
-[data, metadata, and the missing set](https://github.com/techascent/tech.ml.dataset/blob/0ec64ac6bf5c5536491202b1abd3da7abbec1109/src/tech/ml/dataset/impl/column.clj#L141).
+[data, metadata, and the missing set](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/impl/column.clj#L140).
 The column's datatype is the datatype of the `data` member.  The data member can
 be anything convertible to a tech.v2.datatype reader of the appropriate type.
 
 
-Readers are a simple abstraction of typed random access read-only memory.  You can
-create a reader by reifying the appropriately typed interface from `tech.v2.datatype`
-but the datatype library has [quick paths](https://github.com/techascent/tech.datatype/blob/5b4745f728a2773ae542fac9613ffd1c482b9750/src/tech/v2/datatype.clj#L458) to creating
-these:
+Buffers are a [simple abstraction](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/java/tech/v3/datatype/Buffer.java) of typed random access read-only
+memory that implement all the interfaces required to both efficient and easy to use.
+You can create a buffer by reifying the appropriately typed interface from
+`tech.v3.datatype` but the datatype library has
+[quick paths](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype.clj#L102) to creating these:
 
 ```clojure
-user> (require '[tech.v2.datatype :as dtype])
+user> (require '[tech.v3.datatype :as dtype])
 nil
 user> (dtype/make-reader :float32 5 idx)
 [0.0 1.0 2.0 3.0 4.0]
@@ -21,12 +22,21 @@ user> (dtype/make-reader :float32 5 (* 2 idx))
 [0.0 2.0 4.0 6.0 8.0]
 ```
 
-A reader has a three methods - `getDatatype` (optional), `lsize`, and `read`.  `read`
-is typed to the datatype so for instance in the example above, read returns a primitive
-float object.  `lsize` returns a long.  Unlike a the similar method `get` in java
-lists, the `read` method takes a long.  This allows us to use read methods on storage
-mechanism capable of addressing more than 2 (signed int) or 4 (unsigned int) billion
-addresses.
+
+
+A read-only buffer only needs three methods - `elemwiseDatatype` (optional), `lsize`, and
+`read[X]`.  `read[X]` is typed to the datatype so for instance in the example above,
+readFloat returns a primitive float object.  `lsize` returns a long.  Unlike a the
+similar method `get` in java lists, the `read[X]` methods takes a long.  This allows us
+to use read methods on storage mechanism capable of addressing more than 2 (signed int)
+or 4 (unsigned int) billion addresses.
+
+
+Another way to create a reader is to do a 'map' type translation from one or more other
+readers.  This is provided in two ways:
+
+* [`dtype/emap`](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/emap.clj#L97) - Missing set ignorant mapping into a typed representation.
+* [`tech.v3.dataset.column/column-map`](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/column.clj#L174) - Missing set aware mapping into a typed representation.
 
 
 The dataset system in general is smart enough to create columns out of readers in most
@@ -89,93 +99,23 @@ to use if you aren't absolutely certain of your value range how it interacts wit
 your arithmetic pathways.
 
 
-You can create a reader of any type you like and you can use any datastructure you
-like as a datatype.  From the docstring on make-reader:
 ```clojure
-
--------------------------
-tech.v2.datatype/make-reader
-([datatype n-elems read-op])
-Macro
-  Make a reader.  Datatype must be a compile time visible object.
-  read-op has 'idx' in scope which is the index to read from.  Returns a
-  reader of the appropriate type for the passed in datatype.  Results are unchecked
-  casted to the appropriate datatype.  It is up to *you* to ensure this is the result
-  you want or throw an exception.
-
-user> (dtype/make-reader :float32 5 idx)
-[0.0 1.0 2.0 3.0 4.0]
-user> (dtype/make-reader :boolean 5 idx)
-[true true true true true]
-user> (dtype/make-reader :boolean 5 (== idx 0))
-[true false false false false]
-user> (dtype/make-reader :float32 5 (* idx 2))
- [0.0 2.0 4.0 6.0 8.0]
-user> (dtype/make-reader :any-datatype-you-wish 5 (* idx 2))
-[0 2 4 6 8]
-user> (dtype/get-datatype *1)
-:any-datatype-you-wish
-user> (dtype/make-reader [:a :b] 5 (* idx 2))
-[0 2 4 6 8]
-user> (dtype/get-datatype *1)
-[:a :b]
-```
-
-This means you can make a column and mark it as any datatype that you like if you
-are ok with object semantics.
-
-
-Often times it is useful to perform an operation on one or more columns and produce
-a new column.  Almost anything you think of that will result in a countable thing
-will work fine (mapv, etc).  If your operation results in a primitive element per
-index, it will often be very efficient to:
-1.  Use a let statement to type all the inputs to your operation.
-2.  Create a reader of the appropriate type that does the operation.
-
-
-```clojure
-user> (ds/head
-       (ds/add-or-update-column
-        stocks
-        "price-lag"
-        ;;This enables fast, typed random access to the data in the column
-        (let [price-data (dtype/->typed-reader
-                          (stocks "price") :float32)]
-          (dtype/make-reader :float32 (.lsize price-data)
-                             (.read price-data (max 0 (dec idx)))))))
-
-test/data/stocks.csv [5 4]:
-
-| symbol |       date | price | price-lag |
-|--------+------------+-------+-----------|
-|   MSFT | 2000-01-01 | 39.81 |     39.81 |
-|   MSFT | 2000-02-01 | 36.35 |     39.81 |
-|   MSFT | 2000-03-01 | 43.22 |     36.35 |
-|   MSFT | 2000-04-01 | 28.37 |     43.22 |
-|   MSFT | 2000-05-01 | 25.45 |     28.37 |
-```
-
-These columns will still work fine with the arithmetic subsystems:
-
-```clojure
-user> (require '[tech.v2.datatype.functional :as dfn])
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (def stocks (ds/->dataset "test/data/stocks.csv"))
+#'user/stocks
+user> (require '[tech.v3.datatype.functional :as dfn])
+nil
 user> (def stocks-lag
-       (ds/add-or-update-column
-        stocks
-        "price-lag"
-        ;;This enables fast, typed random access to the data in the column
-        (let [price-data (dtype/->typed-reader
-                          (stocks "price") :float32)]
-          (dtype/make-reader :float32 (.lsize price-data)
-                             (.read price-data (max 0 (dec idx)))))))
+        (assoc stocks "price-lag"
+               (let [price-data (dtype/->reader (stocks "price"))]
+                 (dtype/make-reader :float64 (.lsize price-data)
+                                    (.readDouble price-data
+                                                 (max 0 (dec idx)))))))
 
 #'user/stocks-lag
-user> (ds/head
-       (ds/add-or-update-column
-        stocks-lag
-        "price-lag-diff"
-        (dfn/- (stocks-lag "price")
-               (stocks-lag "price-lag"))))
+user> (ds/head (assoc stocks-lag "price-lag-diff" (dfn/- (stocks-lag "price")
+                                                         (stocks-lag "price-lag"))))
 test/data/stocks.csv [5 5]:
 
 | symbol |       date | price | price-lag | price-lag-diff |
@@ -210,14 +150,12 @@ If we now get the actual type of the column's data member, we can see that it is
 a concrete type.
 
 ```clojure
-user> (import '[tech.ml.dataset.impl.column Column])
-tech.ml.dataset.impl.column.Column
-user> (def concrete (ds/update-column stocks-lag "price-lag" dtype/clone))
-#'user/concrete
-user> (type (.data ^Column (concrete "price-lag")))
-[F
+user> (-> (ds/update-column stocks-lag "price-lag" dtype/clone)
+          (get "price-lag")
+          (dtype/as-concrete-buffer))
+#array-buffer<float64>[560]
+[39.81, 39.81, 36.35, 43.22, 28.37, 25.45, 32.54, 28.40, 28.40, 24.53, 28.02, 23.34, 17.65, 24.84, 24.00, 22.25, 27.56, 28.14, 29.70, 26.93, ...]
 ```
-
 
 
 This ability - lazily define a column via interface implementation and still

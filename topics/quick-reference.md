@@ -9,19 +9,19 @@ functions that are we find most useful.
 
 ## Loading/Saving
 
-* [->dataset, ->>dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L765) - loads csv, tsv,
+* [->dataset, ->>dataset](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/io.clj#L87) - loads csv, tsv,
   sequence-of-maps, map-of-arrays, xlsx, xls, parquet and arrow.
-* [write-csv!](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L989) - Writes csv or tsv with
+* [write!](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/io.clj#L203) - Writes csv or tsv with
   gzipping. Depends on scanning file path string to determine options.
-* [nippy freeze/thaw support](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L989).
-* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L891) - Useful if you want the entire
+* [nippy freeze/thaw support](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/io/nippy.clj)
+* [dataset->data](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L666) - Useful if you want the entire
  dataset represented as (mostly) pure Clojure/JVM datastructures.  Missing sets are
  roaring bitmaps, data is probably in primitive arrays.  String tables receive special
  treatment.
-* [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L918) - Inverse of data->dataset.
-* [tech.ml.dataset.parse/csv->rows](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/parse.clj#L719) - Lazily parse a
+* [data->dataset](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L694) - Inverse of data->dataset.
+* [tech.ml.dataset.io.univocity/csv->rows](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/io/univocity.clj#L144) - Lazily parse a
  csv or tsv returning a sequence of string[] rows.  This uses a subset of the ->dataset options.
-* [tech.ml.dataset.parse/rows->dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/parse.clj#L632) - Given
+* [tech.ml.dataset.parse/rows->dataset](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/io/string_row_parser.clj#L13) - Given
  a sequence of string[] rows, parse data into a dataset.  Uses subset of the ->dataset
  options.
 
@@ -30,36 +30,32 @@ functions that are we find most useful.
 
 * Datasets overload Ifn so are functions of their column names.  `(ds :colname)` will
   return the column named `:colname`.  Datasets implement `IPersistentMap` so
-  `(map (comp second meta) ds)` or `(map meta (vals ds))`  will return a sequence of column 
-  metadata.  `keys`, `vals`, `contains?` and map-style destructuring all work on 
-  datasets.
+  `(map (comp second meta) ds)` or `(map meta (vals ds))`  will return a sequence of column
+  metadata.  `keys`, `vals`, `contains?`, `assoc`, `dissoc`, `merge` and map-style destructuring
+  all work on datasets.
 * Columns are iterable and implement indexed so you can use them with `map`, `count`
   and `nth` and overload IFn such that they are functions of their indexes similar
   to persistent vectors.
-* Typed random access is supported the `(tech.v2.datatype/->reader col)`
+* Typed random access is supported the `(tech.v3.datatype/->reader col)`
   transformation.  This is guaranteed to return an implementation of `java.util.List`
   and also overloads `IFn` such that like a persistent vector passing in the index
   will return the value - e.g. `(col 0)` returns the value at index 0.  Direct access
-  to packed datetime columns may be surprising; call `tech.v2.datatype.datetime/unpack`
-  on the column prior to calling `tech.v2.datatype/->reader` to get to the unpacked
+  to packed datetime columns may be surprising; call `tech.v3.datatype.datetime/unpack`
+  on the column prior to calling `tech.v3.datatype/->reader` to get to the unpacked
   datatype.
-* [row-count](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L46).
-* [column-count](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L54).
-* [mapseq-reader](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/readers.clj#L64) - get the rows of the
+* [row-count](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L48) - works on datasets and columns.
+* [column-count](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L55).
+* [mapseq-reader](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/readers.clj#L39) - get the rows of the
  dataset as a `java.util.List` of persistent-map-like maps.  Implemented as a flyweight
  implementation of `clojure.lang.APersistentMap`.  This keeps the data in the backing
  store and lazily reads it so you will have relatively more expensive reading of the
  data but will not increase your memory working-set size.
-* [value-reader](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/readers.clj#L44) - Get the rows of the
+* [value-reader](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/readers.clj#L21) - Get the rows of the
  dataset as a 'java.util.List' of rows.  These rows behave like persistent vectors
  but are not safe to use as keys in maps - use `vec` and get real persistent vectors if
  you intend to call equals or hashCode on these.
-* [tech.ml.dataset.column/missing](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/column.clj#L65) - return
- a RoaringBitmap of the missing indexes
-* [columns-with-missing-seq](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj)
-* [missing](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L281) - Return the union of all missing
-  indexes.  Useful in combination with drop-rows to quickly eliminate missing values
-  from the dataset.
+* [missing](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L265) - return a RoaringBitmap of missing indexes.  If this is a column, it is the column's specific missing indexes.  If this is a dataset, return a union of all the columns' missing indexes.
+* [columns-with-missing-seq](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L85)
 * [meta, with-meta, vary-meta](https://github.com/clojure/clojure/blob/master/src/clj/clojure/core.clj#L202) - Datasets and columns implement
   `clojure.lang.IObj` so you can get/set metadata on them freely. `:name` has meaning in the system and setting it
   directly on a column is not recommended.  Metadata is generally carried forward through most of the operations below.
@@ -73,34 +69,37 @@ pretty good for quick scans.
 
 We use these options frequently during exploration to get more/less printing
 output.  These are used like `(vary-meta ds assoc :print-column-max-width 10)`.
-Often it is useful to print the entire table: `(vary-meta ds assoc :print-index-range :all)`.
+Often it is useful to print the entire table:  `(vary-meta ds assoc :print-index-range :all)`
 
-* [`:print-column-max-width`](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/print.clj#L97).
-* [`:print-index-range`](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/print.clj#L97).
-* [`:print-line-policy`](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/print.clj#L93).
+* [print metadata options](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/print.clj#L93)
 
 
 ## Dataset Exploration
 
-* [head](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L210)
-* [tail](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L220)
-* [sample](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L237)
-* [rand-nth](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L252)
-* [descriptive-stats](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L682) - return a dataset of
+
+
+
+* [head](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L129)
+* [tail](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L140)
+* [sample](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L158)
+* [rand-nth](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L174)
+* [descriptive-stats](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L623) - return a dataset of
  columnwise descriptive statistics.
-* [brief](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L745) - Return a sequence of maps of
- descriptive statistics.
+* [brief](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L695) - Return a sequence of maps of  descriptive statistics.
 
 
 
 ## Subrect Selection
 
-* [select](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L196) - can be used for renaming.
+Keeping in mind that assoc, dissoc, and merge all work at the dataset level - here are some other
+pathways that are useful for subrect selection.
+
+* [select](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L178) - can be used for renaming.
  Anything iterable can be used for the rows.
-* [select-columns](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L237).
-* [drop-columns](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L154)
-* [select-rows](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L255).
-* [drop-rows](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L260).
+* [select-columns](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L219).
+* [select-rows](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L237) - works on datasets and columns.
+* [drop-rows](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L245) - works on datasets and columns.
+* [drop-missing](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L275)
 
 
 
@@ -111,39 +110,35 @@ in `->indexes` variants.  `->column` variants are going to be faster than the ba
 versions and `->indexes` simply return indexes and thus skip creating sub-datasets
 so these are faster yet.
 
-* [assoc](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L175) - add or replace columns.
-* [dissoc](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj#L200) - remove columns, similar to
- drop-columns.
-* [new-dataset](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/impl/dataset.clj#L183) - Create a new dataset from a sequence of columns.  Columns may be actual columns created via `tech.ml.dataset.column/new-column` or they could be maps containing at least keys `{:name :data}` but also potentially `{:metadata :missing}` in order to create a column with a specific set of missing values and metadata.  `:force-datatype true` will disable the system
+* [new-dataset](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/impl/dataset.clj#L380) - Create a new dataset from a sequence of columns.  Columns may be actual columns created via `tech.ml.dataset.column/new-column` or they could be maps containing at least keys `{:name :data}` but also potentially `{:metadata :missing}` in order to create a column with a specific set of missing values and metadata.  `:force-datatype true` will disable the system
 from attempting to scan the data for missing values and e.g. create a float column
 from a vector of Float objects.
-* [group-by-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L404), [group-by](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L378) - Create a persistent map of value->dataset.  Sub-datasets are created via indexing into the original dataset so data is not copied.
-* [sort-by-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L466), [sort-by](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L427) - Return a sorted dataset.
-* [filter-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L350), [filter](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L330) - Return a new dataset with only rows that pass the predicate.
-* [column-cast](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj) - Change the datatype of a column.
-* [concat-copying](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L553), [concat-inplace](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L544) - Given Y datasets produce a new dataset.  Whether to
+* [group-by-column](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L353), [group-by](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L335) - Create a persistent map of value->dataset.  Sub-datasets are created via indexing into the original dataset so data is not copied.
+* [sort-by-column](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L374), [sort-by](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L363) - Return a sorted dataset.
+* [filter-column](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L304), [filter](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L295) - Return a new dataset with only rows that pass the predicate.
+* [column-cast](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L346) - Change the datatype of a column.
+* [concat-copying](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L450), [concat-inplace](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L442) - Given Y datasets produce a new dataset.  Whether to
 do in-place or copying concatenation depends roughly on the number of datasets.
 Inplace works best with under 5 datasets where all datasets have an identical row
 count.  Copying can increase your ram usage but returns a dataset that will be more
 efficient to iterate over later. `(apply ds/concat-copying x-seq)` is
 **far** more efficient than `(reduce ds/concat-copying x-seq)`; this also is true for
 `concat-inplace`.
-* [unique-by-column](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L607), [unique-by](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset/base.clj#L590) - Remove duplicate rows.  Passing in `keep-fn` allows
+* [unique-by-column](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L498), [unique-by](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset/base.clj#L481) - Remove duplicate rows.  Passing in `keep-fn` allows
 you to choose either first, last, or some other criteria for rows that have the same
 values.
-* [columnwise-concat](https://github.com/techascent/tech.ml.dataset/blob/e051de4e82a43b80d2fbcf3d4b52759a9cb878c8/src/tech/ml/dataset.clj) - Concatenate columns into longer
+* [columnwise-concat](https://github.com/techascent/tech.ml.dataset/blob/7c8c7514e0e35995050c1e326122a1826cc18273/src/tech/v3/dataset.clj#L437) - Concatenate columns into longer
 dataset repeating values in other columns.
 
 
 ## Elementwise Arithmetic
 
 
-Functions in 'tech.v2.datatype.functional' all will apply various elementwise
+Functions in 'tech.v3.datatype.functional' all will apply various elementwise
 arithmetic operations to a column lazily returning a new column.
 ```clojure
-       (ds/assoc ds
-                 :value (dtype/set-datatype (ds :value) :int64)
-                 :shrs-or-prn-amt (dtype/set-datatype (ds :shrs-or-prn-amt) :int64)
+       (assoc ds :value (dtype/elemwise-cast (ds :value) :int64)
+                 :shrs-or-prn-amt (dtype/elemwise-cast (ds :shrs-or-prn-amt) :int64)
                  :cik (dtype/const-reader (:cik filing) (ds/row-count ds))
                  :investor (dtype/const-reader investor (ds/row-count ds))
                  :form-type (dtype/const-reader form-type (ds/row-count ds))
@@ -167,10 +162,5 @@ arithmetic operations to a column lazily returning a new column.
  dataset by a bit - sometimes 20%.  This is because lists that have allocated extra
  capacity are copied into arrays that have no extra capacity.
 
- * [tech.v2.datatype/clone](https://github.com/techascent/tech.datatype/blob/master/src/tech/v2/datatype.clj#L218) - Clones the dataset realizing lazy operation and copying the data into java arrays.  Will clone datasets or columns.
-
-
-
-## Further Examples
-
-* [Boulder Rescue Response Times](https://nextjournal.com/chrisn/boulder-rescue-response-times/).
+ * [tech.v3.datatype/clone](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype.clj#L95) - Clones the dataset realizing lazy operation and copying the data into
+ java arrays.  Will clone datasets or columns.
