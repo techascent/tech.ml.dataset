@@ -17,7 +17,7 @@
   (let [src-ds (test-utils/mapseq-fruit-dataset)
         dataset (ds/bind-> src-ds ds
                   (ds/remove-columns [:fruit-subtype :fruit-label])
-                  (ds/string->number cf/categorical)
+                  (ds/categorical->number cf/categorical)
                   (ds/update (cf/difference ds (cf/categorical ds))
                              #(ds-math/transform-minmax % (ds-math/fit-minmax %)))
                   (ds-mod/set-inference-target :fruit-name))
@@ -165,7 +165,7 @@
           dataset (-> src-ds
                       (ds/remove-columns [:fruit-subtype :fruit-label])
                       (ds-mod/set-inference-target :fruit-name)
-                      (ds/string->one-hot [:fruit-name]))]
+                      (ds/categorical->one-hot [:fruit-name]))]
       (is (= {:one-hot-table
               {:orange :fruit-name-0,
                :mandarin :fruit-name-1,

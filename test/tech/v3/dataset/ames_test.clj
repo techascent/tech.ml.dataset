@@ -103,10 +103,10 @@
   [dataset]
   (let [initial-ds
         (-> dataset
-            (ds/string->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa"
+            (ds/categorical->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa"
                                               "NoSewr" "AllPub"])
-            (ds/string->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
-            (ds/string->number ["ExterQual"
+            (ds/categorical->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
+            (ds/categorical->number ["ExterQual"
                                 "ExterCond"
                                 "BsmtQual"
                                 "BsmtCond"
@@ -118,13 +118,13 @@
                                 "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
             (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
                                :categorical? true)
-            (ds/string->number ["MasVnrType"] {"BrkCmn" 1
+            (ds/categorical->number ["MasVnrType"] {"BrkCmn" 1
                                                 "BrkFace" 1
                                                 "CBlock" 1
                                                 "Stone" 1
                                                 "None" 0
                                                 "NA" -1})
-            (ds/string->number ["SaleCondition"] {"Abnorml" 0
+            (ds/categorical->number ["SaleCondition"] {"Abnorml" 0
                                                    "Alloca" 0
                                                    "AdjLand" 0
                                                    "Family" 0
@@ -132,7 +132,7 @@
                                                    "Partial" 1
                                                    "NA" -1})
             ;; ;;Auto convert the rest that are still string columns
-            (ds/string->number cf/string))]
+            (ds/categorical->number cf/string))]
     (if (ds/has-column? initial-ds "SalePrice")
       (-> initial-ds
           (assoc "SalePriceDup" (initial-ds "SalePrice"))
@@ -222,9 +222,9 @@
   [dataset]
   (ds/bind->
    (missing-pipeline dataset) ds
-   (ds/string->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-   (ds/string->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
-   (ds/string->number ["ExterQual"
+   (ds/categorical->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+   (ds/categorical->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
+   (ds/categorical->number ["ExterQual"
                        "ExterCond"
                        "BsmtQual"
                        "BsmtCond"
@@ -236,13 +236,13 @@
                        "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
    (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
                       :categorical? true)
-   (ds/string->number ["MasVnrType"] {"BrkCmn" 1
+   (ds/categorical->number ["MasVnrType"] {"BrkCmn" 1
                                       "BrkFace" 1
                                       "CBlock" 1
                                       "Stone" 1
                                       "None" 0
                                       "NA" -1})
-   (ds/string->number ["SaleCondition"] {"Abnorml" 0
+   (ds/categorical->number ["SaleCondition"] {"Abnorml" 0
                                          "Alloca" 0
                                          "AdjLand" 0
                                          "Family" 0
@@ -250,7 +250,7 @@
                                          "Partial" 1
                                          "NA" -1})
    ;; ;;Auto convert the rest that are still string columns
-   (ds/string->number cf/string)
+   (ds/categorical->number cf/string)
    (ds/update-column "SalePrice" dfn/log1p)
    (ds-mod/set-inference-target "SalePrice")
    (assoc "OverallGrade" (dfn/* (ds "OverallQual") (ds "OverallCond")))
