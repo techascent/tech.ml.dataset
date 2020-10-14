@@ -293,8 +293,8 @@
   (toString [item]
     (let [n-elems (dtype/ecount data)
           format-str (if (> n-elems 20)
-                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s...]"
-                       "#tech.ml.dataset.column<%s>%s\n%s\n[%s]")]
+                       "#tech.v3.dataset.column<%s>%s\n%s\n[%s...]"
+                       "#tech.v3.dataset.column<%s>%s\n%s\n[%s]")]
       (format format-str
               (name (dtype/elemwise-datatype item))
               [n-elems]

@@ -33,6 +33,10 @@
 (set! *warn-on-reflection* true)
 
 
+(defonce ^{:doc "Datasets will now identify their major versions"
+           :tag 'long} major-version 5)
+
+
 (export-symbols tech.v3.dataset.base
                 dataset-name
                 set-dataset-name
