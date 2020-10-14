@@ -3,7 +3,6 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
-[![cljdoc badge](https://cljdoc.org/badge/techascent/tech.ml.dataset)](https://cljdoc.org/d/techascent/tech.ml.dataset/CURRENT)
 
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
@@ -28,20 +27,19 @@ the standard api -- data is copied from disk into buffers.  We also
 support a more or less [from-scratch implementation](src/tech/libs/arrow/in_place.clj) of an in-place
 pathway built expressly to enable both datasets that are larger than machine
 RAM and purely for performance on top of the
-['tech.v2.datatype.mmap'](https://github.com/techascent/tech.datatype/blob/a2ea4011b18c92f38512b67ed8a5e995fb9f4a16/src/tech/v2/datatype/mmap.clj#L397)
+['tech.v3.datatype.mmap'](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/mmap.clj#L16)
 namespace.
 
-We now have support for [nippy serialization](docs/nippy-serialization-rocks.md).
-
-For a simple all-in-one data exploration pathway please checkout [simpledata](https://github.com/cnuernber/simpledata).
-
 An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
+
+
+Checkout our brand new [api documentation!](https://techascent.github.io/tech.ml.dataset/)
 
 
 ## Mini Walkthrough
 
 ```clojure
-user> (require '[tech.ml.dataset :as ds])
+user> (require '[tech.v3.dataset :as ds])
 nil
 ;; We support many file formats
 user> (def csv-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv"))
@@ -56,10 +54,13 @@ test/data/stocks.csv [5 3]:
 |   MSFT | 2000-03-01 | 43.22 |
 |   MSFT | 2000-04-01 | 28.37 |
 |   MSFT | 2000-05-01 | 25.45 |
+
+user> (require '[tech.v3.libs.poi])
+nil
 user> (def xls-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
 #'user/xls-data
 user> (ds/head xls-data)
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
 
 | column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
 |----------|------------|-----------|--------|---------------|------|------------|--------|
@@ -69,11 +70,11 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_
 |      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 15/10/2017 | 3549.0 |
 |      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 16/08/2016 | 2468.0 |
 
-;;And you can have fine grained control over parsing
+;;And you have fine grained control over parsing
 
 user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"
                              {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}}))
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
 
 | column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
 |----------|------------|-----------|--------|---------------|------|------------|--------|
@@ -86,8 +87,9 @@ user>
 
 
 ;;Loading from the web is no problem
+user>
 user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat"
-                                  {:header-row? false}))
+                                  {:header-row? false :file-type :csv}))
 #'user/airports
 user> (ds/head airports)
 https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
@@ -119,25 +121,25 @@ user> (take 2 (ds/mapseq-reader csv-data))
 ;;You can look up columns via `get`, keyword lookup, and invoking the dataset as a function on
 ;;a key (a column name). `keys` and `vals` retrieve respective sequences of column names and columns.
 ;;The functions `assoc` and `dissoc` work to define new associations to conveniently
-;;add, update, or remove columns, with add/update semantics defined by`tech.ml.dataset/add-or-update-column`.
+;;add, update, or remove columns, with add/update semantics defined by`tech.v3.dataset/add-or-update-column`.
 
 ;;Column data is stored in primitive arrays (even most datetimes!) and strings are stored
 ;;in string tables.  You can load really large datasets with this thing!
 
 ;;Columns themselves are sequences of their entries.
 user> (csv-data "symbol")
-#tech.ml.dataset.column<string>[560]
+#tech.v3.dataset.column<string>[560]
 symbol
 [MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
 user> (xls-data "Gender")
-#tech.ml.dataset.column<string>[1000]
+#tech.v3.dataset.column<string>[1000]
 Gender
 [Female, Female, Male, Female, Female, Male, Female, Female, Female, Female, Female, Male, Female, Male, Female, Female, Female, Female, Female, Female, ...]
 user> (take 5 (xls-data "Gender"))
 ("Female" "Female" "Male" "Female" "Female")
 
 
-;;Datasets and columns implement the clojure metadata interfaces (`meta`, `withMeta`).
+;;Datasets and columns implement the clojure metadata interfaces (`meta`, `with-meta`, `vary-meta`)
 
 ;;You can access a sequence of columns of a dataset with `ds/columns`, or `vals` like a map,
 ;;and access the metadata with `meta`:
@@ -161,7 +163,7 @@ user> (for [[k column] csv-data]
 
 user> (let [{:strs [symbol date]} csv-data]
         [symbol (meta date)])
-[#tech.ml.dataset.column<string>[560]
+[#tech.v3.dataset.column<string>[560]
 symbol
 [MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
  {:name "date", :size 560, :datatype :packed-local-date}]
@@ -201,7 +203,7 @@ user> (ds/brief csv-data)
 ;;Another view of that brief:
 
 user> (ds/descriptive-stats csv-data)
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv: descriptive-stats [3 10]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv: descriptive-stats [3 10]:
 
 | :col-name |          :datatype | :n-valid | :n-missing |       :min |      :mean | :mode |       :max | :standard-deviation |      :skew |
 |-----------|--------------------|----------|------------|------------|------------|-------|------------|---------------------|------------|
@@ -219,7 +221,7 @@ user> (-> csv-data
           (assoc "always-ten" 10) ;scalar values are expanded as needed
           (assoc "random"   (repeatedly (ds/row-count csv-data) #(rand-int 100)))
           ds/head)
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 5]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 5]:
 
 | symbol |       date | price | always-ten | random |
 |--------|------------|-------|------------|--------|
@@ -232,7 +234,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 user> (-> csv-data
           (dissoc "price")
           ds/head)
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 2]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 2]:
 
 | symbol |       date |
 |--------|------------|
@@ -250,7 +252,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 user> (let [new-cols [["always-ten" 10] ["new-price" (map inc (csv-data "price"))]]
             new-data (into (dissoc csv-data "price") new-cols)]
             (ds/head new-data))
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 4]:
+https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 4]:
 
 | symbol |       date | always-ten | new-price |
 |--------|------------|------------|-----------|
@@ -276,9 +278,14 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 ### Arrow Dependencies
 
 ```clojure
+;; project-clj -
+
 [org.apache.arrow/arrow-memory-netty "1.0.0"]
 [org.apache.arrow/arrow-memory-core "1.0.0"]
 [org.apache.arrow/arrow-vector "1.0.0" :exclusions [commons-codec]]
+
+;;require -
+(require '[tech.v3.libs.arrow])
 ```
 
 ### Parquet Support
@@ -297,11 +304,10 @@ org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 
 ## More Documentation
 
-* Code-oriented [walkthrough](docs/walkthrough.md) and [quick reference](docs/quick-reference.md).
-* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and `tech.ml.dataset`
+* Code-oriented [walkthrough](topics/walkthrough.md) and [quick reference](topics/quick-reference.md).
+* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of `tech.v3.dataset`
 * [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 * [Simple Data Exploration Example](https://github.com/cnuernber/simpledata)
-* [Boulder Rescue Response Times Exploration](https://nextjournal.com/chrisn/boulder-rescue-response-times/)
 
 
 ## Questions, Community
@@ -314,8 +320,8 @@ org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 
 * [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
 * [regression pipelines](test/tech/ml/dataset/ames_test.clj)
-* [tech.v2.datatype](https://github.com/techascent/tech.datatype) numeric subsystem
-* [datatype cheatsheet](https://github.com/techascent/tech.datatype/blob/master/docs/cheatsheet.md)
+* [tech.v3.datatype](https://github.com/cnuernber/dtype-next) numeric subsystem
+* [datatype cheatsheet](https://github.com/techascent/tech.datatype/blob/master/topics/cheatsheet.md)
 
 
 ## Keywords
