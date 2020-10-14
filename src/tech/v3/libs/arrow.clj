@@ -1,6 +1,7 @@
 (ns tech.v3.libs.arrow
   "Support for reading/writing arrow files.  Users must include the apache arrow
   dependencies in their project:
+
 ```clojure
 [org.apache.arrow/arrow-memory-netty \"1.0.0\"]
 [org.apache.arrow/arrow-memory-core \"1.0.0\"]

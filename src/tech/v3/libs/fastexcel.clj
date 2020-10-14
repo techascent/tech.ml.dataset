@@ -15,7 +15,7 @@
 (set! *warn-on-reflection* true)
 
 
-(def xlsx-file "test/data/file_example_XLSX_1000.xlsx")
+(def ^:private xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 
 
 (defn- cell-type->keyword

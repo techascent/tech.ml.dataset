@@ -1,16 +1,14 @@
 (ns tech.v3.dataset.tensor
   "Conversion mechanisms from dataset to tensor and back as will as zerocopy
   bindings to smile dense matrixes.  Smile has full BLAS/LAPACK bindings so this
-  makes it easy to move from a dataset into transformations such as PCA and back.
-
-  In order to use pca you need to add either latest javacpp openblas support
-  smile mkl support to your project:
+  makes it easy to move from a dataset into transformations such as PCA and back. In
+  order to use pca you need to add either latest javacpp openblas support smile mkl
+  support to your project:
 
 ```clojure
-   [org.bytedeco/openblas \"0.3.10-1.5.4\"]
-   [org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
-```
-  "
+[org.bytedeco/openblas \"0.3.10-1.5.4\"]
+[org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
+```"
   (:require [tech.v3.tensor :as dtt]
             [tech.v3.tensor.dimensions :as dims]
             [tech.v3.datatype.statistics :as stats]
