@@ -329,8 +329,7 @@
             (let [parsed-value (parse-fn value)]
               (cond
                 (= parsed-value parse-failure)
-                (let [start-idx (argops/index-of container-dtype
-                                                 (mapv first promotion-list))
+                (let [start-idx (argops/index-of (mapv first promotion-list) container-dtype)
                       n-elems (.size promotion-list)
                       next-idx (if (== start-idx -1)
                                  -1

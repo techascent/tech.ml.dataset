@@ -497,9 +497,9 @@
          [rhs-offset rhs-indexes]
          (cond
            (#{:< :<=} asof-op)
-           (asof-lt asof-op lhs-reader rhs-reader)
+           (asof-lt (keyword "tech.numerics" (name asof-op)) lhs-reader rhs-reader)
            (#{:> :>=} asof-op)
-           (asof-gt asof-op lhs-reader rhs-reader)
+           (asof-gt (keyword "tech.numerics" (name asof-op)) lhs-reader rhs-reader)
            (= asof-op :nearest)
            (asof-nearest lhs-reader rhs-reader)
            :else

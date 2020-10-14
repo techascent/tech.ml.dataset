@@ -1,6 +1,7 @@
 (ns tech.v3.dataset-test
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.tensor :as ds-tens]
@@ -424,10 +425,11 @@
                               (ds/column-cast :price price-dtype)
                               (ds/column :price))))
         date-dtype (dtype/get-datatype (ds :date))
-        _ (is (dfn/equals (ds :date)
+        _ (is (dfn/equals (dtype-dt/datetime->milliseconds (ds :date))
                           (-> (ds/column-cast ds :date :string)
                               (ds/column-cast :date date-dtype)
-                              (ds/column :date))))]
+                              (ds/column :date)
+                              (dtype-dt/datetime->milliseconds))))]
     ;;Custom cast fn
     (is (= [40 36 43 28 25]
            (->> (ds/column-cast ds :price [:int32 #(Math/round (double %))])

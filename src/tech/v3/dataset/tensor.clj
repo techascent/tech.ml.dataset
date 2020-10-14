@@ -413,7 +413,7 @@
              eig-data (.eigen cov-mat false true true)
              eigenvalues (.-wr eig-data)
              ;;Sort DESCENDING to match svd decomposition.
-             eig-order (argops/argsort :> eigenvalues)]
+             eig-order (argops/argsort :tech.numerics/> eigenvalues)]
          {:means means
           :method :cov
           :eigenvalues (dtype/indexed-buffer eig-order (.-wr eig-data))
