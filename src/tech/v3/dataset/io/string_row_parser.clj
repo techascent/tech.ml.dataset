@@ -1,4 +1,6 @@
 (ns tech.v3.dataset.io.string-row-parser
+  "Parsing functions based on raw data that is represented by a sequence
+  of string arrays."
   (:require [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.datatype :as dtype]

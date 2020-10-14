@@ -1,6 +1,15 @@
 (ns tech.v3.dataset.math
   "Various mathematic transformations of datasets such as building correlation tables,
-  pca, and normalizing columns to have mean of 0 and variance of 1."
+  pca, and normalizing columns to have mean of 0 and variance of 1.
+
+  In order to use pca you need to add either latest javacpp openblas support
+  smile mkl support to your project:
+
+```clojure
+   [org.bytedeco/openblas \"0.3.10-1.5.4\"]
+   [org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
+```
+  "
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
