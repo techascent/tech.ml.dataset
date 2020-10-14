@@ -27,8 +27,8 @@
 (set! *warn-on-reflection* true)
 
 
-(def xls-file "test/data/file_example_XLS_1000.xls")
-(def xlsx-file "test/data/file_example_XLSX_1000.xlsx")
+(def ^:private xls-file "test/data/file_example_XLS_1000.xls")
+(def ^:private xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 
 
 (defn- cell-type->keyword
@@ -97,6 +97,11 @@
 
 
 (defn input->workbook
+  "Given an input data source, return an implementation of
+  `tech.v3.dataset/Spreadsheet$Workbook`.  This interface allows you
+  to iterate through sheets without necessarily parsing them.
+  Once you have a spreadsheet, use `tech.v3.dataset.io.spreadsheet/sheet->dataset`
+  to get a dataset."
   (^Spreadsheet$Workbook [input options]
    (if (instance? Spreadsheet$Workbook input)
      input
@@ -122,11 +127,14 @@
 
 
 (defn workbook->datasets
-  "Returns a sequence of dataset named after the sheets.  This supports a subset of the arguments
-  for tech.ml.dataset/->dataset.  Specifically:
-  :header-row?
-  :parser-fn
-  :parser-scan-len"
+  "Returns a sequence of dataset named after the sheets.  This supports a subset of
+  the arguments for tech.v3.dataset/->dataset.  Specifically:
+
+  * `:header-row?`
+  * `:parser-fn`
+  * `:parser-scan-len`
+
+  Returns a non-lazy sequence of datasets."
   ([input options]
    (let [workbook (input->workbook input options)]
      (try

@@ -56,7 +56,7 @@
                       :source-paths ["src"]
                       :output-path "docs"
                       :doc-paths ["topics"]
-                      :source-uri "https://github.com/techascent/tech.ml.dataset/blob/dtype-next/{filepath}#L{line}"
+                      :source-uri "https://github.com/techascent/tech.ml.dataset/blob/main/{filepath}#L{line}"
                       :namespaces [tech.v3.dataset
                                    tech.v3.dataset.math
                                    tech.v3.dataset.tensor

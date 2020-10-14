@@ -1,4 +1,11 @@
 (ns tech.v3.libs.arrow
+  "Support for reading/writing arrow files.  Users must include the apache arrow
+  dependencies in their project:
+```clojure
+[org.apache.arrow/arrow-memory-netty \"1.0.0\"]
+[org.apache.arrow/arrow-memory-core \"1.0.0\"]
+[org.apache.arrow/arrow-vector \"1.0.0\" :exclusions [commons-codec]]
+```"
   (:require [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.datatype.mmap :as mmap]
             [tech.v3.datatype.native-buffer :as native-buffer]))
@@ -24,9 +31,7 @@
   description that prints well to the REPL.  Useful for quickly seeing what is in
   an Arrow stream.  Returned value can be used to construct datasets via
   in-place/parse-next-dataset.
-  See source code to stream->dataset-seq-inplace.
-  The default resrouce-type of the file is :gc as this is intended to be used
-  for explorational purposes."
+  See source code to stream->dataset-seq-inplace."
   [fname & [options]]
   (let [file-data (mmap/mmap-file fname (merge {:resource-type :gc} options))]
     {:file-data (native-buffer/native-buffer->map file-data)

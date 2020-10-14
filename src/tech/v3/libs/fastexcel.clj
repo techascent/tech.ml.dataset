@@ -1,4 +1,5 @@
 (ns tech.v3.libs.fastexcel
+  "Fast xlsx parsing."
   (:require [tech.io :as io]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
@@ -87,6 +88,11 @@
 
 
 (defn input->workbook
+  "Given an input data source, return an implementation of
+  `tech.v3.dataset/Spreadsheet$Workbook`.  This interface allows you
+  to iterate through sheets without necessarily parsing them.
+  Once you have a spreadsheet, use `tech.v3.dataset.io.spreadsheet/sheet->dataset`
+  to get a dataset."
   (^Spreadsheet$Workbook [input]
    (input->workbook input {}))
   (^Spreadsheet$Workbook [input options]
@@ -102,11 +108,14 @@
 
 
 (defn workbook->datasets
- "Returns a sequence of dataset named after the sheets.  This supports a subset of the arguments
-  for tech.v3.dataset/->dataset.  Specifically:
-  :header-row?
-  :parser-fn
-  :parser-scan-len"
+  "Returns a sequence of dataset named after the sheets.  This supports a subset of
+  the arguments for tech.v3.dataset/->dataset.  Specifically:
+
+  * `:header-row?`
+  * `:parser-fn`
+  * `:parser-scan-len`
+
+  Returns a non-lazy sequence of datasets."
   ([input options]
    (let [workbook (input->workbook input options)]
      (try

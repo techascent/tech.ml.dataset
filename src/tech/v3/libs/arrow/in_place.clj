@@ -162,6 +162,7 @@
 
 
 (defn parse-message-printable
+  "Parse the message and return something that you can look at in the repl."
   [msg]
   (let [retval (parse-message msg)]
     (cond

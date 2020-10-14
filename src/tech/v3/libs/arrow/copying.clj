@@ -186,6 +186,7 @@
 
 
 (defn write-dataset-to-stream!
+  "Write a dataset as an arrow stream file.  File will contain one record set."
   ([ds path options]
    (let [ds (ds-base/ensure-dataset-string-tables ds)
          ds (datetime-cols-to-millis-from-epoch ds options)
@@ -228,7 +229,7 @@
    (write-dataset-seq-to-stream! ds path {})))
 
 
-(defn write-dataset-to-file!
+(defn- write-dataset-to-file!
   "EXPERIMENTAL & NOT WORKING - please use streaming formats for now."
   ([ds path options]
    (let [ds (ds-base/ensure-dataset-string-tables ds)
@@ -372,7 +373,7 @@
 
 (defn stream->dataset-seq-copying
   "Read a complete arrow file lazily.  Each data record is copied into an
-  independent dataset."
+  independent dataset.  Stream is closed when the last dataset is loaded."
   ([path options]
    (let [istream (io/input-stream path)
          reader (ArrowStreamReader. istream (arrow-alloc/allocator))]
@@ -382,6 +383,8 @@
 
 
 (defn read-stream-dataset-copying
+  "Read a single record batch and return a dataset.  It is an error if there
+  are more record batches in the file."
   ([path options]
    (with-open [istream (io/input-stream path)
                reader (ArrowStreamReader. istream (arrow-alloc/allocator))]
