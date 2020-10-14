@@ -67,7 +67,9 @@
                                    tech.v3.dataset.io.datetime
                                    tech.v3.dataset.io.univocity
                                    tech.v3.dataset.io.string-row-parser
-                                   ]}}
+                                   tech.v3.libs.poi
+                                   tech.v3.libs.fastexcel
+                                   tech.v3.libs.arrow]}}
              ;;No neanderthal on travis
              :travis {:dependencies [[criterium "0.4.5"]
                                      [http-kit "2.3.0"]
