@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "5.00-alpha-2"
+(defproject techascent/tech.ml.dataset "5.00-alpha-3-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
