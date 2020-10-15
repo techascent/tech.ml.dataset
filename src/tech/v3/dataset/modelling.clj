@@ -4,10 +4,17 @@
   categorical -> number and one-hot transformation pathways"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.base :as ds-base]
-            [clojure.set :as c-set]
-            [tech.v3.dataset.categorical :as categorical])
-  (:import [tech.v3.datatype ObjectReader]))
+            [tech.v3.dataset.readers :as ds-readers]
+            [tech.v3.dataset.categorical :as categorical]
+            [clojure.set :as c-set])
+  (:import [tech.v3.datatype ObjectReader]
+           [java.util List]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (defn inference-column?
@@ -52,6 +59,16 @@
   value back to the label that generated that value."
   [dataset & [label-columns]]
   (c-set/map-invert (inference-target-label-map dataset label-columns)))
+
+
+
+(defn dataset->categorical-xforms
+  "Given a dataset, return a map of column-name->xform information."
+  [ds]
+  (->> (concat (categorical/dataset->categorical-maps ds)
+               (categorical/dataset->one-hot-maps ds))
+       (map (juxt :src-column identity))
+       (into {})))
 
 
 (defn num-inference-classes
@@ -167,3 +184,18 @@
       "Incorrect number of columns (%d) in dataset for labels transformation"
       (ds-base/column-count rev-mapped))
     rev-mapped))
+
+
+(defn probability-distributions->label-column
+  "Given a dataset that has columns in which the column names describe labels and the rows describe
+  a probability distribution, create a label column by taking the max value in each row and assign
+  column that row value."
+  [prob-ds dst-colname]
+  (let [^List cnames (vec (ds-base/column-names prob-ds))
+        row-rdr (ds-readers/value-reader prob-ds)
+        col-dtype (reduce casting/widest-datatype
+                          (map dtype/elemwise-datatype cnames))]
+    (assoc prob-ds dst-colname
+           (dtype/emap #(cnames (argops/argmax %))
+                       col-dtype
+                       row-rdr))))
