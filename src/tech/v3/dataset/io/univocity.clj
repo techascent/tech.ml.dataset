@@ -149,15 +149,16 @@
   apply here.
 
   options:
-  :column-whitelist - either sequence of string column names or sequence of column
+
+  - `:column-whitelist` - either sequence of string column names or sequence of column
      indices of columns to whitelist.
-  :column-blacklist - either sequence of string column names or sequence of column
+  - `:column-blacklist` - either sequence of string column names or sequence of column
      indices of columns to blacklist.
-  :num-rows - Number of rows to read
-  :separator - Add a character separator to the list of separators to auto-detect.
-  :max-chars-per-column - Defaults to 4096.  Columns with more characters that this
+  - `:num-rows` - Number of rows to read
+  - `:separator` - Add a character separator to the list of separators to auto-detect.
+  - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
      will result in an exception.
-  :max-num-columns - Defaults to 8192.  CSV,TSV files with more columns than this
+  - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301"
   ([input options]
