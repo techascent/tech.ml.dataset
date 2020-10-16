@@ -134,24 +134,24 @@
   "Get the first n row of a dataset.  Equivalent to
   `(select-rows ds (range n)).  Arguments are reversed, however, so this can
   be used in ->> operators."
-  ([n dataset]
+  ([dataset n]
    (-> (select-rows dataset (range n))
        (vary-meta clojure.core/assoc :print-index-range (range n))))
   ([dataset]
-   (head 5 dataset)))
+   (head dataset 5)))
 
 
 (defn tail
   "Get the last n rows of a dataset.  Equivalent to
   `(select-rows ds (range ...)).  Argument order is dataset-last, however, so this can
   be used in ->> operators."
-  ([n dataset]
+  ([dataset n]
    (let [n-rows (row-count dataset)
          start-idx (max 0 (- n-rows (long n)))]
      (-> (select-rows dataset (range start-idx n-rows))
          (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([dataset]
-   (tail 5 dataset)))
+   (tail dataset 5)))
 
 
 (defn shuffle
@@ -161,7 +161,7 @@
 
 (defn sample
   "Sample n-rows from a dataset.  Defaults to sampling *without* replacement."
-  ([n replacement? dataset]
+  ([dataset replacement? n]
    (let [row-count (row-count dataset)
          n (long n)]
      (-> (if replacement?
@@ -169,10 +169,10 @@
            (select-rows dataset (take (min n row-count)
                                       (clojure.core/shuffle (range row-count)))))
          (vary-meta clojure.core/assoc :print-index-range (range n)))))
-  ([n dataset]
-   (sample n false dataset))
+  ([dataset n]
+   (sample dataset false n))
   ([dataset]
-   (sample 5 false dataset)))
+   (sample dataset false 5)))
 
 
 (defn rand-nth
@@ -220,7 +220,8 @@
     filter-fn-or-ds
     (sequential? filter-fn-or-ds)
     (select-columns dataset filter-fn-or-ds)
-    (= :all filter-fn-or-ds)
+    (or (nil? filter-fn-or-ds)
+        (= :all filter-fn-or-ds))
     dataset
     (instance? IFn filter-fn-or-ds)
     (filter-fn-or-ds dataset)
