@@ -123,6 +123,10 @@
   (dtype/shape dataset))
 
 
+(export-symbols tech.v3.dataset.column
+                new-column)
+
+
 (export-symbols tech.v3.dataset.impl.dataset
                 new-dataset)
 

@@ -72,6 +72,19 @@
   (metadata-filter dataset :inference-target?))
 
 
+(defn probability-distribution
+  "Return the columns of the dataset that comprise the probability distribution
+  after classification."
+  [dataset]
+  (metadata-filter dataset #(= :probability-distribution (:column-type %))))
+
+
+(defn prediction
+  "Return the columns of the dataset marked as predictions."
+  [dataset]
+  (metadata-filter dataset #(= :prediction (:column-type %))))
+
+
 (defn feature
   "Return a dataset container only the columns which have not been marked as inference
   columns."

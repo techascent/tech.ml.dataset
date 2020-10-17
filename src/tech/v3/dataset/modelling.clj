@@ -9,7 +9,8 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.categorical :as categorical]
-            [clojure.set :as c-set])
+            [tech.v3.dataset.column :as ds-col]
+            [clojure.set :as set])
   (:import [tech.v3.datatype ObjectReader]
            [java.util List]))
 
@@ -58,7 +59,7 @@
   sequence container 1 label column, generate a reverse map that maps from a dataset
   value back to the label that generated that value."
   [dataset & [label-columns]]
-  (c-set/map-invert (inference-target-label-map dataset label-columns)))
+  (set/map-invert (inference-target-label-map dataset label-columns)))
 
 
 
@@ -187,15 +188,26 @@
 
 
 (defn probability-distributions->label-column
-  "Given a dataset that has columns in which the column names describe labels and the rows describe
-  a probability distribution, create a label column by taking the max value in each row and assign
-  column that row value."
+  "Given a dataset that has columns in which the column names describe labels and the
+  rows describe a probability distribution, create a label column by taking the max
+  value in each row and assign column that row value."
   [prob-ds dst-colname]
   (let [^List cnames (vec (ds-base/column-names prob-ds))
         row-rdr (ds-readers/value-reader prob-ds)
-        col-dtype (reduce casting/widest-datatype
-                          (map dtype/elemwise-datatype cnames))]
-    (assoc prob-ds dst-colname
-           (dtype/emap #(cnames (argops/argmax %))
-                       col-dtype
-                       row-rdr))))
+        cat-map (categorical/create-categorical-map
+                 (->> (map-indexed vector cnames)
+                      (into {})
+                      (set/map-invert))
+                 dst-colname
+                 :float64)
+        retval
+        (assoc prob-ds dst-colname
+               (ds-col/new-column
+                dst-colname
+                (dtype/emap argops/argmax
+                            :float64
+                            row-rdr)
+                {:categorical? true
+                 :categorical-map cat-map}
+                (ds-base/missing prob-ds)))]
+    retval))

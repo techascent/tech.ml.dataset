@@ -44,21 +44,29 @@
 (defrecord CategoricalMap [lookup-table src-column result-datatype])
 
 
+(defn create-categorical-map
+  [lookup-table src-colname result-datatype]
+    (map->CategoricalMap
+   {:lookup-table lookup-table
+    :src-column src-colname
+    :result-datatype result-datatype}))
+
+
 (defn fit-categorical-map
   "Given a column, map it into an numeric space via a discrete map of values
   to integers.  This fits the categorical transformation onto the column and returns
   the transformation."
   ^CategoricalMap [dataset colname & [table-args res-dtype]]
-  (map->CategoricalMap
-   {:lookup-table (reduce (fn [categorical-map col-val]
-                            (if (get categorical-map col-val)
-                              categorical-map
-                              (assoc categorical-map col-val
-                                     (long (count categorical-map)))))
-                          (make-categorical-map-from-table-args table-args)
-                          (col-proto/unique (ds-base/column dataset colname)))
-    :src-column colname
-    :result-datatype (or res-dtype :float64)}))
+  (create-categorical-map
+   (reduce (fn [categorical-map col-val]
+             (if (get categorical-map col-val)
+               categorical-map
+               (assoc categorical-map col-val
+                      (long (count categorical-map)))))
+           (make-categorical-map-from-table-args table-args)
+           (col-proto/unique (ds-base/column dataset colname)))
+   colname
+   (or res-dtype :float64)))
 
 
 (defn transform-categorical-map
