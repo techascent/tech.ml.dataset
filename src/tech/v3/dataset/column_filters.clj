@@ -9,9 +9,13 @@
   (:require [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
-            [tech.v3.dataset.base :as ds-base])
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.column :as ds-col])
   (:import [clojure.lang IFn])
   (:refer-clojure :exclude [boolean update]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (defn column-filter
@@ -21,7 +25,8 @@
   (->> (ds-base/columns dataset)
        (filter filter-fn)
        (map (comp :name meta))
-       (ds-base/select-columns dataset)))
+       (ds-base/select-columns dataset)
+       (ds-base/check-empty)))
 
 
 (defn metadata-filter
@@ -31,7 +36,8 @@
   (->> (map meta (ds-base/columns dataset))
        (filter filter-fn)
        (map :name)
-       (ds-base/select-columns dataset)))
+       (ds-base/select-columns dataset)
+       (ds-base/check-empty)))
 
 
 (defn categorical
@@ -92,6 +98,18 @@
   (metadata-filter dataset (complement :inference-target?)))
 
 
+(defn missing
+  "Return a dataset with only columns have have missing values"
+  [dataset]
+  (column-filter dataset #(not (.isEmpty (ds-col/missing %)))))
+
+
+(defn no-missing
+  "Return a dataset with only columns that have no missing values."
+  [dataset]
+  (column-filter dataset #(.isEmpty (ds-col/missing %))))
+
+
 (defn datetime
   "Return a dataset containing only the datetime columns."
   [dataset]
@@ -101,8 +119,11 @@
 (defn intersection
   "Return only columns for rhs for which an equivalently named column exists in lhs."
   [lhs-ds rhs-ds]
-  (let [lhs-names (set (map (comp :name meta) (ds-base/columns lhs-ds)))]
-    (metadata-filter rhs-ds (comp lhs-names :name))))
+  (if (or (nil? lhs-ds)
+          (nil? rhs-ds))
+    nil
+    (let [lhs-names (set (map (comp :name meta) (ds-base/columns lhs-ds)))]
+      (metadata-filter rhs-ds (comp lhs-names :name)))))
 
 
 (defn union

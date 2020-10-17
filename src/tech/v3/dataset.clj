@@ -65,6 +65,7 @@
                 missing
                 drop-missing
                 add-or-update-column
+                assoc-ds
                 group-by->indexes
                 group-by-column->indexes
                 group-by

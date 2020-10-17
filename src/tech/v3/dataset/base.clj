@@ -47,20 +47,25 @@
 
 (defn row-count
   ^long [dataset-or-col]
-  (if (ds-impl/dataset? dataset-or-col)
-    (second (dtype/shape dataset-or-col))
-    (dtype/ecount dataset-or-col)))
+  (if dataset-or-col
+    (if (ds-impl/dataset? dataset-or-col)
+      (second (dtype/shape dataset-or-col))
+      (dtype/ecount dataset-or-col))
+    0))
 
 
 (defn column-count
   ^long [dataset]
-  (first (dtype/shape dataset)))
+  (if dataset
+    (first (dtype/shape dataset))
+    0))
 
 
 (defn columns
   "Return sequence of all columns in dataset."
   [dataset]
-  (ds-proto/columns dataset))
+  (when dataset
+    (ds-proto/columns dataset)))
 
 
 (defn column
@@ -79,7 +84,8 @@
 
 (defn has-column?
   [dataset column-name]
-  (contains? dataset column-name))
+  (when dataset
+    (contains? dataset column-name)))
 
 
 (defn columns-with-missing-seq
@@ -104,7 +110,9 @@
 (defn add-column
   "Add a new column. Error if name collision"
   [dataset column]
-  (ds-proto/add-column dataset column))
+  (if dataset
+    (ds-proto/add-column dataset column)
+    (ds-impl/new-dataset [column])))
 
 
 (defn new-column
@@ -124,7 +132,11 @@
 ```
   "
   [dataset col-name]
-  (dissoc dataset col-name))
+  (let [retval
+        (dissoc dataset col-name)]
+    (if (== 0 (column-count retval))
+      nil
+      retval)))
 
 
 (defn remove-columns
@@ -136,13 +148,17 @@
 (defn drop-columns
   "Same as remove-columns"
   [dataset col-name-seq]
-  (remove-columns dataset col-name-seq))
+  (when dataset
+    (remove-columns dataset col-name-seq)))
 
 
 (defn update-column
   "Update a column returning a new dataset.  update-fn is a column->column
   transformation.  Error if column does not exist."
   [dataset col-name update-fn]
+  (errors/when-not-error
+   dataset
+   "No dataset passed in to update-column.")
   (ds-proto/update-column dataset col-name update-fn))
 
 
@@ -161,6 +177,9 @@
 (defn update-columns
   "Update a sequence of columns."
   [dataset column-name-seq update-fn]
+  (errors/when-not-error
+   dataset
+   "No dataset passed in to update-columns.")
   (reduce (fn [dataset colname]
             (update-column dataset colname update-fn))
           dataset
@@ -170,9 +189,19 @@
 (defn add-or-update-column
   "If column exists, replace.  Else append new column."
   ([dataset colname column]
-   (ds-proto/add-or-update-column dataset colname column))
+   (if dataset
+     (ds-proto/add-or-update-column dataset colname column)
+     (add-column nil (vary-meta column assoc :name colname))))
   ([dataset column]
    (add-or-update-column dataset (ds-col/column-name column) column)))
+
+
+(defn assoc-ds
+  "If dataset is not nil, calls `clojure.core/assoc`. Else creates a new empty dataset and
+  then calls `clojure.core/assoc`.  Guaranteed to return a dataset (unlike assoc)."
+  [dataset cname cdata & args]
+  (apply clojure.core/assoc (or dataset (ds-impl/new-dataset []))
+         cname cdata args))
 
 
 (defn select
@@ -190,7 +219,10 @@
   (let [index-seq (if (number? index-seq)
                     [index-seq]
                     index-seq)]
-    (ds-proto/select dataset colname-seq index-seq)))
+    (when-not (or (nil? colname-seq)
+                  (and (sequential? colname-seq)
+                       (nil? (seq colname-seq))))
+      (ds-proto/select dataset colname-seq index-seq))))
 
 
 (defn unordered-select
@@ -285,20 +317,14 @@
   (ds-proto/supported-column-stats dataset))
 
 
-(defn check-dataset-wrong-position
-  [item]
-  (when (instance? Dataset item)
-    (throw (Exception. "Dataset now must be passed as last option.
-This is an interface change and we do apologize!"))))
-
-
 (defn filter
   "dataset->dataset transformation.  Predicate is passed a map of
   colname->column-value."
   ([dataset predicate]
-   (->> (ds-readers/mapseq-reader dataset)
-        (argops/argfilter predicate)
-        (select dataset :all))))
+   (when dataset
+     (->> (ds-readers/mapseq-reader dataset)
+          (argops/argfilter predicate)
+          (select dataset :all)))))
 
 
 (defn filter-column
@@ -307,29 +333,31 @@ This is an interface change and we do apologize!"))))
   be used as if the predicate is #(= value %).
   Returns a dataset."
   [dataset colname predicate]
-  (let [predicate (if (instance? IFn predicate)
-                    predicate
-                    (let [pred-dtype (dtype/get-datatype predicate)]
-                      (cond
-                        (casting/integer-type? pred-dtype)
-                        (let [predicate (long predicate)]
-                          (fn [^long arg] (== arg predicate)))
-                        (casting/float-type? pred-dtype)
-                        (let [predicate (double predicate)]
-                          (fn [^double arg] (== arg predicate)))
-                        :else
-                        #(= predicate %))))]
-    (->> (get dataset colname)
-         (argops/argfilter predicate)
-         (select dataset :all))))
+  (when dataset
+    (let [predicate (if (instance? IFn predicate)
+                      predicate
+                      (let [pred-dtype (dtype/get-datatype predicate)]
+                        (cond
+                          (casting/integer-type? pred-dtype)
+                          (let [predicate (long predicate)]
+                            (fn [^long arg] (== arg predicate)))
+                          (casting/float-type? pred-dtype)
+                          (let [predicate (double predicate)]
+                            (fn [^double arg] (== arg predicate)))
+                          :else
+                          #(= predicate %))))]
+      (->> (get dataset colname)
+           (argops/argfilter predicate)
+           (select dataset :all)))))
 
 
 (defn group-by->indexes
   "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
   is an in-order contiguous group of indexes."
   ([dataset key-fn]
-   (->> (ds-readers/mapseq-reader dataset)
-        (argops/arggroup-by key-fn {:unordered? false}))))
+   (when dataset
+     (->> (ds-readers/mapseq-reader dataset)
+          (argops/arggroup-by key-fn {:unordered? false})))))
 
 
 (defn group-by
@@ -337,9 +365,10 @@ This is an interface change and we do apologize!"))))
   a map of colname->column-value.  Selecting which columns are used in the key-fn
   using column-name-seq is optional but will greatly improve performance."
   ([dataset key-fn]
-   (->> (group-by->indexes dataset key-fn)
-        (pmap (fn [[k v]] [k (select dataset :all v)]))
-        (into {}))))
+   (when dataset
+     (->> (group-by->indexes dataset key-fn)
+          (pmap (fn [[k v]] [k (select dataset :all v)]))
+          (into {})))))
 
 
 (defn group-by-column->indexes
@@ -353,20 +382,22 @@ This is an interface change and we do apologize!"))))
 (defn group-by-column
   "Return a map of column-value->dataset."
   [dataset colname]
-  (->> (group-by-column->indexes dataset colname)
-       (pmap (fn [[k v]]
-               [k (-> (select dataset :all v)
-                      (set-dataset-name k))]))
-       (into {})))
+  (when dataset
+    (->> (group-by-column->indexes dataset colname)
+         (pmap (fn [[k v]]
+                 [k (-> (select dataset :all v)
+                        (set-dataset-name k))]))
+         (into {}))))
 
 
 (defn sort-by
   "Sort a dataset by a key-fn and compare-fn."
   ([dataset key-fn compare-fn]
-   (->> (ds-readers/mapseq-reader dataset)
-        (dtype/emap key-fn :object)
-        (argops/argsort compare-fn)
-        (select dataset :all)))
+   (when dataset
+     (->> (ds-readers/mapseq-reader dataset)
+          (dtype/emap key-fn :object)
+          (argops/argsort compare-fn)
+          (select dataset :all))))
   ([dataset key-fn]
    (sort-by dataset key-fn nil)))
 
@@ -374,8 +405,9 @@ This is an interface change and we do apologize!"))))
 (defn sort-by-column
   "Sort a dataset by a given column using the given compare fn."
   ([dataset colname compare-fn]
-   (->> (argops/argsort compare-fn (dataset colname))
-        (select dataset :all)))
+   (when dataset
+     (->> (argops/argsort compare-fn (dataset colname))
+          (select dataset :all))))
   ([dataset colname]
    (sort-by-column dataset colname nil)))
 
@@ -385,8 +417,13 @@ This is an interface change and we do apologize!"))))
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
                       (remove nil?)
                       seq)]
-    (if (== 1 (count datasets))
+
+    (cond
+      (nil? datasets)
+      nil
+      (== 1 (count datasets))
       (first datasets)
+      :else
       (when-let [dataset (first datasets)]
         (let [column-list
               (->> datasets
@@ -439,6 +476,14 @@ This is an interface change and we do apologize!"))))
                (#(with-meta % {:label-map label-map}))))))))
 
 
+(defn check-empty
+  [dataset]
+  (if (== 0 (column-count dataset))
+    nil
+    dataset))
+
+
+
 (defn concat-inplace
   "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
   same columns.  Result column datatypes will be a widening cast of the datatypes."
@@ -464,9 +509,8 @@ This is an interface change and we do apologize!"))))
 
 
 (defn concat
-  "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
-  same columns.  Result column datatypes will be a widening cast of the datatypes.
-  Also see concat-copying as this may be faster in many situations."
+  "Concatenate datasets in place.  See also concat-copying as it may be more
+  efficient for your use case."
   [dataset & datasets]
   (apply concat-inplace dataset datasets))
 
@@ -487,10 +531,11 @@ This is an interface change and we do apologize!"))))
             :or {keep-fn #(first %2)}
              :as _options}
     map-fn]
-   (->> (group-by->indexes dataset map-fn)
-        (map (fn [[k v]] (keep-fn k v)))
-        (sorted-int32-sequence)
-        (select-rows dataset)))
+   (when dataset
+     (->> (group-by->indexes dataset map-fn)
+          (map (fn [[k v]] (keep-fn k v)))
+          (sorted-int32-sequence)
+          (select-rows dataset))))
   ([dataset map-fn]
    (unique-by dataset {} map-fn)))
 
@@ -505,10 +550,11 @@ This is an interface change and we do apologize!"))))
      :or {keep-fn #(first %2)}
      :as _options}
     colname]
-   (->> (group-by-column->indexes dataset colname)
-        (map (fn [[k v]] (keep-fn k v)))
-        (sorted-int32-sequence)
-        (select dataset :all)))
+   (when dataset
+     (->> (group-by-column->indexes dataset colname)
+          (map (fn [[k v]] (keep-fn k v)))
+          (sorted-int32-sequence)
+          (select dataset :all))))
   ([dataset colname]
    (unique-by-column dataset {} colname)))
 
