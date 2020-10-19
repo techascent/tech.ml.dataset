@@ -187,15 +187,18 @@
                           ^RoaringBitmap missing
                           ^PrimitiveList failed-values
                           ^RoaringBitmap failed-indexes
-                          column-name]
+                          column-name
+                          ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
-  (ecount [this] (.lsize container))
+  (ecount [this] (inc max-idx))
   PParser
   (add-value! [p idx value]
+    (set! max-idx (max (long idx) max-idx))
     (when-not (missing-value? value)
       (let [idx (long idx)]
         (let [value-dtype (dtype/datatype value)]
-          (if (= value-dtype container-dtype)
+          (if (and (not= container-dtype :string)
+                   (= value-dtype container-dtype))
             (do
               (add-missing-values! container missing missing-value idx)
               (.add container value))
@@ -272,7 +275,7 @@
         missing (bitmap/->bitmap)]
     (FixedTypeParser. container dtype missing-value parse-fn
                       missing failed-values failed-indexes
-                      cname)))
+                      cname -1)))
 
 
 (defn parser-kwd-list->parser-tuples
@@ -312,11 +315,13 @@
                                   ^RoaringBitmap missing
                                   ;;List of datatype,parser-fn tuples
                                   ^List promotion-list
-                                  column-name]
+                                  column-name
+                                  ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
-  (ecount [this] (.lsize container))
+  (ecount [this] (inc max-idx))
   PParser
   (add-value! [p idx value]
+    (set! max-idx (max (long idx) max-idx))
     (when-not (missing-value? value)
       (let [idx (long idx)]
         (let [value-dtype (dtype/elemwise-datatype value)]
@@ -403,7 +408,8 @@
                                (bitmap/->bitmap)
                                (mapv (juxt identity default-coercers)
                                      parser-datatype-sequence)
-                               column-name)))
+                               column-name
+                               -1)))
   ([column-name]
    (promotional-string-parser column-name default-parser-datatype-sequence)))
 
@@ -413,11 +419,13 @@
                                   ^{:unsynchronized-mutable true} container-dtype
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^RoaringBitmap missing
-                                  column-name]
+                                  column-name
+                                  ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
-  (ecount [this] (.lsize container))
+  (ecount [this] (inc max-idx))
   PParser
   (add-value! [p idx value]
+    (set! max-idx (max (long idx) max-idx))
     (when-not (missing-value? value)
       (let [idx (long idx)
             org-datatype (dtype/datatype value)
@@ -457,4 +465,5 @@
                             :boolean
                             false
                             (bitmap/->bitmap)
-                            column-name))
+                            column-name
+                            -1))

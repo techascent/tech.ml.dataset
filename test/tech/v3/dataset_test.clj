@@ -665,19 +665,6 @@
     (is (= ds thawed-ds))))
 
 
-(deftest select-range-intersection
-  (let [ds (-> (ds/->dataset [{:a 1} {:a 3}])
-               (ds/select-rows (range -100 100)))]
-    (is (= 2 (ds/row-count ds))))
-  (let [range-ds (ds/->dataset {:a (range 100)})]
-    (is (= (vec (range 80 -1 -20))
-           (vec (-> (ds/select-rows range-ds (range 100 -100 -20))
-                    (ds/column :a)))))
-    (is (= (vec (range 0 100 20))
-           (vec (-> (ds/select-rows range-ds (range -100 100 20))
-                    (ds/column :a)))))))
-
-
 (deftest unique-by-nil-regression
   (-> (ds/->dataset [])
       (ds/add-column (ds-col/new-column :abc [nil nil]))
@@ -713,6 +700,44 @@
          (ds/select-columns ["price" :logprice2 :logp3])
          (ds-tens/dataset->tensor)
          (first)))))
+
+
+(deftest parse-nils
+  (let [ds-a (ds/->dataset {:a [nil nil]})
+        ds-b (ds/->dataset [{:a nil} {:a nil}])]
+    (is (= (ds/row-count ds-a)
+           (ds/row-count ds-b)))
+    (is (= 2 (dtype/ecount (ds/missing ds-a)))
+        (= 2 (dtype/ecount (ds/missing ds-b))))))
+
+
+(deftest parser-fn-failing-on-csv-entries
+  (let [stocks (ds/->dataset "test/data/stocks.csv"
+                             {:key-fn keyword
+                              :parser-fn {:date [:string #(subs % 0 5)]}})]
+    (is (= "Jan 1"
+           (first (stocks :date))))))
+
+(deftest one-hot-failing
+  (let [str-ds (-> (ds/->dataset [{"a" 1 "b" "AA"}
+                                  {"a" 2 "b" "AA"}
+                                  {"a" 3 "b" "BB"}
+                                  {"a" 4 "b" "BB"}])
+                   (ds/categorical->one-hot ["b"]))
+        kwd-ds (-> (ds/->dataset [{:a 1 :b "AA"}
+                                  {:a 2 :b "AA"}
+                                  {:a 3 :b "BB"}
+                                  {:a 4 :b "BB"}])
+                   (ds/categorical->one-hot [:b]))]
+    (is (= #{"a" "b-AA" "b-BB"} (set (ds/column-names str-ds))))
+    (is (= #{:a :b-AA :b-BB} (set (ds/column-names kwd-ds))))))
+
+
+(deftest select-memory
+  (let [original (ds/->dataset [{:a 0} {:a 1} {:a 2} {:a 3} {:a 4}])
+        new-ds (ds/select-rows original (range 4))]
+    (is (= (vec (range 4)) (vec (new-ds :a))))
+    (is (thrown? Throwable (vec (:a (ds/select-rows new-ds 4)))))))
 
 
 (comment

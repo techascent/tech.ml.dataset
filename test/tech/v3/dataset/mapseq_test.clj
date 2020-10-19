@@ -167,15 +167,15 @@
                       (ds-mod/set-inference-target :fruit-name)
                       (ds/categorical->one-hot [:fruit-name]))]
       (is (= {:one-hot-table
-              {:orange :fruit-name-0,
-               :mandarin :fruit-name-1,
-               :apple :fruit-name-2,
-               :lemon :fruit-name-3},
+              {:orange :fruit-name-orange,
+               :mandarin :fruit-name-mandarin,
+               :apple :fruit-name-apple,
+               :lemon :fruit-name-lemon},
               :src-column :fruit-name,
               :result-datatype :float64}
              (into {} (first (ds-cat/dataset->one-hot-maps dataset)))))
-      (is (= #{:mass :fruit-name-1 :fruit-name-0 :width :fruit-name-2 :color-score
-	     :fruit-name-3 :height}
+      (is (= #{:mass :fruit-name-orange :fruit-name-mandarin :width :fruit-name-apple :color-score
+	     :fruit-name-lemon :height}
              (->> (ds/columns dataset)
                   (map ds-col/column-name)
                   set)))
@@ -187,10 +187,10 @@
                   vec)))
 
       (is (= {:color-score :regression,
-              :fruit-name-0 :classification,
-              :fruit-name-1 :classification,
-              :fruit-name-2 :classification,
-              :fruit-name-3 :classification,
+              :fruit-name-orange :classification,
+              :fruit-name-lemon :classification,
+              :fruit-name-mandarin :classification,
+              :fruit-name-apple :classification,
               :height :regression
               :width :regression,
               :mass :regression,

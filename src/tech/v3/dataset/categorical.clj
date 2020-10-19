@@ -166,7 +166,7 @@
                   #(str src-name "-" (safe-str %)))
         one-hot-map (->> lookup-table
                          (map (fn [[k v]]
-                                [k (name-fn v)]))
+                                [k (name-fn k)]))
                          (into {}))]
     (map->OneHotMap
      {:one-hot-table one-hot-map

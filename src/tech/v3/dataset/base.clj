@@ -216,6 +216,14 @@
   index-seq - either keyword :all or list of indexes.  May contain duplicates.
   "
   [dataset colname-seq index-seq]
+  (when (dtype-proto/has-constant-time-min-max? index-seq)
+    (let [lmin (long (dtype-proto/constant-time-min index-seq))
+          lmax (long (dtype-proto/constant-time-max index-seq))]
+      (errors/when-not-errorf
+       (and (< lmax (row-count dataset))
+            (>= lmin 0))
+       "Index sequence range [%d-%d] out of dataset row range [0-%d]"
+       lmin lmax (dec (row-count dataset)))))
   (let [index-seq (if (number? index-seq)
                     [index-seq]
                     index-seq)]
