@@ -108,6 +108,7 @@
            (ds-tens/dataset->tensor)
            (first))
 ```"
+  {:style/indent 2}
   [expr name & forms]
   `(as-> ~expr ~name
      ~@(map (fn [form]
