@@ -194,18 +194,27 @@
    (csv->dataset input {})))
 
 
-(defmethod ds-io/data->dataset :csv
+(defn- load-csv
   [data options]
   (ds-io/wrap-stream-fn
    data (:gzipped? options)
-   #(csv->dataset %1 options)))
+   #(csv->dataset %1 options))
+  )
+
+
+(defmethod ds-io/data->dataset :csv
+  [data options]
+  (load-csv data options))
 
 
 (defmethod ds-io/data->dataset :tsv
   [data options]
-  (ds-io/wrap-stream-fn
-   data (:gzipped? options)
-   #(csv->dataset %1 options)))
+  (load-csv data options))
+
+
+(defmethod ds-io/data->dataset :txt
+  [data options]
+  (load-csv data options))
 
 
 (defn- write!
@@ -300,4 +309,9 @@
 
 (defmethod ds-io/dataset->data! :tsv
   [dataset output options]
-  (write-csv! dataset output options))
+  (write-csv! dataset output (assoc options :separator \tab)))
+
+
+(defmethod ds-io/dataset->data! :txt
+  [dataset output options]
+  (write-csv! dataset output (assoc options :separator \tab)))
