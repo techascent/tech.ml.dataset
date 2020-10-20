@@ -215,7 +215,7 @@
     {:keys [separator]
      :or {separator \tab}
      :as options}]
-   (let [^Writer writer (io/writer output)
+   (let [^Writer writer (io/writer! output)
          ^AbstractWriter csvWriter
          (if (:csv-writer options)
            (:csv-writer options)

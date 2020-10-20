@@ -47,7 +47,7 @@
 
 (defn is-missing?
   "Return true if this index is missing."
-  [col idx]
+  [col ^long idx]
   (when-let [^RoaringBitmap bmp (missing col)]
     (.contains bmp idx)))
 

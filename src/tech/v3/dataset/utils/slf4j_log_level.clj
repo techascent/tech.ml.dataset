@@ -9,7 +9,7 @@
   classic logger is returned.  Else, you are on your own!"
   [log-level]
   (.setLevel
-   (org.slf4j.LoggerFactory/getLogger
+   ^Logger (org.slf4j.LoggerFactory/getLogger
     (Logger/ROOT_LOGGER_NAME))
    (case log-level
      :all Level/ALL
