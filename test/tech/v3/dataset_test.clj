@@ -5,6 +5,7 @@
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.join :as ds-join]
             [tech.v3.dataset.test-utils :as test-utils]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
@@ -738,6 +739,26 @@
         new-ds (ds/select-rows original (range 4))]
     (is (= (vec (range 4)) (vec (new-ds :a))))
     (is (thrown? Throwable (vec (:a (ds/select-rows new-ds 4)))))))
+
+
+(deftest custom-sort-by-column
+  (let [DS (-> (tech.v3.dataset/->dataset {:a [5 4 3 2 8 7 6]})
+               (ds/sort-by-column :a compare))]
+    (is (= (vec (sort [5 4 3 2 8 7 6]))
+           (vec (DS :a))))))
+
+
+(deftest set-missing-new-column
+  (let [col (ds-col/new-column "abc" (repeat 10 1) nil [1 2 3])]
+    (is (= [1 nil nil nil 1 1 1 1 1 1] (vec col)))))
+
+
+(deftest join-on-date
+  (let [A (ds/->dataset {:a [(java.time.LocalDate/of 2001 01 01)]
+                         :b [11]})
+        B (ds/->dataset {:a [(java.time.LocalDate/of 2001 01 01)]
+                         :c [22]})]
+    (ds-join/left-join :a A B)))
 
 
 (comment

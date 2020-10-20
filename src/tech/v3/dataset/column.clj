@@ -150,7 +150,10 @@ Implementations should check their metadata before doing calculations."
          (column-data-process/scan-data-for-missing data)]
      (new-column name coldata metadata scanned-missing)))
   ([name data metadata missing]
-   (col-impl/new-column name data metadata missing)))
+   (let [data (if-not (dtype/as-buffer data)
+                (:data (column-data-process/scan-data-for-missing data))
+                data)]
+     (col-impl/new-column name data metadata missing))))
 
 
 (defn extend-column-with-empty

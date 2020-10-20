@@ -2,6 +2,7 @@
   "implementation of join algorithms, both exact (hash-join) and near."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.parallel.for :as parallel-for]
@@ -209,8 +210,8 @@
          rhs-col (rhs rhs-colname)
          lhs-missing? (:lhs-missing? options)
          rhs-missing? (:rhs-missing? options)
-         lhs-dtype (dtype/elemwise-datatype lhs-col)
-         rhs-dtype (dtype/elemwise-datatype rhs-col)
+         lhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype lhs-col))
+         rhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype rhs-col))
          op-dtype (casting/simple-operation-space
                    (casting/widest-datatype lhs-dtype rhs-dtype))
          ;;Ensure we group in same space if possible.
