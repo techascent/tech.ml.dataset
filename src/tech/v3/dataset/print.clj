@@ -20,11 +20,11 @@
 (set! *warn-on-reflection* true)
 
 ;;The default number of rows to print
-(def ^:dynamic *default-table-row-print-length* 25)
+(def ^:dynamic ^:no-doc *default-table-row-print-length* 25)
 ;;The default line policy - see dataset-data->str
-(def ^:dynamic *default-print-line-policy* :repl)
+(def ^:dynamic ^:no-doc *default-print-line-policy* :repl)
 ;;The default max width with 'nil' indicating no limit.
-(def ^:dynamic *default-print-column-max-width* nil)
+(def ^:dynamic ^:no-doc *default-print-column-max-width* nil)
 
 
 
@@ -87,22 +87,27 @@
 (defn dataset-data->str
   "Convert the dataset values to a string.
 
-  Options may be provided in the dataset metadata or may be provided
-  as an options map.  The options map overrides the dataset metadata.
+Options may be provided in the dataset metadata or may be provided
+as an options map.  The options map overrides the dataset metadata.
 
-  :print-index-range - The set of indexes to print.  Defaults to:
+
+  * `:print-index-range` - The set of indexes to print.  Defaults to:
     (range *default-table-row-print-length*)
-  :print-line-policy - defaults to :repl - one of
-    - :repl - multiline table - default nice printing for repl
-    - :markdown - lines delimited by <br>
-    - :single - Only print first line
-  :print-column-max-width - set the max width of a column when printing.
+  * `:print-line-policy` - defaults to `:repl` - one of:
+     - `:repl` - multiline table - default nice printing for repl
+     - `:markdown` - lines delimited by <br>
+     - `:single` - Only print first line
+  * `:print-column-max-width` - set the max width of a column when printing.
 
-  Example for conservative printing:
+
+Example for conservative printing:
+
+```clojure
 tech.ml.dataset.github-test> (def ds (with-meta ds
                                        (assoc (meta ds)
                                               :print-column-max-width 25
-                                              :print-line-policy :single)))"
+                                              :print-line-policy :single)))
+```"
   ([dataset]
    (dataset-data->str dataset {}))
   ([dataset options]
