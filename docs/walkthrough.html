@@ -199,9 +199,9 @@ https://api.github.com/events [5 8]:
 | 13911736795 | PullRequestReviewEvent | {:id 47063667, | {:id 305218173, |   {:action "created", |    true | 2020-10-20T17:49:36Z |                |
 | 13911736760 |              PushEvent | {:id 22623307, | {:id 287289752, | {:push_id 5888739280, |    true | 2020-10-20T17:49:36Z |                |
 </code></pre>
-<p>The full list of possible options is provided in the documentation for <a href="https://github.com/techascent/tech.ml.dataset/blob/0ec98572dae64355ca1ab69b9209db17a810cad8/src/tech/ml/dataset/print.clj#L78">dataset-data-&gt;str</a>.</p>
+<p>The full list of possible options is provided in the documentation for <a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.print.html">dataset-data-&gt;str</a>.</p>
 <h2><a href="#basic-dataset-manipulation" name="basic-dataset-manipulation"></a>Basic Dataset Manipulation</h2>
-<p>Dataset are implementations of <code>clojure.lang.IPersistentMap</code>. They strictly respect column ordering, however, unliked persistent maps.</p>
+<p>Dataset are implementations of <code>clojure.lang.IPersistentMap</code>. They strictly respect column ordering, however, unlike persistent maps.</p>
 <pre><code class="clojure"><br />user&gt; (def new-ds (ds/-&gt;dataset [{:a 1 :b 2} {:a 2 :c 3}]))
 #'user/new-ds
 user&gt; new-ds
@@ -586,22 +586,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.cs
 |       1.0 | somewhat doable |     34900 |
 </code></pre>
 <h2><a href="#datetime-types" name="datetime-types"></a>DateTime Types</h2>
-<p>Support for reading datetime types and manipulating them. Please checkout the <code>dtype-next</code> <a href="https://cnuernber.github.io/dtype-next/tech.v3.datatype.datetime.html">datetime documentation</a>.</p>
-<p>A general outline is:</p>
-<ul>
-  <li>There are a set of type-hinted constants you can use in your code however you like:</li>
-  <li>milliseconds-in-day, nanoseconds-in-second, etc.</li>
-  <li>
-  <p>There are type-hinted constructors for the types and ways to take a type and convert it to another type.</p></li>
-  <li>local-date, instant, zoned-date-time, etc.</li>
-  <li>local-date-&gt;instant, instant-&gt;zoned-date-time, etc.</li>
-  <li>
-  <p>There are a few generalized functions to create new datetime types or to convert a datetime type  into milliseconds-since-epoch and back and to add/subtract integer amounts of different chronographic  units:</p></li>
-  <li>datetime-&gt;milliseconds, milliseconds-&gt;datetime</li>
-  <li>plus-temporal-amount, minus-temporal-amount</li>
-  <li>long-temporal-amount</li>
-  <li>between</li>
-</ul>
+<p>Support for reading datetime types and manipulating them. Please checkout the <code>dtype-next</code> <a href="https://cnuernber.github.io/dtype-next/tech.v3.datatype.datetime.html">datetime documentation</a> right now before moving on :-).</p>
 <pre><code class="clojure">user&gt; (def stocks (ds/-&gt;dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv"
                                 {:key-fn keyword}))
 #'user/stocks

@@ -263,7 +263,7 @@ https://api.github.com/events [5 8]:
 | 13911736760 |              PushEvent | {:id 22623307, | {:id 287289752, | {:push_id 5888739280, |    true | 2020-10-20T17:49:36Z |                |
 ```
 
-The full list of possible options is provided in the documentation for [dataset-data->str](https://github.com/techascent/tech.ml.dataset/blob/0ec98572dae64355ca1ab69b9209db17a810cad8/src/tech/ml/dataset/print.clj#L78).
+The full list of possible options is provided in the documentation for [dataset-data->str](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.print.html).
 
 
 ## Basic Dataset Manipulation
@@ -713,25 +713,8 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.cs
 ## DateTime Types
 
 Support for reading datetime types and manipulating them.  Please checkout the
-`dtype-next` [datetime documentation](https://cnuernber.github.io/dtype-next/tech.v3.datatype.datetime.html).
-
-A general outline is:
-
-- There are a set of type-hinted constants you can use in your code however you like:
-  * milliseconds-in-day, nanoseconds-in-second, etc.
-
-- There are type-hinted constructors for the types and ways to take a type and convert it to another type.
-  * local-date, instant, zoned-date-time, etc.
-  * local-date->instant, instant->zoned-date-time, etc.
-
-
-- There are a few generalized functions to create new datetime types or to convert a datetime type
-  into milliseconds-since-epoch and back and to add/subtract integer amounts of different chronographic
-  units:
-  * datetime->milliseconds, milliseconds->datetime
-  * plus-temporal-amount, minus-temporal-amount
-  * long-temporal-amount
-  * between
+`dtype-next` [datetime documentation](https://cnuernber.github.io/dtype-next/tech.v3.datatype.datetime.html)
+right now before moving on :-).
 
 
 ```clojure
