@@ -269,7 +269,7 @@ The full list of possible options is provided in the documentation for [dataset-
 ## Basic Dataset Manipulation
 
 Dataset are implementations of `clojure.lang.IPersistentMap`.  They strictly
-respect column ordering, however, unliked persistent maps.
+respect column ordering, however, unlike persistent maps.
 
 ```clojure
 
