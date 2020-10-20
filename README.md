@@ -4,6 +4,8 @@
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
 
+* [API Documentation](https://techascent.github.io/tech.ml.dataset/)
+
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
 currently in-memory columnwise databases and we support parsing from file or
@@ -33,7 +35,7 @@ namespace.
 An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
 
-Checkout our brand new [api documentation!](https://techascent.github.io/tech.ml.dataset/)
+
 
 
 ## Mini Walkthrough
