@@ -32,10 +32,11 @@ RAM and purely for performance on top of the
 ['tech.v3.datatype.mmap'](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/mmap.clj#L16)
 namespace.
 
-An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
+
+* An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
 
 
-
+* Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
 
 
 ## Mini Walkthrough
