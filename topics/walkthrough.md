@@ -398,7 +398,7 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.cs
 ## Add, Remove, Update
 
 ```clojure
-user> (require '[tech.v2.datatype.functional :as dfn])
+user> (require '[tech.v3.datatype.functional :as dfn])
 nil
 user> (def small-ames (ds/head (ds/select-columns ames-ds ["KitchenQual" "SalePrice"])))
 #'user/small-ames
@@ -574,8 +574,6 @@ https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5
 |   MSFT | 2000-03-01 | 43.22 |
 |   MSFT | 2000-04-01 | 28.37 |
 |   MSFT | 2000-05-01 | 25.45 |
-user> (->> (ds/group-by-column "symbol" stocks)
-           (map (fn [[k v]] (ds/descriptive-stats v))))
 
 user> (->> (ds/group-by-column stocks "symbol")
            (map (fn [[k v]] (ds/descriptive-stats v))))
@@ -661,18 +659,6 @@ user> (def named-baths (assoc updated-ames "NamedBath" (dtype/emap #(let [tbaths
                                                                         "living in style"))
                                                                    :string
                                                                    (updated-ames "TotalBath"))))
-#'user/named-baths
-user> (ds/head (ds/select-columns named-baths ["TotalBath" "NamedBath"]))
-https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 2]:
-
-| TotalBath |         NamedBath |
-|-----------|-------------------|
-|       3.5 |   living in style |
-|       2.5 | getting somewhere |
-|       3.5 |   living in style |
-|       2.0 | getting somewhere |
-|       3.5 |   living in style |
-
 #'user/named-baths
 user> (ds/head (ds/select-columns named-baths ["TotalBath" "NamedBath"]))
 https://github.com/techascent/tech.ml.dataset/raw/master/test/data/ames-train.csv.gz [5 2]:
