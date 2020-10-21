@@ -1,4 +1,11 @@
 # Changelog
+## 5.00
+ * Large upgrade to [`dtype-next`](https://github.com/cnuernber/dtype-next/).
+ * All public functions are dataset-first.  This breaks compatibility with sort-by
+   filter, etc.
+ * Namespace changes to be `tech.v3` across the board as opposed to `tech.v2` along
+   with `tech.ml`.
+
 ## 4.03
  * Fix for #136
 
