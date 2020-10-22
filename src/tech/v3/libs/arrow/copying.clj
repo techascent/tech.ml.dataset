@@ -354,7 +354,7 @@
   [ds-name ^VectorSchemaRoot schema-root dict-map options]
   (->> (.getFieldVectors schema-root)
        (map-indexed vector)
-       (map (partial field-vec->column options dict-map))
+       (mapv (partial field-vec->column options dict-map))
        (ds-impl/new-dataset ds-name)))
 
 

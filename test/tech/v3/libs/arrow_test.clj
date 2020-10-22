@@ -65,3 +65,10 @@
               (ds-col/missing (pyames-inplace "LotFrontage"))))))
     (finally
       (.delete (java.io.File. "temp.ames.arrow")))))
+
+
+(comment
+  (dotimes [iter 10]
+    (arrow/read-stream-dataset-copying "/home/chrisn/Downloads/screenings.arrow")
+    )
+  )

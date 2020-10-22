@@ -4,6 +4,7 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.native-buffer :as native-buffer]
+            [tech.v3.datatype.errors :as errors]
             [primitive-math :as pmath])
   (:import [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype Buffer ObjectReader BooleanBuffer]
@@ -113,10 +114,14 @@
       (lsize [rdr] n-elems)
       (readObject [rdr idx]
         (let [cur-offset (.readLong offset-rdr idx)
-              next-offset (.readLong offset-rdr (inc idx))]
-         (String. ^bytes (dtype/->byte-array
-                          (dtype/sub-buffer value-buf cur-offset
-                                            (- next-offset cur-offset)))))))))
+              next-offset (.readLong offset-rdr (inc idx))
+              str-data (dtype/sub-buffer value-buf cur-offset
+                                         (- next-offset cur-offset))]
+          (errors/when-not-errorf
+           str-data
+           "Nil value returned from sub buffer: %s - 0x%x - %d-%d"
+           (type value-buf) (.address value-buf) cur-offset next-offset)
+         (String. ^bytes (dtype/->byte-array str-data)))))))
 
 
 (defn varchar->strings
