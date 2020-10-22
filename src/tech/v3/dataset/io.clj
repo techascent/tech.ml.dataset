@@ -201,6 +201,23 @@
 
 
 (defn write!
+  "Write a dataset out to a file.  Supported forms are:
+
+```clojure
+(ds/write! test-ds \"test.csv\")
+(ds/write! test-ds \"test.tsv\")
+(ds/write! test-ds \"test.tsv.gz\")
+(ds/write! test-ds \"test.nippy\")
+(ds/write! test-ds out-stream)
+```
+
+Options:
+
+  * `:max-chars-per-column` - csv,tsv specific, defaults to 65536 - values longer than this will
+     cause an exception during serialization.
+  * `:max-num-columns` - csv,tsv specific, defaults to 8192 - If the dataset has more than this number of
+     columns an exception will be thrown during serialization.
+  * `:quoted-columns` - csv specific - sequence of columns names that you would like to always have quoted."
   ([dataset output-path options]
    (let [options (merge (when (string? output-path)
                           (str->file-info output-path))

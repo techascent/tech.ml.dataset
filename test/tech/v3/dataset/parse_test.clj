@@ -356,3 +356,22 @@
     (is (= 197 (count (filter #(not= 0.0 % ) (ds "pvalue")))))
     (is (thrown? Throwable (ds/->dataset "test/data/double_parse_test.csv"
                                          {:separator ",n"})))))
+
+
+(deftest long-column-data-throws
+  (try
+    (let [ds (ds/->dataset [{:a "onelongstring"}])]
+      (is (thrown? Throwable
+                   (ds/write! ds "longfile.csv" {:max-chars-per-column 5}))))
+    (finally
+      (.delete (java.io.File. "longfile.csv")))))
+
+
+(deftest quoted-column-data
+  (try
+    (let [ds (ds/->dataset [{:a "onelongstring"}])]
+      (ds/write! ds "quoted.csv" {:quoted-columns [:a]})
+      (is (= "\"a\"\n\"onelongstring\"\n"
+             (slurp "quoted.csv"))))
+    (finally
+      (.delete (java.io.File. "quoted.csv")))))

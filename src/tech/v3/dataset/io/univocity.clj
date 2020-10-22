@@ -4,11 +4,13 @@
   methods."
   (:require [tech.io :as io]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.io.string-row-parser :as row-parser]
             [tech.v3.dataset.io :as ds-io]
-            [tech.v3.dataset.column :as ds-col])
+            [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.utils :as ds-utils])
   (:import  [tech.v3.datatype Buffer ObjectReader]
-            [com.univocity.parsers.common AbstractParser AbstractWriter]
+            [com.univocity.parsers.common AbstractParser AbstractWriter CommonSettings]
             [com.univocity.parsers.csv
              CsvFormat CsvParserSettings CsvParser
              CsvWriterSettings CsvWriter]
@@ -47,6 +49,22 @@
     :else
     (throw (Exception. (format "'%s' is not a valid separator" item)))))
 
+(defn- default-csv-options
+  [options]
+  (-> options
+      (update :max-chars-per-column #(or % (* 64 1024)))
+      (update :max-num-columns #(or % 8192))))
+
+
+(defn- apply-options-to-settings!
+  ^CommonSettings [^CommonSettings settings options]
+  (let [{:keys [max-chars-per-column
+                max-num-columns]} (default-csv-options options)]
+    (doto settings
+      (.setMaxCharsPerColumn (long max-chars-per-column))
+      (.setMaxColumns (long max-num-columns))))
+  settings)
+
 
 
 (defn create-csv-parser
@@ -56,14 +74,11 @@
                            column-whitelist
                            column-blacklist
                            separator
-                           n-initial-skip-rows
-                           max-chars-per-column
-                           max-num-columns]
+                           n-initial-skip-rows]
                     :or {header-row? true
                          ;;64K max chars per column.  This is a silly thing to have
                          ;;to set...
-                         max-chars-per-column (* 64 1024)
-                         max-num-columns 8192}
+                         }
                     :as options}]
   (if-let [csv-parser (:csv-parser options)]
     csv-parser
@@ -78,12 +93,11 @@
         (.setNumberOfRecordsToRead settings (if header-row?
                                               (inc (int num-rows))
                                               (int num-rows))))
+      (apply-options-to-settings! settings options)
       (doto settings
         (.setSkipEmptyLines true)
         (.setIgnoreLeadingWhitespaces true)
-        (.setIgnoreTrailingWhitespaces true)
-        (.setMaxCharsPerColumn (long max-chars-per-column))
-        (.setMaxColumns (long max-num-columns)))
+        (.setIgnoreTrailingWhitespaces true))
       (when n-initial-skip-rows
         (.setNumberOfRowsToSkip settings (int n-initial-skip-rows)))
       (when (or (seq column-whitelist)
@@ -217,6 +231,23 @@
   (load-csv data options))
 
 
+(defprotocol PApplyWriteOptions
+  (apply-write-options! [settings options]))
+
+
+(extend-protocol PApplyWriteOptions
+  CsvWriterSettings
+  (apply-write-options! [settings options]
+    (when-let [quoted-fields (seq (:quoted-columns options))]
+      (let [^"[Ljava.lang.String;" str-ary
+            (into-array String (map ds-utils/column-safe-name quoted-fields))]
+        (.quoteFields settings str-ary)))
+    settings)
+  TsvWriterSettings
+  (apply-write-options! [settings options]
+    settings))
+
+
 (defn- write!
   ([output header-string-array row-string-array-seq]
    (write! output header-string-array row-string-array-seq {}))
@@ -225,14 +256,25 @@
      :or {separator \tab}
      :as options}]
    (let [^Writer writer (io/writer! output)
+
          ^AbstractWriter csvWriter
          (if (:csv-writer options)
            (:csv-writer options)
-           (case separator
-             \,
-             (CsvWriter. writer (CsvWriterSettings.))
-             \tab
-             (TsvWriter. writer (TsvWriterSettings.))))]
+           (let [settings (-> (case separator
+                                \,
+                                (CsvWriterSettings.)
+                                \tab
+                                (TsvWriterSettings.))
+                              (apply-options-to-settings! options)
+                              (apply-write-options! options))]
+             (cond
+               (instance? CsvWriterSettings settings)
+               (CsvWriter. writer ^CsvWriterSettings settings)
+               (instance? TsvWriterSettings settings)
+               (TsvWriter. writer ^TsvWriterSettings settings)
+               :else
+               (errors/throwf "Unrecognized settings type %s" (type settings))
+               )))]
      (when header-string-array
        (.writeHeaders csvWriter ^"[Ljava.lang.String;" header-string-array))
      (try
@@ -267,9 +309,16 @@
           (when (string? output)
             (ds-io/str->file-info output))
           options)
+         {:keys [max-chars-per-column
+                 max-num-columns]} (default-csv-options options)
          columns (vals ds)
+         _ (errors/when-not-errorf
+            (<= (count columns) (long max-num-columns))
+            "Too many columns detected (%d) for max-num-columns (%d)"
+            (count columns) max-num-columns)
          headers (into-array String
                              (map (comp data->string :name meta) columns))
+         column-names (mapv (comp :name meta) columns)
          ^List str-readers
          (mapv (comp dtype/->reader #(ds-col/column-map data->string :string %)) columns)
 
@@ -277,6 +326,7 @@
          [n-cols n-rows] (dtype/shape ds)
          n-cols (long n-cols)
          n-rows (long n-rows)
+         max-chars-per-column (long max-chars-per-column)
          ;;Create a reader that produces string arrays of each row.
          str-rdr (reify ObjectReader
                    (lsize [rdr] n-rows)
@@ -284,10 +334,14 @@
                      (let [^"[Ljava.lang.String;" str-array (make-array
                                                              String n-cols)]
                        (dotimes [col-idx n-cols]
-                         (aset str-array col-idx ^String
-                               (.readObject ^ObjectReader
-                                            (.get str-readers col-idx)
-                                            row-idx)))
+                         (let [str-data (.readObject ^ObjectReader
+                                                     (.get str-readers col-idx)
+                                                     row-idx)]
+                           (errors/when-not-errorf
+                            (< (count str-data) max-chars-per-column)
+                            "Column %s has value whose length (%d) is greater than max-chars-per-column (%d)."
+                            (column-names col-idx) (count str-data) max-chars-per-column)
+                           (aset str-array col-idx ^String str-data)))
                        str-array)))
          output (if gzipped?
                   (io/gzip-output-stream! output)
