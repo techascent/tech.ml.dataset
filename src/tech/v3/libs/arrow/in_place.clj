@@ -9,7 +9,6 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
-            [tech.resource :as resource]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer
             MessageMetadataResult]
@@ -227,8 +226,13 @@
           retval (StringTable. str-list nil (dyn-int-list/make-from-container
                                              index-data))]
       retval)
-    (let [[offsets varchar-data] buffers]
-      (offsets-data->string-reader (native-buffer/set-native-datatype offsets :int32)
+    (let [[offsets varchar-data] buffers
+          offset-buf-width (quot (dtype/ecount offsets)
+                                 (long n-elems))
+          offset-buf-dtype (case offset-buf-width
+                             4 :uint32
+                             8 :int64)]
+      (offsets-data->string-reader (native-buffer/set-native-datatype offsets offset-buf-dtype)
                                    varchar-data n-elems))))
 
 
@@ -238,40 +242,41 @@
         {:keys [nodes buffers]} record-batch]
     (assert (= (count fields) (count nodes)))
     (->> (map vector fields nodes)
-         (reduce (fn [[retval ^long buf-idx] [field node]]
-                   (let [field-dtype (get-in field [:field-type :datatype])
-                         col-metadata (dissoc (:field-type field) :datatype)
-                         encoding (get field :dictionary-encoding)
-                         n-buffers (long (if (and (= :string field-dtype)
-                                                  (not encoding))
-                                           3
-                                           2))
-                         specific-bufs (subvec buffers buf-idx
-                                               (+ buf-idx n-buffers))
-                         n-elems (long (:n-elems node))
-                         missing (if (== 0 (long (:n-null-entries node)))
-                                   (bitmap/->bitmap)
-                                   (arrow-dtype/int8-buf->missing
-                                    (first specific-bufs)
-                                    n-elems))
-                         metadata (into col-metadata (:metadata field))]
-                     [(conj retval
-                            (col-impl/new-column
-                             (:name field)
-                             (case field-dtype
-                               :string (string-data->column-data
-                                        dict-map encoding (drop 1 specific-bufs)
-                                        n-elems)
-                               :boolean
-                               (arrow-dtype/byte-buffer->bitwise-boolean-buffer
-                                (second specific-bufs) n-elems)
-                               (-> (native-buffer/set-native-datatype
-                                    (second specific-bufs) field-dtype)
-                                   (dtype/sub-buffer 0 n-elems)))
-                             metadata
-                             missing))
-                      (+ buf-idx n-buffers)]))
-                 [[] 0])
+         (reduce
+          (fn [[retval ^long buf-idx] [field node]]
+            (let [field-dtype (get-in field [:field-type :datatype])
+                  col-metadata (dissoc (:field-type field) :datatype)
+                  encoding (get field :dictionary-encoding)
+                  n-buffers (long (if (and (= :string field-dtype)
+                                           (not encoding))
+                                    3
+                                    2))
+                  specific-bufs (subvec buffers buf-idx
+                                        (+ buf-idx n-buffers))
+                  n-elems (long (:n-elems node))
+                  missing (if (== 0 (long (:n-null-entries node)))
+                            (bitmap/->bitmap)
+                            (arrow-dtype/int8-buf->missing
+                             (first specific-bufs)
+                             n-elems))
+                  metadata (into col-metadata (:metadata field))]
+              [(conj retval
+                     (col-impl/new-column
+                      (:name field)
+                      (case field-dtype
+                        :string (string-data->column-data
+                                 dict-map encoding (drop 1 specific-bufs)
+                                 n-elems)
+                        :boolean
+                        (arrow-dtype/byte-buffer->bitwise-boolean-buffer
+                         (second specific-bufs) n-elems)
+                        (-> (native-buffer/set-native-datatype
+                             (second specific-bufs) field-dtype)
+                            (dtype/sub-buffer 0 n-elems)))
+                      metadata
+                      missing))
+               (+ buf-idx n-buffers)]))
+          [[] 0])
          (first)
          (ds-impl/new-dataset))))
 
@@ -289,11 +294,7 @@
           data-record (first rest-messages)]
       (cons
        (-> (records->ds schema dict-map data-record)
-           (ds-base/set-dataset-name (format "%s-%03d" fname idx))
-           ;;Assoc on the file data so the gc doesn't release the source memory map
-           ;;until no one is accessing the dataset any more in the case where
-           ;;the file was opened with {:resource-type :gc}
-           (resource/track (constantly fdata)))
+           (ds-base/set-dataset-name (format "%s-%03d" fname idx)))
        (lazy-seq (parse-next-dataset fdata schema (rest rest-messages)
                                      fname (inc (long idx))))))))
 
@@ -341,9 +342,7 @@
       (throw (Exception. "File contains multiple record batches.
 Please use stream->dataset-seq-inplace.")))
     (-> (records->ds schema dict-map data-record)
-        (ds-base/set-dataset-name fname)
-        ;;Ensure the file data is linked via gc to the dataset.
-        (resource/track (constantly fdata)))))
+        (ds-base/set-dataset-name fname))))
 
 
 (comment

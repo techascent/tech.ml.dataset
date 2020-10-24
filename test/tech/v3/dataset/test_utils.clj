@@ -1,5 +1,5 @@
 (ns tech.v3.dataset.test-utils
-  (:require [tech.io :as io]
+  (:require [tech.v3.io :as io]
             [clojure.string :as s]
             [tech.v3.dataset :as ds]
             [camel-snake-kebab.core :refer [->kebab-case]]))

@@ -2,7 +2,7 @@
   "Bindings to univocity.  Transforms csv's, tsv's into sequences
   of string arrays that are then passed into `tech.v3.dataset.io.string-row-parser`
   methods."
-  (:require [tech.io :as io]
+  (:require [tech.v3.io :as io]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.io.string-row-parser :as row-parser]

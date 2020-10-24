@@ -1,7 +1,6 @@
 (ns tech.v3.dataset.github-test
   (:require [tech.v3.dataset :as ds]
             [tech.v3.datatype :as dtype]
-            [tech.io :as io]
             [clojure.test :refer [deftest is]]))
 
 

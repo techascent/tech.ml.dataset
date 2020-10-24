@@ -1,5 +1,5 @@
 (ns tech.v3.dataset.io
-  (:require [tech.io :as io]
+  (:require [tech.v3.io :as io]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.libs.smile.data :as smile-data]

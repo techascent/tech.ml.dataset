@@ -6,8 +6,8 @@
   (:import  [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
             [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
              ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
-             ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
-             ArrowType$Duration DictionaryEncoding]
+             ArrowType$Utf8 ArrowType$LargeUtf8 ArrowType$Date ArrowType$Time
+             ArrowType$Timestamp ArrowType$Duration DictionaryEncoding]
             [java.util Map]))
 
 
@@ -90,7 +90,13 @@
   ArrowType$Utf8
   (datafy [this]
     {:datatype :string
-     :encoding :utf-8})
+     :encoding :utf-8
+     :offset-buffer-datatype :uint32})
+  ArrowType$LargeUtf8
+  (datafy [this]
+    {:datatype :string
+     :encoding :utf-8
+     :offset-buffer-datatype :int64})
   ArrowType$FloatingPoint
   (datafy [this]
     {:datatype (condp = (.getPrecision this)

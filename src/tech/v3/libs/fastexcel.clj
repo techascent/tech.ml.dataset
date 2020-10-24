@@ -1,6 +1,6 @@
 (ns tech.v3.libs.fastexcel
   "Fast xlsx parsing."
-  (:require [tech.io :as io]
+  (:require [tech.v3.io :as io]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]

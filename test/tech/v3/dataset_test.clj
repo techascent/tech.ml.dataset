@@ -10,7 +10,7 @@
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
             [tech.v3.libs.fastexcel]
-            [tech.io :as tech-io]
+            [tech.v3.io :as tech-io]
             [taoensso.nippy :as nippy]
             [clojure.test :refer [deftest is]])
   (:import [java.util List HashSet UUID]

@@ -14,7 +14,7 @@
             [tech.v3.libs.arrow.datatype :as arrow-dtype]
             [tech.v3.libs.arrow.allocator :as arrow-alloc]
             [clojure.edn :as edn]
-            [tech.io :as io])
+            [tech.v3.io :as io])
   (:import
    ;;Behold -- My Kindom Of Nouns!!!
    [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary

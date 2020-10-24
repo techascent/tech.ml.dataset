@@ -4,7 +4,7 @@
             [tech.v3.datatype.errors :as errors]
             ;;Support for tensor/array buffers in nippy
             [tech.v3.datatype.nippy]
-            [tech.io :as io]
+            [tech.v3.io :as io]
             [taoensso.nippy :as nippy])
   (:import [tech.v3.dataset.impl.dataset Dataset]))
 
