@@ -5,6 +5,7 @@
 
 
 * [API Documentation](https://techascent.github.io/tech.ml.dataset/)
+* [Get Started Now](https://github.com/cnuernber/simpledata)
 
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
@@ -310,7 +311,6 @@ org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 * Code-oriented [walkthrough](topics/walkthrough.md) and [quick reference](topics/quick-reference.md).
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of `tech.v3.dataset`
 * [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
-* [Simple Data Exploration Example](https://github.com/cnuernber/simpledata)
 
 
 ## Questions, Community
@@ -321,10 +321,7 @@ org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 
 ## Further Reading
 
-* [sequences of maps](test/tech/ml/dataset/mapseq_test.clj)
-* [regression pipelines](test/tech/ml/dataset/ames_test.clj)
 * [tech.v3.datatype](https://github.com/cnuernber/dtype-next) numeric subsystem
-* [datatype cheatsheet](https://github.com/techascent/tech.datatype/blob/master/topics/cheatsheet.md)
 
 
 ## Keywords
