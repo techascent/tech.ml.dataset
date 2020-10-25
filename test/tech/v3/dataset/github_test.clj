@@ -12,4 +12,7 @@
                                                           :key-fn keyword})]
     (is (every? keyword? (ds/column-names ds)))
     (is (= [8 30] (dtype/shape ds)))))
+
+(require '[tech.v3.datatype.functional :as dfn])
+(defonce flights  (ds/->dataset "https://raw.githubusercontent.com/Rdatatable/data.table/master/vignettes/flights14.csv"))
   )

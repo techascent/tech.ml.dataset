@@ -44,90 +44,91 @@
 
 
 (defn- make-buffer
-  [^RoaringBitmap missing data]
-  (let [^Buffer src (dtype-proto/->buffer data)
-        dtype (.elemwiseDatatype src)
-        {:keys [unpacking-read packing-write]}
-        (packing/buffer-packing-pair dtype)
-        missing-value (column-base/datatype->missing-value dtype)]
-    ;;Sometimes we can utilize a pure passthrough.
-    (if (and (.isEmpty missing)
-             (not unpacking-read))
-      src
-      (reify Buffer
-        (elemwiseDatatype [this] dtype)
-        (lsize [this] (.lsize src))
-        (allowsRead [this] (.allowsRead src))
-        (allowsWrite [this] (.allowsWrite src))
-        (readBoolean [this idx]
-          (if (.contains missing idx)
-            (casting/datatype->boolean :unknown missing-value)
-            (.readBoolean src idx)))
-        (readByte [this idx]
-          (if (.contains missing idx)
-            (unchecked-byte missing-value)
-            (.readByte src idx)))
-        (readShort [this idx]
-          (if (.contains missing idx)
-            (unchecked-short missing-value)
-            (.readShort src idx)))
-        (readChar [this idx]
-          (if (.contains missing idx)
-            (char missing-value)
-            (.readChar src idx)))
-        (readInt [this idx]
-          (if (.contains missing idx)
-            (unchecked-int missing-value)
-            (.readInt src idx)))
-        (readLong [this idx]
-          (if (.contains missing idx)
-            (unchecked-long missing-value)
-            (.readLong src idx)))
-        (readFloat [this idx]
-          (if (.contains missing idx)
-            (float missing-value)
-            (.readFloat src idx)))
-        (readDouble [this idx]
-          (if (.contains missing idx)
-            (double missing-value)
-            (.readDouble src idx)))
-        (readObject [this idx]
-          (when-not (.contains missing idx)
-            (if unpacking-read
-              (unpacking-read this idx)
-              (.readObject src idx))))
-        (writeBoolean [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeBoolean src idx val))
-        (writeByte [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeByte src idx val))
-        (writeShort [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeShort src idx val))
-        (writeChar [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeChar src idx val))
-        (writeInt [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeInt src idx val))
-        (writeLong [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeLong src idx val))
-        (writeFloat [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeFloat src idx val))
-        (writeDouble [this idx val]
-          (.remove missing (unchecked-int idx))
-          (.writeDouble src idx val))
-        (writeObject [this idx val]
-          (if val
-            (do
-              (.remove missing (unchecked-int idx))
-              (if packing-write
-                (packing-write this idx val)
-                (.writeObject src idx val)))
-            (.add missing (unchecked-int idx))))))))
+  (^Buffer [^RoaringBitmap missing data dtype]
+   (let [^Buffer src (dtype-proto/->buffer data)
+         {:keys [unpacking-read packing-write]}
+         (packing/buffer-packing-pair dtype)
+         missing-value (column-base/datatype->missing-value dtype)]
+     ;;Sometimes we can utilize a pure passthrough.
+     (if (and (.isEmpty missing)
+              (not unpacking-read))
+       src
+       (reify Buffer
+         (elemwiseDatatype [this] dtype)
+         (lsize [this] (.lsize src))
+         (allowsRead [this] (.allowsRead src))
+         (allowsWrite [this] (.allowsWrite src))
+         (readBoolean [this idx]
+           (if (.contains missing idx)
+             (casting/datatype->boolean :unknown missing-value)
+             (.readBoolean src idx)))
+         (readByte [this idx]
+           (if (.contains missing idx)
+             (unchecked-byte missing-value)
+             (.readByte src idx)))
+         (readShort [this idx]
+           (if (.contains missing idx)
+             (unchecked-short missing-value)
+             (.readShort src idx)))
+         (readChar [this idx]
+           (if (.contains missing idx)
+             (char missing-value)
+             (.readChar src idx)))
+         (readInt [this idx]
+           (if (.contains missing idx)
+             (unchecked-int missing-value)
+             (.readInt src idx)))
+         (readLong [this idx]
+           (if (.contains missing idx)
+             (unchecked-long missing-value)
+             (.readLong src idx)))
+         (readFloat [this idx]
+           (if (.contains missing idx)
+             (float missing-value)
+             (.readFloat src idx)))
+         (readDouble [this idx]
+           (if (.contains missing idx)
+             (double missing-value)
+             (.readDouble src idx)))
+         (readObject [this idx]
+           (when-not (.contains missing idx)
+             (if unpacking-read
+               (unpacking-read this idx)
+               (.readObject src idx))))
+         (writeBoolean [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeBoolean src idx val))
+         (writeByte [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeByte src idx val))
+         (writeShort [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeShort src idx val))
+         (writeChar [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeChar src idx val))
+         (writeInt [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeInt src idx val))
+         (writeLong [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeLong src idx val))
+         (writeFloat [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeFloat src idx val))
+         (writeDouble [this idx val]
+           (.remove missing (unchecked-int idx))
+           (.writeDouble src idx val))
+         (writeObject [this idx val]
+           (if val
+             (do
+               (.remove missing (unchecked-int idx))
+               (if packing-write
+                 (packing-write this idx val)
+                 (.writeObject src idx val)))
+             (.add missing (unchecked-int idx))))))))
+  (^Buffer [missing data]
+   (make-buffer missing data (dtype-proto/elemwise-datatype data))))
 
 
 (defmacro cached-vector! []
@@ -163,6 +164,14 @@
              (dtype-proto/elemwise-cast data new-dtype)
              metadata
              nil))
+  dtype-proto/PElemwiseReaderCast
+  (elemwise-reader-cast [this new-dtype]
+    (if (= new-dtype (dtype-proto/elemwise-datatype data))
+      (do
+        (cached-vector!)
+        (.data cached-vector))
+      (make-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
+                   new-dtype)))
   dtype-proto/PToBuffer
   (convertible-to-buffer? [this] true)
   (->buffer [this]

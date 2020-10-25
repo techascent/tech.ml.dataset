@@ -173,16 +173,18 @@
            dataset
            (instance? DataFrame dataset)
            (smile-data/dataframe->dataset dataset options)
-           (map? dataset)
-           (parse-mapseq-colmap/column-map->dataset options dataset)
-           (map? (first (seq dataset)))
-           (parse-mapseq-colmap/mapseq->dataset options dataset)
            (or (string? dataset) (instance? InputStream dataset))
            (let [options (if (string? dataset)
                            (merge (str->file-info dataset)
                                   options)
                            options)]
              (data->dataset dataset options))
+           (map? dataset)
+           (parse-mapseq-colmap/column-map->dataset options dataset)
+           ;;Not everything has a conversion to seq.
+           (map? (try (first (seq dataset))
+                      (catch Throwable e nil)))
+           (parse-mapseq-colmap/mapseq->dataset options dataset)
            (nil? (seq dataset))
            (ds-impl/new-dataset options nil))]
      (if dataset-name
