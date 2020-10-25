@@ -12,7 +12,7 @@
 currently in-memory columnwise databases and we support parsing from file or
 input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
 and sequences of maps** as input sources.  [SQL bindings](https://github.com/techascent/tech.ml.dataset.sql)
-are provided as a separate library. We also support [efficient conversion](src/tech/libs/smile/data.clj)
+are provided as a separate library. We also support efficient conversion
 to/from smile DataFrames and thus we have transitive support for Apache Arrow and Parquet files.  Load
 a DataFrame and then call ->dataset on the dataframe :-).
 
@@ -25,9 +25,9 @@ columnwise operations on the dataset are very fast.
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
-Upgraded support for [Apache Arrow](src/tech.libs/arrow.clj).  We support copying pathway using
-the standard api -- data is copied from disk into buffers.  We also
-support a more or less [from-scratch implementation](src/tech/libs/arrow/in_place.clj) of an in-place
+Upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We support 
+copying pathway using the standard api -- data is copied from disk into buffers.  We also
+support a more or less [from-scratch implementation](src/tech/v3/libs/arrow/in_place.clj) of an in-place
 pathway built expressly to enable both datasets that are larger than machine
 RAM and purely for performance on top of the
 ['tech.v3.datatype.mmap'](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/mmap.clj#L16)
