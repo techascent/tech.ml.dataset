@@ -75,4 +75,11 @@
   (dotimes [iter 10]
     (arrow/read-stream-dataset-copying "/home/chrisn/Downloads/screenings.arrow")
     )
+
+  (defn count-rows-arrow
+    []
+    (apply +
+     (->>
+      (repeat 2000 "/home/chrisn/Downloads/screenings.arrow")
+      (mapv #(ds/row-count (arrow/read-stream-dataset-inplace %))))))
   )
