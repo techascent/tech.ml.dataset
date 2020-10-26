@@ -19,3 +19,6 @@ data
 *.tsv
 *.tsv.gz
 *.arrow
+graalvm*
+resources
+graal-test

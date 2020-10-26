@@ -10,7 +10,7 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
-            [clojure.pprint :as pprint])
+            [tech.v3.datatype.graal-native :as graal-native])
   (:import [java.io Writer]
            [clojure.lang IPersistentMap IObj IFn Counted Indexed MapEntry]
            [java.util Map List LinkedHashSet]
@@ -441,8 +441,11 @@
 (dtype-pp/implement-tostring-print Dataset)
 
 
-(defmethod pprint/simple-dispatch
-  tech.v3.dataset.impl.dataset.Dataset [f] (pr f))
+;;pprint and graal native do not play nice with each other.
+(graal-native/when-not-defined-graal-native
+ (require '[clojure.pprint :as pprint])
+ (defmethod pprint/simple-dispatch
+   tech.v3.dataset.impl.dataset.Dataset [f] (pr f)))
 
 
 (defn dataset?

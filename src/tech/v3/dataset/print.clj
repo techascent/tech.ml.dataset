@@ -7,14 +7,18 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
-            [clojure.string :as str]
-            [clojure.pprint :as pp])
+            [tech.v3.datatype.graal-native :as graal-native]
+            [clojure.string :as str])
   (:import [tech.v3.datatype Buffer ObjectReader]
            [java.util List HashMap Collections ArrayList]
            [tech.v3.dataset FastStruct]
            [clojure.lang PersistentStructMap$Def
             PersistentVector]
            [org.roaringbitmap RoaringBitmap]))
+
+
+(graal-native/when-not-defined-graal-native
+ (require '[clojure.pprint :as pp]))
 
 
 (set! *warn-on-reflection* true)
@@ -34,7 +38,9 @@
               (map? item)
               (set? item))
         (with-out-str
-          (pp/pprint item))
+          (graal-native/if-defined-graal-native
+           (println item)
+           (pp/pprint item)))
         (dtype-pp/format-object item))
       (str/replace "|" "\\|")))
 
