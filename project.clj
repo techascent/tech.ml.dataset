@@ -42,7 +42,7 @@
                                            commons-logging
                                            com.google.code.findbugs/jsr305
                                            com.fasterxml.jackson.core/jackson-databind]]
-                             [org.apache.arrow/arrow-memory-netty "1.0.0"]
+                             [org.apache.arrow/arrow-memory-unsafe "1.0.0"]
                              [org.apache.arrow/arrow-memory-core "1.0.0"]
                              [org.apache.arrow/arrow-vector "1.0.0"
                               :exclusions [commons-codec]]]
