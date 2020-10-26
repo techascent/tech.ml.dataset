@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -e
+
+lein larray && lein clean && lein uberjar
+
+source scripts/activate-graal
+
+## Want to use http,https?
+## -H:EnableURLProtocols=https
+
+graalvm/bin/native-image \
+    --report-unsupported-elements-at-runtime \
+    --initialize-at-build-time \
+    --no-fallback \
+    --no-server \
+    --allow-incomplete-classpath \
+    -J-Dclojure.spec.skip-macros=true \
+    -J-Dclojure.compiler.direct-linking=true \
+    -J-Dtech.v3.datatype.graal-native=true \
+    -jar target/dataset.jar graal-test

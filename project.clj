@@ -42,7 +42,7 @@
                                            commons-logging
                                            com.google.code.findbugs/jsr305
                                            com.fasterxml.jackson.core/jackson-databind]]
-                             [org.apache.arrow/arrow-memory-netty "1.0.0"]
+                             [org.apache.arrow/arrow-memory-unsafe "1.0.0"]
                              [org.apache.arrow/arrow-memory-core "1.0.0"]
                              [org.apache.arrow/arrow-vector "1.0.0"
                               :exclusions [commons-codec]]]
@@ -90,9 +90,18 @@
                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
                                      [org.apache.arrow/arrow-vector "1.0.0"
                                       :exclusions [commons-codec]]]}
-             :uberjar {:aot [tech.v3.dataset]
-                       :source-paths ["src"]
-                       :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}}
+             :uberjar {:aot [tech.v3.dataset.main]
+                       :main tech.v3.dataset.main
+                       :dependencies [[org.apache.arrow/arrow-memory-unsafe "1.0.0"]
+                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
+                                      [org.apache.arrow/arrow-vector "1.0.0"
+                                       :exclusions [commons-codec]]]
+                       :source-paths ["src" "graal-native"]
+                       :jvm-opts ["-Dclojure.compiler.direct-linking=true"
+                                  "-Dtech.v3.datatype.graal-native=true"]
+                       :uberjar-name "dataset.jar"}
+             :larray {:source-paths ["graal-native"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"]
-  :aliases {"codox" ["with-profile" "codox,dev" "codox"]})
+  :aliases {"codox" ["with-profile" "codox,dev" "codox"]
+            "larray" ["with-profile" "larray" "run" "-m" "tech.v3.dataset.unpack-larray"]})

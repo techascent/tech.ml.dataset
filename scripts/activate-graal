@@ -1,0 +1,3 @@
+#!/bin/bash
+
+export GRAALVM_HOME="$(pwd)/graalvm"

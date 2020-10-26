@@ -1,7 +1,12 @@
 (ns ^:no-doc tech.v3.dataset.format-sequence
   "This code provided initial by genmeblog after careful consideration
   of R print code"
-  (:require [clojure.pprint :refer [cl-format]]))
+  (:import [java.text DecimalFormat]))
+
+
+;;CN - I removed cl-format as a required dependency so that graal native executables would
+;;both compile faster and be much smaller.
+
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -100,18 +105,35 @@
          w (max non-finite-len (if e?
                                  (+ lft rght exp 3) ;; 3 = "." + sign of E + "E"
                                  (+ lft rght 1))) ;; 1 for "."
+         ;;cl-format string definitions, keeping because we may want them.
          fmt (if e?
                (str "~" w "," rght "," exp "E")
                (str "~" w "," rght "F"))
-         non-finite-fmt (str "~" w "@A")]
+         non-finite-fmt (str "~" w "@A")
+
+         deci-format-str (apply str (concat ["0."]
+                                            (repeat rght "0")
+                                            (when e?
+                                              ["E"])
+                                            (when e?
+                                              (repeat exp "0"))))
+         deci-format (DecimalFormat. deci-format-str)
+         non-finite-format (str "%" w "s")]
      (fn [x]
-       (let [^double x (or x ##NaN)]
-         (if (Double/isFinite x)
-           (cl-format nil fmt x)
-           (cl-format nil non-finite-fmt (cond
-                                           (== ##Inf x) "Inf"
-                                           (== ##-Inf x) "-Inf"
-                                           :else "NaN"))))))))
+       (let [^double x (or x ##NaN)
+             finite? (Double/isFinite x)]
+         (let [^String unspaced (if (Double/isFinite x)
+                                  (.format deci-format x)
+                                  (cond
+                                    (== ##Inf x) "Inf"
+                                    (== ##-Inf x) "-Inf"
+                                    :else "NaN"))]
+           (String/format non-finite-format
+                          (object-array [(if (and e? finite?
+                                                  (== -1 (.lastIndexOf unspaced "E-")))
+                                           ;;Insert the + sign
+                                           (.replace unspaced "E" "E+")
+                                           unspaced)]))))))))
 
 (defn format-sequence
   "Format sequence of double for given:
