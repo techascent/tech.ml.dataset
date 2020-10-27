@@ -31,7 +31,7 @@
                              [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
                              [uncomplicate/neanderthal "0.35.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
-                             [org.apache.parquet/parquet-hadoop "1.10.1"]
+                             [org.apache.parquet/parquet-hadoop "1.11.0"]
                              [org.apache.hadoop/hadoop-common
                               "3.1.1"
                               ;;We use logback-classic.
@@ -39,7 +39,6 @@
                                            log4j
                                            com.google.guava/guava
                                            commons-codec
-                                           commons-logging
                                            com.google.code.findbugs/jsr305
                                            com.fasterxml.jackson.core/jackson-databind]]
                              [org.apache.arrow/arrow-memory-unsafe "1.0.0"]
