@@ -4,6 +4,7 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.libs.arrow :as arrow]
             [clojure.set :as set])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
             [java.nio.charset StandardCharsets]))
@@ -375,3 +376,32 @@
              (slurp "quoted.csv"))))
     (finally
       (.delete (java.io.File. "quoted.csv")))))
+
+
+(deftest text-data
+  (try
+    (let [ds (ds/->dataset [{:a "onestring"}
+                            {:a "anotherstring"}
+                            {}]
+                           {:parser-fn :text})
+          _ (is (= :text (-> (ds :a) meta :datatype)))
+          _ (ds/write! ds "text.csv")
+          _ (ds/write! ds "text.nippy")
+          csv-ds (ds/->dataset "text.csv" {:parser-fn {"a" :text}
+                                           :key-fn keyword})
+          _ (is (= :text (-> (csv-ds :a) meta :datatype)))
+          ;;_ (is (= 3 (ds/row-count csv-ds)))
+          nippy-ds (ds/->dataset "text.nippy")
+          _ (is (= :text (-> (nippy-ds :a) meta :datatype)))
+          _ (is (= 3 (ds/row-count nippy-ds)))
+          _ (arrow/write-dataset-to-stream! ds "text.arrow")
+          ds-copy (arrow/read-stream-dataset-copying "text.arrow")
+          _ (is (= :text (-> (ds-copy :a) meta :datatype)))
+          _ (is (= 3 (ds/row-count nippy-ds)))
+          ds-inplace (arrow/read-stream-dataset-inplace "text.arrow")]
+      (is (= :text (-> (ds-inplace "a") meta :datatype)))
+      (is (= 3 (ds/row-count nippy-ds))))
+    (finally
+      (.delete (java.io.File. "text.csv"))
+      (.delete (java.io.File. "text.nippy"))
+      (.delete (java.io.File. "text.arrow")))))

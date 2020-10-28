@@ -1,6 +1,8 @@
 (ns tech.v3.libs.arrow.in-place
   (:require [tech.v3.datatype.mmap :as mmap]
             [tech.v3.libs.arrow.datatype :as arrow-dtype]
+            ;;Protocol definitions that make datafy work
+            [tech.v3.libs.arrow.schema]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.native-buffer :as native-buffer]
             [tech.v3.datatype.nio-buffer :as nio-buffer]
@@ -216,7 +218,7 @@
 
 
 (defn string-data->column-data
-  [dict-map encoding buffers n-elems]
+  [dict-map encoding offset-buf-dtype buffers n-elems]
   (if encoding
     (let [str-list (get-in dict-map [(:id encoding) :strings])
           index-data (-> (first buffers)
@@ -226,14 +228,10 @@
           retval (StringTable. str-list nil (dyn-int-list/make-from-container
                                              index-data))]
       retval)
-    (let [[offsets varchar-data] buffers
-          offset-buf-width (quot (dtype/ecount offsets)
-                                 (long n-elems))
-          offset-buf-dtype (case offset-buf-width
-                             4 :uint32
-                             8 :int64)]
-      (offsets-data->string-reader (native-buffer/set-native-datatype offsets offset-buf-dtype)
-                                   varchar-data n-elems))))
+    (let [[offsets varchar-data] buffers]
+      (-> (offsets-data->string-reader (native-buffer/set-native-datatype offsets offset-buf-dtype)
+                                       varchar-data n-elems)
+          (arrow-dtype/string-reader->text-reader)))))
 
 
 (defn records->ds
@@ -265,7 +263,9 @@
                       (:name field)
                       (case field-dtype
                         :string (string-data->column-data
-                                 dict-map encoding (drop 1 specific-bufs)
+                                 dict-map encoding
+                                 (get-in field [:field-type :offset-buffer-datatype])
+                                 (drop 1 specific-bufs)
                                  n-elems)
                         :boolean
                         (arrow-dtype/byte-buffer->bitwise-boolean-buffer

@@ -3,22 +3,28 @@
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.io.context :as io-context]
+            [tech.v3.dataset.io.column-parsers :as col-parsers]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.base :as dtype-base]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.protocols :as dtype-proto]
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
            [tech.v3.datatype PrimitiveList]
            [org.apache.parquet.hadoop ParquetFileReader]
-           [org.apache.parquet.hadoop.metadata BlockMetaData ColumnChunkMetaData]
+           [org.apache.parquet.hadoop.metadata BlockMetaData ColumnChunkMetaData
+            CompressionCodecName]
            [org.apache.parquet.column.page PageReadStore]
            [org.apache.parquet.column.impl ColumnReadStoreImpl]
-           [org.apache.parquet.column ColumnDescriptor ColumnReader]
-           [org.apache.parquet.io.api GroupConverter PrimitiveConverter]
+           [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding]
+           [org.apache.parquet.io.api GroupConverter PrimitiveConverter Binary]
            [org.apache.parquet.schema OriginalType
-            PrimitiveType$PrimitiveTypeName]
+            PrimitiveType$PrimitiveTypeName Type$Repetition]
            [java.nio ByteBuffer ByteOrder]
-           [java.time Instant LocalDate]))
+           [java.time Instant LocalDate]
+           [java.util Iterator]))
 
 
 (comment
@@ -51,189 +57,419 @@
     (asGroupConverter [] (group-converter))))
 
 
-(defn- static-parse-column
-  ([^ColumnReader col-rdr ^ColumnDescriptor col-def n-rows
-    dtype read-fn missing-value]
-   (let [max-def-level (.getMaxDefinitionLevel col-def)
-         missing (bitmap/->bitmap)
-         n-rows (long n-rows)
-         container (col-base/make-container dtype 0)
-         _ (.ensureCapacity container n-rows)
-         col-name (.. col-def getPrimitiveType getName)]
-     (dotimes [row n-rows]
-       (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
-         (read-fn container col-rdr)
-         (do
-           (.add missing row)
-           (.addObject container missing-value)))
-       (.consume col-rdr))
-     (col-impl/new-column col-name container {:parquet-metadata (.toString col-def)}
-                          missing)))
-  ([^ColumnReader col-rdr ^ColumnDescriptor col-def n-rows
-    dtype read-fn]
-   (static-parse-column col-rdr col-def n-rows dtype read-fn
-                        (col-base/datatype->missing-value dtype))))
+(deftype ^:private ColumnIterator [^ColumnReader col-rdr
+                                   read-fn
+                                   ^long max-def-level
+                                   ^:unsynchronized-mutable n-rows]
+  Iterator
+  (hasNext [it] (> n-rows 0))
+  (next [it]
+    (if (> n-rows 0)
+      (let [retval (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
+                     (read-fn col-rdr)
+                     :tech.ml.dataset.parse/missing)]
+        (set! n-rows (dec n-rows))
+        (.consume col-rdr)
+        retval)
+      (throw (java.util.NoSuchElementException.)))))
 
 
-(defn- default-parse-column
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (static-parse-column
-   col-rdr col-def n-rows :object
-   (fn [^PrimitiveList container ^ColumnReader col-rdr]
-     (.addObject container (.. col-rdr getBinary getBytes)))))
+(defn- read-byte-array
+  ^bytes [^ColumnReader rdr]
+  (.. rdr getBinary getBytes))
+
+(defn- read-str
+  ^String [^ColumnReader rdr]
+  (String. (read-byte-array rdr)))
 
 
-(defn- original-type-equals?
-  [^ColumnDescriptor col-def orig-type]
-  (= (.. col-def getPrimitiveType getOriginalType) orig-type))
+(defn- read-instant
+  ^Instant [^ColumnReader rdr]
+  (let [byte-buf (-> (ByteBuffer/wrap (read-byte-array rdr))
+                     (.order ByteOrder/LITTLE_ENDIAN))
+        nano-of-day (.getLong byte-buf)
+        julian-day (long (.getInt byte-buf))
+        epoch-day (- julian-day 2440588)
+        epoch-second (+ (* epoch-day dtype-dt/seconds-in-day)
+                        (quot nano-of-day dtype-dt/nanoseconds-in-second))
+        nanos (rem nano-of-day dtype-dt/nanoseconds-in-second)]
+    (Instant/ofEpochSecond epoch-second nanos)))
 
 
-(defmulti ^:private parse-column
-  (fn [col-rdr ^ColumnDescriptor col-def n-rows]
-    (.. col-def getPrimitiveType getPrimitiveTypeName)))
+(defn- read-local-date
+  ^LocalDate [^ColumnReader rdr]
+  (LocalDate/ofEpochDay (.getInteger rdr)))
 
 
+(defn- read-int
+  [^ColumnReader rdr]
+  (.getInteger rdr))
 
-(defmethod parse-column :default
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (default-parse-column col-rdr col-def n-rows))
+(defn- read-long
+  ^long [^ColumnReader rdr]
+  (.getLong rdr))
 
+(defn- read-float
+  [^ColumnReader rdr]
+  (.getFloat rdr))
 
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/BINARY
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (if (original-type-equals? col-def OriginalType/UTF8)
-    (static-parse-column
-     col-rdr col-def n-rows :string
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addObject container (String. (.. col-rdr getBinary getBytes))))
-     "")
-    (default-parse-column col-rdr col-def n-rows)))
+(defn- read-double
+  ^double [^ColumnReader rdr]
+  (.getDouble rdr))
 
+(defn- byte-range?
+  [^long cmin ^long cmax]
+  (and (>= cmin Byte/MIN_VALUE)
+       (<= cmax Byte/MAX_VALUE)))
 
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/INT96
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (static-parse-column
-   col-rdr col-def n-rows :instant
-   (fn [^PrimitiveList container ^ColumnReader col-rdr]
-     (let [byte-data (.. col-rdr getBinary getBytes)
-           byte-buf (-> (ByteBuffer/wrap byte-data)
-                        (.order ByteOrder/LITTLE_ENDIAN))
-           nano-of-day (.getLong byte-buf)
-           julian-day (long (.getInt byte-buf))
-           epoch-day (- julian-day 2440588)
-           epoch-second (+ (* epoch-day dtype-dt/seconds-in-day)
-                           (quot nano-of-day dtype-dt/nanoseconds-in-second))
-           nanos (rem nano-of-day dtype-dt/nanoseconds-in-second)]
-       (.addObject container (Instant/ofEpochSecond epoch-second nanos))))))
+(defn- ubyte-range?
+  [^long cmin ^long cmax]
+  (and (>= cmin 0)
+       (<= cmax 255)))
 
+(defn- short-range?
+  [^long cmin ^long cmax]
+  (and (>= cmin Short/MIN_VALUE)
+       (<= cmax Short/MAX_VALUE)))
 
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/INT32
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (if (original-type-equals? col-def OriginalType/DATE)
-    (static-parse-column
-     col-rdr col-def n-rows :packed-local-date
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addObject container (LocalDate/ofEpochDay (.getInteger col-rdr)))))
-    (static-parse-column
-     col-rdr col-def n-rows :int32
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addLong container (.getInteger col-rdr))))))
+(defn- ushort-range?
+  [^long cmin ^long cmax]
+  (and (>= cmin 0)
+       (<= cmax 65535)))
 
 
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/INT64
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (cond
-    (original-type-equals? col-def OriginalType/TIMESTAMP_MILLIS)
-    (static-parse-column
-     col-rdr col-def n-rows :packed-instant
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addObject container (dtype-dt/milliseconds-since-epoch->instant
-                              (.getLong col-rdr)))))
-    (original-type-equals? col-def OriginalType/TIMESTAMP_MICROS)
-    (static-parse-column
-     col-rdr col-def n-rows :packed-instant
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addObject container (dtype-dt/microseconds-since-epoch->instant
-                              (.getLong col-rdr)))))
-    :else
-    (static-parse-column
-     col-rdr col-def n-rows :int64
-     (fn [^PrimitiveList container ^ColumnReader col-rdr]
-       (.addLong container (.getLong col-rdr))))))
+(defn- col-reader->iterable
+  ^Iterable [^ColumnReader col-rdr ^ColumnDescriptor col-def n-rows metadata]
+  (let [n-rows (long n-rows)
+        pf (.getPrimitiveType col-def)
+        prim-type (.getPrimitiveTypeName pf)
+        org-type (.getOriginalType pf)
+        max-def-level (.getMaxDefinitionLevel col-def)
+        col-min (get-in metadata [:statistics :min])
+        col-max (get-in metadata [:statistics :max])]
+    (condp = prim-type
+      PrimitiveType$PrimitiveTypeName/BINARY
+      (if (= org-type OriginalType/UTF8)
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr] :string)
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr read-str
+                                           max-def-level n-rows)))
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr] :object)
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr read-byte-array
+                                           max-def-level n-rows))))
+      PrimitiveType$PrimitiveTypeName/INT96
+      (reify
+        dtype-proto/PElemwiseDatatype
+        (elemwise-datatype [rdr] :instant)
+        Iterable
+        (iterator [rdr] (ColumnIterator. col-rdr read-instant
+                                         max-def-level n-rows)))
+      PrimitiveType$PrimitiveTypeName/INT32
+      (if (= org-type OriginalType/DATE)
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr] :local-date)
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr read-local-date
+                                           max-def-level n-rows)))
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr]
+            (cond
+              (and col-min col-max)
+              (let [col-min (long col-min)
+                    col-max (long col-max)]
+                (cond
+                  (byte-range? col-min col-max) :int8
+                  (ubyte-range? col-min col-max) :uint8
+                  (short-range? col-min col-max) :int16
+                  (ushort-range? col-min col-max) :uint16
+                  :else :int32))
+              (= org-type OriginalType/INT_8)
+              :int8
+              (= org-type OriginalType/UINT_8)
+              :uint8
+              (= org-type OriginalType/INT_16)
+              :int16
+              (= org-type OriginalType/UINT_16)
+              :uint16
+              :else
+              :int32))
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr read-int
+                                           max-def-level n-rows))))
+      PrimitiveType$PrimitiveTypeName/INT64
+      (condp = org-type
+        OriginalType/TIMESTAMP_MILLIS
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr] :instant)
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr #(dtype-dt/milliseconds-since-epoch->instant
+                                                     (read-long %))
+                                           max-def-level n-rows)))
+        OriginalType/TIMESTAMP_MICROS
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr] :instant)
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr #(dtype-dt/microseconds-since-epoch->instant
+                                                     (read-long %))
+                                           max-def-level n-rows)))
+        (reify
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [rdr]
+            (cond
+              (and col-min col-max)
+              (let [col-min (long col-min)
+                    col-max (long col-max)]
+                (cond
+                  (byte-range? col-min col-max) :int8
+                  (ubyte-range? col-min col-max) :uint8
+                  (short-range? col-min col-max) :int16
+                  (ushort-range? col-min col-max) :uint16
+                  :else :int64))
+              (= org-type OriginalType/UINT_32)
+              :uint32
+              :else
+              :int64))
+          Iterable
+          (iterator [rdr] (ColumnIterator. col-rdr read-long
+                                           max-def-level n-rows))))
+      PrimitiveType$PrimitiveTypeName/DOUBLE
+      (reify
+        dtype-proto/PElemwiseDatatype
+        (elemwise-datatype [rdr] :float64)
+        Iterable
+        (iterator [rdr] (ColumnIterator. col-rdr read-double
+                                         max-def-level n-rows)))
+      PrimitiveType$PrimitiveTypeName/FLOAT
+      (reify
+        dtype-proto/PElemwiseDatatype
+        (elemwise-datatype [rdr] :float32)
+        Iterable
+        (iterator [rdr] (ColumnIterator. col-rdr read-float
+                                         max-def-level n-rows)))
+      ;;Default case, just return the byte arrays
+      (reify
+        dtype-proto/PElemwiseDatatype
+        (elemwise-datatype [rdr] :object)
+        Iterable
+        (iterator [rdr] (ColumnIterator. col-rdr read-byte-array
+                                         max-def-level n-rows))))))
 
 
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/DOUBLE
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (static-parse-column
-   col-rdr col-def n-rows :float64
-   (fn [^PrimitiveList container ^ColumnReader col-rdr]
-     (.addDouble container (.getDouble col-rdr)))))
-
-
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/FLOAT
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (static-parse-column
-   col-rdr col-def n-rows :float32
-   (fn [^PrimitiveList container ^ColumnReader col-rdr]
-     (.addDouble container (.getFloat col-rdr)))))
-
-
-(defmethod parse-column PrimitiveType$PrimitiveTypeName/BOOLEAN
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^long n-rows]
-  (static-parse-column
-   col-rdr col-def n-rows :boolean
-   (fn [^PrimitiveList container ^ColumnReader col-rdr]
-     (.addBoolean container (.getBoolean col-rdr)))))
+(defn- parse-column
+  [col-rdr ^ColumnDescriptor col-def n-rows parse-context key-fn metadata]
+  (let [n-rows (long n-rows)
+        col-name (.. col-def getPrimitiveType getName)
+        iterable (col-reader->iterable col-rdr col-def n-rows metadata)
+        iterator (.iterator iterable)
+        col-parser (parse-context col-name)
+        {:keys [data missing metadata]}
+        (if col-parser
+          ;;The user specified a specific parser for this datatype
+          (loop [continue? (.hasNext iterator)
+                 row 0]
+            (if continue?
+              (let [col-data (.next iterator)]
+                (when-not (= col-data :tech.ml.dataset.parse/missing)
+                  (col-parsers/add-value! col-parser row col-data))
+                (recur (.hasNext iterator) (unchecked-inc row)))
+              (col-parsers/finalize! col-parser n-rows)))
+            (let [container-dtype (packing/pack-datatype
+                                   (dtype-base/elemwise-datatype iterable))
+                  container (col-base/make-container container-dtype)
+                  missing-value (col-base/datatype->missing-value container-dtype)
+                  missing (bitmap/->bitmap)]
+              ;;Faster to not use the generic system because we know what the type
+              ;;will be.
+              (loop [continue? (.hasNext iterator)
+                     row 0]
+              (if continue?
+                (let [col-data (.next iterator)]
+                  (if (.equals ^Object col-data :tech.ml.dataset.parse/missing)
+                    (do
+                      (.add missing row)
+                      (.addObject container missing-value))
+                    (.addObject container col-data))
+                  (recur (.hasNext iterator) (unchecked-inc row)))
+                {:data container
+                 :missing missing}))))]
+    (col-impl/new-column (key-fn col-name) data metadata missing)))
 
 
 (defn- page->ds
-  [^PageReadStore page ^ParquetFileReader reader ^BlockMetaData block-metadata]
+  [^PageReadStore page ^ParquetFileReader reader options block-metadata]
   (let [file-metadata (.getFileMetaData reader)
         schema (.getSchema file-metadata)
         col-read-store (ColumnReadStoreImpl. page (group-converter) schema
                                              (.getCreatedBy file-metadata))
-        n-rows (.getRowCount page)]
-    (->> (map (fn [^ColumnDescriptor col-def ^ColumnChunkMetaData col-metadata]
-                (let [col-name (.. col-def getPrimitiveType getName)
-                      stats (.getStatistics col-metadata)]
-                  (try
-                    (let [reader (locking col-read-store
-                                   (.getColumnReader col-read-store col-def))
-                          retval (parse-column reader col-def n-rows)
-                          converter (condp = (dtype-base/elemwise-datatype retval)
-                                      :string
-                                      (fn [^Binary data] (String. (.getBytes data)))
-                                      :packed-local-date
-                                      (fn [^long data] (LocalDate/ofEpochDay data))
-                                      identity)]
-                      (vary-meta
-                       retval
-                       merge {:min (converter (.genericGetMin stats))
-                              :max (converter (.genericGetMax stats))
-                              :num-missing (.getNumNulls stats)}))
-                    (catch Throwable e
-                      (log/warnf e "Failed to parse column %s: %s"
-                                 col-name (.toString col-def))
-                      nil))))
-              (.getColumns schema) (.getColumns block-metadata))
-         (remove nil?)
-         (ds-impl/new-dataset))))
+        n-rows (.getRowCount page)
+        parse-context (io-context/options->parser-fn options nil)
+        key-fn (or (:key-fn options) identity)
+        column-whitelist (when (seq (:column-whitelist options))
+                           (set (:column-whitelist options)))
+        column-blacklist (when (seq (:column-blacklist options))
+                           (set (:column-blacklist options)))
+        retval
+        (->> (map (fn [^ColumnDescriptor col-def col-metadata]
+                    (let [cname (key-fn (.. col-def getPrimitiveType getName))
+                          whitelisted? (or (not column-whitelist)
+                                           (column-whitelist cname))
+                          blacklisted? (and column-blacklist
+                                            (column-blacklist cname))]
+                      (when (or whitelisted?
+                                (not blacklisted?))
+                        (try
+                          (let [reader (.getColumnReader col-read-store col-def)
+                                retval (parse-column reader col-def n-rows parse-context key-fn col-metadata)
+                                converter (condp = (dtype-base/elemwise-datatype retval)
+                                            :string
+                                            (fn [^Binary data] (String. (.getBytes data)))
+                                            :text
+                                            (fn [^Binary data] (String. (.getBytes data)))
+                                            :packed-local-date
+                                            (fn [^long data] (LocalDate/ofEpochDay data))
+                                            ;;Strip non-numeric representations else we risk not being able to
+                                            ;;save to nippy
+                                            (fn [data] (if (number? data) data nil)))]
+                            (vary-meta
+                             retval
+                             merge
+                             (-> col-metadata
+                                 (dissoc :primitive-type)
+                                 (update :statistics
+                                         (fn [stats]
+                                           (-> stats
+                                               (update :min #(when % (converter %)))
+                                               (update :max #(when % (converter %)))))))))
+                          (catch Throwable e
+                            (log/warnf e "Failed to parse column %s: %s"
+                                       cname (.toString col-def))
+                            nil)))))
+                  (.getColumns schema) (:columns block-metadata))
+             (remove nil?)
+             (ds-impl/new-dataset))]
+    (vary-meta retval merge (dissoc block-metadata :columns))))
 
 
 (defn- read-next-dataset
-  [^ParquetFileReader reader block-metadata block-metadata-seq]
+  [^ParquetFileReader reader options block-metadata block-metadata-seq]
   (if-let [page (.readNextRowGroup reader)]
-    (cons (page->ds page reader block-metadata)
-          (lazy-seq (read-next-dataset reader
+    (cons (page->ds page reader options block-metadata)
+          (lazy-seq (read-next-dataset reader options
                                        (first block-metadata-seq)
                                        (rest block-metadata-seq))))
     (.close reader)))
 
 
-(defn read-parquet-file
+(def ^:private comp-code-map
+  {CompressionCodecName/BROTLI :brotli
+   CompressionCodecName/GZIP :gzip
+   CompressionCodecName/LZ4 :lz4
+   CompressionCodecName/LZO :lzo
+   CompressionCodecName/SNAPPY :snappy
+   CompressionCodecName/UNCOMPRESSED :uncompressed
+   CompressionCodecName/ZSTD :zstd})
+
+
+(def ^:private encoding-map
+  {Encoding/BIT_PACKED :bit-packed
+   Encoding/DELTA_BINARY_PACKED :delta-binary-packed
+   Encoding/DELTA_BYTE_ARRAY :delta-byte-array
+   Encoding/DELTA_LENGTH_BYTE_ARRAY :delta-length-byte-array
+   Encoding/PLAIN :plain
+   Encoding/PLAIN_DICTIONARY :plain-dictionary
+   Encoding/RLE :rle
+   Encoding/RLE_DICTIONARY :rle-dictionary})
+
+
+(def ^:private repetition-map
+  {Type$Repetition/REQUIRED :required
+   Type$Repetition/REPEATED :repeated
+   Type$Repetition/OPTIONAL :optional})
+
+
+(def ^:private original-type-map
+  {OriginalType/BSON :bson
+   OriginalType/DATE :date
+   OriginalType/DECIMAL :decimal
+   OriginalType/ENUM :enum
+   OriginalType/INTERVAL :interval
+   OriginalType/INT_8 :int8
+   OriginalType/INT_16 :int16
+   OriginalType/INT_32 :int32
+   OriginalType/INT_64 :int64
+   OriginalType/JSON :json
+   OriginalType/LIST :list
+   OriginalType/MAP :map
+   OriginalType/MAP_KEY_VALUE :map-key-value
+   OriginalType/TIMESTAMP_MICROS :timestamp-micros
+   OriginalType/TIMESTAMP_MILLIS :timestamp-millis
+   OriginalType/TIME_MICROS :time-micros
+   OriginalType/TIME_MILLIS :time-millis
+   OriginalType/UINT_8 :uint8
+   OriginalType/UINT_16 :uint16
+   OriginalType/UINT_32 :uint32
+   OriginalType/UINT_64 :uint64
+   OriginalType/UTF8 :utf8})
+
+
+
+(defn parquet-reader->metadata
+  [^ParquetFileReader reader]
+  (->> (.getRowGroups reader)
+       (map (fn [^BlockMetaData block]
+              {:path (.getPath block)
+               :num-rows (.getRowCount block)
+               :total-byte-size (.getTotalByteSize block)
+               :columns
+               (->> (.getColumns ^BlockMetaData block)
+                    (mapv (fn [^ColumnChunkMetaData metadata]
+                            (let [ptype (.getPrimitiveType metadata)]
+                              {:starting-pos (.getStartingPos metadata)
+                               :compression-codec (get comp-code-map (.getCodec metadata)
+                                                       :unrecognized-compression-codec)
+                               :path (.toArray (.getPath metadata))
+                               :primitive-type ptype
+                               :repetition (get repetition-map (.getRepetition ptype)
+                                                :unrecognized-repetition)
+                               :original-type (get original-type-map (.getOriginalType ptype)
+                                                   (.getOriginalType ptype))
+                               :first-data-page-offset (.getFirstDataPageOffset metadata)
+                               :dictionary-page-offset (.getDictionaryPageOffset metadata)
+                               :num-values (.getValueCount metadata)
+                               :uncompressed-size (.getTotalUncompressedSize metadata)
+                               :total-size (.getTotalSize metadata)
+                               :statistics (let [stats (.getStatistics metadata)]
+                                             {:min (.genericGetMin stats)
+                                              :max (.genericGetMax stats)
+                                              :num-missing (.getNumNulls stats)})
+                               :encodings (->> (.getEncodings metadata)
+                                               (map #(get encoding-map % :unrecognized-encoding))
+                                               set)}))))}))))
+
+
+(defn parquet->metadata-seq
+  "Given a local parquet file, return a sequence of metadata, one for each page.
+  A page maps directly to a dataset."
+  [^String path]
+  (with-open [reader (ParquetFileReader/open (HadoopInput/file path))]
+    (parquet-reader->metadata reader)))
+
+
+(defn parquet->ds-seq
+  "Given a local parquet file, return a sequence of datasets. Column will have parquet metadata
+  merged into their normal metadata."
   ([^String path options]
    (let [reader (ParquetFileReader/open (HadoopInput/file path))
-         blocks (.getRowGroups reader)]
-     (read-next-dataset reader (first blocks) (rest blocks))))
+         metadata (parquet-reader->metadata reader)]
+     (read-next-dataset reader options (first metadata) (rest metadata))))
   ([^String path]
-   (read-parquet-file path nil)))
+   (parquet->ds-seq path nil)))

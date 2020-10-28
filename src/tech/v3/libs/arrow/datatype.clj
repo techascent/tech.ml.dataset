@@ -8,6 +8,7 @@
             [primitive-math :as pmath])
   (:import [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype Buffer ObjectReader BooleanBuffer]
+           [tech.v3.dataset Text]
            [org.apache.arrow.vector VarCharVector BitVector TinyIntVector UInt1Vector
             SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
             Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
@@ -144,7 +145,7 @@
     (.add offsets 0)
     (dotimes [idx n-elems]
       (when-not (.contains missing idx)
-        (let [byte-data (.getBytes ^String (str-rdr idx) "UTF-8")]
+        (let [byte-data (.getBytes ^String (str (str-rdr idx)) "UTF-8")]
           (.addAll byte-list (dtype/as-concrete-buffer byte-data))))
       (.addLong offsets (.lsize byte-list)))
     (.allocateNew fv (.size byte-list) n-elems)
@@ -161,6 +162,17 @@
                    (dtype/sub-buffer (arrow-buffer->native-buffer :int8 data-buf)
                                      0 (dtype/ecount byte-list))))
     fv))
+
+
+(defn string-reader->text-reader
+  ^Buffer [item]
+  (let [data-buf (dtype/->reader item)]
+    (reify ObjectReader
+      (elemwiseDatatype [rdr] :text)
+      (lsize [rdr] (.lsize data-buf))
+      (readObject [rdr idx]
+        (when-let [data (.readObject data-buf idx)]
+          (Text. (str data)))))))
 
 
 (defn byte-buffer->bitwise-boolean-buffer

@@ -7,14 +7,13 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.datatype.argtypes :refer [arg-type]]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.dataset.impl.dataset :as ds-impl])
+            [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util UUID List HashMap]
            [java.util.function Function]
            [tech.v3.datatype PrimitiveList]
+           [tech.v3.dataset Text]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
            [java.time.format DateTimeFormatter]))
@@ -113,7 +112,7 @@
                (if (< (count str-val) 1024)
                  str-val
                  parse-failure))
-    :text #(str %)}
+    :text #(Text. (str %))}
    (->> parse-dt/datatype->general-parse-fn-map
         (mapcat (fn [[k v]]
                   (let [unpacked-parser (make-safe-parse-fn
@@ -169,10 +168,10 @@
 
 
 (defn- missing-value?
-  [^String value]
+  [value]
   (or (nil? value)
-      (= "" value)
-      (and (string? value) (.equalsIgnoreCase value "na"))))
+      (.equals "" value)
+      (and (string? value) (.equalsIgnoreCase ^String value "na"))))
 
 
 (defn- not-missing?
@@ -222,8 +221,7 @@
 
 (defn- find-fixed-parser
   [kwd]
-  (if (or (= kwd :string)
-          (= kwd :text))
+  (if (= kwd :string)
     str
     (if-let [retval (get default-coercers kwd)]
       retval
@@ -430,7 +428,7 @@
       (let [idx (long idx)
             org-datatype (dtype/datatype value)
             packed-dtype (packing/pack-datatype org-datatype)
-            container-ecount (dtype/ecount container)]
+            container-ecount (.lsize container)]
         (if (or (== 0 container-ecount)
                 (= container-dtype packed-dtype))
           (do

@@ -14,7 +14,8 @@
   [options parse-type]
   (let [default-parse-fn (case parse-type
                            :object column-parsers/promotional-object-parser
-                           :string column-parsers/promotional-string-parser)
+                           :string column-parsers/promotional-string-parser
+                           nil (constantly nil))
         key-fn (or (:key-fn options) identity)
         parser-descriptor (:parser-fn options)]
     (fn [cname-or-index]
