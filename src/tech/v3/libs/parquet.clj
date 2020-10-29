@@ -22,37 +22,48 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.io.context :as io-context]
             [tech.v3.dataset.io.column-parsers :as col-parsers]
             [tech.v3.dataset.io :as ds-io]
+            [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.io :as io]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.parallel.for :as pfor]
+            [clojure.set :as set]
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
-           [tech.v3.datatype PrimitiveList]
-           [org.apache.parquet.hadoop ParquetFileReader]
+           [tech.v3.datatype PrimitiveList Buffer]
+           [org.apache.hadoop.conf Configuration]
+           [org.apache.parquet.hadoop ParquetFileReader ParquetWriter
+            ParquetFileWriter ParquetFileWriter$Mode CodecFactory
+            FilePageWriteStore]
+           [org.apache.parquet.hadoop.util HadoopOutputFile]
            [org.apache.parquet.hadoop.metadata BlockMetaData ColumnChunkMetaData
             CompressionCodecName]
+           [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding
+            ParquetProperties ColumnWriter]
            [org.apache.parquet.column.page PageReadStore]
            [org.apache.parquet.column.impl ColumnReadStoreImpl]
-           [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding]
-           [org.apache.parquet.io OutputFile PositionOutputStream]
+           [org.apache.parquet.io OutputFile PositionOutputStream InputFile
+            ColumnIOFactory PrimitiveColumnIO]
            [org.apache.parquet.io.api GroupConverter PrimitiveConverter Binary]
-           ;;Only parquet would have the only way to write a file be a hadoop thing.
-           [org.apache.parquet.hadoop.example ExampleParquetWriter]
-           [org.apache.parquet.schema OriginalType
-            PrimitiveType$PrimitiveTypeName Type$Repetition]
+           [org.apache.parquet.schema OriginalType MessageType
+            PrimitiveType$PrimitiveTypeName Type$Repetition Type PrimitiveType]
+           [org.roaringbitmap RoaringBitmap]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel]
            [java.nio.file Paths StandardOpenOption OpenOption]
            [java.io OutputStream]
            [java.time Instant LocalDate]
-           [java.util Iterator]))
+           [java.util Iterator List]))
 
 
 (comment
@@ -104,6 +115,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 (defn- read-byte-array
   ^bytes [^ColumnReader rdr]
+  (let [bin-val (.getBinary rdr)]
+    (throw (Exception. (format "str type is %s" (type bin-val)))))
   (.. rdr getBinary getBytes))
 
 (defn- read-str
@@ -390,10 +403,14 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 (defn- read-next-dataset
   [^ParquetFileReader reader options block-metadata block-metadata-seq]
   (if-let [row-group (.readNextRowGroup reader)]
-    (cons (row-group->ds row-group reader options block-metadata)
-          (lazy-seq (read-next-dataset reader options
-                                       (first block-metadata-seq)
-                                       (rest block-metadata-seq))))
+    (try
+      (cons (row-group->ds row-group reader options block-metadata)
+            (lazy-seq (read-next-dataset reader options
+                                         (first block-metadata-seq)
+                                         (rest block-metadata-seq))))
+      (catch Throwable e
+        (.close reader)
+        (throw e)))
     (.close reader)))
 
 
@@ -484,19 +501,35 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                                                set)}))))}))))
 
 
+(defn- ->file-reader
+  ^ParquetFileReader [data]
+  (cond
+    (instance? ParquetFileReader data)
+    data
+    (string? data)
+    (ParquetFileReader/open (HadoopInput/file data))
+    (instance? org.apache.hadoop.fs.Path data)
+    (ParquetFileReader/open ^org.apache.hadoop.fs.Path data)
+    (instance? InputFile data)
+    (ParquetFileReader/open ^InputFile data)
+    :else
+    (errors/throwf "Unrecognized parquet input type: %s" (type data))))
+
+
 (defn parquet->metadata-seq
   "Given a local parquet file, return a sequence of metadata, one for each row-group.
   A row-group maps directly to a dataset."
-  [^String path]
-  (with-open [reader (ParquetFileReader/open (HadoopInput/file path))]
+  [path]
+  (with-open [reader (->file-reader path)]
     (parquet-reader->metadata reader)))
 
 
 (defn parquet->ds-seq
-  "Given a local parquet file, return a sequence of datasets. Column will have parquet metadata
-  merged into their normal metadata."
-  ([^String path options]
-   (let [reader (ParquetFileReader/open (HadoopInput/file path))
+  "Given a string, hadoop path, or a parquet InputFile, return a sequence of datasets.
+  Column will have parquet metadata merged into their normal metadata.
+  Reader will be closed upon termination of the sequence."
+  ([path options]
+   (let [reader (->file-reader path)
          metadata (parquet-reader->metadata reader)]
      (read-next-dataset reader options (first metadata) (rest metadata))))
   ([^String path]
@@ -551,26 +584,255 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (defn- local-file-output-file
-  ^OutputFile [str-path]
-  (reify OutputFile
-    (create [f block-size-hint]
-      (pos-out-stream str-path))
-    (createOrOverwrite [f block-size-hint]
-      (pos-out-stream str-path))
-    (supportsBlockSize [f] false)
-    ;;Fair roll of the dice
-    (defaultBlockSize [f] 4096)))
+  ^OutputFile [^String str-path]
+  (let [file (io/file str-path)
+        _ (errors/when-not-error
+           file
+           "Only writing to filesystem files is supported")
+        str-path (.getCanonicalPath file)]
+    (reify OutputFile
+      (create [f block-size-hint]
+        (pos-out-stream str-path))
+      (createOrOverwrite [f block-size-hint]
+        (pos-out-stream str-path))
+      (supportsBlockSize [f] false)
+      ;;Fair roll of the dice
+      (defaultBlockSize [f] 4096))))
 
+
+(defn- ->file-writer
+  ^ParquetFileWriter [path ^Configuration config ^MessageType schema
+                      ^ParquetProperties properties]
+  (let [^OutputFile of (cond
+                         (instance? OutputFile path)
+                         path
+                         (instance? org.apache.hadoop.fs.Path path)
+                         (HadoopOutputFile/fromPath path config)
+                         (string? path)
+                         (local-file-output-file path)
+                         :else
+                         (errors/throwf "Unrecognized parquet file writer input: %s" (type path)))]
+    (ParquetFileWriter. of schema ParquetFileWriter$Mode/CREATE
+                        ParquetWriter/DEFAULT_BLOCK_SIZE
+                        ParquetWriter/MAX_PADDING_SIZE_DEFAULT
+                        (.getColumnIndexTruncateLength properties)
+                        (.getStatisticsTruncateLength properties)
+                        (.getPageWriteChecksumEnabled properties))))
+
+
+(def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32 :local-date})
+(def ^:private int64-set #{:uint32 :int64 :uint64 :instant})
+(def ^:private str-set #{:string :text})
+
+
+(defn- column->field
+  ^Type [col]
+  (let [colmeta (meta col)
+        datatype (-> (:datatype colmeta)
+                     (packing/unpack-datatype)
+                     (casting/un-alias-datatype))
+        colname (:name colmeta)
+        missing (ds-col/missing col)]
+    (PrimitiveType.
+     ^Type$Repetition
+     (if (== 0 (dtype-base/ecount missing))
+       Type$Repetition/REQUIRED
+       Type$Repetition/OPTIONAL)
+
+     ^PrimitiveType$PrimitiveTypeName
+     (cond
+       (= :boolean datatype) PrimitiveType$PrimitiveTypeName/BOOLEAN
+       (int32-set datatype) PrimitiveType$PrimitiveTypeName/INT32
+       (int64-set datatype) PrimitiveType$PrimitiveTypeName/INT64
+       (str-set datatype) PrimitiveType$PrimitiveTypeName/BINARY
+       (= :float32 datatype) PrimitiveType$PrimitiveTypeName/FLOAT
+       (= :float64 datatype) PrimitiveType$PrimitiveTypeName/DOUBLE
+       :else
+       (errors/throwf "Unsupported datatype for parquet writing: %s" datatype))
+
+     (int 0)
+     ^String (ds-utils/column-safe-name colname)
+     ^OriginalType
+     (case datatype
+       :int8 OriginalType/INT_8
+       :int16 OriginalType/INT_16
+       :int32 OriginalType/INT_32
+       :int64 OriginalType/INT_64
+       :uint8 OriginalType/UINT_8
+       :uint16 OriginalType/UINT_16
+       :uint32 OriginalType/UINT_32
+       :uint64 OriginalType/UINT_64
+       :string OriginalType/UTF8
+       :text OriginalType/UTF8
+       :local-date OriginalType/DATE
+       :instant OriginalType/TIMESTAMP_MICROS
+       nil)
+     nil nil)))
+
+
+(defn- ds->schema
+  ^MessageType [ds]
+  (let [^List fields (->> (vals ds)
+                          (mapv column->field))]
+    (MessageType. (ds-utils/column-safe-name (:name (meta ds)))
+                  fields)))
+
+
+(defn- compression-codec
+  ^CompressionCodecName [kwd]
+  (get (set/map-invert comp-code-map) kwd CompressionCodecName/SNAPPY))
+
+
+(defn- consume-column!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows consume-fn]
+  (let [buffer (dtype-base/->reader buffer)
+        n-rows (long n-rows)]
+    (dotimes [idx n-rows]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (consume-fn idx)))))
+
+
+(defn- consume-boolean!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (dtype-base/->reader buffer)]
+    (fn [^long idx]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (.write col-writer (.readBoolean buffer idx) (int 0) (int 1))))))
+
+
+(defn- consume-int32!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (if (= :local-date (packing/unpack-datatype
+                                   (dtype-base/elemwise-datatype buffer)))
+                 (dtype-base/->buffer
+                  (dtype-dt/long-temporal-field :epoch-days buffer))
+                 (dtype-base/->reader buffer))]
+    (fn [^long idx]
+        (if (.contains missing idx)
+          (.writeNull col-writer 0 0)
+          (.write col-writer (.readInt buffer idx) (int 0) (int 1))))))
+
+
+(defn- consume-int64!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (if (= :instant
+                      (packing/unpack-datatype (dtype-base/elemwise-datatype buffer)))
+
+                 (dtype-base/->reader buffer))]
+    (if (= :instant )
+
+      (fn [^long idx]
+        (if (.contains missing idx)
+          (.writeNull col-writer 0 0)
+          (.write col-writer (.readLong buffer idx) (int 0) (int 1)))))))
+
+
+(defn- consume-string!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (dtype-base/->reader buffer)]
+    (fn [^long idx]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (.write col-writer (Binary/fromString (str (.readObject buffer idx)))
+                (int 0) (int 1))))))
+
+
+(defn- consume-float32!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (dtype-base/->reader buffer)]
+    (fn [^long idx]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (.write col-writer (.readFloat buffer idx)
+                (int 0) (int 1))))))
+
+
+(defn- consume-float64!
+  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
+  (let [buffer (dtype-base/->reader buffer)]
+    (fn [^long idx]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (.write col-writer (.readDouble buffer idx)
+                (int 0) (int 1))))))
+
+
+(defn write-column!
+  [n-rows ds-col ^ColumnWriter col-writer ^ColumnDescriptor col-desc]
+  (let [missing (ds-col/missing ds-col)
+        datatype (-> (:datatype (meta ds-col))
+                     (packing/unpack-datatype)
+                     (casting/un-alias-datatype))]
+    (println "datatype is" datatype)
+    (cond
+      (= :boolean datatype) (consume-boolean! ds-col missing col-writer n-rows)
+      (int32-set datatype) (consume-int32! ds-col missing col-writer n-rows)
+      (int64-set datatype) (consume-int64! ds-col missing col-writer n-rows)
+      (str-set datatype) (consume-string! ds-col missing col-writer n-rows)
+      (= :float32 datatype) (consume-float32! ds-col missing col-writer n-rows)
+      (= :float64 datatype) (consume-float64! ds-col missing col-writer n-rows)
+      :else
+      (errors/throwf "Unsupported datatype for parquet writing: %s" datatype))))
 
 
 (defn ds-seq->parquet
   ([path options ds-seq]
-   (let [file (io/file path)
-         _ (errors/when-not-error
-            file
-            "Only writing to filesystem files is supported")
-         builder (ExampleParquetWriter/builder (local-file-output-file
-                                                (.getCanonicalPath file)))]
-     builder))
+   (let [first-ds (first ds-seq)
+         schema (ds->schema first-ds)
+         ^Configuration configuration
+         (or (:hadoop-configuration options)
+             (Configuration.))
+         ^ParquetProperties properties
+         (or (:parquet-properties options)
+             (-> (ParquetProperties/builder)
+                 (.build)))
+         ^CodecFactory codec-factory
+         (or (:parquet-codec-factory options)
+             (CodecFactory. configuration
+                            (.getPageSizeThreshold properties)))
+         compressor (or (:parquet-compressor options)
+                        (.getCompressor codec-factory
+                                        (compression-codec (:compression-codec options))))
+         file-writer (->file-writer path configuration schema properties)
+         validating? (boolean (get options :parquet-validating? true))
+         message-column-io (.getColumnIO (ColumnIOFactory. validating?) schema)
+         col-descriptors (->> (.getLeaves message-column-io)
+                              (map (fn [^PrimitiveColumnIO prim-io]
+                                     (.getColumnDescriptor prim-io))))
+         colnames (map (comp :name meta) (vals first-ds))]
+     (.start file-writer)
+     (doseq [[_group-ordinal ds] (map-indexed vector ds-seq)]
+       (let [ds-cols (ds-base/columns (ds-base/select-columns ds colnames))
+             page-write-store (FilePageWriteStore.
+                               compressor
+                               schema
+                               (.getAllocator properties)
+                               (.getColumnIndexTruncateLength properties)
+                               (.getPageWriteChecksumEnabled properties))
+             column-store (.newColumnWriteStore properties schema page-write-store)
+             colwriters (->> col-descriptors
+                             (map (fn [^ColumnDescriptor col-desc]
+                                    (.getColumnWriter column-store col-desc))))
+             n-rows (ds-base/row-count ds)
+             ^List col-write-fns (mapv (partial write-column! n-rows) ds-cols colwriters col-descriptors)]
+         (.startBlock file-writer n-rows)
+         (dotimes [idx n-rows]
+           (doseq [write-fn col-write-fns]
+             (write-fn idx))
+           (.endRecord column-store))
+         (.flush column-store)
+         (.flushToFileWriter page-write-store file-writer)
+         (.endBlock file-writer)))
+     (.end file-writer {"created-by" "tech.v3.dataset"})
+     :ok))
   ([path ds-seq]
    (ds-seq->parquet path nil ds-seq)))
+
+
+(defn ds->parquet
+  ([ds path options]
+   (ds-seq->parquet path options [ds]))
+  ([ds path]
+   (ds->parquet ds path nil)))
