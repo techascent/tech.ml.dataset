@@ -16,7 +16,7 @@
                com.fasterxml.jackson.core/jackson-databind]]
 ```
 
-Read implementation Initialize based off of:
+Read implementation initialially based off of:
 https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -31,12 +31,12 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
             [tech.v3.io :as io]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.base :as dtype-base]
+            [tech.v3.datatype.emap :as emap]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.parallel.for :as pfor]
             [clojure.set :as set]
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
@@ -115,8 +115,6 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 (defn- read-byte-array
   ^bytes [^ColumnReader rdr]
-  (let [bin-val (.getBinary rdr)]
-    (throw (Exception. (format "str type is %s" (type bin-val)))))
   (.. rdr getBinary getBytes))
 
 (defn- read-str
@@ -561,7 +559,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   (let [fchannel (FileChannel/open
                   (Paths/get str-path (into-array String []))
                   (into-array OpenOption [StandardOpenOption/WRITE
-                                          StandardOpenOption/CREATE]))]
+                                          StandardOpenOption/CREATE
+                                          StandardOpenOption/TRUNCATE_EXISTING]))]
     (proxy [PositionOutputStream] []
       (getPos [] (.position fchannel))
       (close [] (.close fchannel))
@@ -683,16 +682,6 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   (get (set/map-invert comp-code-map) kwd CompressionCodecName/SNAPPY))
 
 
-(defn- consume-column!
-  [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows consume-fn]
-  (let [buffer (dtype-base/->reader buffer)
-        n-rows (long n-rows)]
-    (dotimes [idx n-rows]
-      (if (.contains missing idx)
-        (.writeNull col-writer 0 0)
-        (consume-fn idx)))))
-
-
 (defn- consume-boolean!
   [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
   (let [buffer (dtype-base/->reader buffer)]
@@ -704,11 +693,11 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 (defn- consume-int32!
   [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
-  (let [buffer (if (= :local-date (packing/unpack-datatype
-                                   (dtype-base/elemwise-datatype buffer)))
-                 (dtype-base/->buffer
-                  (dtype-dt/long-temporal-field :epoch-days buffer))
-                 (dtype-base/->reader buffer))]
+  (let [buffer (-> (if (= :local-date (packing/unpack-datatype
+                                       (dtype-base/elemwise-datatype buffer)))
+                     (dtype-dt/long-temporal-field :epoch-days buffer)
+                     buffer)
+                   (dtype-base/->buffer))]
     (fn [^long idx]
         (if (.contains missing idx)
           (.writeNull col-writer 0 0)
@@ -717,16 +706,16 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 (defn- consume-int64!
   [buffer ^RoaringBitmap missing ^ColumnWriter col-writer n-rows]
-  (let [buffer (if (= :instant
-                      (packing/unpack-datatype (dtype-base/elemwise-datatype buffer)))
-
-                 (dtype-base/->reader buffer))]
-    (if (= :instant )
-
-      (fn [^long idx]
-        (if (.contains missing idx)
-          (.writeNull col-writer 0 0)
-          (.write col-writer (.readLong buffer idx) (int 0) (int 1)))))))
+  (let [buffer (-> (if (= :instant
+                          (packing/unpack-datatype
+                           (dtype-base/elemwise-datatype buffer)))
+                     (emap/emap dtype-dt/instant->microseconds-since-epoch :int64 buffer)
+                     buffer)
+                   (dtype-base/->buffer))]
+    (fn [^long idx]
+      (if (.contains missing idx)
+        (.writeNull col-writer 0 0)
+        (.write col-writer (.readLong buffer idx) (int 0) (int 1))))))
 
 
 (defn- consume-string!
@@ -759,13 +748,12 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                 (int 0) (int 1))))))
 
 
-(defn write-column!
+(defn- write-column!
   [n-rows ds-col ^ColumnWriter col-writer ^ColumnDescriptor col-desc]
   (let [missing (ds-col/missing ds-col)
         datatype (-> (:datatype (meta ds-col))
                      (packing/unpack-datatype)
                      (casting/un-alias-datatype))]
-    (println "datatype is" datatype)
     (cond
       (= :boolean datatype) (consume-boolean! ds-col missing col-writer n-rows)
       (int32-set datatype) (consume-int32! ds-col missing col-writer n-rows)
@@ -778,6 +766,15 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (defn ds-seq->parquet
+  "Write a sequence of datasets to a parquet file.  EAch dataset will be stored
+  in a parquet row group in a single file.
+
+ Options:
+
+  * `:hadoop-configuration` - Either nil or an instance of `org.apache.hadoop.conf.Configuration`.
+  * `:parquet-properties` - Either nil or an instance of `org.apache.parquet.column.ParquetProperties`.
+  * `:parquet-compression-codec` - Either nil or an instance of `org.apache.parquet.hadoop.metadata.CompressionCodecName`.
+  * `:parquet-validating?` - true if the columns should be validated after being written.  Defauts to true."
   ([path options ds-seq]
    (let [first-ds (first ds-seq)
          schema (ds->schema first-ds)
@@ -794,7 +791,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                             (.getPageSizeThreshold properties)))
          compressor (or (:parquet-compressor options)
                         (.getCompressor codec-factory
-                                        (compression-codec (:compression-codec options))))
+                                        (compression-codec (:parquet-compression-codec
+                                                            options))))
          file-writer (->file-writer path configuration schema properties)
          validating? (boolean (get options :parquet-validating? true))
          message-column-io (.getColumnIO (ColumnIOFactory. validating?) schema)
@@ -816,11 +814,12 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                              (map (fn [^ColumnDescriptor col-desc]
                                     (.getColumnWriter column-store col-desc))))
              n-rows (ds-base/row-count ds)
-             ^List col-write-fns (mapv (partial write-column! n-rows) ds-cols colwriters col-descriptors)]
+             ^List col-write-fns (mapv (partial write-column! n-rows) ds-cols colwriters col-descriptors)
+             n-col-write-fns (.size col-write-fns)]
          (.startBlock file-writer n-rows)
          (dotimes [idx n-rows]
-           (doseq [write-fn col-write-fns]
-             (write-fn idx))
+           (dotimes [col-idx n-col-write-fns]
+             ((.get col-write-fns col-idx) idx))
            (.endRecord column-store))
          (.flush column-store)
          (.flushToFileWriter page-write-store file-writer)
@@ -832,7 +831,29 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (defn ds->parquet
+  "Write a dataset to a parquet file.  Many parquet options are possible;
+  these can also be passed in via ds/->write!
+
+  Options:
+
+  * `:hadoop-configuration` - Either nil or an instance of `org.apache.hadoop.conf.Configuration`.
+  * `:parquet-properties` - Either nil or an instance of `org.apache.parquet.column.ParquetProperties`.
+  * `:parquet-compression-codec` - Either nil or an instance of `org.apache.parquet.hadoop.metadata.CompressionCodecName`.
+  * `:parquet-validating?` - true if the columns should be validated after being written.  Defauts to true."
   ([ds path options]
    (ds-seq->parquet path options [ds]))
   ([ds path]
    (ds->parquet ds path nil)))
+
+
+(defmethod ds-io/dataset->data! :parquet
+  [ds output options]
+  (ds->parquet ds output options))
+
+
+(comment
+  (do (require '[tech.v3.dataset :as ds])
+      (def stocks (ds/->dataset "test/data/stocks.csv")))
+
+
+  )
