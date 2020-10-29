@@ -1,14 +1,36 @@
 (ns tech.v3.libs.parquet
-  "https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
+  "Support for reading Parquet files.  Please include these dependencies in
+  your project:
+
+
+```clojure
+[org.apache.parquet/parquet-hadoop \"1.10.1\"]
+[org.apache.hadoop/hadoop-common
+  \"3.1.1\"
+  :exclusions [org.slf4j/slf4j-log4j12
+               log4j
+               com.google.guava/guava
+               commons-codec
+               commons-logging
+               com.google.code.findbugs/jsr305
+               com.fasterxml.jackson.core/jackson-databind]]
+```
+
+Read implementation Initialize based off of:
+https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
+
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.io.context :as io-context]
             [tech.v3.dataset.io.column-parsers :as col-parsers]
+            [tech.v3.dataset.io :as ds-io]
+            [tech.v3.io :as io]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
@@ -19,10 +41,16 @@
            [org.apache.parquet.column.page PageReadStore]
            [org.apache.parquet.column.impl ColumnReadStoreImpl]
            [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding]
+           [org.apache.parquet.io OutputFile PositionOutputStream]
            [org.apache.parquet.io.api GroupConverter PrimitiveConverter Binary]
+           ;;Only parquet would have the only way to write a file be a hadoop thing.
+           [org.apache.parquet.hadoop.example ExampleParquetWriter]
            [org.apache.parquet.schema OriginalType
             PrimitiveType$PrimitiveTypeName Type$Repetition]
            [java.nio ByteBuffer ByteOrder]
+           [java.nio.channels FileChannel]
+           [java.nio.file Paths StandardOpenOption OpenOption]
+           [java.io OutputStream]
            [java.time Instant LocalDate]
            [java.util Iterator]))
 
@@ -304,7 +332,7 @@
     (col-impl/new-column (key-fn col-name) data metadata missing)))
 
 
-(defn- page->ds
+(defn- row-group->ds
   [^PageReadStore page ^ParquetFileReader reader options block-metadata]
   (let [file-metadata (.getFileMetaData reader)
         schema (.getSchema file-metadata)
@@ -361,8 +389,8 @@
 
 (defn- read-next-dataset
   [^ParquetFileReader reader options block-metadata block-metadata-seq]
-  (if-let [page (.readNextRowGroup reader)]
-    (cons (page->ds page reader options block-metadata)
+  (if-let [row-group (.readNextRowGroup reader)]
+    (cons (row-group->ds row-group reader options block-metadata)
           (lazy-seq (read-next-dataset reader options
                                        (first block-metadata-seq)
                                        (rest block-metadata-seq))))
@@ -422,7 +450,7 @@
 
 
 
-(defn parquet-reader->metadata
+(defn- parquet-reader->metadata
   [^ParquetFileReader reader]
   (->> (.getRowGroups reader)
        (map (fn [^BlockMetaData block]
@@ -457,8 +485,8 @@
 
 
 (defn parquet->metadata-seq
-  "Given a local parquet file, return a sequence of metadata, one for each page.
-  A page maps directly to a dataset."
+  "Given a local parquet file, return a sequence of metadata, one for each row-group.
+  A row-group maps directly to a dataset."
   [^String path]
   (with-open [reader (ParquetFileReader/open (HadoopInput/file path))]
     (parquet-reader->metadata reader)))
@@ -473,3 +501,76 @@
      (read-next-dataset reader options (first metadata) (rest metadata))))
   ([^String path]
    (parquet->ds-seq path nil)))
+
+
+
+(defmethod ds-io/data->dataset :parquet
+  [input options]
+  (let [data-file (io/file input)
+        _ (errors/when-not-errorf
+           (.exists data-file)
+           "Only on-disk files work with parquet.  %s does not resolve to a file"
+           input)
+        dataset-seq (parquet->ds-seq (.getCanonicalPath data-file) options)]
+    (errors/when-not-errorf
+     (== 1 (count dataset-seq))
+     "Zero or multiple datasets found in parquet file %s" input)
+    (first dataset-seq)))
+
+
+;;https://github.com/apache/parquet-mr/blob/72738f59920cb8a875757d5fbb0a70bd7115fdcf/parquet-column/src/main/java/org/apache/parquet/column/impl/ColumnWriteStoreV1.java
+;;https://github.com/apache/parquet-mr/blob/master/parquet-hadoop/src/main/java/org/apache/parquet/hadoop/ParquetFileWriter.java
+;;https://github.com/apache/parquet-mr/blob/master/parquet-hadoop/src/main/java/org/apache/parquet/hadoop/ColumnChunkPageWriteStore.java
+
+
+(defn- pos-out-stream
+  [str-path]
+  (let [fchannel (FileChannel/open
+                  (Paths/get str-path (into-array String []))
+                  (into-array OpenOption [StandardOpenOption/WRITE
+                                          StandardOpenOption/CREATE]))]
+    (proxy [PositionOutputStream] []
+      (getPos [] (.position fchannel))
+      (close [] (.close fchannel))
+      (flush [] (.force fchannel false))
+      (write
+        ([data]
+         (if (bytes? data)
+           (let [^bytes data data]
+             (.write fchannel (ByteBuffer/wrap data)))
+           (let [data (unchecked-byte data)
+                 data-ary (byte-array [data])
+                 buf (ByteBuffer/wrap data-ary)]
+             (.write fchannel buf))))
+        ([data off len]
+         (let [byte-buf (ByteBuffer/wrap data)
+               _ (.position byte-buf off)
+               _ (.limit byte-buf (+ off len))]
+           (assert (== (.remaining byte-buf) len))
+           (.write fchannel byte-buf)))))))
+
+
+(defn- local-file-output-file
+  ^OutputFile [str-path]
+  (reify OutputFile
+    (create [f block-size-hint]
+      (pos-out-stream str-path))
+    (createOrOverwrite [f block-size-hint]
+      (pos-out-stream str-path))
+    (supportsBlockSize [f] false)
+    ;;Fair roll of the dice
+    (defaultBlockSize [f] 4096)))
+
+
+
+(defn ds-seq->parquet
+  ([path options ds-seq]
+   (let [file (io/file path)
+         _ (errors/when-not-error
+            file
+            "Only writing to filesystem files is supported")
+         builder (ExampleParquetWriter/builder (local-file-output-file
+                                                (.getCanonicalPath file)))]
+     builder))
+  ([path ds-seq]
+   (ds-seq->parquet path nil ds-seq)))
