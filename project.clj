@@ -75,7 +75,7 @@
              :travis {:dependencies [[criterium "0.4.5"]
                                      [http-kit "2.3.0"]
                                      [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
-                                     [org.apache.parquet/parquet-hadoop "1.10.1"]
+                                     [org.apache.parquet/parquet-hadoop "1.11.0"]
                                      [org.apache.hadoop/hadoop-common
                                       "3.1.1"
                                       ;;We use logback-classic.

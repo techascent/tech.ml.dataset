@@ -135,6 +135,11 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
     (Instant/ofEpochSecond epoch-second nanos)))
 
 
+(defn- read-boolean
+  [^ColumnReader rdr]
+  (.getBoolean rdr))
+
+
 (defn- read-local-date
   ^LocalDate [^ColumnReader rdr]
   (LocalDate/ofEpochDay (.getInteger rdr)))
@@ -187,6 +192,13 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         col-min (get-in metadata [:statistics :min])
         col-max (get-in metadata [:statistics :max])]
     (condp = prim-type
+      PrimitiveType$PrimitiveTypeName/BOOLEAN
+      (reify
+        dtype-proto/PElemwiseDatatype
+        (elemwise-datatype [rdr] :boolean)
+        Iterable
+        (iterator [rdr] (ColumnIterator. col-rdr read-boolean
+                                         max-def-level n-rows)))
       PrimitiveType$PrimitiveTypeName/BINARY
       (if (= org-type OriginalType/UTF8)
         (reify
