@@ -205,28 +205,28 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                                          max-def-level n-rows)))
       PrimitiveType$PrimitiveTypeName/BINARY
       (if (= org-type OriginalType/UTF8)
-        (let []
-          (if false
-            (let [dict-data (HashMap.)
-                  compute-fn (reify java.util.function.Function
-                               (apply [this value]
-                                 (read-str col-rdr)))
-                  read-fn (fn [^ColumnReader rdr]
-                            (let [dict-id (.getCurrentValueDictionaryID rdr)]
-                              (.computeIfAbsent dict-data dict-id compute-fn)))]
-              (println "dictionary-pathway")
-              (reify
-                dtype-proto/PElemwiseDatatype
-                (elemwise-datatype [rdr] :string)
-                Iterable
-                (iterator [rdr] (ColumnIterator. col-rdr read-fn
-                                                 max-def-level n-rows))))
+        (if false
+          (let [dict-data (HashMap.)
+                compute-fn (reify java.util.function.Function
+                             (apply [this value]
+                               (read-str col-rdr)))
+                read-fn (fn [^ColumnReader rdr]
+                          ;;This always throws an exception independent of if the column
+                          ;;has a dictionary encoding
+                          (let [dict-id (.getCurrentValueDictionaryID rdr)]
+                            (.computeIfAbsent dict-data dict-id compute-fn)))]
             (reify
               dtype-proto/PElemwiseDatatype
               (elemwise-datatype [rdr] :string)
               Iterable
-              (iterator [rdr] (ColumnIterator. col-rdr read-str
-                                               max-def-level n-rows)))))
+              (iterator [rdr] (ColumnIterator. col-rdr read-fn
+                                               max-def-level n-rows))))
+          (reify
+            dtype-proto/PElemwiseDatatype
+            (elemwise-datatype [rdr] :string)
+            Iterable
+            (iterator [rdr] (ColumnIterator. col-rdr read-str
+                                             max-def-level n-rows))))
         (reify
           dtype-proto/PElemwiseDatatype
           (elemwise-datatype [rdr] :object)
@@ -416,7 +416,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                              :statistics (-> (:statistics col-metadata)
                                              (update :min #(when % (converter %)))
                                              (update :max #(when % (converter %))))
-                             :parquet-metadata (dissoc col-metadata :statistics)))
+                             :parquet-metadata (dissoc col-metadata :statistics :primitive-type)))
                           (catch Throwable e
                             (log/warnf e "Failed to parse column %s: %s"
                                        cname (.toString col-def))
