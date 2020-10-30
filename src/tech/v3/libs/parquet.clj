@@ -63,7 +63,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
            [java.nio.file Paths StandardOpenOption OpenOption]
            [java.io OutputStream]
            [java.time Instant LocalDate]
-           [java.util Iterator List]))
+           [java.util Iterator List HashMap]))
 
 
 (comment
@@ -190,7 +190,11 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         org-type (.getOriginalType pf)
         max-def-level (.getMaxDefinitionLevel col-def)
         col-min (get-in metadata [:statistics :min])
-        col-max (get-in metadata [:statistics :max])]
+        col-max (get-in metadata [:statistics :max])
+        ;;TODO - get dictionaries working.  Columns readers throw exceptions
+        ;;no matter what if the dictionary id is queried.
+        dictionary? (or (contains? (:encodings metadata) :plain-dictionary)
+                        (contains? (:encodings metadata) :rle-dictionary))]
     (condp = prim-type
       PrimitiveType$PrimitiveTypeName/BOOLEAN
       (reify
@@ -201,12 +205,28 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                                          max-def-level n-rows)))
       PrimitiveType$PrimitiveTypeName/BINARY
       (if (= org-type OriginalType/UTF8)
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :string)
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-str
-                                           max-def-level n-rows)))
+        (let []
+          (if false
+            (let [dict-data (HashMap.)
+                  compute-fn (reify java.util.function.Function
+                               (apply [this value]
+                                 (read-str col-rdr)))
+                  read-fn (fn [^ColumnReader rdr]
+                            (let [dict-id (.getCurrentValueDictionaryID rdr)]
+                              (.computeIfAbsent dict-data dict-id compute-fn)))]
+              (println "dictionary-pathway")
+              (reify
+                dtype-proto/PElemwiseDatatype
+                (elemwise-datatype [rdr] :string)
+                Iterable
+                (iterator [rdr] (ColumnIterator. col-rdr read-fn
+                                                 max-def-level n-rows))))
+            (reify
+              dtype-proto/PElemwiseDatatype
+              (elemwise-datatype [rdr] :string)
+              Iterable
+              (iterator [rdr] (ColumnIterator. col-rdr read-str
+                                               max-def-level n-rows)))))
         (reify
           dtype-proto/PElemwiseDatatype
           (elemwise-datatype [rdr] :object)
@@ -392,14 +412,11 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                                             (fn [data] (if (number? data) data nil)))]
                             (vary-meta
                              retval
-                             merge
-                             (-> col-metadata
-                                 (dissoc :primitive-type)
-                                 (update :statistics
-                                         (fn [stats]
-                                           (-> stats
-                                               (update :min #(when % (converter %)))
-                                               (update :max #(when % (converter %)))))))))
+                             assoc
+                             :statistics (-> (:statistics col-metadata)
+                                             (update :min #(when % (converter %)))
+                                             (update :max #(when % (converter %))))
+                             :parquet-metadata (dissoc col-metadata :statistics)))
                           (catch Throwable e
                             (log/warnf e "Failed to parse column %s: %s"
                                        cname (.toString col-def))
@@ -407,7 +424,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                   (.getColumns schema) (:columns block-metadata))
              (remove nil?)
              (ds-impl/new-dataset))]
-    (vary-meta retval merge (dissoc block-metadata :columns))))
+    (vary-meta retval assoc :parquet-metadata (dissoc block-metadata :columns))))
 
 
 (defn- read-next-dataset
