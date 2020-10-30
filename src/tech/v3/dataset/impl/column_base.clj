@@ -5,7 +5,8 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.datatype :as dtype])
   (:import [java.util Map List]
-           [tech.v3.datatype PrimitiveList]))
+           [tech.v3.datatype PrimitiveList]
+           [tech.v3.dataset Text]))
 
 
 (def ^Map dtype->missing-val-map
@@ -26,9 +27,12 @@
    :local-time nil
    :duration nil
    :string ""
-   :text ""
+   :text nil
    :keyword nil
    :symbol nil})
+
+
+(casting/add-object-datatype! :text Text)
 
 
 (defn datatype->missing-value
@@ -45,9 +49,9 @@
   (^PrimitiveList [dtype n-elems]
    (case dtype
      :string (str-table/make-string-table n-elems "")
-     :text (let [^List list-data (dtype/make-container :list :string 0)]
+     :text (let [^List list-data (dtype/make-container :list :text 0)]
              (dotimes [iter n-elems]
-               (.add list-data ""))
+               (.add list-data nil))
              list-data)
      (dtype/make-container :list dtype n-elems)))
   (^PrimitiveList [dtype]

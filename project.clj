@@ -22,30 +22,32 @@
                                org.slf4j/slf4j-api]]
                  [ch.qos.logback/logback-classic   "1.2.3"]
                  ;;Many things require guava, so we may as well have latest version
-                 [com.google.guava/guava "28.0-jre"]]
+                 [com.google.guava/guava "28.0-jre"]
+                 ;;provided scope
+                 [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
+                 [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
+                 [org.apache.parquet/parquet-hadoop "1.11.0" :scope "provided"]
+                 [org.apache.hadoop/hadoop-common
+                  "3.1.1"
+                  ;;We use logback-classic.
+                  :exclusions [org.slf4j/slf4j-log4j12
+                               log4j
+                               com.google.guava/guava
+                               commons-codec
+                               com.google.code.findbugs/jsr305
+                               com.fasterxml.jackson.core/jackson-databind]
+                  :scope "provided"]
+                 [org.apache.arrow/arrow-memory-unsafe "1.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-memory-core "1.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-vector "1.0.0"
+                  :exclusions [commons-codec] :scope "provided"]
+                 [uncomplicate/neanderthal "0.35.0" :scope "provided"]
+                 ]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [org.bytedeco/openblas "0.3.10-1.5.4"]
-                             [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
-                             [uncomplicate/neanderthal "0.35.0"]
-                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
-                             [org.apache.parquet/parquet-hadoop "1.10.1"]
-                             [org.apache.hadoop/hadoop-common
-                              "3.1.1"
-                              ;;We use logback-classic.
-                              :exclusions [org.slf4j/slf4j-log4j12
-                                           log4j
-                                           com.google.guava/guava
-                                           commons-codec
-                                           commons-logging
-                                           com.google.code.findbugs/jsr305
-                                           com.fasterxml.jackson.core/jackson-databind]]
-                             [org.apache.arrow/arrow-memory-unsafe "1.0.0"]
-                             [org.apache.arrow/arrow-memory-core "1.0.0"]
-                             [org.apache.arrow/arrow-vector "1.0.0"
-                              :exclusions [commons-codec]]]
+                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
               :test-paths ["test" "neanderthal"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]]
@@ -69,33 +71,12 @@
                                    tech.v3.dataset.io.string-row-parser
                                    tech.v3.dataset.print
                                    tech.v3.libs.poi
+                                   tech.v3.libs.parquet
                                    tech.v3.libs.fastexcel
                                    tech.v3.libs.arrow]}}
              ;;No neanderthal on travis
-             :travis {:dependencies [[criterium "0.4.5"]
-                                     [http-kit "2.3.0"]
-                                     [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
-                                     [org.apache.parquet/parquet-hadoop "1.10.1"]
-                                     [org.apache.hadoop/hadoop-common
-                                      "3.1.1"
-                                      ;;We use logback-classic.
-                                      :exclusions [org.slf4j/slf4j-log4j12
-                                                   log4j
-                                                   com.google.guava/guava
-                                                   commons-codec
-                                                   commons-logging
-                                                   com.google.code.findbugs/jsr305
-                                                   com.fasterxml.jackson.core/jackson-databind]]
-                                     [org.apache.arrow/arrow-memory-netty "1.0.0"]
-                                     [org.apache.arrow/arrow-memory-core "1.0.0"]
-                                     [org.apache.arrow/arrow-vector "1.0.0"
-                                      :exclusions [commons-codec]]]}
              :uberjar {:aot [tech.v3.dataset.main]
                        :main tech.v3.dataset.main
-                       :dependencies [[org.apache.arrow/arrow-memory-unsafe "1.0.0"]
-                                      [org.apache.arrow/arrow-memory-core "1.0.0"]
-                                      [org.apache.arrow/arrow-vector "1.0.0"
-                                       :exclusions [commons-codec]]]
                        :source-paths ["src" "graal-native"]
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"
                                   "-Dtech.v3.datatype.graal-native=true"]

@@ -27,8 +27,8 @@
 
       (is (= (vec (stocks "symbol")) (vec (stocks-copying "symbol")) ))
       (is (= (vec (stocks "symbol")) (vec (stocks-inplace "symbol"))))
-      (is (= (vec (stocks "symbol")) (vec (pystocks-copying "symbol"))))
-      (is (= (vec (stocks "symbol")) (vec (pystocks-inplace "symbol")))))
+      (is (= (vec (stocks "symbol")) (mapv str (pystocks-copying "symbol"))))
+      (is (= (vec (stocks "symbol")) (mapv str (pystocks-inplace "symbol")))))
     (finally
       (.delete (java.io.File. "temp.stocks.arrow")))))
 

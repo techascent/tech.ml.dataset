@@ -24,6 +24,7 @@
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
+           [tech.v3.dataset Text]
            [java.util List HashSet LinkedHashMap Map Arrays HashMap
             ArrayList]
            [org.roaringbitmap RoaringBitmap]
@@ -717,6 +718,40 @@
         (StringTable. int->str-ary-list str->int int-data)))))
 
 
+(defn- column->text-data
+  [coldata]
+  (let [^PrimitiveList str-data-buf (dtype/make-container :list :int8 0)
+        ^PrimitiveList offset-buf (dtype/make-container :list :int64 0)]
+    (pfor/consume!
+     #(do
+        (.addLong offset-buf (.lsize str-data-buf))
+        (when %
+          (let [str-bytes (.getBytes ^String (str %))]
+            (.addAll str-data-buf (dtype/->buffer str-bytes)))))
+     coldata)
+    (.addLong offset-buf (.lsize str-data-buf))
+    {:string-data (dtype/->array str-data-buf)
+     :offsets (dtype/->array offset-buf)}))
+
+
+(defn- text-data->column-data
+  [{:keys [string-data offsets]} missing]
+  (let [n-elems (dec (dtype/ecount offsets))
+        string-data (dtype/->buffer string-data)
+        offsets (dtype/->buffer offsets)
+        ^RoaringBitmap missing missing]
+    (-> (reify ObjectReader
+          (elemwiseDatatype [rdr] :text)
+          (lsize [rdr] n-elems)
+          (readObject [rdr idx]
+            (let [cur-off (.readLong offsets idx)
+                  next-off (.readLong offsets (inc idx))]
+              (when-not (.contains missing idx)
+                (Text. (String. (dtype/->byte-array
+                                 (dtype/sub-buffer string-data cur-off (- next-off cur-off)))))))))
+        (dtype/clone))))
+
+
 (defn dataset->data
   "Convert a dataset to a pure clojure datastructure.  Returns a map with two keys:
   {:metadata :columns}.
@@ -728,14 +763,18 @@
    :columns (->> (columns ds)
                  (mapv (fn [col]
                          ;;Only store packed data.  This can sidestep serialization issues
-                         (let [col (packing/pack col)
-                               dtype (dtype/get-datatype col)]
-                           {:metadata (meta col)
-                            :missing (bitmap/bitmap->efficient-random-access-reader (ds-col/missing col))
-                            :name (:name (meta col))
+                         (let [metadata (meta col)
+                               col (packing/pack col)
+                               dtype (dtype/elemwise-datatype col)]
+                           {:metadata metadata
+                            :missing (dtype/->array
+                                      (bitmap/bitmap->efficient-random-access-reader (ds-col/missing col)))
+                            :name (:name metadata)
                             :data (cond
-                                    (= :string (dtype/get-datatype col))
+                                    (= :string dtype)
                                     (column->string-data col)
+                                    (= :text dtype)
+                                    (column->text-data col)
                                     ;;Nippy doesn't handle object arrays or arraylists
                                     ;;very well.
                                     (= :object (casting/flatten-datatype dtype))
@@ -750,16 +789,19 @@
   full dataset"
   [{:keys [metadata columns] :as input}]
   (->> columns
-       (map (fn [{:keys [metadata] :as coldata}]
-              (let [datatype (:datatype metadata)]
+       (map (fn [{:keys [metadata missing] :as coldata}]
+              (let [datatype (:datatype metadata)
+                    missing (bitmap/->bitmap missing)]
                 (->
                  (cond
                    (= :string datatype)
                    (update coldata :data string-data->column-data)
+                   (= :text datatype)
+                   (update coldata :data #(text-data->column-data % missing))
                    (= :object (casting/flatten-datatype datatype))
                    (update coldata :data dtype/elemwise-cast datatype)
                    :else
                    (update coldata :data array-buffer/array-buffer datatype))
                  (clojure.core/assoc :force-datatype? true)
-                 (clojure.core/update :missing bitmap/->bitmap)))))
+                 (clojure.core/update :missing (constantly missing))))))
        (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))

@@ -30,7 +30,6 @@
     TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector]
    [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
     ArrowFileWriter ArrowFileReader]
-
    [tech.v3.dataset.string_table StringTable]
    [java.util HashMap]
    [java.time ZoneId]
@@ -185,12 +184,25 @@
        (dorun)))
 
 
+(defn- prepare-dataset-for-write
+  [ds options]
+  (cond-> (datetime-cols-to-millis-from-epoch ds options)
+    (not (:strings-as-text? options))
+    (ds-base/ensure-dataset-string-tables)))
+
+
 (defn write-dataset-to-stream!
-  "Write a dataset as an arrow stream file.  File will contain one record set."
+  "Write a dataset as an arrow stream file.  File will contain one record set.
+
+  Options:
+
+  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
+     dictionaries.  This works well if you want to load an arrow file in-place or if
+     you know the strings in your dataset are either really large or should not be in
+     string tables."
   ([ds path options]
-   (let [ds (ds-base/ensure-dataset-string-tables ds)
-         ds (datetime-cols-to-millis-from-epoch ds options)
-         {:keys [schema dict-provider]} (ds->arrow-schema ds)
+   (let [ds (prepare-dataset-for-write ds options)
+         {:keys [schema dict-provider]} (ds->arrow-schema ds options)
          ^DictionaryProvider dict-provider dict-provider]
      (with-open [ostream (io/output-stream! path)
                  vec-root (VectorSchemaRoot/create
@@ -208,11 +220,17 @@
 (defn write-dataset-seq-to-stream!
   "Write a sequence of datasets to a stream.  Datasets are written with doseq.
   All datasets must be amenable to being written into vectors of the type dictated
-  by the schema of the first dataset.  Each dataset is written to a separate batch."
+  by the schema of the first dataset.  Each dataset is written to a separate batch.
+
+
+  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
+     dictionaries.  This works well if you want to load an arrow file in-place or if
+     you know the strings in your dataset are either really large or should not be in
+     string tables."
   ([ds-seq path options]
-   (let [ds (first ds-seq)
-         ds (datetime-cols-to-millis-from-epoch ds options)
-         {:keys [schema dict-provider]} (ds->arrow-schema ds {:strings-as-text? true})
+   (let [ds-seq (map #(prepare-dataset-for-write % options) ds-seq)
+         ds (first ds-seq)
+         {:keys [schema dict-provider]} (ds->arrow-schema ds options)
          ^DictionaryProvider dict-provider dict-provider]
      (with-open [ostream (io/output-stream! path)
                  vec-root (VectorSchemaRoot/create
@@ -221,8 +239,7 @@
                  writer (ArrowStreamWriter. vec-root dict-provider ostream)]
        (.start writer)
        (doseq [ds ds-seq]
-         (let [ds (datetime-cols-to-millis-from-epoch ds options)]
-           (copy-ds->vec-root vec-root ds))
+         (copy-ds->vec-root vec-root ds)
          (.writeBatch writer))
        (.end writer))))
   ([ds path]
@@ -331,7 +348,8 @@
               (.put str->int (.get strs idx) idx))
             (StringTable. strs str->int data))
           offset-buf
-          (arrow-dtype/varchar->strings fv)
+          (-> (dtype/->buffer (arrow-dtype/varchar->strings fv))
+              (arrow-dtype/string-reader->text-reader))
           ;;Mapping back to local-dates takes a bit of time.  This is only
           ;;necessary if you really need them.
           (and fix-date-types?
