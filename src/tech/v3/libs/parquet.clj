@@ -1,10 +1,15 @@
 (ns tech.v3.libs.parquet
-  "Support for reading Parquet files.  Please include these dependencies in
-  your project:
+  "Support for reading Parquet files. Supported datatypes:
+
+  * all numeric types
+  * strings
+  * java.time LocalDate, Instant
+  * UUIDs (get read/written as strings in accordance to R's write_parquet function)
 
 
+  Please include these dependencies in your project:
 ```clojure
-[org.apache.parquet/parquet-hadoop \"1.10.1\"]
+[org.apache.parquet/parquet-hadoop \"1.11.0\"]
 [org.apache.hadoop/hadoop-common
   \"3.1.1\"
   :exclusions [org.slf4j/slf4j-log4j12
@@ -41,6 +46,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
            [tech.v3.datatype PrimitiveList Buffer]
+           [tech.v3.dataset Text]
            [org.apache.hadoop.conf Configuration]
            [org.apache.parquet.hadoop ParquetFileReader ParquetWriter
             ParquetFileWriter ParquetFileWriter$Mode CodecFactory
@@ -794,6 +800,25 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
       (errors/throwf "Unsupported datatype for parquet writing: %s" datatype))))
 
 
+(defn- prepare-for-parquet
+  "In preparation for parquet so far we need to only map uuid columns
+  to text columns."
+  [ds]
+  (reduce (fn [ds col]
+            (let [colmeta (meta col)]
+              (if (= :uuid (:datatype colmeta))
+                ;;Column-map respects missing
+                (ds-base/update-column
+                 ds (:name colmeta)
+                 (fn [col]
+                   (ds-col/column-map #(Text. (str %))
+                                      :text
+                                      col)))
+               ds)))
+          ds
+          (vals ds)))
+
+
 (defn ds-seq->parquet
   "Write a sequence of datasets to a parquet file.  EAch dataset will be stored
   in a parquet row group in a single file.
@@ -805,7 +830,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   * `:parquet-compression-codec` - Either nil or an instance of `org.apache.parquet.hadoop.metadata.CompressionCodecName`.
   * `:parquet-validating?` - true if the columns should be validated after being written.  Defauts to true."
   ([path options ds-seq]
-   (let [first-ds (first ds-seq)
+   (let [ds-seq (map prepare-for-parquet ds-seq)
+         first-ds (first ds-seq)
          schema (ds->schema first-ds)
          ^Configuration configuration
          (or (:hadoop-configuration options)

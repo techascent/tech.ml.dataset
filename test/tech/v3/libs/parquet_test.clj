@@ -56,3 +56,16 @@
       (is (dfn/equals (ames "SalePrice") (newd "SalePrice"))))
     (finally
       (.delete (java.io.File. "ames.parquet")))))
+
+
+(deftest uuid-test
+  (try
+    (let [uuid-ds (ds/->dataset "test/data/uuid.parquet"
+                                {:parser-fn {"uuids" :uuid}})
+          _ (ds/write! uuid-ds "test-uuid.parquet")
+          new-ds (ds/->dataset "test-uuid.parquet"
+                               {:parser-fn {"uuids" :uuid}})]
+      (is (= :uuid ((comp :datatype meta) (uuid-ds "uuids"))))
+      (is (= :uuid ((comp :datatype meta) (new-ds "uuids")))))
+    (finally
+      (.delete (java.io.File. "test-uuid.parquet")))))
