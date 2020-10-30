@@ -46,6 +46,17 @@
                              [org.apache.arrow/arrow-vector "1.0.0"
                               :exclusions [commons-codec]]]
               :test-paths ["test" "neanderthal"]}
+             :jar
+             {:dependencies [[org.apache.parquet/parquet-hadoop "1.11.0"]
+                             [org.apache.hadoop/hadoop-common
+                              "3.1.1"
+                              ;;We use logback-classic.
+                              :exclusions [org.slf4j/slf4j-log4j12
+                                           log4j
+                                           com.google.guava/guava
+                                           commons-codec
+                                           com.google.code.findbugs/jsr305
+                                           com.fasterxml.jackson.core/jackson-databind]]]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]]
               :plugins [[lein-codox "0.10.7"]]
@@ -92,7 +103,17 @@
                                       :exclusions [commons-codec]]]}
              :uberjar {:aot [tech.v3.dataset.main]
                        :main tech.v3.dataset.main
-                       :dependencies [[org.apache.arrow/arrow-memory-unsafe "1.0.0"]
+                       :dependencies [[org.apache.parquet/parquet-hadoop "1.11.0"]
+                                      [org.apache.hadoop/hadoop-common
+                                       "3.1.1"
+                                       ;;We use logback-classic.
+                                       :exclusions [org.slf4j/slf4j-log4j12
+                                                    log4j
+                                                    com.google.guava/guava
+                                                    commons-codec
+                                                    com.google.code.findbugs/jsr305
+                                                    com.fasterxml.jackson.core/jackson-databind]]
+                                      [org.apache.arrow/arrow-memory-unsafe "1.0.0"]
                                       [org.apache.arrow/arrow-memory-core "1.0.0"]
                                       [org.apache.arrow/arrow-vector "1.0.0"
                                        :exclusions [commons-codec]]]

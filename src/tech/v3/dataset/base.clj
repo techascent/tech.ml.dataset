@@ -763,16 +763,17 @@
    :columns (->> (columns ds)
                  (mapv (fn [col]
                          ;;Only store packed data.  This can sidestep serialization issues
-                         (let [col (packing/pack col)
-                               dtype (dtype/get-datatype col)]
-                           {:metadata (meta col)
+                         (let [metadata (meta col)
+                               col (packing/pack col)
+                               dtype (dtype/elemwise-datatype col)]
+                           {:metadata metadata
                             :missing (dtype/->array
                                       (bitmap/bitmap->efficient-random-access-reader (ds-col/missing col)))
-                            :name (:name (meta col))
+                            :name (:name metadata)
                             :data (cond
-                                    (= :string (dtype/get-datatype col))
+                                    (= :string dtype)
                                     (column->string-data col)
-                                    (= :text (dtype/get-datatype col))
+                                    (= :text dtype)
                                     (column->text-data col)
                                     ;;Nippy doesn't handle object arrays or arraylists
                                     ;;very well.
