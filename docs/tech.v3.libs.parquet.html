@@ -7,6 +7,13 @@
   <li>java.time LocalDate, Instant</li>
   <li>UUIDs (get read/written as strings in accordance to R’s write_parquet function)</li>
 </ul>
+<p>Parsing parquet file options include more general io/-&gt;dataset options:</p>
+<ul>
+  <li><code>:key-fn</code></li>
+  <li><code>:column-whitelist</code></li>
+  <li><code>:column-blacklist</code></li>
+  <li><code>:parser-fn</code></li>
+</ul>
 <p>Please include these dependencies in your project:</p>
 <pre><code class="clojure">[org.apache.parquet/parquet-hadoop "1.11.0"]
 [org.apache.hadoop/hadoop-common
@@ -26,11 +33,11 @@
   <li><code>:parquet-properties</code> - Either nil or an instance of <code>org.apache.parquet.column.ParquetProperties</code>.</li>
   <li><code>:parquet-compression-codec</code> - Either nil or an instance of <code>org.apache.parquet.hadoop.metadata.CompressionCodecName</code>.</li>
   <li><code>:parquet-validating?</code> - true if the columns should be validated after being written. Defauts to true.</li>
-</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L888">view source</a></div></div><div class="public anchor" id="var-ds-seq-.3Eparquet"><h3>ds-seq-&gt;parquet</h3><div class="usage"><code>(ds-seq-&gt;parquet path options ds-seq)</code><code>(ds-seq-&gt;parquet path ds-seq)</code></div><div class="doc"><div class="markdown"><p>Write a sequence of datasets to a parquet file. EAch dataset will be stored  in a parquet row group in a single file.</p>
+</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L897">view source</a></div></div><div class="public anchor" id="var-ds-seq-.3Eparquet"><h3>ds-seq-&gt;parquet</h3><div class="usage"><code>(ds-seq-&gt;parquet path options ds-seq)</code><code>(ds-seq-&gt;parquet path ds-seq)</code></div><div class="doc"><div class="markdown"><p>Write a sequence of datasets to a parquet file. EAch dataset will be stored  in a parquet row group in a single file.</p>
 <p>Options:</p>
 <ul>
   <li><code>:hadoop-configuration</code> - Either nil or an instance of <code>org.apache.hadoop.conf.Configuration</code>.</li>
   <li><code>:parquet-properties</code> - Either nil or an instance of <code>org.apache.parquet.column.ParquetProperties</code>.</li>
   <li><code>:parquet-compression-codec</code> - Either nil or an instance of <code>org.apache.parquet.hadoop.metadata.CompressionCodecName</code>.</li>
   <li><code>:parquet-validating?</code> - true if the columns should be validated after being written. Defauts to true.</li>
-</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L822">view source</a></div></div><div class="public anchor" id="var-parquet-.3Eds-seq"><h3>parquet-&gt;ds-seq</h3><div class="usage"><code>(parquet-&gt;ds-seq path options)</code><code>(parquet-&gt;ds-seq path)</code></div><div class="doc"><div class="markdown"><p>Given a string, hadoop path, or a parquet InputFile, return a sequence of datasets. Column will have parquet metadata merged into their normal metadata. Reader will be closed upon termination of the sequence.</p></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L560">view source</a></div></div><div class="public anchor" id="var-parquet-.3Emetadata-seq"><h3>parquet-&gt;metadata-seq</h3><div class="usage"><code>(parquet-&gt;metadata-seq path)</code></div><div class="doc"><div class="markdown"><p>Given a local parquet file, return a sequence of metadata, one for each row-group. A row-group maps directly to a dataset.</p></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L552">view source</a></div></div></div></body></html>
+</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L831">view source</a></div></div><div class="public anchor" id="var-parquet-.3Eds-seq"><h3>parquet-&gt;ds-seq</h3><div class="usage"><code>(parquet-&gt;ds-seq path options)</code><code>(parquet-&gt;ds-seq path)</code></div><div class="doc"><div class="markdown"><p>Given a string, hadoop path, or a parquet InputFile, return a sequence of datasets. Column will have parquet metadata merged into their normal metadata. Reader will be closed upon termination of the sequence.</p></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L569">view source</a></div></div><div class="public anchor" id="var-parquet-.3Emetadata-seq"><h3>parquet-&gt;metadata-seq</h3><div class="usage"><code>(parquet-&gt;metadata-seq path)</code></div><div class="doc"><div class="markdown"><p>Given a local parquet file, return a sequence of metadata, one for each row-group. A row-group maps directly to a dataset.</p></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/libs/parquet.clj#L561">view source</a></div></div></div></body></html>

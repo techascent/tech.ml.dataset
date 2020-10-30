@@ -7,7 +7,16 @@
   * UUIDs (get read/written as strings in accordance to R's write_parquet function)
 
 
+  Parsing parquet file options include more general io/->dataset options:
+
+  * `:key-fn`
+  * `:column-whitelist`
+  * `:column-blacklist`
+  * `:parser-fn`
+
+
   Please include these dependencies in your project:
+
 ```clojure
 [org.apache.parquet/parquet-hadoop \"1.11.0\"]
 [org.apache.hadoop/hadoop-common
