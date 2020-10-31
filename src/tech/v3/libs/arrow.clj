@@ -3,9 +3,9 @@
   dependencies in their project:
 
 ```clojure
-[org.apache.arrow/arrow-memory-netty \"1.0.0\"]
-[org.apache.arrow/arrow-memory-core \"1.0.0\"]
-[org.apache.arrow/arrow-vector \"1.0.0\" :exclusions [commons-codec]]
+[org.apache.arrow/arrow-memory-netty \"2.0.0\"]
+[org.apache.arrow/arrow-memory-core \"2.0.0\"]
+[org.apache.arrow/arrow-vector \"2.0.0\" :exclusions [commons-codec]]
 ```"
   (:require [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.datatype.mmap :as mmap]

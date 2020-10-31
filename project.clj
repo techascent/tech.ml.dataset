@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.00-alpha-15-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.00-alpha-15"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.0"]
-                 [cnuernber/dtype-next             "6.00-alpha-13"]
+                 [cnuernber/dtype-next             "6.00-alpha-14"]
                  [techascent/tech.io               "4.02"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -37,9 +37,9 @@
                                com.google.code.findbugs/jsr305
                                com.fasterxml.jackson.core/jackson-databind]
                   :scope "provided"]
-                 [org.apache.arrow/arrow-memory-unsafe "1.0.0" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-core "1.0.0" :scope "provided"]
-                 [org.apache.arrow/arrow-vector "1.0.0"
+                 [org.apache.arrow/arrow-memory-unsafe "2.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-memory-core "2.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-vector "2.0.0"
                   :exclusions [commons-codec] :scope "provided"]
                  [uncomplicate/neanderthal "0.35.0" :scope "provided"]
                  ]
@@ -65,6 +65,7 @@
                                    tech.v3.dataset.join
                                    tech.v3.dataset.modelling
                                    tech.v3.dataset.categorical
+                                   tech.v3.dataset.reductions
                                    tech.v3.dataset.column-filters
                                    tech.v3.dataset.io.datetime
                                    tech.v3.dataset.io.univocity
