@@ -2,7 +2,8 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.reductions :as dtype-reductions]
-            [tech.v3.datatype.bitmap :as bitmap])
+            [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.parallel.for :as parallel-for])
   (:import [tech.v3.datatype IndexReduction Buffer]
            [java.util Map Map$Entry HashMap List Set HashSet]
            [java.util.concurrent ConcurrentHashMap]
@@ -21,22 +22,30 @@
 
 
 (defn group-by-column-aggregate
-  "Perform a group by over a sequence of datasets where the reducer is handed each index and the
-  context is stored in a map.  The reduction in this case is unordered so your indexes will
-  arrive out of order.  The index-reductions's prepare-batch method will be called once with
-  each dataset before iterating over that dataset's items.
+  "Perform a group by over a sequence of datasets where the reducer is handed each index
+  and the context is stored in a map.  The reduction in this case is unordered so your
+  indexes will arrive out of order.  The index-reductions's prepare-batch method will be
+  called once with each dataset before iterating over that dataset's items.
 
-  The return value is a parallel java stream made from the entrySet of the hash map.  It has
-  an efficient further reduction to an array or you can process the stream yourself.
+  The return value is a parallel java stream made from the entrySet of the hash map.  It
+  has an efficient further reduction to an array or you can process the stream yourself.
 
   Options:
 
-  * `:skip-finalize?` - If skip-finalize? is true then the return value simply *is*
-     the reduction map containing the non-finalized reducer data. It will be up the caller to call
-     .finalize on the reducer for each java.util.Map$Entry value returned.   If finalize is true,
-     then a parallel stream of tuples of k,v are returned."
-  ([column-name ^IndexReduction reducer ds-seq {:keys [skip-finalize?]}]
-   (let [reduction (ConcurrentHashMap.)
+  * `:skip-finalize?` - If skip-finalize? is true then the return value simply *is* the
+    reduction map containing the non-finalized reducer data. It will be up the caller to
+    call .finalize on the reducer for each java.util.Map$Entry value returned.  If
+    finalize is true, then a parallel stream of tuples of k,v are returned.
+  * `:map-initial-capacity` - initial capacity -- this can have a big effect on
+    overall algorithm speed according to the
+    [docunentation](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html)."
+  ([column-name ^IndexReduction reducer ds-seq
+    {:keys [skip-finalize?
+            map-initial-capacity]
+     :or {map-concurrency-level (parallel-for/common-pool-parallelism)
+          map-initial-capacity 100000
+          load-factor load-factor}}]
+   (let [reduction (ConcurrentHashMap. (int map-initial-capacity))
          _ (doseq [dataset ds-seq]
              (let [batch-data (.prepareBatch reducer dataset)]
                (dtype-reductions/unordered-group-by-reduce
