@@ -43,6 +43,11 @@
       (.delete (java.io.File. "userdata1.nippy")))))
 
 
+(deftest whitelist-test
+  (let [testd (ds/->dataset "test/data/parquet/userdata1.parquet"
+                            {:column-whitelist ["first_name" "last_name" "gender"]})]
+    (is (= 3 (ds/column-count testd)))))
+
 
 (deftest ames-ds
   (try

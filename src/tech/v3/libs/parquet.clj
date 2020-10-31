@@ -410,8 +410,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                                            (column-whitelist cname))
                           blacklisted? (and column-blacklist
                                             (column-blacklist cname))]
-                      (when (or whitelisted?
-                                (not blacklisted?))
+                      (when (and whitelisted?
+                                 (not blacklisted?))
                         (try
                           (let [reader (.getColumnReader col-read-store col-def)
                                 retval (parse-column reader col-def n-rows parse-context key-fn col-metadata)
