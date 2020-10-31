@@ -259,9 +259,9 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
       (if (= org-type OriginalType/DATE)
         (reify
           dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :local-date)
+          (elemwise-datatype [rdr] :epoch-days)
           Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-local-date
+          (iterator [rdr] (ColumnIterator. col-rdr read-int
                                            max-def-level n-rows)))
         (reify
           dtype-proto/PElemwiseDatatype
@@ -663,7 +663,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                         (.getPageWriteChecksumEnabled properties))))
 
 
-(def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32 :local-date})
+(def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32
+                           :local-date :epoch-days})
 (def ^:private int64-set #{:uint32 :int64 :uint64 :instant})
 (def ^:private str-set #{:string :text})
 
@@ -672,8 +673,10 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   ^Type [col]
   (let [colmeta (meta col)
         datatype (-> (:datatype colmeta)
-                     (packing/unpack-datatype)
-                     (casting/un-alias-datatype))
+                     (packing/unpack-datatype))
+        datatype (if (not= datatype :epoch-days)
+                   (casting/un-alias-datatype datatype)
+                   datatype)
         colname (:name colmeta)
         missing (ds-col/missing col)]
     (PrimitiveType.
@@ -708,6 +711,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
        :string OriginalType/UTF8
        :text OriginalType/UTF8
        :local-date OriginalType/DATE
+       :epoch-days OriginalType/DATE
        :instant OriginalType/TIMESTAMP_MICROS
        nil)
      nil nil)))

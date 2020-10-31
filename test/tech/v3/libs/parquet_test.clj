@@ -3,6 +3,7 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.libs.parquet :as parquet]
             [tech.v3.dataset.utils :as ds-utils]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
 (ds-utils/set-slf4j-log-level :info)
@@ -18,7 +19,7 @@
       (is (dfn/equals (stocks "price")
                       (stocks-p "price")))
       (is (= (vec (stocks "date"))
-             (vec (stocks-p "date")))))
+             (vec (dtype-dt/epoch->datetime :local-date (stocks-p "date"))))))
     (finally
       (.delete (java.io.File. "stocks.parquet")))))
 
