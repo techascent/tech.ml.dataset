@@ -17,7 +17,7 @@
         single-price (->> (ds/group-by-column stocks "symbol")
                           (map (fn [[k ds]]
                                  [k {"price" {:n-elems (ds/row-count ds)
-                                              :value (dfn/sum (ds "price"))}}]))
+                                              :sum (dfn/sum (ds "price"))}}]))
                           (into {}))
         key-seq (vec (keys data))
         vectorizer (fn [collection inner-key]
@@ -25,5 +25,5 @@
     (is (= 5 (count data)))
     (is (dfn/equals (vectorizer data :n-elems)
                     (dfn/* 3 (vectorizer single-price :n-elems))))
-    (is (dfn/equals (vectorizer data :value)
-                    (dfn/* 3 (vectorizer single-price :value))))))
+    (is (dfn/equals (vectorizer data :sum)
+                    (dfn/* 3 (vectorizer single-price :sum))))))

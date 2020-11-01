@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.reductions
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.parallel.for :as parallel-for])
@@ -14,7 +15,8 @@
            [tech.v3.datatype DoubleReader Consumers$StagedConsumer]
            [tech.v3.datatype DoubleConsumers$Sum DoubleConsumers$MinMaxSum]
            [it.unimi.dsi.fastutil.ints Int2ObjectMap
-            Int2ObjectOpenHashMap]))
+            Int2ObjectOpenHashMap]
+           [clojure.lang IFn]))
 
 
 (set! *warn-on-reflection* true)
@@ -27,40 +29,58 @@
   indexes will arrive out of order.  The index-reductions's prepare-batch method will be
   called once with each dataset before iterating over that dataset's items.
 
-  The return value is a parallel java stream made from the entrySet of the hash map.  It
-  has an efficient further reduction to an array or you can process the stream yourself.
+  There are three possible return value types for this function.  Called with no options
+  tuples of key to finalized value will be returned via a parallel java stream.  There is
+  an option to pass in your own consumer so you your function will get called for every
+  k,v tuple and finally there is an option to get the unfinalized ConcurrentHashMap.
 
   Options:
 
-  * `:skip-finalize?` - If skip-finalize? is true then the return value simply *is* the
-    reduction map containing the non-finalized reducer data. It will be up the caller to
-    call .finalize on the reducer for each java.util.Map$Entry value returned.  If
-    finalize is true, then a parallel stream of tuples of k,v are returned.
+  * `:finalize-type` - One of three options, defaults to `:stream`.
+     - `:stream` - The finalized results will be returned in the form of k,v tuples in a
+        `java.util.stream.Stream`.
+     - An instant of `clojure.lang.IFn` - This function, which must accept 2 arguments,
+       will be called on each k,v pair and no value will be returned.
+     - `:skip` - The entire java.util.ConcurrentHashMap will be returned with the value
+        in an unfinalized state.  It will be up to the caller to call the reducer's
+        finalize method on all the values.
   * `:map-initial-capacity` - initial capacity -- this can have a big effect on
     overall algorithm speed according to the
     [docunentation](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html)."
-  ([column-name ^IndexReduction reducer ds-seq
-    {:keys [skip-finalize?
+  ([column-name
+    ^IndexReduction reducer
+    {:keys [finalize-type
             map-initial-capacity]
-     :or {map-concurrency-level (parallel-for/common-pool-parallelism)
-          map-initial-capacity 100000
-          load-factor load-factor}}]
-   (let [reduction (ConcurrentHashMap. (int map-initial-capacity))
-         _ (doseq [dataset ds-seq]
-             (let [batch-data (.prepareBatch reducer dataset)]
-               (dtype-reductions/unordered-group-by-reduce
-                reducer batch-data (dataset column-name) reduction)))]
-     (if skip-finalize?
-       reduction
+     :or {map-initial-capacity 100000
+          finalize-type :stream}}
+    ds-seq]
+   (let [reduction (ConcurrentHashMap. (int map-initial-capacity))]
+     (doseq [dataset ds-seq]
+       (let [batch-data (.prepareBatch reducer dataset)]
+         (dtype-reductions/unordered-group-by-reduce
+          reducer batch-data (dataset column-name) reduction)))
+     (cond
+       (= :stream finalize-type)
        (-> (.entrySet reduction)
            (.parallelStream)
            (.map (reify Function
                    (apply [this v]
                      (let [v ^Map$Entry v]
                        [(.getKey v)
-                        (.finalize reducer (.getValue v))]))))))))
+                        (.finalize reducer (.getValue v))])))))
+       (= :skip finalize-type)
+       reduction
+       (instance? IFn finalize-type)
+       (.forEach
+        reduction
+        1
+        (reify BiConsumer
+          (accept [this k v]
+            (finalize-type k (.finalize reducer v)))))
+       :else
+       (errors/throwf "Unrecognized finalize-type: %s" finalize-type))))
   ([column-name ^IndexReduction reducer ds-seq]
-   (group-by-column-aggregate column-name reducer ds-seq nil)))
+   (group-by-column-aggregate column-name reducer nil ds-seq)))
 
 
 (defn stream->array
@@ -98,37 +118,40 @@
 
 (defmacro ^:private make-reducer
   [datatype colname-seq staged-consumer-constructor-fn]
-  `(reify IndexReduction
-    (prepareBatch [this# ds#]
-      (mapv #(dtype/->reader (ds# %) ~datatype) ~colname-seq))
-    (reduceIndex [this# readers# ctx# idx#]
-      (let [readers# (as-list readers#)
-            n-readers# (.size readers#)
-            ctx# (typecast/as-object-array
-                  (if ctx#
-                    ctx#
-                    (object-array (repeatedly n-readers# ~staged-consumer-constructor-fn))))]
-        (dotimes [ary-idx# n-readers#]
-          (typed-accept ~datatype
-                        (aget ctx# ary-idx#)
-                        (.get readers# ary-idx#)
-                        idx#))
-        ctx#))
-    (reduceReductions [this# lhs# rhs#]
-      (let [lhs# (typecast/as-object-array lhs#)
-            rhs# (typecast/as-object-array rhs#)]
-        (dotimes [idx# (alength lhs#)]
-          (let [lhs-cons# (as-staged-consumer (aget lhs# idx#))
-                rhs-cons# (as-staged-consumer (aget rhs# idx#))]
-            (.inplaceCombine lhs-cons# rhs-cons#)))
-        lhs#))
-    (finalize [this# lhs#]
-      (->> (map vector
-                ~colname-seq
-                (map (fn [data#]
-                       (.value (as-staged-consumer data#)))
-                     lhs#))
-           (into {})))))
+  `(let [n-readers# (count ~colname-seq)]
+     (reify IndexReduction
+       (prepareBatch [this# ds#]
+         (->> (map #(dtype/->reader (ds# %) ~datatype) ~colname-seq)
+              (object-array)))
+       (reduceIndex [this# readers# ctx# idx#]
+         (let [readers# (typecast/as-object-array readers#)
+               ctx# (typecast/as-object-array
+                     (if ctx#
+                       ctx#
+                       (object-array (repeatedly
+                                      n-readers#
+                                      ~staged-consumer-constructor-fn))))]
+           (dotimes [ary-idx# n-readers#]
+             (typed-accept ~datatype
+                           (aget ctx# ary-idx#)
+                           (aget readers# ary-idx#)
+                           idx#))
+           ctx#))
+       (reduceReductions [this# lhs# rhs#]
+         (let [lhs# (typecast/as-object-array lhs#)
+               rhs# (typecast/as-object-array rhs#)]
+           (dotimes [idx# (alength lhs#)]
+             (let [lhs-cons# (as-staged-consumer (aget lhs# idx#))
+                   rhs-cons# (as-staged-consumer (aget rhs# idx#))]
+               (.inplaceCombine lhs-cons# rhs-cons#)))
+           lhs#))
+       (finalize [this# lhs#]
+         (->> (map vector
+                   ~colname-seq
+                   (map (fn [data#]
+                          (.value (as-staged-consumer data#)))
+                        lhs#))
+              (into {}))))))
 
 
 (defn double-reducer
