@@ -4,12 +4,13 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
-                 [camel-snake-kebab                "0.4.0"]
+                 [camel-snake-kebab                "0.4.2"]
                  [cnuernber/dtype-next             "6.00-alpha-15"]
                  [techascent/tech.io               "4.02"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
-                 [org.apache.poi/poi-ooxml         "4.1.2"]
+                 [org.apache.poi/poi-ooxml         "4.1.2"
+                  :exclusions [commons-codec]]
                  [org.dhatim/fastexcel-reader      "0.10.12"
                   :exclusions [org.apache.poi/poi-ooxml]]
                  [com.github.haifengl/smile-core   "2.5.3"
@@ -20,28 +21,35 @@
                  [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 [ch.qos.logback/logback-classic   "1.2.3"]
+                 [ch.qos.logback/logback-classic   "1.2.3"
+                  :exclusions [org.slf4j/slf4j-api]]
                  ;;Many things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]
+
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
-                 [org.apache.parquet/parquet-hadoop "1.11.0" :scope "provided"]
-                 [org.apache.hadoop/hadoop-common
-                  "3.1.1"
-                  ;;We use logback-classic.
-                  :exclusions [org.slf4j/slf4j-log4j12
-                               log4j
-                               com.google.guava/guava
-                               commons-codec
-                               com.google.code.findbugs/jsr305
-                               com.fasterxml.jackson.core/jackson-databind]
-                  :scope "provided"]
                  [org.apache.arrow/arrow-memory-unsafe "2.0.0" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-core "2.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-memory-core "2.0.0" :scope "provided"
+                  :exclusions [org.slf4j/slf4j-api]]
                  [org.apache.arrow/arrow-vector "2.0.0"
-                  :exclusions [commons-codec] :scope "provided"]
+                  :exclusions [commons-codec
+                               com.fasterxml.jackson.core/jackson-core
+                               com.fasterxml.jackson.core/jackson-annotations
+                               com.fasterxml.jackson.core/jackson-databind
+                               org.slf4j/slf4j-api]
+                  :scope "provided"]
                  [uncomplicate/neanderthal "0.35.0" :scope "provided"]
+
+                 ;;Geni dependencies
+                 [zero.one/geni "0.0.34" :scope "provided"
+                  :exclusions [commons-codec]]
+                 [org.apache.spark/spark-avro_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-core_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]
                  ]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
