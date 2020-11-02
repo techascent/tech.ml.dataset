@@ -6,24 +6,28 @@
 
 
 (deftest simple-reduction
-  (let [stocks (ds/->dataset "test/data/stocks.csv")
-        data (->> (ds-reductions/group-by-column-aggregate
-                   "symbol"
-                   (ds-reductions/double-reducer ["price"]
-                                                 ds-reductions/sum-consumer)
-                   [stocks stocks stocks])
-                  (ds-reductions/stream->vec)
-                  (into {}))
-        single-price (->> (ds/group-by-column stocks "symbol")
-                          (map (fn [[k ds]]
-                                 [k {"price" {:n-elems (ds/row-count ds)
-                                              :sum (dfn/sum (ds "price"))}}]))
-                          (into {}))
-        key-seq (vec (keys data))
-        vectorizer (fn [collection inner-key]
-                     (mapv #(get-in collection [% "price" inner-key]) key-seq))]
-    (is (= 5 (count data)))
-    (is (dfn/equals (vectorizer data :n-elems)
-                    (dfn/* 3 (vectorizer single-price :n-elems))))
-    (is (dfn/equals (vectorizer data :sum)
-                    (dfn/* 3 (vectorizer single-price :sum))))))
+  (let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+        agg-ds (-> (ds-reductions/group-by-column-agg
+                    :symbol
+                    {:n-elems (ds-reductions/row-count)
+                     :price-avg (ds-reductions/mean :price)
+                     :price-sum (ds-reductions/sum :price)
+                     :symbol (ds-reductions/first-value :symbol)
+                     :n-dates (ds-reductions/count-distinct :date :int32)}
+                    [stocks stocks stocks])
+                   (ds/sort-by-column :symbol))
+        single-price (-> (->> (ds/group-by-column stocks :symbol)
+                              (map (fn [[k ds]]
+                                     {:symbol k
+                                      :n-elems (ds/row-count ds)
+                                      :price-sum (dfn/sum (ds :price))
+                                      :price-avg (dfn/mean (ds :price))}))
+                              (ds/->>dataset))
+                         (ds/sort-by-column :symbol))]
+    (is (= 5 (ds/row-count agg-ds)))
+    (is (dfn/equals (agg-ds :n-elems)
+                    (dfn/* 3 (single-price :n-elems))))
+    (is (dfn/equals (agg-ds :price-sum)
+                    (dfn/* 3 (single-price :price-sum))))
+    (is (dfn/equals (agg-ds :price-avg)
+                    (single-price :price-avg)))))
