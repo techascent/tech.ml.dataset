@@ -4,26 +4,34 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype.bitmap :as bitmap]
-            [tech.v3.parallel.for :as parallel-for])
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.io :as ds-io]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.parallel.for :as parallel-for]
+            [primitive-math :as pmath])
   (:import [tech.v3.datatype IndexReduction Buffer]
-           [java.util Map Map$Entry HashMap List Set HashSet]
+           [java.util Map Map$Entry HashMap List Set HashSet ArrayList]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiFunction BiConsumer Function DoubleConsumer
             LongConsumer Consumer]
            [java.util.stream Stream]
            [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype DoubleReader Consumers$StagedConsumer]
+           [tech.v3.datatype LongReader BooleanReader ObjectReader DoubleReader
+            Consumers$StagedConsumer]
            [tech.v3.datatype DoubleConsumers$Sum DoubleConsumers$MinMaxSum]
            [it.unimi.dsi.fastutil.ints Int2ObjectMap
             Int2ObjectOpenHashMap]
-           [clojure.lang IFn]))
+           [clojure.lang IFn])
+  (:refer-clojure :exclude [distinct]))
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
 
-(defn group-by-column-aggregate
+(defn ^:no-doc group-by-column-aggregate-impl
   "Perform a group by over a sequence of datasets where the reducer is handed each index
   and the context is stored in a map.  The reduction in this case is unordered so your
   indexes will arrive out of order.  The index-reductions's prepare-batch method will be
@@ -59,7 +67,7 @@
      (doseq [dataset ds-seq]
        (let [batch-data (.prepareBatch reducer dataset)]
          (dtype-reductions/unordered-group-by-reduce
-          reducer batch-data (dataset column-name) reduction)))
+          reducer batch-data (ds-base/column dataset column-name) reduction)))
      (cond
        (= :stream finalize-type)
        (-> (.entrySet reduction)
@@ -81,7 +89,7 @@
        :else
        (errors/throwf "Unrecognized finalize-type: %s" finalize-type))))
   ([column-name ^IndexReduction reducer ds-seq]
-   (group-by-column-aggregate column-name reducer nil ds-seq)))
+   (group-by-column-aggregate-impl column-name reducer nil ds-seq)))
 
 
 (defn stream->array
@@ -118,74 +126,60 @@
 
 
 (defmacro ^:private make-reducer
-  [datatype colname-seq staged-consumer-constructor-fn]
-  `(let [n-readers# (count ~colname-seq)]
-     (reify IndexReduction
-       (prepareBatch [this# ds#]
-         (->> (map #(dtype/->reader (ds# %) ~datatype) ~colname-seq)
-              (object-array)))
-       (reduceIndex [this# readers# ctx# idx#]
-         (let [readers# (typecast/as-object-array readers#)
-               ctx# (typecast/as-object-array
-                     (if ctx#
-                       ctx#
-                       (object-array (repeatedly
-                                      n-readers#
-                                      ~staged-consumer-constructor-fn))))]
-           (dotimes [ary-idx# n-readers#]
-             (typed-accept ~datatype
-                           (aget ctx# ary-idx#)
-                           (aget readers# ary-idx#)
-                           idx#))
-           ctx#))
-       (reduceReductions [this# lhs# rhs#]
-         (let [lhs# (typecast/as-object-array lhs#)
-               rhs# (typecast/as-object-array rhs#)]
-           (dotimes [idx# (alength lhs#)]
-             (let [lhs-cons# (as-staged-consumer (aget lhs# idx#))
-                   rhs-cons# (as-staged-consumer (aget rhs# idx#))]
-               (.inplaceCombine lhs-cons# rhs-cons#)))
-           lhs#))
-       (finalize [this# lhs#]
-         (->> (map vector
-                   ~colname-seq
-                   (map (fn [data#]
-                          (.value (as-staged-consumer data#)))
-                        lhs#))
-              (into {}))))))
+  [datatype colname staged-consumer-constructor-fn finalize-fn]
+  `(reify IndexReduction
+     (prepareBatch [this# ds#]
+       (dtype/->reader (ds-base/column ds# ~colname) ~datatype))
+     (reduceIndex [this# reader# ctx# idx#]
+       (let [ctx# (if ctx#
+                    ctx#
+                    (~staged-consumer-constructor-fn))]
+         (typed-accept ~datatype ctx# reader# idx#)
+         ctx#))
+     (reduceReductions [this# lhs# rhs#]
+       (let [lhs# (as-staged-consumer lhs#)
+             rhs# (as-staged-consumer rhs#)]
+         (.inplaceCombine lhs# rhs#)
+         lhs#))
+     (finalize [this# lhs#]
+       (~finalize-fn
+        (.value (as-staged-consumer lhs#))))))
 
 
-(defn double-reducer
-  "Create an indexed reduction that uses double readers expects DoubleConsumers.
-  constructor-fn will be used to create context-specific double consumers."
-  ^IndexReduction [colname-seq staged-double-consumer-constructor-fn]
-  (make-reducer :float64 colname-seq staged-double-consumer-constructor-fn))
+(defn first-value
+  [colname]
+  (reify IndexReduction
+     (prepareBatch [this ds]
+       (dtype/->reader (ds-base/column ds colname)))
+    (reduceIndex [this batch-ctx ctx idx]
+      (or ctx (batch-ctx idx)))
+    (reduceReductions [this lhs rhs]
+      lhs)))
 
 
-(defn long-reducer
-  "Create an indexed reduction that uses long readers expects LongConsumers.
-  constructor-fn will be used to create context-specific long consumers."
-  ^IndexReduction [colname-seq staged-long-consumer-constructor-fn]
-  (make-reducer :int64 colname-seq staged-long-consumer-constructor-fn))
-
-
-(defn object-reducer
-  "Create an indexed reduction that uses object readers expects ObjectConsumers.
-  constructor-fn will be used to create context-specific object consumers."
-  ^IndexReduction [colname-seq staged-consumer-constructor-fn]
-  (make-reducer :object colname-seq staged-consumer-constructor-fn))
-
-
-(defn sum-consumer
+(defn sum
   "Create a double consumer which will sum the values."
-  []
-  (DoubleConsumers$Sum.))
+  [colname]
+  (make-reducer :float64 colname
+                #(DoubleConsumers$Sum.)
+                #(get % :sum)))
 
 
-(defn min-max-sum-consumer
-  "Create a double consumer which will perform min, max, and sum the values."
+(defn mean
+  "Create a double consumer which will produce a mean of the column."
+  [colname]
+  (make-reducer :float64 colname #(DoubleConsumers$Sum.)
+                #(pmath// (double (get % :sum))
+                          (double (get % :n-elems)))))
+
+(defn row-count
+  "Create a simple reducer that returns the number of times reduceIndex was called."
   []
-  (DoubleConsumers$MinMaxSum.))
+  (reify IndexReduction
+    (reduceIndex [this batch-ctx ctx idx]
+      (unchecked-inc (long (or ctx 0))))
+    (reduceReductions [this lhs rhs]
+      (pmath/+ (long lhs) (long rhs)))))
 
 
 (deftype BitmapConsumer [^{:unsynchronized-mutable true
@@ -201,10 +195,14 @@
     bitmap))
 
 
-(defn bitmap-consumer
-  "Perform a consumer which aggregates to a RoaringBitmap."
-  ^BitmapConsumer []
-  (BitmapConsumer. (bitmap/->bitmap)))
+(defn distinct-int32
+  "Get the set of distinct items given you know the space is no larger than int32
+  space.  The optional finalizer allows you to post-process the data."
+  ([colname finalizer]
+   (make-reducer :int64 colname #(BitmapConsumer. (bitmap/->bitmap))
+                 (or finalizer identity)))
+  ([colname]
+   (distinct-int32 colname nil)))
 
 
 (deftype SetConsumer [^{:unsynchronized-mutable true
@@ -219,18 +217,29 @@
   (value [this] data))
 
 
-(defn set-consumer
-  "Create a consumer which aggregates to a HashSet."
-  []
-  ^Consumer (SetConsumer. (HashSet.)))
+(defn distinct
+  "Create a reducer that will return a "
+  ([colname finalizer]
+   (make-reducer :object colname #(SetConsumer. (HashSet.))
+                 (or finalizer identity)))
+  ([colname]
+   (distinct colname nil)))
 
 
-(defn aggregate-reducer
+(defn count-distinct
+  ([colname op-space]
+   (case op-space
+     :int32 (distinct-int32 colname dtype/ecount)
+     :object (distinct colname dtype/ecount)))
+  ([colname]
+   (count-distinct colname :object)))
+
+
+(defn- aggregate-reducer
   "Create a reducer that aggregates to several other reducers.  Reducers are provided in a map
   of reducer-name->reducer and the result is a map of reducer-name -> finalized reducer value."
-  ^IndexReduction [reducer-map]
-  (let [reducer-names (keys reducer-map)
-        reducer-seq (object-array (vals reducer-map))
+  ^IndexReduction [reducer-seq]
+  (let [reducer-seq (object-array reducer-seq)
         n-reducers (alength reducer-seq)]
     (reify IndexReduction
       (prepareBatch [this dataset]
@@ -258,42 +267,117 @@
           lhs-ctx))
       (finalize [this ctx]
         (let [^objects ctx ctx]
-          (->> (map (fn [reducer-name reducer ctx]
-                      [reducer-name
-                       (.finalize ^IndexReduction reducer ctx)])
-                    reducer-names
-                    reducer-seq
-                    ctx)
-               (into {})))))))
+          (dotimes [idx (alength ctx)]
+            (let [^IndexReduction reducer (aget reducer-seq idx)
+                  fin-val (.finalize ^IndexReduction reducer (aget ctx idx))]
+              (aset ctx idx fin-val)))
+          ctx)))))
+
+
+(defn group-by-column-agg
+  "Group a sequence of datasets by a column and aggregate down into a new dataset.
+
+  * agg-map - map of result column name to reducer.  All values in the agg map must be
+    instances of `tech.v3.datatype.IndexReduction`.  Column values will be inferred from
+    the finalized result of the first reduction with nil indicating an object column.
+
+  Options:
+
+  * `:map-initial-capacity` - initial hashmap capacity.  Resizing hash-maps is expensive so we
+     would like to set this to something reasonable.  Defaults to 100000.
+
+  Example:
+
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (require '[tech.v3.dataset.reductions :as ds-reduce])
+nil
+user> (def stocks (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword}))
+#'user/stocks
+user> (ds-reduce/group-by-column-agg
+       :symbol
+       {:symbol (ds-reduce/first-value :symbol)
+        :price-avg (ds-reduce/mean :price)
+        :price-sum (ds-reduce/sum :price)}
+       [stocks stocks stocks])
+:symbol-aggregation [5 3]:
+
+| :symbol |   :price-avg | :price-sum |
+|---------|--------------|------------|
+|    MSFT |  24.73674797 |    9127.86 |
+|     IBM |  91.26121951 |   33675.39 |
+|    AAPL |  64.73048780 |   23885.55 |
+|    GOOG | 415.87044118 |   84837.57 |
+|    AMZN |  47.98707317 |   17707.23 |
+```"
+  ([colname agg-map options ds-seq]
+   (let [map-initial-capacity (long (get options :map-initial-capacity 100000))
+         results (ArrayList. 100000)
+         cnames (vec (keys agg-map))
+         ;;group by using this reducer followed by this consumer fn.
+         _ (group-by-column-aggregate-impl
+            colname
+            (aggregate-reducer (vals agg-map))
+            ;;This is recommended but I didn't see a large result by setting it.
+            (assoc options
+                   :finalize-type
+                   (fn [_column-value reduce-data]
+                     (locking results
+                       (.add results reduce-data))))
+            ds-seq)
+         ary-data (.toArray results)
+         n-elems (alength ary-data)]
+     (if (== 0 n-elems)
+       nil
+       ;;Transpose results in-place.
+       (->> (map
+             (fn [^long col-idx colname colval]
+               ;;With a binary record type this operation could be nicer.
+               ;;We create 'virtual' columns that we can randomly address into.
+               (col-impl/new-column
+                colname
+                (case (casting/simple-operation-space (dtype/datatype colval))
+                  ;;IDX in the code below means row-idx
+                  :boolean (reify BooleanReader
+                             (lsize [rdr] n-elems)
+                             (readBoolean [rdr row-idx]
+                               (boolean (aget ^objects (aget ary-data row-idx) col-idx))))
+                  :int64 (reify LongReader
+                           (lsize [rdr] n-elems)
+                           (readLong [rdr row-idx]
+                             (unchecked-long (aget ^objects (aget ary-data row-idx) col-idx))))
+                  :float64 (reify DoubleReader
+                             (lsize [rdr] n-elems)
+                             (readDouble [rdr row-idx]
+                               (unchecked-double (aget ^objects (aget ary-data row-idx) col-idx))))
+                  (reify ObjectReader
+                    (lsize [rdr] n-elems)
+                    (readObject [rdr row-idx]
+                      (aget ^objects (aget ary-data row-idx) col-idx))))
+                nil
+                (bitmap/->bitmap)))
+             (range n-elems) cnames (first results))
+            (ds-impl/new-dataset {:dataset-name (str colname "-aggregation")})))))
+  ([colname agg-map ds-seq]
+   (group-by-column-agg colname agg-map nil ds-seq)))
 
 
 (comment
   (require '[tech.v3.dataset :as ds])
   (require '[tech.v3.datatype.datetime :as dtype-dt])
-  (def stocks (-> (ds/->dataset "test/data/stocks.csv")
-                  (ds/update-column "date" #(dtype-dt/datetime->epoch :epoch-days %))))
+  (def stocks (-> (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+                  (ds/update-column :date #(dtype-dt/datetime->epoch :epoch-days %))))
 
 
-  (-> (group-by-column-aggregate
-       "symbol"
-       (double-reducer ["price"] sum-consumer)
-       [stocks stocks stocks])
-      (stream->vec))
-
-
-  (-> (group-by-column-aggregate
-       "symbol"
-       (long-reducer ["date"] bitmap-consumer)
-       [stocks])
-      (stream->vec))
-
-
-  (-> (group-by-column-aggregate
-       "symbol"
-       (aggregate-reducer {:summations (double-reducer ["price"] min-max-sum-consumer)
-                           :dates (long-reducer ["date"] bitmap-consumer)})
-       [stocks stocks stocks])
-      (stream->vec))
+  (group-by-column-agg
+   :symbol
+   {:n-elems (row-count)
+    :price-avg (mean :price)
+    :price-sum (sum :price)
+    :symbol (first-value :symbol)
+    :n-dates (count-distinct :date :int32)}
+   [stocks stocks stocks])
 
 
   )
