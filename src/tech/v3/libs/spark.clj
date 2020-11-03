@@ -4,6 +4,7 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.io :as ds-io]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.datatype.emap :as emap]
             [tech.v3.datatype.datetime :as dtype-dt]
@@ -15,20 +16,14 @@
            [org.apache.spark.sql.types StructType StructField
             DataTypes DataType]
            [tech.v3.datatype ObjectReader]
+           [tech.v3.dataset SimpleRDD]
            [java.time LocalDate Instant]
+           [java.util.function Function]
            [java.sql Date]
            [java.util List]))
 
-(set! *warn-on-reflection* true)
 
-(comment
-  (require '[zero-one.geni.core :as g])
-  (require '[zero-one.geni.defaults :as geni-defaults])
-  (def dataframe (g/read-csv! "test/data/stocks.csv"))
-  (require '[tech.v3.dataset :as ds])
-  (def stocks (ds/->dataset "test/data/stocks.csv"))
-  (def session @geni-defaults/spark)
-  )
+(set! *warn-on-reflection* true)
 
 
 (def ^:private datatype->sql-map
@@ -134,37 +129,83 @@
    (vals ds)))
 
 
-(defn- ds->schema
-  ^StructType [ds]
+(defn ds-schema->spark-schema
+  ^StructType [ds-schema]
   (let [retval (StructType.)]
     (reduce
      (fn [retval col]
-       (let [{:keys [datatype name]} (meta col)
+       (let [{:keys [datatype name]} col
              name (ds-utils/column-safe-name name)
              nullable? (boolean (not (.isEmpty (ds-col/missing col))))]
          (.add ^StructType retval name (datatype->sql-type datatype) nullable?)))
      retval
-     (vals ds))))
+     (:columns ds-schema))))
+
+
+(defn ds-schema
+  [ds]
+  (assoc (meta ds)
+         :columns (mapv meta (vals ds))))
+
+
+(defn- dataset->row-list
+  ^List [ds]
+  (let [val-rdr (ds-readers/value-reader ds)
+        n-elems (.lsize val-rdr)]
+    (reify ObjectReader
+      (lsize [rdr] n-elems)
+      (readObject [rdr idx]
+        (RowFactory/create
+         (object-array (.readObject val-rdr idx)))))))
 
 
 (defn ds->spark-dataset
   (^Dataset [ds ^SparkSession spark-session options]
    ;;Prepare the dataset datatypes
-   (let [ds (prepare-ds-for-spark ds)
-         val-rdr (ds-readers/value-reader ds)
-         n-elems (.lsize val-rdr)]
-     (.createDataFrame spark-session
-                       ^List (reify ObjectReader
-                               (lsize [rdr] n-elems)
-                               (readObject [rdr idx]
-                                 (RowFactory/create
-                                  (object-array (.readObject val-rdr idx)))))
-                       (ds->schema ds))))
+   (let [ds (prepare-ds-for-spark ds)]
+     (.createDataFrame spark-session (dataset->row-list ds)
+                       (-> (ds-schema ds)
+                           (ds-schema->spark-schema)))))
   (^Dataset [ds session]
    (ds->spark-dataset ds session nil)))
 
 
-(defn spark-dataset->inplace-ds
+(defn default-ds-fn
+  [src]
+  (-> (ds-io/->dataset src)
+      (prepare-ds-for-spark)
+      (dataset->row-list)))
+
+
+(defn ds-src-data->rdd
+  "Given a session, a full namespaced name that resolves to an IFn,
+  and a list of serializable data produce an RDD."
+  (^Dataset [^SparkSession spark-session
+             ^String ds-fn-name
+             ds-src-data]
+   (SimpleRDD. (.sparkContext spark-session)
+               (vec ds-src-data)
+               ds-fn-name)))
+
+
+(comment
+  (require '[zero-one.geni.core :as g])
+  (require '[zero-one.geni.defaults :as geni-defaults])
+  (def dataframe (g/read-csv! "test/data/stocks.csv"))
+  (require '[tech.v3.dataset :as ds])
+  (def stocks (ds/->dataset "test/data/stocks.csv"))
+  (def session @geni-defaults/spark)
+  (def schema (-> (ds/->dataset "test/data/stocks.csv")
+                  (prepare-ds-for-spark)
+                  (ds-schema)))
+  (def rdd (ds-src-data->dataset @geni-defaults/spark
+                                 schema
+                                 "tech.v3.libs.spark/default-ds-fn"
+                                 [[{:a 1} {:a 2}]]))
+  )
+
+
+(defn collect-spark-dataset->ds
   [^Dataset dataset]
   ;;Make sure we are dealing with rows, not drama
   ;;This system will not be able to deal with missing
