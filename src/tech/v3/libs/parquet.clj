@@ -658,9 +658,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
     (ParquetFileWriter. of schema ParquetFileWriter$Mode/CREATE
                         ParquetWriter/DEFAULT_BLOCK_SIZE
                         ParquetWriter/MAX_PADDING_SIZE_DEFAULT
-                        (.getColumnIndexTruncateLength properties)
-                        (.getStatisticsTruncateLength properties)
-                        (.getPageWriteChecksumEnabled properties))))
+
+                        )))
 
 
 (def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32
@@ -874,9 +873,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
              page-write-store (FilePageWriteStore.
                                compressor
                                schema
-                               (.getAllocator properties)
-                               (.getColumnIndexTruncateLength properties)
-                               (.getPageWriteChecksumEnabled properties))
+                               (.getAllocator properties))
              column-store (.newColumnWriteStore properties schema page-write-store)
              colwriters (->> col-descriptors
                              (map (fn [^ColumnDescriptor col-desc]

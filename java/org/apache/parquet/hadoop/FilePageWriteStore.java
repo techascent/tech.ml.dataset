@@ -13,10 +13,8 @@ import java.io.IOException;
 
 public class FilePageWriteStore implements PageWriteStore {
   final ColumnChunkPageWriteStore pageWriteStore;
-  public FilePageWriteStore( BytesCompressor compressor, MessageType schema, ByteBufferAllocator allocator,
-			     int columnIndexTruncateLength, boolean pageWriteChecksumEnabled) {
-    pageWriteStore = new ColumnChunkPageWriteStore(compressor, schema, allocator,
-						   columnIndexTruncateLength, pageWriteChecksumEnabled);
+  public FilePageWriteStore( BytesCompressor compressor, MessageType schema, ByteBufferAllocator allocator) {
+    pageWriteStore = new ColumnChunkPageWriteStore(compressor, schema, allocator);
   }
   public PageWriter getPageWriter(ColumnDescriptor path) {
     return pageWriteStore.getPageWriter(path);

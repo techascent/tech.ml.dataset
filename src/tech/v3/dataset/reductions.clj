@@ -45,13 +45,14 @@
   Options:
 
   * `:finalize-type` - One of three options, defaults to `:stream`.
-     - `:stream` - The finalized results will be returned in the form of k,v tuples in a
-        `java.util.stream.Stream`.
-     - An instant of `clojure.lang.IFn` - This function, which must accept 2 arguments,
-       will be called on each k,v pair and no value will be returned.
-     - `:skip` - The entire java.util.ConcurrentHashMap will be returned with the value
-        in an unfinalized state.  It will be up to the caller to call the reducer's
-        finalize method on all the values.
+       * `:stream` - The finalized results will be returned in the form of k,v tuples in a
+          `java.util.stream.Stream`.
+       * An instant of `clojure.lang.IFn` - This function, which must accept 2 arguments,
+         will be called on each k,v pair and no value will be returned.
+       * `:skip` - The entire java.util.ConcurrentHashMap will be returned with the value
+         in an unfinalized state.  It will be up to the caller to call the reducer's
+         finalize method on all the values.
+
   * `:map-initial-capacity` - initial capacity -- this can have a big effect on
     overall algorithm speed according to the
     [documentation](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html)."
