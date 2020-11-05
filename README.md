@@ -281,9 +281,10 @@ https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5
 ```clojure
 ;; project-clj -
 
-[org.apache.arrow/arrow-memory-netty "1.0.0"]
-[org.apache.arrow/arrow-memory-core "1.0.0"]
-[org.apache.arrow/arrow-vector "1.0.0" :exclusions [commons-codec]]
+;;Unsafe works with graal native
+[org.apache.arrow/arrow-memory-unsafe "2.0.0"]
+[org.apache.arrow/arrow-memory-core "2.0.0"]
+[org.apache.arrow/arrow-vector "2.0.0" :exclusions [commons-codec]]
 
 ;;require -
 (require '[tech.v3.libs.arrow])
@@ -291,14 +292,19 @@ https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5
 
 ### Parquet Support
 
-This support comes in via the smile pathway and thus there is currently not great
-support for missing values for those two formats.  You will need to rescan the data
-most likely to know where the missing values lie.
+Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.
+That means we should be able to load most Parquet files.  Failure to load a parquet file quickly and accurately 
+with correct missing values is a issue.
+
 
 #### Parquet Dependencies
 
 ```clojure
-org.apache.parquet/parquet-hadoop {:mvn/version "1.10.1"}
+;;require
+(require '[tech.v3.libs.parquet])
+
+;;Also works with 1.10.X
+org.apache.parquet/parquet-hadoop {:mvn/version "1.11.0"}
 org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 ```
 
