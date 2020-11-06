@@ -51,15 +51,12 @@
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]]
   :test-selectors {:travis (complement :travis-broken)}
-  :profiles {:repl
-             {:dependencies [[ch.qos.logback/logback-classic "1.2.3"
-                              :exclusions [org.slf4j/slf4j-api]]]}
-             :dev
+  :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
                              [ch.qos.logback/logback-classic "1.2.3" :exclusions [org.slf4j/slf4j-api]]
-                             [log4j "1.2.7" :scope "test"]
+                             [log4j "1.2.7" :scope "test"] ;; tests of spark-core need this
                              ]
 
               :test-paths ["test" "neanderthal"]}
