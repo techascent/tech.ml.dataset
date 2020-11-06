@@ -761,6 +761,10 @@
     (ds-join/left-join :a A B)))
 
 
+(deftest sample-repeatable-seed
+  (let [ds (ds/->dataset "test/data/stocks.csv")]))
+
+
 (comment
 
   (def test-ds (ds/->dataset

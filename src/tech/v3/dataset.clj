@@ -9,6 +9,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.update-reader :as update-reader]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
@@ -22,7 +23,7 @@
             [tech.v3.dataset.io.nippy]
             [tech.v3.libs.smile.data :as smile-data]
             [clojure.set :as set])
-  (:import [java.util List Iterator Collection ArrayList ]
+  (:import [java.util List Iterator Collection ArrayList Random]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype PrimitiveList]
            [clojure.lang IFn])
@@ -161,24 +162,38 @@
 
 
 (defn shuffle
-  [dataset]
-  (select-rows dataset (clojure.core/shuffle (range (row-count dataset)))))
+  "Shuffle the rows of the dataset optionally providing a seed.
+  See https://cnuernber.github.io/dtype-next/tech.v3.datatype.argops.html#var-argshuffle."
+  ([dataset {:keys [seed] :as options}]
+   (select-rows dataset (argops/argshuffle (row-count dataset) options)))
+  ([dataset]
+   (shuffle dataset nil)))
 
 
 (defn sample
-  "Sample n-rows from a dataset.  Defaults to sampling *without* replacement."
-  ([dataset replacement? n]
+  "Sample n-rows from a dataset.  Defaults to sampling *without* replacement.
+
+  For the definition of seed, see the argshuffle documentation](https://cnuernber.github.io/dtype-next/tech.v3.datatype.argops.html#var-argshuffle)
+
+  The returned dataset's metadata is altered merging `{:print-index-range (range n)}` in so you
+  will always see the entire returned dataset.  If this isn't desired, `vary-meta` a good pathway."
+  ([dataset n {:keys [replacement? seed]}]
    (let [row-count (row-count dataset)
-         n (long n)]
+         n (long n)
+         ^Random seed (when seed
+                        (if (number? seed)
+                          (Random. (long seed))
+                          seed))]
      (-> (if replacement?
-           (select-rows dataset (repeatedly n #(rand-int row-count)))
-           (select-rows dataset (take (min n row-count)
-                                      (clojure.core/shuffle (range row-count)))))
+           (select-rows dataset (repeatedly n #(.nextInt seed)))
+           (select-rows dataset (dtype/sub-buffer
+                                 (argops/argshuffle row-count {:seed seed})
+                                 0 (min n row-count))))
          (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([dataset n]
-   (sample dataset false n))
+   (sample dataset false n nil))
   ([dataset]
-   (sample dataset false 5)))
+   (sample dataset false 5 nil)))
 
 
 (defn rand-nth
