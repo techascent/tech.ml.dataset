@@ -24,7 +24,7 @@
     ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
     ArrowType$Duration DictionaryEncoding]
    [org.apache.arrow.vector VarCharVector BaseFixedWidthVector
-    BaseVariableWidthVector FieldVector
+    BaseVariableWidthVector FieldVector DateDayVector
     VectorSchemaRoot  TimeStampMicroTZVector TimeStampMicroVector
     TimeStampMilliVector TimeStampMilliTZVector TimeStampSecVector
     TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector]
@@ -141,9 +141,9 @@
      (dtype-dt/utc-zone-id))))
 
 
-(defn datetime-cols-to-millis-from-epoch
+(defn datetime-cols->epoch
   [ds {:keys [timezone]}]
-  (let [timezone (->timezone timezone)]
+  (let [timezone (when timezone (->timezone timezone))]
     (reduce
      (fn [ds col]
        (let [col-dt (dtype/elemwise-datatype col)]
@@ -152,7 +152,12 @@
                   (col-proto/column-name col)
                   (col-impl/new-column
                    (col-proto/column-name col)
-                   (dtype-dt/datetime->milliseconds timezone col)
+                   (dtype-dt/datetime->epoch
+                    timezone
+                    (if (= :local-date (packing/unpack-datatype col-dt))
+                      :epoch-days
+                      :epoch-milliseconds)
+                    col)
                    (assoc (meta col)
                           :timezone (str timezone)
                           :source-datatype (dtype/elemwise-datatype col))
@@ -186,7 +191,7 @@
 
 (defn- prepare-dataset-for-write
   [ds options]
-  (cond-> (datetime-cols-to-millis-from-epoch ds options)
+  (cond-> (datetime-cols->epoch ds options)
     (not (:strings-as-text? options))
     (ds-base/ensure-dataset-string-tables)))
 
@@ -246,7 +251,7 @@
    (write-dataset-seq-to-stream! ds path {})))
 
 
-(defn- write-dataset-to-file!
+#_(defn- write-dataset-to-file!
   "EXPERIMENTAL & NOT WORKING - please use streaming formats for now."
   ([ds path options]
    (let [ds (ds-base/ensure-dataset-string-tables ds)
@@ -282,6 +287,8 @@
 (extend-protocol PFieldVecMeta
   Object
   (field-vec-metadata [fv] {})
+  DateDayVector
+  (field-vec-metadata [fv] {:time-unit :epoch-days})
   TimeStampNanoVector
   (field-vec-metadata [fv] {:time-unit :epoch-nanosecond})
   TimeStampNanoTZVector
@@ -306,7 +313,7 @@
 
 
 (defn field-vec->column
-  [{:keys [fix-date-types?]}
+  [{:keys [epoch->datetime?]}
    dict-map
    [^long idx ^FieldVector fv]]
   (let [field (.getField fv)
@@ -337,6 +344,7 @@
         ;;Aside from actual metadata saved with the field vector, some field vector
         ;;types generate their own bit of metadata
         metadata (merge metadata (field-vec-metadata fv))
+        fv-dtype (dtype/elemwise-datatype fv)
         coldata
         (cond
           dict
@@ -352,14 +360,13 @@
               (arrow-dtype/string-reader->text-reader))
           ;;Mapping back to local-dates takes a bit of time.  This is only
           ;;necessary if you really need them.
-          (and fix-date-types?
-               (:timezone metadata)
-               (:source-datatype metadata)
-               (dtype-dt/datetime-datatype? (:source-datatype metadata))
-               (not= (:source-datatype metadata) (dtype/elemwise-datatype fv)))
-          (dtype/clone
-           (dtype-dt/milliseconds->datetime (:source-datatype metadata)
-                                            (:timezone metadata) fv))
+          (and epoch->datetime?
+               (arrow-dtype/epoch-datatypes fv-dtype))
+          (->> (dtype/clone fv)
+               (dtype-dt/epoch->datetime
+                (:timezone metadata)
+                (or (:source-datatype metadata)
+                    (arrow-dtype/default-datetime-datatype fv-dtype))))
           :else
           (dtype/->array-buffer fv))
         new-col

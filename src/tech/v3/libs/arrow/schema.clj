@@ -7,7 +7,8 @@
             [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
              ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
              ArrowType$Utf8 ArrowType$LargeUtf8 ArrowType$Date ArrowType$Time
-             ArrowType$Timestamp ArrowType$Duration DictionaryEncoding]
+             ArrowType$Timestamp ArrowType$Duration DictionaryEncoding
+             ArrowType$Date]
             [java.util Map]))
 
 
@@ -44,7 +45,8 @@
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
          datatype (packing/unpack-datatype datatype)]
-     (case (if (= :epoch-milliseconds datatype)
+     (case (if (or (= :epoch-milliseconds datatype)
+                   (= :epoch-days datatype))
              datatype
              (casting/un-alias-datatype datatype))
        :boolean (ft-fn (ArrowType$Bool.))
@@ -60,6 +62,7 @@
        :float64 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/DOUBLE))
        :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                                         (str (:timezone extra-data))))
+       :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
        :local-time (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 8)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
@@ -106,15 +109,19 @@
   ArrowType$Timestamp
   (datafy [this]
     (merge
-     (if (= (.getUnit this) TimeUnit/MILLISECOND)
-       {:datatype :epoch-milliseconds}
-       {:datatype :int64 :time-unit (condp = (.getUnit this)
-                                      TimeUnit/MICROSECOND :microsecond
-                                      TimeUnit/NANOSECOND :nanosecond
-                                      TimeUnit/SECOND :second)})
+     (condp = (.getUnit this)
+       TimeUnit/MILLISECOND {:datatype :epoch-milliseconds}
+       TimeUnit/MICROSECOND {:datatype :epoch-microseconds}
+       TimeUnit/SECOND {:datatype :epoch-second}
+       TimeUnit/NANOSECOND {:datatype :int64 :time-unit :epoch-nanoseconds})
      (when (and (.getTimezone this)
                 (not= 0 (count (.getTimezone this))))
        {:timezone (.getTimezone this)})))
+  ArrowType$Date
+  (datafy [this]
+    (condp = (.getUnit this)
+      DateUnit/MILLISECOND {:datatype :epoch-milliseconds}
+      DateUnit/DAY {:datatype :epoch-days}))
   ArrowType$Bool
   (datafy [this] {:datatype :boolean})
   DictionaryEncoding

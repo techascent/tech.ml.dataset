@@ -228,6 +228,7 @@
    :float64 'Float8Vector
    :string 'VarCharVector
    :text 'VarCharVector
+   :epoch-days `DateDayVector
    :epoch-milliseconds 'TimeStampMilliVector})
 
 
@@ -243,6 +244,7 @@
 (defn as-float32-vector ^Float4Vector [item] item)
 (defn as-float64-vector ^Float8Vector [item] item)
 (defn as-varchar-vector ^VarCharVector [item] item)
+(defn as-date-day-vector ^DateDayVector [item] item)
 (defn as-timestamp-vector ^TimeStampVector [item] item)
 (defn as-timestamp-milli-vector ^TimeStampMilliVector [item] item)
 (defn as-timestamp-micro-vector ^TimeStampMicroVector [item] item)
@@ -264,7 +266,20 @@
     :float32 `(as-float32-vector ~item)
     :float64 `(as-float64-vector ~item)
     :string `(as-varchar-vector ~item)
+    :epoch-days `(as-date-day-vector ~item)
     :epoch-milliseconds `(as-timestamp-milli-vector ~item)))
+
+
+(def epoch-datatypes #{:epoch-days :epoch-nanosecond :epoch-microsecond
+                       :epoch-millisecond :epoch-second})
+
+
+(def default-datetime-datatype
+  {:epoch-days :local-date
+   :epoch-millisecond :instant
+   :epoch-microsecond :instant
+   :epoch-nanosecond :instant
+   :epoch-second :instant})
 
 
 (def extension-datatypes
@@ -279,6 +294,7 @@
              :int32 :uint32
              :int64 :uint64
              :float32 :float64
+             :epoch-days
              :epoch-milliseconds}))
 
 

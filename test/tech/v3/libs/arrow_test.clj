@@ -4,6 +4,7 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
 
@@ -25,7 +26,7 @@
       (is (dfn/equals (stocks "price") (pystocks-copying "price")))
       (is (dfn/equals (stocks "price") (pystocks-inplace "price")))
 
-      (is (= (vec (stocks "symbol")) (vec (stocks-copying "symbol")) ))
+      (is (= (vec (stocks "symbol")) (vec (stocks-copying "symbol"))))
       (is (= (vec (stocks "symbol")) (vec (stocks-inplace "symbol"))))
       (is (= (vec (stocks "symbol")) (mapv str (pystocks-copying "symbol"))))
       (is (= (vec (stocks "symbol")) (mapv str (pystocks-inplace "symbol")))))
@@ -59,6 +60,35 @@
              (ds-col/missing (pyames-inplace "LotFrontage")))))
     (finally
       (.delete (java.io.File. "temp.ames.arrow")))))
+
+
+;; > read_ipc_stream ("with_date.arrow")
+;; member-id day                         trx-id brand-id month year quantity
+;; 1     86422  23 564132249-257605208-1718971337      202     6 2019        1
+;; 2     12597  25   897161990-1972492812-1691041      134     6 2019        2
+;; 3    126980  16  31433047-823825990-2105753041       11     6 2019        2
+;; price style-id       date
+;; 1  65536      171 2019-06-23
+;; 2 131072       38 2019-06-25
+;; 3 131072       33 2019-06-16
+
+(deftest date-arrow-test
+  (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow")]
+    (is (= [18070 18072 18063]
+           (date-data "date")))
+    (is (= :epoch-days (dtype/elemwise-datatype (date-data "date")))))
+  (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow"
+                                                     {:epoch->datetime? true})]
+    (is (= (mapv #(java.time.LocalDate/parse %)
+                 ["2019-06-23" "2019-06-25" "2019-06-16"])
+           (date-data "date")))
+    (is (= :local-date (dtype/elemwise-datatype (date-data "date")))))
+  (let [date-data (arrow/read-stream-dataset-inplace "test/data/with_date.arrow"
+                                                     {:epoch->datetime? true})]
+    (is (= (mapv #(java.time.LocalDate/parse %)
+                 ["2019-06-23" "2019-06-25" "2019-06-16"])
+           (date-data "date")))
+    (is (= :local-date (dtype/elemwise-datatype (date-data "date"))))))
 
 
 

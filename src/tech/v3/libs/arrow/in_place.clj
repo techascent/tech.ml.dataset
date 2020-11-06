@@ -1,5 +1,6 @@
 (ns tech.v3.libs.arrow.in-place
   (:require [tech.v3.datatype.mmap :as mmap]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.libs.arrow.datatype :as arrow-dtype]
             ;;Protocol definitions that make datafy work
             [tech.v3.libs.arrow.schema]
@@ -235,7 +236,7 @@
 
 
 (defn records->ds
-  [schema dict-map record-batch]
+  [schema dict-map record-batch options]
   (let [{:keys [fields]} schema
         {:keys [nodes buffers]} record-batch]
     (assert (= (count fields) (count nodes)))
@@ -261,15 +262,24 @@
               [(conj retval
                      (col-impl/new-column
                       (:name field)
-                      (case field-dtype
-                        :string (string-data->column-data
-                                 dict-map encoding
-                                 (get-in field [:field-type :offset-buffer-datatype])
-                                 (drop 1 specific-bufs)
-                                 n-elems)
-                        :boolean
+                      (cond
+                        (= field-dtype :string)
+                        (string-data->column-data
+                         dict-map encoding
+                         (get-in field [:field-type :offset-buffer-datatype])
+                         (drop 1 specific-bufs)
+                         n-elems)
+                        (= field-dtype :boolean)
                         (arrow-dtype/byte-buffer->bitwise-boolean-buffer
                          (second specific-bufs) n-elems)
+                        (and (:epoch->datetime? options)
+                             (arrow-dtype/epoch-datatypes field-dtype))
+                        (dtype-dt/epoch->datetime (:timezone metadata)
+                                                  (arrow-dtype/default-datetime-datatype field-dtype)
+                                                  (-> (native-buffer/set-native-datatype
+                                                       (second specific-bufs) field-dtype)
+                                                      (dtype/sub-buffer 0 n-elems)))
+                        :else
                         (-> (native-buffer/set-native-datatype
                              (second specific-bufs) field-dtype)
                             (dtype/sub-buffer 0 n-elems)))
@@ -282,7 +292,7 @@
 
 
 (defn- parse-next-dataset
-  [fdata schema messages fname idx]
+  [fdata schema messages fname idx options]
   (when (seq messages)
     (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
                                     messages)
@@ -293,10 +303,10 @@
                         (into {}))
           data-record (first rest-messages)]
       (cons
-       (-> (records->ds schema dict-map data-record)
+       (-> (records->ds schema dict-map data-record options)
            (ds-base/set-dataset-name (format "%s-%03d" fname idx)))
        (lazy-seq (parse-next-dataset fdata schema (rest rest-messages)
-                                     fname (inc (long idx))))))))
+                                     fname (inc (long idx)) options))))))
 
 
 (defn stream->dataset-seq-inplace
@@ -314,7 +324,7 @@
         _ (when-not (= :schema (:message-type schema))
             (throw (Exception. "Initial message is not a schema message.")))
         messages (rest messages)]
-    (parse-next-dataset fdata schema messages fname 0)))
+    (parse-next-dataset fdata schema messages fname 0 options)))
 
 
 (defn read-stream-dataset-inplace
@@ -341,5 +351,5 @@
     (when (seq (rest rest-messages))
       (throw (Exception. "File contains multiple record batches.
 Please use stream->dataset-seq-inplace.")))
-    (-> (records->ds schema dict-map data-record)
+    (-> (records->ds schema dict-map data-record options)
         (ds-base/set-dataset-name fname))))
