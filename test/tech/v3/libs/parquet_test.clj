@@ -6,7 +6,6 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
-(ds-utils/set-slf4j-log-level :info)
 
 
 (deftest stocks-test

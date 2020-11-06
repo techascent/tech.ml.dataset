@@ -8,7 +8,6 @@
             [clojure.test :refer [deftest is]]))
 
 
-(tech.v3.dataset.utils/set-slf4j-log-level :info)
 
 (deftest simple-stocks
   (try

@@ -38,19 +38,6 @@
   (.iterator ^Iterable (seq item-seq)))
 
 
-(defn set-slf4j-log-level
-  "Set the slf4j log level.  Safe to call if slf4j is not in the
-  classpath.  Upon success, returns a keyword.  Upon failure, returns
-  a map with {:exception} pointing to the failure."
-  [level]
-  (locking #'sequence->iterator
-    (try
-      ((requiring-resolve
-        'tech.v3.dataset.utils.slf4j-log-level/set-log-level) level)
-      (catch Throwable e
-        {:exception e}))))
-
-
 (defn column-safe-name
   "Given a generic item (keyword, symbol) create a string that safe to be used
   to name columns."

@@ -21,8 +21,6 @@
                  [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 [ch.qos.logback/logback-classic   "1.2.3"
-                  :exclusions [org.slf4j/slf4j-api]]
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
                  ;;Many things require guava, so we may as well have latest version
