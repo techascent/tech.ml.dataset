@@ -45,17 +45,23 @@
                  [zero.one/geni "0.0.34" :scope "provided"
                   :exclusions [commons-codec]]
                  [org.apache.spark/spark-avro_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-core_2.12 "3.0.1" :scope "provided"]
+                 [org.apache.spark/spark-core_2.12 "3.0.1" :scope "provided" :exclusions [log4j org.slf4j/slf4j-log4j12]]
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]
-                 ]
+                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]]
   :test-selectors {:travis (complement :travis-broken)}
-  :profiles {:dev
+  :profiles {:repl
+             {:dependencies [[ch.qos.logback/logback-classic "1.2.3"
+                              :exclusions [org.slf4j/slf4j-api]]]}
+             :dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
+                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
+                             [ch.qos.logback/logback-classic "1.2.3" :exclusions [org.slf4j/slf4j-api]]
+                             [log4j "1.2.7" :scope "test"]
+                             ]
+
               :test-paths ["test" "neanderthal"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]]
@@ -91,6 +97,12 @@
                                   "-Dtech.v3.datatype.graal-native=true"]
                        :uberjar-name "dataset.jar"}
              :larray {:source-paths ["graal-native"]}}
+  :repl-options {:init (do
+                         (import '[ch.qos.logback.classic Level])
+                         (import '[ch.qos.logback.classic Logger])
+                         (.setLevel  (org.slf4j.LoggerFactory/getLogger (Logger/ROOT_LOGGER_NAME)) Level/WARN)
+                         (println "Logging was set to \"WARN\""))
+                 }
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"]
   :aliases {"codox" ["with-profile" "codox,dev" "codox"]
