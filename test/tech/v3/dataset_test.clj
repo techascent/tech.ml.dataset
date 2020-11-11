@@ -5,6 +5,7 @@
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.join :as ds-join]
             [tech.v3.dataset.test-utils :as test-utils]
             ;;Loading multimethods required to load the files
@@ -762,7 +763,17 @@
 
 
 (deftest sample-repeatable-seed
-  (let [ds (ds/->dataset "test/data/stocks.csv")]))
+  (let [ds (ds/->dataset "test/data/stocks.csv")]
+    (is (= (vec (get (ds/sample ds 5 {:seed 20}) "symbol"))
+           (vec (get (ds/sample ds 5 {:seed 20}) "symbol"))))))
+
+
+(deftest string-table-addall
+  (let [data ["one" "two" "three"]
+        strt (str-table/make-string-table 0)]
+    (.addAll strt data)
+    (is (= (vec strt)
+           data))))
 
 
 (comment
