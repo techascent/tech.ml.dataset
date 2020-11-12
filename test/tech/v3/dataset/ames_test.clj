@@ -21,7 +21,8 @@
            (dtype/->vector new-col)))))
 
 
-(def src-ds (ds/->dataset "test/data/ames-house-prices/train.csv"))
+(def src-ds (ds/->dataset "test/data/ames-house-prices/train.csv"
+                          {:parser-fn {"CentralAir" :boolean}}))
 
 
 (defn missing-pipeline

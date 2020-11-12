@@ -282,9 +282,9 @@
 
 
 (def default-parser-datatype-sequence
-  [:boolean :int16 :int32 :int64 :float64 :uuid
+  [:int16 :int32 :int64 :float64 :uuid
    :packed-duration :packed-local-date
-   :zoned-date-time :string :text])
+   :zoned-date-time :string :text :boolean])
 
 
 (defn- promote-container

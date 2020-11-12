@@ -129,24 +129,28 @@
   - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the header
      row.  Works across both csv and spreadsheet datasets.
   - `:parser-fn` -
-    - `keyword?` - all columns parsed to this datatype
-    - tuple - pair of [datatype `parse-data`] in which case container of type
-      [datatype] will be created. `parse-data` can be one of:
-        - `:relaxed?` - data will be parsed such that parse failures of the standard
-           parse functions do not stop the parsing process.  :unparsed-values and
-           :unparsed-indexes are available in the metadata of the column that tell
-           you the values that failed to parse and their respective indexes.
-        - `fn?` - function from str-> one of `:tech.ml.dataset.parser/missing`,
-           `:tech.ml.dataset.parser/parse-failure`, or the parsed value.
-           Exceptions here always kill the parse process.  :missing will get marked
-           in the missing indexes, and :parse-failure will result in the index being
-           added to missing, the unparsed the column's :unparsed-values and
-           :unparsed-indexes will be updated.
-        - `string?` - for datetime types, this will turned into a DateTimeFormatter via
-           DateTimeFormatter/ofPattern.  For encoded-text, this has to be a valid
-           argument to Charset/forName.
-        - `DateTimeFormatter` - use with the appropriate temporal parse static function
-           to parse the value.
+      - `keyword?` - all columns parsed to this datatype. For example: `{:parser-fn :string}`
+      - `map?` - `{column-name parse-method}` parse each column with specified `parse-method`.
+        The `parse-method` can be:
+          - `keyword?` - parse the specified column to this datatype. For example:
+            `{:parser-fn {:answer :boolean :id :int32}}`
+          - tuple - pair of `[datatype parse-data]` in which case container of type
+            `[datatype]` will be created. `parse-data` can be one of:
+              - `:relaxed?` - data will be parsed such that parse failures of the standard
+                 parse functions do not stop the parsing process.  :unparsed-values and
+                 :unparsed-indexes are available in the metadata of the column that tell
+                 you the values that failed to parse and their respective indexes.
+              - `fn?` - function from str-> one of `:tech.ml.dataset.parser/missing`,
+                 `:tech.ml.dataset.parser/parse-failure`, or the parsed value.
+                 Exceptions here always kill the parse process.  :missing will get marked
+                 in the missing indexes, and :parse-failure will result in the index being
+                 added to missing, the unparsed the column's :unparsed-values and
+                 :unparsed-indexes will be updated.
+              - `string?` - for datetime types, this will turned into a DateTimeFormatter via
+                 DateTimeFormatter/ofPattern.  For encoded-text, this has to be a valid
+                 argument to Charset/forName.
+              - `DateTimeFormatter` - use with the appropriate temporal parse static function
+                 to parse the value.
    - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.
