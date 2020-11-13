@@ -620,6 +620,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
              (.write fchannel buf))))
         ([data off len]
          (let [byte-buf (ByteBuffer/wrap data)
+               off (long off)
+               len (long len)
                _ (.position byte-buf off)
                _ (.limit byte-buf (+ off len))]
            (assert (== (.remaining byte-buf) len))
