@@ -56,7 +56,14 @@
 
 (def default-coercers
   (merge
-   {:boolean #(if (string? %)
+   {:bool #(if (string? %)
+             (let [^String data %]
+               (cond
+                 (.equals "true" data) true
+                 (.equals "false" data) false
+                 :else parse-failure))
+             (boolean %))
+    :boolean #(if (string? %)
                 (let [^String data %]
                   (cond
                     (or (.equalsIgnoreCase "t" data)
@@ -141,6 +148,8 @@
     (loop [n-elems n-elems]
       (when (< n-elems idx)
         (case simple-dtype
+          :bool
+          (.addBoolean container false)
           :boolean
           (.addBoolean container false)
           :int64
@@ -282,7 +291,7 @@
 
 
 (def default-parser-datatype-sequence
-  [:int16 :int32 :int64 :float64 :uuid
+  [:bool :int16 :int32 :int64 :float64 :uuid
    :packed-duration :packed-local-date
    :zoned-date-time :string :text :boolean])
 
@@ -363,7 +372,8 @@
                           (cond
                             (== 0 n-valid)
                             parser-data
-                            (and (or (= :boolean container-dtype)
+                            (and (or (= :bool container-dtype)
+                                     (= :boolean container-dtype)
                                      (casting/numeric-type? container-dtype))
                                  (casting/numeric-type?
                                   (packing/unpack-datatype parser-datatype)))
@@ -399,7 +409,7 @@
 (defn promotional-string-parser
   ([column-name parser-datatype-sequence]
    (let [first-dtype (first parser-datatype-sequence)]
-     (PromotionalStringParser. (column-base/make-container first-dtype)
+     (PromotionalStringParser. (column-base/make-container (if (= :bool first-dtype) :boolean first-dtype))
                                first-dtype
                                false
                                (default-coercers first-dtype)

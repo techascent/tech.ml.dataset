@@ -27,10 +27,17 @@
     (is (= :string (dtype/get-datatype (ds/column ds "word"))))
     (is (= ["true", "False", "YES", "NO", "positive", "negative", "yep", "not", "pos", "neg"]
            (ds/column ds "word")))
+    (is (= :boolean (dtype/get-datatype (ds/column ds "bool"))))
+    (is (= [true, true, false, false, true, false, true, false, false, false]
+           (ds/column ds "bool")))
+    (is (= :string (dtype/get-datatype (ds/column ds "boolstr"))))
+    (is (= ["true", "true", "false", "false", "true", "false", "true", "false", "False", "false"]
+           (ds/column ds "boolstr")))
     (is (= :string (dtype/get-datatype (ds/column ds "boolean"))))
     (is (= ["t", "y", "n", "f", "true", "false", "positive", "negative", "negative", "negative"]
            (ds/column ds "boolean"))))
-  (let [ds (ds/->dataset "test/data/datatype_parser.csv" {:parser-fn {"boolean" :boolean}})]
+  (let [ds (ds/->dataset "test/data/datatype_parser.csv" {:parser-fn {"boolean" :boolean
+                                                                      "boolstr" :boolean}})]
     (is (= :int16 (dtype/get-datatype (ds/column ds "id"))))
     (is (= [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] (ds/column ds "id")))
     (is (= :string (dtype/get-datatype (ds/column ds "char"))))
@@ -39,10 +46,15 @@
     (is (= :string (dtype/get-datatype (ds/column ds "word"))))
     (is (= ["true", "False", "YES", "NO", "positive", "negative", "yep", "not", "pos", "neg"]
            (ds/column ds "word")))
+    (is (= :boolean (dtype/get-datatype (ds/column ds "bool"))))
+    (is (= [true, true, false, false, true, false, true, false, false, false]
+           (ds/column ds "boolean")))
+    (is (= :boolean (dtype/get-datatype (ds/column ds "boolstr"))))
+    (is (= [true, true, false, false, true, false, true, false, false, false]
+           (ds/column ds "boolstr")))
     (is (= :boolean (dtype/get-datatype (ds/column ds "boolean"))))
     (is (= [true, true, false, false, true, false, true, false, false, false]
            (ds/column ds "boolean")))))
-
 
 (deftest iterable
   (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))]
