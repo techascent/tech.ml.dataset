@@ -37,4 +37,8 @@
 
 (defmethod ds-io/dataset->data! :nippy
   [dataset output options]
-  (io/put-nippy! output dataset))
+  (if (:gzipped? options)
+    (with-open [os (io/gzip-output-stream! output)]
+      (let [data (nippy/freeze dataset)]
+        (.write os data)))
+    (io/put-nippy! output dataset)))
