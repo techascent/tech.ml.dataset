@@ -103,6 +103,12 @@
         (.delete (java.io.File. "test.arrow"))))))
 
 
+(deftest failed-R-file
+  (let [cp-data (arrow/read-stream-dataset-copying "test/data/part-8981.ipc_stream")
+        inp-data (arrow/read-stream-dataset-inplace "test/data/part-8981.ipc_stream")]
+    (is (= (vec (ds/column-names cp-data))
+           (vec (ds/column-names inp-data))))))
+
 
 (comment
 
