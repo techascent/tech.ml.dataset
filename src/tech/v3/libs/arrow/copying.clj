@@ -328,8 +328,11 @@
                            (get dict-map (.getId encoding)))
         metadata (try (->> (.getMetadata field)
                            (map (fn [[k v]]
-                                  [(edn/read-string k)
-                                   (edn/read-string v)]))
+                                  (try
+                                    [(edn/read-string k)
+                                     (edn/read-string v)]
+                                    (catch Exception e
+                                      [k v]))))
                            (into {}))
                       (catch Throwable e
                         (throw

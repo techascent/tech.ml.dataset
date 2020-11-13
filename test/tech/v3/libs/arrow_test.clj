@@ -4,6 +4,7 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
+            [tech.v3.libs.parquet]
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
@@ -89,6 +90,17 @@
                  ["2019-06-23" "2019-06-25" "2019-06-16"])
            (date-data "date")))
     (is (= :local-date (dtype/elemwise-datatype (date-data "date"))))))
+
+
+(deftest odd-parquet-crash
+  (let [test-data (ds/->dataset "test/data/part-00000-74d3eb51-bc9c-4ba5-9d13-9e0d71eea31f.c000.snappy.parquet")]
+    (try
+      (arrow/write-dataset-to-stream! test-data "test.arrow")
+      (let [arrow-ds (arrow/read-stream-dataset-copying "test.arrow")]
+        (is (= (ds/missing test-data)
+               (ds/missing arrow-ds))))
+      (finally
+        (.delete (java.io.File. "test.arrow"))))))
 
 
 
