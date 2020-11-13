@@ -25,14 +25,22 @@
   <li><code>:max-chars-per-column</code> - Defaults to 4096. Columns with more characters that this  will result in an exception.</li>
   <li><code>:max-num-columns</code> - Defaults to 8192. CSV,TSV files with more columns than this  will fail to parse. For more information on this option, please visit:  <a href="https://github.com/uniVocity/univocity-parsers/issues/301">https://github.com/uniVocity/univocity-parsers/issues/301</a></li>
   <li><code>:n-initial-skip-rows</code> - Skip N rows initially. This currently may include the header  row. Works across both csv and spreadsheet datasets.</li>
-  <li><code>:parser-fn</code> -</li>
-  <li><code>keyword?</code> - all columns parsed to this datatype</li>
-  <li>tuple - pair of [datatype <code>parse-data</code>] in which case container of type [datatype] will be created. <code>parse-data</code> can be one of:
+  <li><code>:parser-fn</code> -
     <ul>
-      <li><code>:relaxed?</code> - data will be parsed such that parse failures of the standard  parse functions do not stop the parsing process. :unparsed-values and  :unparsed-indexes are available in the metadata of the column that tell  you the values that failed to parse and their respective indexes.</li>
-      <li><code>fn?</code> - function from str-&gt; one of <code>:tech.ml.dataset.parser/missing</code>,  <code>:tech.ml.dataset.parser/parse-failure</code>, or the parsed value.  Exceptions here always kill the parse process. :missing will get marked  in the missing indexes, and :parse-failure will result in the index being  added to missing, the unparsed the column’s :unparsed-values and  :unparsed-indexes will be updated.</li>
-      <li><code>string?</code> - for datetime types, this will turned into a DateTimeFormatter via  DateTimeFormatter/ofPattern. For encoded-text, this has to be a valid  argument to Charset/forName.</li>
-      <li><code>DateTimeFormatter</code> - use with the appropriate temporal parse static function  to parse the value.</li>
+      <li><code>keyword?</code> - all columns parsed to this datatype. For example: <code>{:parser-fn :string}</code></li>
+      <li><code>map?</code> - <code>{column-name parse-method}</code> parse each column with specified <code>parse-method</code>.  The <code>parse-method</code> can be:
+        <ul>
+          <li><code>keyword?</code> - parse the specified column to this datatype. For example:  <code>{:parser-fn {:answer :boolean :id :int32}}</code></li>
+          <li>tuple - pair of <code>[datatype parse-data]</code> in which case container of type  <code>[datatype]</code> will be created. <code>parse-data</code> can be one of:
+            <ul>
+              <li><code>:relaxed?</code> - data will be parsed such that parse failures of the standard  parse functions do not stop the parsing process. :unparsed-values and  :unparsed-indexes are available in the metadata of the column that tell  you the values that failed to parse and their respective indexes.</li>
+              <li><code>fn?</code> - function from str-&gt; one of <code>:tech.ml.dataset.parser/missing</code>,  <code>:tech.ml.dataset.parser/parse-failure</code>, or the parsed value.  Exceptions here always kill the parse process. :missing will get marked  in the missing indexes, and :parse-failure will result in the index being  added to missing, the unparsed the column’s :unparsed-values and  :unparsed-indexes will be updated.</li>
+              <li><code>string?</code> - for datetime types, this will turned into a DateTimeFormatter via  DateTimeFormatter/ofPattern. For encoded-text, this has to be a valid  argument to Charset/forName.</li>
+              <li><code>DateTimeFormatter</code> - use with the appropriate temporal parse static function  to parse the value.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
     </ul>
   </li>
   <li><code>map?</code> - the header-name-or-idx is used to lookup value. If not nil, then  value can be any of the above options. Else the default column parser  is used.</li>
@@ -139,4 +147,4 @@ null [6 3]:
   <li><code>:max-chars-per-column</code> - csv,tsv specific, defaults to 65536 - values longer than this will  cause an exception during serialization.</li>
   <li><code>:max-num-columns</code> - csv,tsv specific, defaults to 8192 - If the dataset has more than this number of  columns an exception will be thrown during serialization.</li>
   <li><code>:quoted-columns</code> - csv specific - sequence of columns names that you would like to always have quoted.</li>
-</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/io.clj#L205">view source</a></div></div></div></body></html>
+</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/io.clj#L209">view source</a></div></div></div></body></html>

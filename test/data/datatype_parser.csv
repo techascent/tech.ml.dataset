@@ -1,0 +1,11 @@
+id, char,   word,     bool,   boolstr, boolean
+1,  t,      true,     true,   true,    t
+2,  f,      False,    true,   true,    y
+3,  y,      YES,      false,  false,   n
+4,  n,      NO,       false,  false,   f
+5,  T,      positive, true,   true,    true
+6,  F,      negative, false,  false,   false
+7,  Y,      yep,      true,   true,    positive
+8,  N,      not,      false,  false,   negative
+9,  A,      pos,      false,  False,   negative
+10, z,      neg,      false,  false,   negative

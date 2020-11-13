@@ -54,7 +54,7 @@
    ["BsmtHalfBath" :int16]
    ["BsmtQual" :string]
    ["BsmtUnfSF" :int16]
-   ["CentralAir" :boolean]
+   ["CentralAir" :string]
    ["Condition1" :string]
    ["Condition2" :string]
    ["Electrical" :string]
