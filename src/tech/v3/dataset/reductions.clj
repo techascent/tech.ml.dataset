@@ -1,4 +1,10 @@
 (ns tech.v3.dataset.reductions
+  "Specific high performance reductions intended to be performend over a sequence
+  of datasets.
+
+  Currently there is one major reduction, `group-by-column-agg` which does
+  a group-by operation followed by a user-defined aggregation
+  into a new dataset."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.errors :as errors]
