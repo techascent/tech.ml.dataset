@@ -21,7 +21,7 @@
                  [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 [ch.qos.logback/logback-classic   "1.2.3"
+                 [ch.qos.logback/logback-classic "1.2.3"
                   :exclusions [org.slf4j/slf4j-api]]
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
@@ -47,12 +47,15 @@
                  [zero.one/geni "0.0.34" :scope "provided"
                   :exclusions [commons-codec]]
                  [org.apache.spark/spark-avro_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-core_2.12 "3.0.1" :scope "provided"]
+                 ;;Remove spark-core's dependency on log4j12, they use
+                 ;;slf4j anyway.
+                 [org.apache.spark/spark-core_2.12 "3.0.1"
+                  :scope "provided"
+                  :exclusions [org.slf4j/slf4j-log4j12]]
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]
-                 ]
+                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
