@@ -109,13 +109,14 @@
     (is (= (vec (ds/column-names cp-data))
            (vec (ds/column-names inp-data))))))
 
+
 (deftest large-var-char-file
   (let [cp-data (arrow/read-stream-dataset-copying "test/data/largeVarChar.ipc")
         inp-data (arrow/read-stream-dataset-inplace "test/data/largeVarChar.ipc")]
     (is (= (vec (ds/column-names cp-data))
-           (vec (ds/column-names inp-data))))))
-
-
+           (vec (ds/column-names inp-data))))
+    (is (= (vec (first (ds/columns cp-data)))
+           (vec (first (ds/columns inp-data)))))))
 
 
 (comment

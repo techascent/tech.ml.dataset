@@ -14,8 +14,9 @@
             Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
             DurationVector TimeStampMicroTZVector TimeStampMicroVector TimeStampVector
             TimeStampMilliVector TimeStampMilliTZVector FieldVector VectorSchemaRoot
-            BaseVariableWidthVector BaseFixedWidthVector TimeStampNanoVector
-            TimeStampNanoTZVector TimeStampSecVector TimeStampSecTZVector]
+            BaseVariableWidthVector BaseLargeVariableWidthVector BaseFixedWidthVector
+            TimeStampNanoVector TimeStampNanoTZVector TimeStampSecVector TimeStampSecTZVector
+            LargeVarCharVector]
            [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
             DictionaryProvider$MapDictionaryProvider]
            [org.apache.arrow.memory ArrowBuf]
@@ -102,32 +103,51 @@
           (.writeByte writer idx (unchecked-byte data)))))
     buffer))
 
+(defprotocol POffsetBuffer
+  (^NativeBuffer get-offset-buffer [fv]))
+
+
+(extend-protocol POffsetBuffer
+  BaseVariableWidthVector
+  (get-offset-buffer [fv]
+    (arrow-buffer->native-buffer :uint32  (.getOffsetBuffer fv)))
+  BaseLargeVariableWidthVector
+  (get-offset-buffer [fv]
+    (arrow-buffer->native-buffer :int64  (.getOffsetBuffer fv))))
+
 
 (defn varchar->string-reader
   "copies the data into a list of strings."
-  ^List [^VarCharVector fv]
-  (let [n-elems (dtype/ecount fv)
-        value-buf (arrow-buffer->native-buffer :int8 (.getDataBuffer fv))
-        offset-buf (arrow-buffer->native-buffer :int32 (.getOffsetBuffer fv))
-        offset-rdr (dtype/->reader offset-buf)]
-    (reify ObjectReader
-      (elemwiseDatatype [rdr] :string)
-      (lsize [rdr] n-elems)
-      (readObject [rdr idx]
-        (let [cur-offset (.readLong offset-rdr idx)
-              next-offset (.readLong offset-rdr (inc idx))
-              str-data (dtype/sub-buffer value-buf cur-offset
-                                         (- next-offset cur-offset))]
-          (errors/when-not-errorf
-           str-data
-           "Nil value returned from sub buffer: %s - 0x%x - %d-%d"
-           (type value-buf) (.address value-buf) cur-offset next-offset)
-         (String. ^bytes (dtype/->byte-array str-data)))))))
+  (^List [^FieldVector fv offset-buf-dtype]
+   (let [n-elems (dtype/ecount fv)
+         value-buf (arrow-buffer->native-buffer :int8 (.getDataBuffer fv))
+         offset-buf (get-offset-buffer fv)
+         offset-rdr (dtype/->reader offset-buf)]
+     (reify ObjectReader
+       (elemwiseDatatype [rdr] :string)
+       (lsize [rdr] n-elems)
+       (readObject [rdr idx]
+         (let [cur-offset (.readLong offset-rdr idx)
+               next-offset (.readLong offset-rdr (inc idx))
+               str-data (dtype/sub-buffer value-buf cur-offset
+                                          (- next-offset cur-offset))]
+           (errors/when-not-errorf
+            str-data
+            "Nil value returned from sub buffer: %s - 0x%x - %d-%d"
+            (type value-buf) (.address value-buf) cur-offset next-offset)
+           (String. ^bytes (dtype/->byte-array str-data)))))))
+  (^List [fv]
+   (varchar->string-reader fv :uint8)))
 
 
 (defn varchar->strings
-  ^List [^VarCharVector fv]
-  (dtype/make-container :list :string (varchar->string-reader fv)))
+  ^List [fv]
+  (dtype/make-container :list :string (varchar->string-reader fv :uint32)))
+
+
+(defn large-varchar->strings
+  ^List [fv]
+  (dtype/make-container :list :string (varchar->string-reader fv :int64)))
 
 
 (defn dictionary->strings
@@ -244,6 +264,7 @@
 (defn as-float32-vector ^Float4Vector [item] item)
 (defn as-float64-vector ^Float8Vector [item] item)
 (defn as-varchar-vector ^VarCharVector [item] item)
+(defn as-large-varchar-vector ^LargeVarCharVector [item] item)
 (defn as-date-day-vector ^DateDayVector [item] item)
 (defn as-timestamp-vector ^TimeStampVector [item] item)
 (defn as-timestamp-milli-vector ^TimeStampMilliVector [item] item)
@@ -266,6 +287,7 @@
     :float32 `(as-float32-vector ~item)
     :float64 `(as-float64-vector ~item)
     :string `(as-varchar-vector ~item)
+    :text `(as-varchar-vector ~item)
     :epoch-days `(as-date-day-vector ~item)
     :epoch-milliseconds `(as-timestamp-milli-vector ~item)))
 
@@ -283,9 +305,10 @@
 
 
 (def extension-datatypes
-  [[:epoch-milliseconds `TimeStampMilliTZVector]
-   [:int64 `TimeStampMilliVector]
-   [:int64 `TimeStampVector]])
+  [[:epoch-milliseconds 'TimeStampMilliTZVector]
+   [:int64 'TimeStampMilliVector]
+   [:int64 'TimeStampVector]
+   [:text 'LargeVarCharVector]])
 
 (defn- primitive-datatype?
   [datatype]

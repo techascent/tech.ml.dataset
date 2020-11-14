@@ -24,8 +24,8 @@
     ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
     ArrowType$Duration DictionaryEncoding]
    [org.apache.arrow.vector VarCharVector BaseFixedWidthVector
-    BaseVariableWidthVector FieldVector DateDayVector
-    VectorSchemaRoot  TimeStampMicroTZVector TimeStampMicroVector
+    BaseVariableWidthVector BaseLargeVariableWidthVector FieldVector
+    DateDayVector VectorSchemaRoot  TimeStampMicroTZVector TimeStampMicroVector
     TimeStampMilliVector TimeStampMilliTZVector TimeStampSecVector
     TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector]
    [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
@@ -341,8 +341,6 @@
                                   e
                                   (.getMetadata field))))))
         valid-buf (.getValidityBuffer fv)
-        offset-buf (when (instance? BaseVariableWidthVector fv)
-                     (.getOffsetBuffer fv))
         missing (arrow-dtype/valid-buf->missing valid-buf n-elems)
         ;;Aside from actual metadata saved with the field vector, some field vector
         ;;types generate their own bit of metadata
@@ -358,8 +356,13 @@
             (dotimes [idx n-table-elems]
               (.put str->int (.get strs idx) idx))
             (StringTable. strs str->int data))
-          offset-buf
+          (and (instance? BaseVariableWidthVector fv)
+               (.getOffsetBuffer fv))
           (-> (dtype/->buffer (arrow-dtype/varchar->strings fv))
+              (arrow-dtype/string-reader->text-reader))
+          (and (instance? BaseLargeVariableWidthVector fv)
+               (.getOffsetBuffer fv))
+          (-> (dtype/->buffer (arrow-dtype/large-varchar->strings fv))
               (arrow-dtype/string-reader->text-reader))
           ;;Mapping back to local-dates takes a bit of time.  This is only
           ;;necessary if you really need them.

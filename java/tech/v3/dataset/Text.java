@@ -18,7 +18,7 @@ public class Text implements Comparable
     } else if (other instanceof Text) {
       strData = ((Text)other).text;
     }
-    return text == strData;
+    return text.equals(strData);
   }
   public int compareTo(Object other) {
     String strData = null;
