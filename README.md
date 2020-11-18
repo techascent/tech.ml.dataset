@@ -300,7 +300,7 @@ with correct missing values is a issue.
 #### Parquet Dependencies
 
 ```clojure
-;;require
+;;namespace needs to be required for parquet support
 (require '[tech.v3.libs.parquet])
 
 ;;Also works with 1.10.X
