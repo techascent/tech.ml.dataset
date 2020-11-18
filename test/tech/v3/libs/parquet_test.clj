@@ -1,8 +1,10 @@
 (ns tech.v3.libs.parquet-test
   (:require [tech.v3.dataset :as ds]
+            [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.libs.parquet :as parquet]
             [tech.v3.dataset.utils :as ds-utils]
+            [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.test :refer [deftest is]]))
 
@@ -75,3 +77,20 @@
       (is (= :uuid ((comp :datatype meta) (new-ds "uuids")))))
     (finally
       (.delete (java.io.File. "test-uuid.parquet")))))
+
+
+(deftest missing-uint8-data
+  ;;Use a large enough value the the system is forced to use uint8 columns else
+  ;;it will default to int8 columns based on the column data min/max
+  (let [ds (ds/->dataset {:a (dtype/make-container :uint8 [10 20 245])})
+        ds (ds/update-column ds :a #(ds-col/set-missing % [1 5]))]
+    (try
+      (parquet/ds->parquet ds "test.parquet")
+      (let [nds (ds/->dataset "test.parquet" {:key-fn keyword})]
+        (is (= 3 (ds/row-count nds)))
+        (is (= [1] (vec (dtype/->reader (ds/missing ds)))))
+        (is (= :uint8 (dtype/elemwise-datatype (ds :a))))
+        (is (= :uint8 (dtype/elemwise-datatype (nds :a))))
+        (is (= [1] (vec (dtype/->reader (ds/missing nds))))))
+      (finally
+        (.delete (java.io.File. "test.parquet"))))))

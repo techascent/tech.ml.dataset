@@ -231,6 +231,15 @@
                      ;;handle infinite seq's
                      (take (dtype/ecount data) long-rdr))
           bitmap (->bitmap long-rdr)]
+      (let [max-value (long (if-not (.isEmpty bitmap)
+                              (dtype-proto/constant-time-max bitmap)
+                              0))]
+        ;;trim the bitmap to fit the column
+        (when (>= max-value (dtype/ecount col))
+          (.andNot bitmap (bitmap/->bitmap (range (dtype/ecount col)
+                                                  (unchecked-inc max-value))))
+          (assert (< (long (dtype-proto/constant-time-max bitmap))
+                     (dtype/ecount col)))))
       (.runOptimize bitmap)
       (Column. bitmap
                data

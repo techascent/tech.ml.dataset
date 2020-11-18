@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.00-beta-4-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.00-beta-4"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.00-alpha-22"]
+                 [cnuernber/dtype-next             "6.00-beta-2"]
                  [techascent/tech.io               "4.02"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -21,6 +21,7 @@
                  [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
+                 ;;In your projects you may want to use exclusions.
                  [ch.qos.logback/logback-classic "1.2.3"
                   :exclusions [org.slf4j/slf4j-api]]
                  ;;Version of slf4j hand chosen to be a middle ground between projects.

@@ -40,9 +40,9 @@
   (let [dtype (if (packing/packed-datatype? dtype)
                 dtype
                 (casting/un-alias-datatype dtype))]
-    (if (contains? dtype->missing-val-map dtype)
-      (get dtype->missing-val-map dtype)
-      nil)))
+    (get dtype->missing-val-map dtype
+         (when (casting/numeric-type? dtype)
+           (casting/cast 0 dtype)))))
 
 
 (defn make-container
