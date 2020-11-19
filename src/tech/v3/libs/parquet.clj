@@ -1,5 +1,8 @@
 (ns tech.v3.libs.parquet
-  "Support for reading Parquet files. Supported datatypes:
+  "Support for reading Parquet files. You must require this namespace to
+  enable parquet read/write support.
+
+  Supported datatypes:
 
   * all numeric types
   * strings

@@ -223,7 +223,9 @@ Options:
      cause an exception during serialization.
   * `:max-num-columns` - csv,tsv specific, defaults to 8192 - If the dataset has more than this number of
      columns an exception will be thrown during serialization.
-  * `:quoted-columns` - csv specific - sequence of columns names that you would like to always have quoted."
+  * `:quoted-columns` - csv specific - sequence of columns names that you would like to always have quoted.
+  * `:file-type` - Manually specify the file type.  This is usually inferred from the filename but if you
+     pass in an output stream then you will need to specify the file type."
   ([dataset output-path options]
    (let [options (merge (when (string? output-path)
                           (str->file-info output-path))
