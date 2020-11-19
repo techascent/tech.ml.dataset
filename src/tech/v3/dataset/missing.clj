@@ -7,7 +7,8 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.datatype.datetime :as dtype-dt])
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [clojure.tools.logging :as log])
   (:import [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]))
 
@@ -152,6 +153,7 @@
          missing-replace (reduce (partial find-lerp-values cnt col lerp) {} ranges)]
      (replace-missing-with-value col missing missing-replace))))
 
+
 (defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
@@ -198,14 +200,14 @@
                         (.isEmpty missing)
                         ds
                         (== row-cnt (.getCardinality missing))
-                        (do
-                          (errors/when-not-errorf
-                           (and (= :value strategy)
-                                (not (instance? IFn value)))
-                           "Column has no values and strategy (%s) is dependent upon existing values"
-                           strategy)
+                        (if (and (= :value strategy)
+                                 (not (instance? IFn value)))
                           (ds-base/add-or-update-column
-                           ds (replace-missing-with-strategy col missing strategy value)))
+                           ds (replace-missing-with-strategy col missing strategy value))
+                          (do
+                            (log/warnf "Column has no values and strategy (%s) is dependent upon existing values"
+                                       strategy)
+                            ds))
                         :else
                         (ds-base/add-or-update-column
                          ds (replace-missing-with-strategy col missing strategy value)))))
