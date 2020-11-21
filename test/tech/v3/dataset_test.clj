@@ -682,6 +682,14 @@
            (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
 
 
+(deftest replace-missing-all-values-missing
+  (let [empty-col (ds/->dataset {:a [nil nil]})]
+    (is (= 2 (-> empty-col
+                 (ds/replace-missing [:a] :value dfn/mean)
+                 (ds/missing)
+                 (dtype/ecount))))))
+
+
 (deftest replace-missing-ldt
   (let [dtds (ds/->dataset {:dt [(java.time.LocalDateTime/of 2020 1 1 1 1 1)
                                  nil nil nil

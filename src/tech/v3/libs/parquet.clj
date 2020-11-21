@@ -1,5 +1,8 @@
 (ns tech.v3.libs.parquet
-  "Support for reading Parquet files. Supported datatypes:
+  "Support for reading Parquet files. You must require this namespace to
+  enable parquet read/write support.
+
+  Supported datatypes:
 
   * all numeric types
   * strings
@@ -371,7 +374,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
             (let [container-dtype (packing/pack-datatype
                                    (dtype-base/elemwise-datatype iterable))
                   container (col-base/make-container container-dtype)
-                  missing-value (col-base/datatype->missing-value container-dtype)
+                  missing-value (col-base/datatype->missing-value
+                                 (packing/unpack-datatype container-dtype))
                   missing (bitmap/->bitmap)]
               ;;Faster to not use the generic system because we know what the type
               ;;will be.
@@ -381,8 +385,13 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                 (let [col-data (.next iterator)]
                   (if (.equals ^Object col-data :tech.ml.dataset.parse/missing)
                     (do
-                      (.add missing row)
-                      (.addObject container missing-value))
+                      (try
+                        (.add missing row)
+                        (.addObject container missing-value)
+                        (catch Exception e
+                          (log/warnf e "Parse failure: %s(%s) - missing - %s"
+                                     col-name container-dtype missing-value)
+                          (throw e))))
                     (.addObject container col-data))
                   (recur (.hasNext iterator) (unchecked-inc row)))
                 {:data container

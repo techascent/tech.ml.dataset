@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "5.00-beta-4-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.00-beta-6-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -21,6 +21,7 @@
                  [com.github.haifengl/smile-nlp    "2.5.3"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
+                 ;;In your projects you may want to use exclusions.
                  [ch.qos.logback/logback-classic "1.2.3"
                   :exclusions [org.slf4j/slf4j-api]]
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
