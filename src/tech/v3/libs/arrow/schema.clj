@@ -2,7 +2,8 @@
   (:require [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.packing :as packing]
             [clojure.core.protocols :as clj-proto]
-            [clojure.datafy :refer [datafy]])
+            [clojure.datafy :refer [datafy]]
+            [clojure.tools.logging :as log])
   (:import  [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
             [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
              ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
@@ -36,6 +37,8 @@
   (->> metadata
        (map (fn [[k v]] [(pr-str k) (pr-str v)]))
        (into {})))
+
+(defonce ^:private uuid-warn-counter (atom 0))
 
 
 (defn datatype->field-type
@@ -71,7 +74,10 @@
                  (ft-fn (.getIndexType encoding) encoding)
                  ;;If no encoding is provided then just save the string as text
                  (ft-fn (ArrowType$Utf8.)))
-       :uuid (ft-fn (ArrowType$Utf8.))
+       :uuid (do
+               (when (== 1 (long (swap! uuid-warn-counter inc)))
+                 (log/warn "Columns of type UUID are converted to type text when serializing to Arrow"))
+               (ft-fn (ArrowType$Utf8.)))
        :text (ft-fn (ArrowType$Utf8.))
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
