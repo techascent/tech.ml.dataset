@@ -119,6 +119,24 @@
            (vec (first (ds/columns inp-data)))))))
 
 
+(deftest uuid-test
+  (try
+    (let [uuid-ds (ds/->dataset "test/data/uuid.parquet"
+                                {:parser-fn {"uuids" :uuid}})
+          _ (arrow/write-dataset-to-stream! uuid-ds "test-uuid.arrow")
+          copying-ds (arrow/read-stream-dataset-copying "test-uuid.arrow")
+          inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")]
+      (is (= :text ((comp :datatype meta) (copying-ds "uuids"))))
+      (is (= :text ((comp :datatype meta) (inplace-ds "uuids"))))
+      (is (= (vec (copying-ds "uuids"))
+             (vec (inplace-ds "uuids"))))
+      (is (= (mapv str (uuid-ds "uuids"))
+             (mapv str (copying-ds "uuids")))))
+    (finally
+      (.delete (java.io.File. "test-uuid.arrow")))))
+
+
+
 (comment
 
   (deftest big-arrow-text

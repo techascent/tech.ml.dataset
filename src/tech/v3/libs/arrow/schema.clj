@@ -71,6 +71,7 @@
                  (ft-fn (.getIndexType encoding) encoding)
                  ;;If no encoding is provided then just save the string as text
                  (ft-fn (ArrowType$Utf8.)))
+       :uuid (ft-fn (ArrowType$Utf8.))
        :text (ft-fn (ArrowType$Utf8.))
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
