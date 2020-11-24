@@ -191,9 +191,9 @@
                                  0 (min n row-count))))
          (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([dataset n]
-   (sample dataset false n nil))
+   (sample dataset n nil))
   ([dataset]
-   (sample dataset false 5 nil)))
+   (sample dataset 5 nil)))
 
 
 (defn rand-nth

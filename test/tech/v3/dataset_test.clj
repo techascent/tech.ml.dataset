@@ -814,6 +814,12 @@
            (vec (get (ds/sample ds 5 {:seed 20}) "symbol"))))))
 
 
+(deftest sample-arities
+  (let [ds (ds/->dataset "test/data/stocks.csv")]
+    (is (= (dtype/ecount (get (ds/sample ds) "symbol"))
+           (dtype/ecount (get (ds/sample ds 5) "symbol"))))))
+
+
 (deftest string-table-addall
   (let [data ["one" "two" "three"]
         strt (str-table/make-string-table 0)]
