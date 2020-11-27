@@ -828,6 +828,14 @@
            data))))
 
 
+(deftest concat-copying-object-fail
+  (let [ds1 (ds/->dataset {:a [["A" 1]["B" 1]]})
+        ds2 (ds/->dataset {:a [["A" 2]["B" 2]]})
+        dsc (ds/concat-copying ds1 ds2)]
+    (is (= [["A" 1] ["B" 1] ["A" 2] ["B" 2]]
+           (vec (dsc :a))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

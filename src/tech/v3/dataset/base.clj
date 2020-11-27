@@ -501,6 +501,19 @@
              dataset datasets))
 
 
+(defn- coalesce-blocks!
+  "Copy a sequence of blocks of countable things into a larger
+  countable thing."
+  [dst src-seq]
+  (reduce (fn [offset src-item]
+            (let [n-elems (dtype/ecount src-item)]
+              (dtype/copy! src-item (dtype/sub-buffer dst offset n-elems))
+              (+ (long offset) n-elems)))
+          0
+          src-seq)
+  dst)
+
+
 (defn concat-copying
   "Concatenate datasets into a new dataset copying data.  Respects missing values.
   Datasets must all have the same columns.  Result column datatypes will be a widening
@@ -510,10 +523,8 @@
                       (remove nil?)
                       seq)
         n-rows (long (reduce + (map row-count datasets)))]
-    (do-concat #(-> (dtype/copy-raw->item! %2
-                                           (dtype/make-container
-                                            :jvm-heap %1 n-rows))
-                    (first))
+    (do-concat #(coalesce-blocks! (dtype/make-container :jvm-heap %1 n-rows)
+                                  %2)
                (first datasets) (rest datasets))))
 
 
