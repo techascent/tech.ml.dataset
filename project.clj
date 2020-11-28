@@ -87,6 +87,7 @@
                                    tech.v3.dataset.io.univocity
                                    tech.v3.dataset.io.string-row-parser
                                    tech.v3.dataset.print
+                                   tech.v3.libs.smile.data
                                    tech.v3.libs.poi
                                    tech.v3.libs.parquet
                                    tech.v3.libs.fastexcel

@@ -28,9 +28,7 @@
            [java.util List HashSet LinkedHashMap Map Arrays HashMap
             ArrayList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IFn]
-           [smile.data DataFrame]
-           [smile.io Read])
+           [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
 
 

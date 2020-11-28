@@ -2,12 +2,10 @@
   (:require [tech.v3.io :as io]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.libs.smile.data :as smile-data]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers])
-  (:import [java.io InputStream File]
-           [smile.data DataFrame]))
+  (:import [java.io InputStream File]))
 
 
 (defn str->file-info
@@ -175,8 +173,6 @@
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
-           (instance? DataFrame dataset)
-           (smile-data/dataframe->dataset dataset options)
            (or (string? dataset) (instance? InputStream dataset))
            (let [options (if (string? dataset)
                            (merge (str->file-info dataset)

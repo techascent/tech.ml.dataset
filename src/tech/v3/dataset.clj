@@ -21,7 +21,6 @@
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
-            [tech.v3.libs.smile.data :as smile-data]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList Random]
            [org.roaringbitmap RoaringBitmap]
@@ -95,6 +94,7 @@
                 ->dataset
                 ->>dataset
                 write!)
+
 
 
 (defmacro bind->
@@ -258,7 +258,7 @@
 
 
   * `filter-fn-or-ds` is a generalized parameter.  May be a function,
-     a dataset or a sequence of columns
+     a dataset or a sequence of column names.
   *  update-fn must take the dataset as the first argument and must return
      a dataset.
 
@@ -367,6 +367,61 @@
                  (ds-cat/transform-one-hot filtered-ds fit-data)))
              filtered-ds
              (column-names filtered-ds))))))
+
+
+(defn column-map
+  "Produce a new (or updated) column as the result of mapping a fn over columns.
+
+  Missing set of the new column will be the union of the missing sets of the
+  original columns.
+
+  * `dataset` - dataset.
+  * `result-colname` - Name of new (or existing) column.
+  * `map-fn` - function to map over columns.  Same rules as `tech.v3.datatype/emap`.
+  * `res-dtype` - Defaults to the unified result of the input column datasets.
+  * `filter-fn-or-ds` - A dataset, a sequence of columns, or a `tech.v3.datasets/column-filters`
+     column filter function.  Defaults to all the columns of the existing dataset.
+
+  Returns a new dataset with a new or updated column.
+
+  Example:
+
+
+```clojure
+user> (require '[tech.v3.dataset :as ds]))
+nil
+user> (def ds (ds/->dataset \"test/data/stocks.csv\"))
+#'user/ds
+user> (ds/head ds)
+test/data/stocks.csv [5 3]:
+
+| symbol |       date | price |
+|--------|------------|-------|
+|   MSFT | 2000-01-01 | 39.81 |
+|   MSFT | 2000-02-01 | 36.35 |
+|   MSFT | 2000-03-01 | 43.22 |
+|   MSFT | 2000-04-01 | 28.37 |
+|   MSFT | 2000-05-01 | 25.45 |
+user> (-> (ds/column-map ds \"price^2\" #(* % %) [\"price\"])
+          (ds/head))
+test/data/stocks.csv [5 4]:
+
+| symbol |       date | price |   price^2 |
+|--------|------------|-------|-----------|
+|   MSFT | 2000-01-01 | 39.81 | 1584.8361 |
+|   MSFT | 2000-02-01 | 36.35 | 1321.3225 |
+|   MSFT | 2000-03-01 | 43.22 | 1867.9684 |
+|   MSFT | 2000-04-01 | 28.37 |  804.8569 |
+|   MSFT | 2000-05-01 | 25.45 |  647.7025 |
+```"
+  ([dataset result-colname map-fn res-dtype filter-fn-or-ds]
+   (update dataset filter-fn-or-ds #(assoc % result-colname
+                                           (apply ds-col/column-map map-fn
+                                                  res-dtype (columns %)))))
+  ([dataset result-colname map-fn filter-fn-or-ds]
+   (column-map dataset result-colname map-fn nil filter-fn-or-ds))
+  ([dataset result-colname map-fn]
+   (column-map dataset result-colname map-fn nil (column-names dataset))))
 
 
 (defn column-cast
@@ -730,19 +785,3 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ([ds]
    (brief ds {:stat-names (all-descriptive-stats-names)
               :n-categorical-values nil})))
-
-
-(defn dataset->smile-dataframe
-  "Convert a dataset to a smile dataframe.
-
-  This operation may clone columns if they aren't backed by java heap arrays.
-  See ensure-array-backed
-
-  It is important to note that smile supports a subset of the functionality in
-  tech.v3.dataset.  One difference is smile columns have string column names and
-  have no missing set.
-
-  Returns a smile.data.DataFrame"
-  ^smile.data.DataFrame [ds]
-  (-> (ensure-array-backed ds)
-      (smile-data/dataset->dataframe)))

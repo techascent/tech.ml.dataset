@@ -1,4 +1,5 @@
 (ns tech.v3.libs.smile.data
+  "Bindings to the smile DataFrame system."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.protocols :as dtype-proto]
@@ -9,6 +10,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.string-table :as str-table]
             [clojure.set :as set])
   (:import [tech.v3.dataset.impl.dataset Dataset]
@@ -32,7 +34,7 @@
 (set! *warn-on-reflection* true)
 
 
-(def datatype->smile-map
+(def ^:no-doc datatype->smile-map
   {:boolean DataTypes/BooleanType
    :int8 DataTypes/ByteType
    :char DataTypes/CharType
@@ -52,20 +54,20 @@
    :object DataTypes/ObjectType})
 
 
-(def smile->datatype-map
+(def ^:no-doc smile->datatype-map
   (-> (set/map-invert datatype->smile-map)
       (assoc DataTypes/DateType :local-date
              DataTypes/TimeType :local-time
              DataTypes/DateTimeType :local-date-time)))
 
 
-(defn datatype->smile
+(defn ^:no-doc datatype->smile
   ^DataType [dtype]
   (when dtype
     (get datatype->smile-map dtype DataTypes/ObjectType)))
 
 
-(defn colname->str
+(defn ^:no-doc colname->str
   ^String [cname]
   (cond
     (string? cname) cname
@@ -75,19 +77,19 @@
     (str cname)))
 
 
-(defn smile-struct-field
+(defn ^:no-doc smile-struct-field
   ^StructField [name dtype]
   (StructField. (colname->str name)
                 (datatype->smile dtype)))
 
 
-(defn column->field
+(defn ^:no-doc column->field
   ^StructField [col]
   (smile-struct-field (ds-col/column-name col)
                       (dtype/get-datatype col)))
 
 
-(defn datatype->smile-vec-type
+(defn ^:no-doc datatype->smile-vec-type
   "Datatype has to be a compile time constant"
   [datatype]
   (case (casting/safe-flatten datatype)
@@ -102,7 +104,7 @@
     :object 'Vector))
 
 
-(defn datatype->smile-vec-impl-type
+(defn ^:no-doc datatype->smile-vec-impl-type
   "Datatype has to be a compile time constant"
   [datatype]
   (case (casting/safe-flatten datatype)
@@ -117,7 +119,8 @@
     'VectorImpl))
 
 
-(defn column->smile
+(defn column->smile-column
+  "Convert a dataset column to a smile vector."
   ^BaseVector [col]
   (let [col-data (packing/unpack col)
         col-dtype (dtype/get-datatype col-data)
@@ -135,17 +138,17 @@
       (VectorFactory/genericVector field col-ary))))
 
 
-(defn dataset->dataframe
+(defn ^:no-doc dataset->dataframe
   "Convert a dataset to a smile.data DataFrame"
   ^DataFrame [ds]
   (if (instance? DataFrame ds)
     ds
     (DataFrameFactory/construct ^"[Lsmile.data.vector.BaseVector;"
-                                (into-array BaseVector (map column->smile
+                                (into-array BaseVector (map column->smile-column
                                                             (vals ds))))))
 
 
-(defmacro construct-primitive-smile-vec
+(defmacro ^:private construct-primitive-smile-vec
   [datatype name data]
   (case datatype
     :boolean `(BooleanVectorImpl. ~name (typecast/as-boolean-array ~data))
@@ -167,7 +170,7 @@
   (ecount [v] (long (.size v))))
 
 
-(defmacro extend-primitive-vec
+(defmacro ^:private extend-primitive-vec
   [datatype]
   `(extend-type ~(datatype->smile-vec-impl-type datatype)
      dtype-proto/PElemwiseDatatype
@@ -205,24 +208,58 @@
         (VectorImpl. new-field (.array v))))))
 
 
-(defn dataframe->dataset
-  ([df {:keys [unify-strings?]
-        :or {unify-strings? true}
-        :as options}]
+(defn smile-column->column
+  "Convert a smile column into a tmd column.  Note that missing sets are not
+  supported by smile.
+
+  Options:
+
+  * `:unify-strings` - defaults to true - Use per-column string tables to reduce
+  the memory overead of the Smile dataframe."
+  ([^BaseVector smile-vec {:keys [unify-strings?]
+                           :or {unify-strings? true}}]
+   (ds-col/new-column (.name smile-vec)
+                      (if (and unify-strings?
+                               (= :string (dtype/get-datatype smile-vec)))
+                        (let [str-rdr (dtype/emap #(when % (str %)) :string smile-vec)]
+                          (str-table/string-table-from-strings str-rdr))
+                        smile-vec)))
+  ([^BaseVector smile-vec]
+   (smile-column->column smile-vec nil)))
+
+
+(defn smile-dataframe->dataset
+  "Convert a smile datarame into a dataset.
+
+  Options:
+
+  * `:unify-strings` - defaults to true - Use per-column string tables to reduce
+  the memory overead of the Smile dataframe.
+  * `:key-fn` - Use a key-fn to convert the smile column names."
+  ([df options]
    (->> df
-        (map (fn [^BaseVector smile-vec]
-               {:name (.name smile-vec)
-                :data
-                (if (and unify-strings?
-                         (= :string (dtype/get-datatype smile-vec)))
-                  (let [str-rdr (dtype/emap #(when % (str %)) :string smile-vec)]
-                    (str-table/string-table-from-strings str-rdr))
-                  smile-vec)}))
+        (map #(smile-column->column % options))
         (ds-impl/new-dataset options  {:name "_unnamed"})))
   ([df]
-   (dataframe->dataset df {})))
+   (smile-dataframe->dataset df {})))
 
 
 (defmethod print-method DataFrameImpl
   [dataset w]
   (.write ^Writer w (.toString ^Object dataset)))
+
+
+(defn dataset->smile-dataframe
+  "Convert a dataset to a smile dataframe.
+
+  This operation may clone columns if they aren't backed by java heap arrays.
+  See `tech.v3.dataset/ensure-array-backed`.
+
+  It is important to note that smile supports a subset of the functionality in
+  tech.v3.dataset.  One difference is smile columns have string column names and
+  have no missing set.
+
+  Returns a smile.data.DataFrame"
+  ^smile.data.DataFrame [ds]
+  (-> (ds-base/ensure-array-backed ds)
+      (dataset->dataframe)))
