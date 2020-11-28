@@ -5,6 +5,7 @@
    filter, etc.
  * Namespace changes to be `tech.v3` across the board as opposed to `tech.v2` along
    with `tech.ml`.
+ * All smile dataframe functionality is in tech.v3.libs.smile.data.
 
 ## 4.03
  * Fix for #136
