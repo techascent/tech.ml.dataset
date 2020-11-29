@@ -836,6 +836,14 @@
            (vec (dsc :a))))))
 
 
+(deftest concat-inplace-desc-stats
+  (let [ds (ds/->dataset [{"A" 1 "B" 2} {"A" 2 "B" 3}])]
+    (is (dfn/equals [1.5 2.5]
+                    (-> (ds/concat ds ds)
+                        (ds/descriptive-stats)
+                        (:mean))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
