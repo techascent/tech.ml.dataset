@@ -13,4 +13,5 @@ before_script:
 script:
   lein with-profile travis test :travis
 cache:
-  directories: "$HOME/.m2"
+  directories:
+    - "$HOME/.m2"
