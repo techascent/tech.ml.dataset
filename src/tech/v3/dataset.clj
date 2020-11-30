@@ -57,9 +57,12 @@
                 update-columns
                 rename-columns
                 select
+                select-by-index
                 unordered-select
                 select-columns
+                select-columns-by-index
                 select-rows
+                select-rows-by-index
                 drop-rows
                 remove-rows
                 missing

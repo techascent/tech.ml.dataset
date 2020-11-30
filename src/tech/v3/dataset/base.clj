@@ -231,6 +231,23 @@
                        (nil? (seq colname-seq))))
       (ds-proto/select dataset colname-seq index-seq))))
 
+(defn select-by-index [dataset col-index row-index]
+  "Trim dataset according to this sequence of indexes.  Returns a new dataset.
+  col-index and row-index - one of:
+    - :all - all the columns
+    - list of indexes. May contain duplicates and negatives(counting from end).
+  "
+  (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
+        col-index (if (number? col-index) [col-index] col-index)
+        row-index (if (number? row-index) [row-index] row-index)
+        colname-seq (if (sequential? col-index)
+                      (->> (dtype/emap (partial make-pos (column-count dataset)) :int64 col-index)
+                           (map #(nth (column-names dataset) %)))
+                      col-index)
+        row-index (if (sequential? row-index)
+                    (dtype/emap (partial make-pos (row-count dataset)) :int64 row-index)
+                    row-index)]
+    (select dataset colname-seq row-index)))
 
 (defn unordered-select
   "Perform a selection but use the order of the columns in the existing table; do
@@ -256,9 +273,14 @@
 
 
 (defn select-columns
+  "Select columns from the dataset by seq of column names or :all."
   [dataset col-name-seq]
   (select dataset col-name-seq :all))
 
+(defn select-columns-by-index
+  "Select columns from the dataset by seq of index(includes negative) or :all."
+  [dataset col-index]
+  (select-by-index dataset col-index :all))
 
 (defn rename-columns
   "Rename columns using a map.  Does not reorder columns."
@@ -279,6 +301,17 @@
   (if (ds-impl/dataset? dataset-or-col)
     (select dataset-or-col :all row-indexes)
     (ds-col/select dataset-or-col row-indexes)))
+
+(defn select-rows-by-index
+  "Select rows from the dataset or column by seq of index(includes negative) or :all."
+  [dataset-or-col row-index]
+  (if (ds-impl/dataset? dataset-or-col)
+    (select-by-index dataset-or-col :all row-index)
+    (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
+          row-index (if (sequential? row-index)
+                      (dtype/emap (partial make-pos (row-count dataset-or-col)) :int64 row-index)
+                      row-index)]
+      (ds-col/select dataset-or-col row-index))))
 
 
 (defn drop-rows
