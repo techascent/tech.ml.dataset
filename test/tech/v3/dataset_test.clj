@@ -564,8 +564,58 @@
            (-> (ds/select-rows ds [5])
                (ds/value-reader)
                (first)
-               (vec))))))
+               (vec))))
+    ))
 
+(deftest select-by-index
+  (let [ds (ds/->dataset {:V1 (take 9 (cycle [1 2]))
+                          :V2 (range 1 10)
+                          :V3 (take 9 (cycle [0.5 1.0 1.5]))
+                          :V4 (take 9 (cycle [\A \B \C]))})]
+
+    (is (= [1 \A]
+           (-> (ds/select-by-index ds [0 3] [0 8])
+               (ds/value-reader)
+               (first)
+               (vec))
+           (-> (ds/select-by-index ds [-4 -1] [-9 -1])
+               (ds/value-reader)
+               (first)
+               (vec))))
+
+    (is (= [\C]
+           (-> (ds/select-by-index ds 3 8)
+               (ds/value-reader)
+               (first)
+               (vec))
+           (-> (ds/select-by-index ds -1 -1)
+               (ds/value-reader)
+               (first)
+               (vec))
+           (-> (ds/select-by-index ds [3] [8])
+               (ds/value-reader)
+               (first)
+               (vec))
+           (-> (ds/select-by-index ds [-1] [-1])
+               (ds/value-reader)
+               (first)
+               (vec))))
+
+    (is (= [\A \B \C \A \B \C \A \B \C]
+           (vec ((ds/select-columns-by-index ds 3) :V4))
+           (vec ((ds/select-columns-by-index ds [3]) :V4))
+           (vec ((ds/select-columns-by-index ds -1) :V4))
+           (vec ((ds/select-columns-by-index ds [-1]) :V4))))
+
+    (is (= [2 6 1.5 \C]
+           (-> (ds/select-rows-by-index ds -4)
+               (ds/value-reader)
+               (first)
+               (vec))
+           (-> (ds/select-rows-by-index ds [-4])
+               (ds/value-reader)
+               (first)
+               (vec))))))
 
 (deftest columns-named-false
   (let [DS (ds/->dataset [{false 1} {false 2}])]
