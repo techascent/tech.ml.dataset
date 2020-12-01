@@ -231,12 +231,15 @@
                        (nil? (seq colname-seq))))
       (ds-proto/select dataset colname-seq index-seq))))
 
-(defn select-by-index [dataset col-index row-index]
+(defn select-by-index
   "Trim dataset according to this sequence of indexes.  Returns a new dataset.
+
   col-index and row-index - one of:
+
     - :all - all the columns
-    - list of indexes. May contain duplicates and negatives(counting from end).
-  "
+    - list of indexes. May contain duplicates.  Negative values will be counted from
+      the end of the sequence."
+  [dataset col-index row-index]
   (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
         col-index (if (number? col-index) [col-index] col-index)
         row-index (if (number? row-index) [row-index] row-index)
@@ -278,7 +281,9 @@
   (select dataset col-name-seq :all))
 
 (defn select-columns-by-index
-  "Select columns from the dataset by seq of index(includes negative) or :all."
+  "Select columns from the dataset by seq of index(includes negative) or :all.
+
+  See documentation for `select-by-index`."
   [dataset col-index]
   (select-by-index dataset col-index :all))
 
@@ -303,7 +308,9 @@
     (ds-col/select dataset-or-col row-indexes)))
 
 (defn select-rows-by-index
-  "Select rows from the dataset or column by seq of index(includes negative) or :all."
+  "Select rows from the dataset or column by seq of index(includes negative) or :all.
+
+   See documentation for `select-by-index`."
   [dataset-or-col row-index]
   (if (ds-impl/dataset? dataset-or-col)
     (select-by-index dataset-or-col :all row-index)
