@@ -1,10 +1,13 @@
 (ns tech.v3.libs.arrow
-  "Support for reading/writing arrow files.  Users must include the apache arrow
-  dependencies in their project:
+  "Support for reading/writing arrow files.  We currently support only the
+  arrow 'streaming' file type.  This is indicated via the `ipc` pathways in R
+  and is (at the time of writing this documentation) the default for Pandas.
+
+
+Users must include the apache arrow dependencies in their project:
 
 ```clojure
-[org.apache.arrow/arrow-memory-netty \"2.0.0\"]
-[org.apache.arrow/arrow-memory-core \"2.0.0\"]
+[org.apache.arrow/arrow-memory-unsafe \"2.0.0\"]
 [org.apache.arrow/arrow-vector \"2.0.0\" :exclusions [commons-codec]]
 ```"
   (:require [tech.v3.datatype.export-symbols :refer [export-symbols]]

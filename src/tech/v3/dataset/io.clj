@@ -85,21 +85,35 @@
 (defn ->dataset
   "Create a dataset from either csv/tsv or a sequence of maps.
 
-   * A `String` or `InputStream` will be interpreted as a file (or gzipped file if it
+   * A `String` be interpreted as a file (or gzipped file if it
      ends with .gz) of tsv or csv data.  The system will attempt to autodetect if this
      is csv or tsv and then engineering around detecting datatypes all of which can
      be overridden.
 
-   *  A sequence of maps may be passed in in which case the first N maps are scanned in
-     order to derive the column datatypes before the actual columns are created.
+  * InputStreams have no file type and thus a `file-type` must be provided in the
+    options.
+
+  * A sequence of maps may be passed in in which case the first N maps are scanned in
+    order to derive the column datatypes before the actual columns are created.
+
+  Parquet, xlsx, and xls formats require that you require the appropriate libraries
+  which are `tech.v3.libs.parquet` for parquet, `tech.v3.libs.fastexcel` for xlsx,
+  and `tech.v3.libs.poi` for xls.
+
+
+  Arrow support is provided via the tech.v3.libs.Arrow namespace not via a file-type
+  overload as the Arrow project current has 3 different file types and it is not clear
+  what their final suffix will be or which of the three file types it will indicate.
+  Please see documentation in the `tech.v3.libs.arrow` namespace for further information
+  on Arrow file types.
 
   Options:
 
   - `:dataset-name` - set the name of the dataset.
   - `:file-type` - Override filetype discovery mechanism for strings or force a particular
-      parser for an input stream.  Note that arrow and parquet must have paths on disk
+      parser for an input stream.  Note that parquet must have paths on disk
       and cannot currently load from input stream.  Acceptible file types are:
-      #{:csv :tsv :xlsx :xls :arrow :parquet}.
+      #{:csv :tsv :xlsx :xls :parquet}.
   - `:gzipped?` - for file formats that support it, override autodetection and force
      creation of a gzipped input stream as opposed to a normal input stream.
   - `:column-whitelist` - either sequence of string column names or sequence of column
