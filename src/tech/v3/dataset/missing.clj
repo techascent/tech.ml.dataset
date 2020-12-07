@@ -6,6 +6,7 @@
             [tech.v3.datatype.update-reader :as update-rdr]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.tools.logging :as log])
@@ -41,7 +42,10 @@
                    col (cond
                          (map? value) value
                          (iterable-sequence? value) (zipmap missing (cycle value))
-                         :else (bitmap/bitmap-value->bitmap-map missing value)))
+                         :else (bitmap/bitmap-value->bitmap-map
+                                missing
+                                (casting/cast value
+                                              (dtype/elemwise-datatype col)))))
                   {} (if (map? value)
                        (remove-from-rbitmap missing (keys value))
                        (RoaringBitmap.))))
@@ -157,7 +161,7 @@
 (defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
-                (value (dtype/->reader col))
+                (value col)
                 value)]
     (condp = strategy
       :down (replace-missing-with-direction

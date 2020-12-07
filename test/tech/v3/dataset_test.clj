@@ -894,6 +894,15 @@
                         (:mean))))))
 
 
+(deftest replace-missing-regression-181
+  []
+  (let [ds (ds/->dataset {:a [nil nil 2 2]})]
+    (is (=  [2 2 2 2]
+            (-> (ds/replace-missing ds :all :value dfn/mean)
+                :a
+                vec)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
