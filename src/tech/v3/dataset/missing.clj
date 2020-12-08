@@ -195,8 +195,11 @@
    (replace-missing ds columns-selector strategy nil))
   ([ds columns-selector strategy value]
    (let [strategy (or strategy :mid)
-         row-cnt (ds-base/row-count ds)]
-     (->> (ds-base/select-columns ds columns-selector)
+         row-cnt (ds-base/row-count ds)
+         selected (if (fn? columns-selector)
+                    (columns-selector ds)
+                    (ds-base/select-columns ds columns-selector))]
+     (->> selected
           (ds-base/columns)
           (reduce (fn [ds col]
                     (let [^RoaringBitmap missing (col/missing col)]
