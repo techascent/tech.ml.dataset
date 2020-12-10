@@ -176,8 +176,13 @@
 
 (defn replace-missing
   "Replace missing values in some columns with a given strategy.
-  The columns selector may be any legal argument to select-columns.
+  The columns selector may be:
+
+  - seq of any legal column names
+  - or a column filter function, such as `numeric` and `categorical`
+
   Strategies may be:
+
   - `:down` - take value from previous non-missing row if possible else use next
     non-missing row.
   - `:up` - take value from next non-missing row if possible else use previous
@@ -186,17 +191,21 @@
      rows.
   - `:lerp` - Linearly interpolate values between previous and next nonmissing rows.
   - `:value` - Value will be provided - see below.
-  value may be provided which will then be used.  Value may be a function in which
-  case it will be called on the column with missing values elided and the return will
-  be used to as the filler."
+
+      value may be provided which will then be used.  Value may be a function in which
+      case it will be called on the column with missing values elided and the return will
+      be used to as the filler."
   ([ds] (replace-missing ds :mid))
   ([ds strategy] (replace-missing ds :all strategy))
   ([ds columns-selector strategy]
    (replace-missing ds columns-selector strategy nil))
   ([ds columns-selector strategy value]
    (let [strategy (or strategy :mid)
-         row-cnt (ds-base/row-count ds)]
-     (->> (ds-base/select-columns ds columns-selector)
+         row-cnt (ds-base/row-count ds)
+         selected (if (fn? columns-selector)
+                    (columns-selector ds)
+                    (ds-base/select-columns ds columns-selector))]
+     (->> selected
           (ds-base/columns)
           (reduce (fn [ds col]
                     (let [^RoaringBitmap missing (col/missing col)]

@@ -8,6 +8,7 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.join :as ds-join]
             [tech.v3.dataset.test-utils :as test-utils]
+            [tech.v3.dataset.column-filters :as cf]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
             [tech.v3.libs.fastexcel]
@@ -738,6 +739,17 @@
                  (ds/replace-missing [:a] :value dfn/mean)
                  (ds/missing)
                  (dtype/ecount))))))
+
+(deftest replace-missing-selector-fn
+  (let [ds (ds/->dataset {:a [nil nil 2 4]
+                          :b [nil nil 4 6]
+                          :c [nil nil "A" "B"]})
+        ds-replaced (-> ds
+                        (ds/replace-missing cf/numeric :value dfn/mean)
+                        (ds/replace-missing cf/categorical :value "C"))]
+    (is (= [3 3 2 4] (vec (ds-replaced :a))))
+    (is (= [5 5 4 6] (vec (ds-replaced :b))))
+    (is (= ["C" "C" "A" "B"] (vec (ds-replaced :c))))))
 
 
 (deftest replace-missing-ldt
