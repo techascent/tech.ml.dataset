@@ -153,7 +153,6 @@
          missing-replace (reduce (partial find-lerp-values cnt col-rdr lerp-fn)
                                  {} ranges)
          temp-result-col (replace-missing-with-value col-rdr missing missing-replace)]
-     (println (vec (map long temp-result-col)))
      (if (dtype-dt/datetime-datatype? orig-col-dtype)
        (col/new-column (:name (meta col))
                        (dtype-dt/milliseconds->datetime orig-col-dtype
