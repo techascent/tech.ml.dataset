@@ -6,6 +6,7 @@
             [tech.v3.datatype.update-reader :as update-rdr]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt]
@@ -90,86 +91,95 @@
               n (.nextAbsentValue missing current)]
           (recur (.nextValue missing n) (conj buff [p n])))))))
 
-(defn- lerp
-  [coerce-type-fn mn mx steps]
-  (let [steps+ (inc steps)]
-    (dtype/emap #(+ mn (coerce-type-fn (* (unchecked-inc (long %))
-                                          (/ (- mx mn) steps+))))
-                :object
-                (range steps))))
-
-(def ^:private lerp-double (partial lerp double))
-(def ^:private lerp-float (partial lerp float))
-(def ^:private lerp-long (partial lerp #(long (Math/round ^double %))))
-(def ^:private lerp-int (partial lerp #(int (Math/round ^double %))))
-(def ^:private lerp-short (partial lerp #(short (Math/round ^double %))))
-(def ^:private lerp-byte (partial lerp #(byte (Math/round ^double %))))
-
-(defn- lerp-time
-  [datatype mn mx steps]
-  (let [vs (lerp-long (dtype-dt/datetime->milliseconds mn)
-                      (dtype-dt/datetime->milliseconds mx)
-                      steps)
-        retval (dtype-dt/milliseconds->datetime datatype vs)]
-    retval))
-
-(defn- lerp-object
-  [f l steps]
-  (let [h (/ steps 2.0)]
-    (map #(if (< % h) f l)(range steps))))
-
-(defn- find-lerp
-  [v datatype]
-  (or (condp = datatype
-        :int8 lerp-byte
-        :int16 lerp-short
-        :int32 lerp-int
-        :int64 lerp-long
-        :float32 lerp-float
-        :float64 lerp-double
-        :object (cond
-                  (integer? v) lerp-long
-                  (number? v) lerp-double
-                  :else lerp-object)
-        nil)
-      (cond
-        (dtype-dt/datetime-datatype? datatype) (partial lerp-time datatype)
-        :else lerp-object)))
 
 (defn- find-lerp-values
-  ([cnt col lerp curr [start end]]
-   (let [no-left? (neg? start)
-         no-right? (>= end cnt)]
-     (when-not (and no-left? no-right?) ;; all values are missing?
-       (let [s (dtype/get-value col (if no-left? end start))
-             e (dtype/get-value col (if no-right? start end))
-             start (inc start)
-             end (min cnt end)
-             size (- end start)
-             lerp (or lerp (find-lerp s (dtype/get-datatype col)))]
-         (merge curr (zipmap (range start end) (lerp s e size))))))))
+  [cnt col lerp-fn curr [start end]]
+  (let [no-left? (neg? start)
+        no-right? (>= end cnt)]
+    (when-not (and no-left? no-right?) ;; all values are missing?
+      (let [s (dtype/get-value col (if no-left? end start))
+            e (dtype/get-value col (if no-right? start end))
+            start (inc start)
+            end (min cnt end)
+            size (- end start)]
+        (merge curr (zipmap (range start end) (lerp-fn s e size)))))))
+
+
+(defn- midpoint-lerp-double
+  [^double start ^double end ^long n-steps]
+  (let [mid (+ start (/ (- (double end) (double start)) 2.0))]
+    (dtype/const-reader mid n-steps)))
+
+(defn- midpoint-lerp-object
+  [start end ^long n-steps]
+  (let [mid (+ start (/ (- end start) 2.0))]
+    (dtype/const-reader mid n-steps)))
+
+(defn- lerp-double
+  [^double start ^double end ^long n-steps]
+  (let [steps+ (inc n-steps)
+        data-range (/ (- end start) (double steps+))]
+    (dtype/make-reader :float64 n-steps
+                       (+ start (* data-range (inc idx))))))
+
+(defn- lerp-object
+  [start end ^long n-steps]
+  (let [steps+ (inc n-steps)
+        data-range (/ (- end start) steps+)]
+    (dtype/make-reader :object n-steps
+                       (+ start (* data-range (inc idx))))))
+
+
 
 (defn- replace-missing-with-lerp
-  ([col missing] (replace-missing-with-lerp nil col missing))
-  ([lerp col missing]
+  ([lerp-type col missing]
    (let [ranges (find-missing-ranges missing)
          cnt (dtype/ecount col)
-         missing-replace (reduce (partial find-lerp-values cnt col lerp) {} ranges)]
-     (replace-missing-with-value col missing missing-replace))))
+         orig-col-dtype (dtype/elemwise-datatype col)
+         [col-dtype col-rdr]
+         (cond
+           (dtype-dt/datetime-datatype? orig-col-dtype)
+           [:float64 (-> (dtype-dt/datetime->milliseconds col)
+                         (dtype-proto/elemwise-cast :float64))]
+           (casting/numeric-type? orig-col-dtype)
+           [:float64 (dtype-proto/elemwise-cast col :float64)]
+           :else
+           [:object (dtype-proto/->reader col)])
+         lerp-fn (condp = [col-dtype lerp-type]
+                   [:float64 :mid] midpoint-lerp-double
+                   [:object :mid] midpoint-lerp-object
+                   [:float64 :lerp] lerp-double
+                   [:object :lerp] lerp-object)
+         missing-replace (reduce (partial find-lerp-values cnt col-rdr lerp-fn)
+                                 {} ranges)
+         temp-result-col (replace-missing-with-value col-rdr missing missing-replace)]
+     (println (vec (map long temp-result-col)))
+     (if (dtype-dt/datetime-datatype? orig-col-dtype)
+       (col/new-column (:name (meta col))
+                       (dtype-dt/milliseconds->datetime orig-col-dtype
+                                                        temp-result-col))
+       (vary-meta temp-result-col assoc :name (:name (meta col)))))))
 
 
 (defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
                 (value col)
-                value)]
+                value)
+        col-dtype (dtype/elemwise-datatype col)
+        ;;non-numeric columns default to down from lerp or mid
+        strategy (if (and (#{:lerp :mid} strategy)
+                          (not (or (casting/numeric-type? col-dtype)
+                                   (dtype-dt/datetime-datatype? col-dtype))))
+                   :down
+                   strategy)]
     (condp = strategy
       :down (replace-missing-with-direction
              [missing-direction-prev missing-direction-next] col missing value)
       :up (replace-missing-with-direction
            [missing-direction-next missing-direction-prev] col missing value)
-      :lerp (replace-missing-with-lerp col missing)
-      :mid (replace-missing-with-lerp lerp-object col missing)
+      :lerp (replace-missing-with-lerp :lerp col missing)
+      :mid (replace-missing-with-lerp :mid col missing)
       (replace-missing-with-value col missing value))))
 
 

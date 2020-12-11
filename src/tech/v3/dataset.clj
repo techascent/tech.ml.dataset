@@ -274,8 +274,7 @@
            (ds/update cf/boolean ds/replace-missing-value false)
            (ds/update-columnwise (cf/union (cf/numeric ds) (cf/boolean ds))
                                  #(dtype/elemwise-cast % :float64)))
-```
-"
+```"
   [lhs-ds filter-fn-or-ds update-fn & args]
   (let [filtered-ds (filter-dataset lhs-ds filter-fn-or-ds)]
     (merge lhs-ds (apply update-fn filtered-ds args))))
