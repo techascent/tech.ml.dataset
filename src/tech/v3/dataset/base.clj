@@ -174,15 +174,18 @@
 
 
 (defn update-columns
-  "Update a sequence of columns."
-  [dataset column-name-seq update-fn]
+  "Update a sequence of columns selected by column name seq or column selector function."
+  [dataset column-name-seq-or-fn update-fn]
   (errors/when-not-error
    dataset
    "No dataset passed in to update-columns.")
-  (reduce (fn [dataset colname]
-            (update-column dataset colname update-fn))
-          dataset
-          column-name-seq))
+  (let [column-name-seq (if (fn? column-name-seq-or-fn)
+                          (column-names (column-name-seq-or-fn dataset))
+                          column-name-seq-or-fn)]
+    (reduce (fn [dataset colname]
+              (update-column dataset colname update-fn))
+            dataset
+            column-name-seq)))
 
 
 (defn add-or-update-column
