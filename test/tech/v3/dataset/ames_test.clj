@@ -33,7 +33,7 @@
     (ds/update-elemwise cf/string #(get {"" "NA"} % %))
     (ds/update cf/numeric ds/replace-missing-value 0)
     (ds/update cf/boolean ds/replace-missing-value false)
-    (ds/update-column (cf/union (cf/numeric ds) (cf/boolean ds))
+    (ds/update-columnwise (cf/union (cf/numeric ds) (cf/boolean ds))
                           #(dtype/elemwise-cast % :float64))))
 
 (def original-missing
@@ -71,7 +71,7 @@
                    12.317171167298682
                    11.849404844423074
                    12.429220196836383]
-                  (-> (ds/update-column src-ds ["SalePrice"] dfn/log1p)
+                  (-> (ds/update-columns src-ds ["SalePrice"] dfn/log1p)
                       (ds/select-rows (range 5))
                       (ds/column "SalePrice")
                       (vec)))))
@@ -322,7 +322,7 @@
   [dataset]
   (let [feature-ds (cf/difference dataset (cf/target dataset))
         numeric-feature-ds (cf/difference feature-ds (cf/categorical feature-ds))
-        skew-fixed (ds/update-column numeric-feature-ds skew-column-filter
+        skew-fixed (ds/update-columnwise numeric-feature-ds skew-column-filter
                                          dfn/log1p)
         std-scale-fit (ds-math/fit-std-scale skew-fixed)]
     (merge dataset (ds-math/transform-std-scale skew-fixed std-scale-fit))))

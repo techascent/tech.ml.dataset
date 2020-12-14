@@ -247,6 +247,8 @@
     (or (nil? filter-fn-or-ds)
         (= :all filter-fn-or-ds))
     dataset
+    (or (string? filter-fn-or-ds) (keyword? filter-fn-or-ds))
+    (select-columns dataset filter-fn-or-ds)
     (instance? IFn filter-fn-or-ds)
     (filter-fn-or-ds dataset)
     :else
