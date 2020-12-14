@@ -174,7 +174,8 @@
 
 
 (defn update-columns
-  "Update a sequence of columns selected by column name seq or column selector function."
+  "Update a sequence of columns selected by column name seq or column selector
+  function."
   [dataset column-name-seq-or-fn update-fn]
   (errors/when-not-error
    dataset

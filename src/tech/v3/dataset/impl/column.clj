@@ -284,9 +284,11 @@
       (when (and any-missing? error-on-missing?)
         (throw (Exception. "Missing values detected and error-on-missing? set")))
       (when-not (or (= :boolean col-dtype)
+                    (= :object col-dtype)
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/make-container :jvm-heap :float64 col)))
+      (dtype/make-container :jvm-heap :float64 (dtype-proto/elemwise-reader-cast
+                                                col :float64))))
   IObj
   (meta [this]
     (assoc metadata

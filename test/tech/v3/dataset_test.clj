@@ -938,6 +938,14 @@
     ds'))
 
 
+(deftest column-to-double-regression-187
+  (let [col1 (ds-col/new-column :col1 [1 2 3])]
+    (is (dfn/equals [1 2 3]
+                    (ds-col/to-double-array col1))))
+  (let [col1 (ds-col/new-column :col1 (int-array [1 2 3]))]
+    (is (dfn/equals (ds-col/to-double-array col1) [1 2 3]))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
