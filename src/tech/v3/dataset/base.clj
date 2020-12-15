@@ -159,8 +159,8 @@
   For example:
 
   ```clojure
-  (remove-columns DS [:A :B])
-  (remove-columns DS cf/categorical)
+  (drop-columns DS [:A :B])
+  (drop-columns DS cf/categorical)
   ```"
   [dataset colname-seq-or-fn]
   (when dataset
