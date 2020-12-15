@@ -139,16 +139,32 @@
 
 
 (defn remove-columns
-  "Same as drop-columns"
-  [dataset colname-seq]
-  (reduce ds-proto/remove-column dataset colname-seq))
+  "Remove columns indexed by column name seq or column filter function.
+  For example:
+
+  ```clojure
+  (remove-columns DS [:A :B])
+  (remove-columns DS cf/categorical)
+  ```"
+  [dataset colname-seq-or-fn]
+  (let [colname-seq (if (fn? colname-seq-or-fn)
+                          (column-names (colname-seq-or-fn dataset))
+                          colname-seq-or-fn)]
+    (reduce ds-proto/remove-column dataset colname-seq)))
 
 
 (defn drop-columns
-  "Same as remove-columns"
-  [dataset col-name-seq]
+  "Same as remove-columns. Remove columns indexed by column name seq or
+  column filter function.
+  For example:
+
+  ```clojure
+  (remove-columns DS [:A :B])
+  (remove-columns DS cf/categorical)
+  ```"
+  [dataset colname-seq-or-fn]
   (when dataset
-    (remove-columns dataset col-name-seq)))
+    (remove-columns dataset colname-seq-or-fn)))
 
 
 (defn update-column
@@ -175,7 +191,14 @@
 
 (defn update-columns
   "Update a sequence of columns selected by column name seq or column selector
-  function."
+  function.
+
+  For example:
+
+  ```clojure
+  (update-columns DS [:A :B] #(dfn/+ % 2))
+  (update-columns DS cf/numeric #(dfn// % 2))
+  ```"
   [dataset column-name-seq-or-fn update-fn]
   (errors/when-not-error
    dataset
@@ -280,9 +303,24 @@
 
 
 (defn select-columns
-  "Select columns from the dataset by seq of column names or :all."
-  [dataset col-name-seq]
-  (select dataset col-name-seq :all))
+  "Select columns from the dataset by:
+
+  - seq of column names
+  - column selector function
+  - `:all` keyword
+
+  For example:
+
+  ```clojure
+  (select-columns DS [:A :B])
+  (select-columns DS cf/numeric)
+  (select-columns DS :all)
+  ```"
+  [dataset colname-seq-or-fn]
+  (let [colname-seq (if (fn? colname-seq-or-fn)
+                          (column-names (colname-seq-or-fn dataset))
+                          colname-seq-or-fn)]
+    (select dataset colname-seq :all)))
 
 (defn select-columns-by-index
   "Select columns from the dataset by seq of index(includes negative) or :all.
