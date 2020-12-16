@@ -8,11 +8,11 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.tools.logging :as log])
   (:import [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IFn]))
+           [clojure.lang IFn]
+           [tech.v3.datatype ObjectReader]))
 
 
 (defn- iterable-sequence?
@@ -130,7 +130,6 @@
                        (+ start (* data-range (inc idx))))))
 
 
-
 (defn- replace-missing-with-lerp
   ([lerp-type col missing]
    (let [ranges (find-missing-ranges missing)
@@ -146,8 +145,8 @@
            :else
            [:object (dtype-proto/->reader col)])
          lerp-fn (condp = [col-dtype lerp-type]
-                   [:float64 :mid] midpoint-lerp-double
-                   [:object :mid] midpoint-lerp-object
+                   [:float64 :midpoint] midpoint-lerp-double
+                   [:object :midpoint] midpoint-lerp-object
                    [:float64 :lerp] lerp-double
                    [:object :lerp] lerp-object)
          missing-replace (reduce (partial find-lerp-values cnt col-rdr lerp-fn)
@@ -160,6 +159,23 @@
        (vary-meta temp-result-col assoc :name (:name (meta col)))))))
 
 
+(defn- replace-missing-with-nearest
+  [col missing]
+  (let [ranges (find-missing-ranges missing)
+        cnt (dtype/ecount col)
+        col-dt (dtype/elemwise-datatype col)
+        lerp-fn (fn [start end ^long n-steps]
+                  (let [hs (quot (inc n-steps) 2)]
+                    (reify ObjectReader
+                      (elemwiseDatatype [rdr] col-dt)
+                      (lsize [rdr] n-steps)
+                      (readObject [rdr idx]
+                        (if (< idx hs) start end)))))
+        missing-replace (reduce (partial find-lerp-values cnt col lerp-fn)
+                                {} ranges)]
+    (replace-missing-with-value col missing missing-replace)))
+
+
 (defn replace-missing-with-strategy
   [col missing strategy value]
   (let [value (if (fn? value)
@@ -167,10 +183,14 @@
                 value)
         col-dtype (dtype/elemwise-datatype col)
         ;;non-numeric columns default to down from lerp or mid
-        strategy (if (and (#{:lerp :mid} strategy)
-                          (not (or (casting/numeric-type? col-dtype)
-                                   (dtype-dt/datetime-datatype? col-dtype))))
+        strategy (cond
+                   (and (#{:lerp :midpoint} strategy)
+                        (not (or (casting/numeric-type? col-dtype)
+                                 (dtype-dt/datetime-datatype? col-dtype))))
                    :down
+                   (= strategy :mid)
+                   :nearest
+                   :else
                    strategy)]
     (condp = strategy
       :down (replace-missing-with-direction
@@ -178,7 +198,8 @@
       :up (replace-missing-with-direction
            [missing-direction-next missing-direction-prev] col missing value)
       :lerp (replace-missing-with-lerp :lerp col missing)
-      :mid (replace-missing-with-lerp :mid col missing)
+      :nearest (replace-missing-with-nearest col missing)
+      :midpoint (replace-missing-with-lerp :midpoint col missing)
       (replace-missing-with-value col missing value))))
 
 
@@ -196,7 +217,8 @@
     non-missing row.
   - `:up` - take value from next non-missing row if possible else use previous
      non-missing row.
-  - `:mid` - Use midpoint of averaged values between previous and next nonmissing
+  - `:nearest` - Use nearest of next or previous values.  `:mid` is an alias for `:nearest`.
+  - `:midpoint` - Use midpoint of averaged values between previous and next nonmissing
      rows.
   - `:lerp` - Linearly interpolate values between previous and next nonmissing rows.
   - `:value` - Value will be provided - see below.

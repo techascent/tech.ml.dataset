@@ -727,7 +727,7 @@
            (vec ((ds/replace-missing ds :down) :a))))
     (is (= [1.0 1.0 1.0 1.0 2.0 4.0 4.0 4.0 4.0 4.0 4.0 11.0 11.0 11.0 11.0]
            (vec ((ds/replace-missing ds :up) :a))))
-    (is (= [1.0 1.0 1.0 1.0 2.0 3.0 3.0 3.0 3.0 3.0 4.0 7.5 11.0 11.0 11.0]
+    (is (= [1.0 1.0 1.0 1.0 2.0 2.0 2.0 2.0 4.0 4.0 4.0 4.0 11.0 11.0 11.0]
            (vec ((ds/replace-missing ds :mid) :a))))
     (is (= [5.0 5.0 5.0 1.0 2.0 5.0 5.0 5.0 5.0 5.0 4.0 5.0 11.0 5.0 5.0]
            (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
@@ -927,7 +927,7 @@
                                [nil date-dtype nil nil date-dtype nil date-dtype nil])
                               (dfn/* 10 (range 8))
                               :days)})
-        ds' (ds/replace-missing ds :mid)]
+        ds' (ds/replace-missing ds :midpoint)]
     (is (= [2.0 2.0 3.0 3.0 4.0 5.0 6.0 6.0] (vec (ds' :a))))
     (is (= [3.0 4.5 4.5 6.0 7.5 9.0 10.5 12.0] (vec (ds' :b))))
     (is (= ["A" "A" "A" "A" "B" "B" "C" "C"] (vec (ds' :c))))
@@ -935,7 +935,22 @@
     (is (= ["2020-12-21" "2020-12-21" "2021-01-05" "2021-01-05" "2021-01-20"
             "2021-01-30" "2021-02-09" "2021-02-09"]
            (mapv str (:e ds'))))
-    ds'))
+    (let [ds (ds/->dataset {:a [nil 2 nil nil nil 4 nil 6 nil]
+                            :b [3. nil nil nil 6. nil 9. nil 12.]
+                            :c [nil "A" nil nil "B" nil nil "C" nil]
+                            :d ["A" nil nil "B" nil nil "C" nil "D"]
+                            :e (dtype-dt/plus-temporal-amount
+                                (dtype/make-container
+                                 :local-date
+                                 [nil date-dtype nil nil nil date-dtype nil
+                                  date-dtype nil])
+                                (dfn/* 10 (range 9))
+                                :days)})
+          ds' (ds/replace-missing ds :nearest)
+          ds'' (ds/replace-missing ds :mid)]
+      (is (= [2 2 2 2 4 4 4 6 6] (vec (ds' :a))))
+      (is (= [2 2 2 2 4 4 4 6 6] (vec (ds'' :a))))
+      (is (= [3.0 3.0 3.0 6.0 6.0 6.0 9.0 9.0 12.0] (vec (ds' :b)))))))
 
 
 (deftest column-to-double-regression-187
