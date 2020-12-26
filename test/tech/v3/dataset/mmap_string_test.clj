@@ -12,56 +12,10 @@
            )
   )
 
-;; (defn reset-file [fpath]
-;;  (with-open [o (io/output-stream fpath)]))
-
-;; (defn str->mmap [str mmap-file]
-;;   (let [file (io/file mmap-file)
-;;         file-length (.length file)
-;;         bytes (.getBytes str (Charset/forName "UTF-8"))]
-;;     (with-open [o (io/output-stream file :append true)]
-;;       (.write o bytes))
-;;     {:offset file-length :length (count bytes)
-;;      :mmap (mmap/mmap-file mmap-file) }))
-
-   ;; (defn extract-string [mmap offset length]
-   ;;   (String.
-   ;;    (dtype/->byte-array
-   ;;     (dtype/sub-buffer mmap offset length))))
-
-
-;; (defn add-mmap-text-column [ds pointer-col-name text-col-name]
-;;   (let [offset-length->text-reader
-;;         (reify ObjectReader
-;;           (elemwiseDatatype [rdr] :object)
-;;           (lsize [rdr] (ds/row-count ds) )
-;;           (readObject [rdr _idx]
-;;             (let [pointer (nth (get ds pointer-col-name ) _idx)
-;;                   mmap (:mmap pointer)
-;;                   offset (:offset pointer)
-;;                   length (:length pointer)]
-;;               (if (nil? offset)
-;;                 nil
-;;                 (extract-string mmap offset length)))))]
-;;        (ds/add-or-update-column ds (ds/new-column text-col-name offset-length->text-reader {} []))))
-
-
 
 (comment
 
 
-
-  ;; (def mmap-file-name "/tmp/abstract-column.bin")
-
-
-
-  ;; (reset-file mmap-file-name)
-
-  ;; (def string-list (string-list/->MmapStringList mmap-file-name
-  ;;                                                (io/output-stream mmap-file-name)
-  ;;                                                (atom [])
-  ;;                                                (atom nil)
-  ;;                                                ) )
 
   (def ds
     (-> "./test/data/medical-text.csv"
