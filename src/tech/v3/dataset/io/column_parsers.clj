@@ -119,7 +119,10 @@
                (if (< (count str-val) 1024)
                  str-val
                  parse-failure))
-    :text #(Text. (str %))}
+    :text #(Text. (str %))
+    :mmap-string #(str %)
+
+    }
    (->> parse-dt/datatype->general-parse-fn-map
         (mapcat (fn [[k v]]
                   (let [unpacked-parser (make-safe-parse-fn

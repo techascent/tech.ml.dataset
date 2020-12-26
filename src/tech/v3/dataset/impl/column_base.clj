@@ -3,7 +3,10 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.dataset.string-table :as str-table]
-            [tech.v3.datatype :as dtype])
+            [tech.v3.datatype.mmap-string-list :as mmap-str]
+            [tech.v3.datatype :as dtype]
+            [clojure.java.io :as io]
+            )
   (:import [java.util Map List]
            [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]))
@@ -27,6 +30,7 @@
    :local-time nil
    :duration nil
    :string ""
+   :mmap-string ""
    :text nil
    :keyword nil
    :symbol nil})
@@ -53,6 +57,11 @@
              (dotimes [iter n-elems]
                (.add list-data nil))
              list-data)
+     :mmap-string (mmap-str/->MmapStringList "/tmp/test.mmap"
+                                             (io/output-stream "/tmp/test.mmap")
+                                             (atom [])
+                                             (atom nil)
+                                             )
      (dtype/make-container :list dtype n-elems)))
   (^PrimitiveList [dtype]
    (make-container dtype 0)))
