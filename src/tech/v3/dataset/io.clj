@@ -5,7 +5,6 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers]
-            [pppmap.core :as ppp]
             )
   (:import [java.io InputStream File]))
 

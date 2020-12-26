@@ -1,9 +1,8 @@
-(ns tech.v3.dataset.big-text
+(ns tech.v3.dataset.mmap-string-test
   (:require [tech.v3.datatype :as dtype]
             [clojure.java.io :as io]
             [tech.v3.dataset :as ds]
             [tech.v3.datatype.mmap :as mmap]
-            [pppmap.core :as ppp]
             [tech.v3.datatype.mmap-string-list :as string-list]
             )
   (:import [java.nio.charset Charset]
