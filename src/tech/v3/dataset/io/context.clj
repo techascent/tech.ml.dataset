@@ -28,10 +28,10 @@
           (map? parser-descriptor)
           (if-let [col-parser-desc (or (get parser-descriptor cname)
                                        (get parser-descriptor cname-or-index))]
-            (column-parsers/make-fixed-parser cname col-parser-desc)
+            (column-parsers/make-fixed-parser cname col-parser-desc (:column-opts options ))
             (default-parse-fn cname))
           :else
-          (column-parsers/make-fixed-parser cname parser-descriptor))))))
+          (column-parsers/make-fixed-parser cname parser-descriptor (:column-opts options)))))))
 
 
 (defn- make-colname

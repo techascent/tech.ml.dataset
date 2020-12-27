@@ -9,7 +9,8 @@
             )
   (:import [java.util Map List]
            [tech.v3.datatype PrimitiveList]
-           [tech.v3.dataset Text]))
+           [tech.v3.dataset Text]
+           [java.io FileOutputStream]))
 
 
 (def ^Map dtype->missing-val-map
@@ -50,18 +51,26 @@
 
 
 (defn make-container
-  (^PrimitiveList [dtype n-elems]
+  (^PrimitiveList [dtype n-elems column-options]
    (case dtype
      :string (str-table/make-string-table n-elems "")
      :text (let [^List list-data (dtype/make-container :list :text 0)]
              (dotimes [iter n-elems]
                (.add list-data nil))
              list-data)
-     :mmap-string (mmap-str/->MmapStringList "/tmp/test.mmap"
-                                             (io/output-stream "/tmp/test.mmap")
-                                             (atom [])
-                                             (atom nil)
-                                             )
+     :mmap-string (let [mmap-file
+                        (or  (:mmap-file column-options)
+                             (java.io.File/createTempFile "tmd" ".mmap"))
+                        positions (or (:positions column-options) (atom []))
+                        mmap-file-output-stream (or (:mmap-file-output-stream column-options) (FileOutputStream. mmap-file true) )]
+                    (mmap-str/->MmapStringList
+                     mmap-file
+                     mmap-file-output-stream
+                     positions
+                     (atom nil)
+                     ))
      (dtype/make-container :list dtype n-elems)))
+  (^PrimitiveList [dtype n-elems]
+   (make-container dtype n-elems nil))
   (^PrimitiveList [dtype]
-   (make-container dtype 0)))
+   (make-container dtype 0 nil)))

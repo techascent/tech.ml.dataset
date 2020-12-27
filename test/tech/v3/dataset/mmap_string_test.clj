@@ -23,31 +23,62 @@
                        :max-chars-per-column 10000000
                        :parser-fn {:abstract :mmap-string} })
 
-        )))
+        ))
+
+  (last (:abstract ds))
+
+
+  (def positions (atom []))
+  (def ds
+    (-> "./test/data/medical-text.csv"
+        (ds/->dataset {:key-fn keyword
+                       :column-whitelist ["cord_uid" "abstract"]
+                       :max-chars-per-column 10000000
+                       :column-opts {:abstract {:mmap-file "/tmp/out.mmap" :positions positions}}
+                       :parser-fn {:abstract :mmap-string} })
+
+        ))
+
+  (.positions
+   (.data
+    (:abstract ds)))
+
+  )
 
 
 (comment
 
-  ;; (def files
-  ;;   (->> (io/file  "/home/carsten/Dropbox/sources/analyseOpinions/corpus")
-  ;;        (file-seq)
-  ;;        (filter #(.isFile %))
-  ;;        (map #(.getPath %))
-  ;;        ))
+  (def column-opts
+    {:text {:mmap-file "/tmp/corpus.mmap" :positions (atom [])}
+     })
 
-  ;; (defn file->ds [fpath]
-  ;;   (let [text
-  ;;         (slurp fpath)
-  ;;         ds (->
-  ;;             (ds/->dataset {:text-pointers [text]}
-  ;;                           {
-  ;;                            :parser-fn {:text-pointers [:object #(str->mmap % mmap-file-name )]}})
-  ;;             (add-mmap-text-column  :text-pointers :text))]
-  ;;     ds
-  ;;     ))
+  (def files
+    (->> (io/file  "/home/carsten/Dropbox/sources/analyseOpinions/corpus")
+         (file-seq)
+         (filter #(.isFile %))
+         (map #(.getPath %))
+         ))
 
-  ;; (def all
-  ;;   (apply ds/concat
-  ;;          (map file->ds files)))
+  (defn file->ds [fpath]
+    (let [text
+          (slurp fpath)
+          ds (->
+              (ds/->dataset {:text [text]}
+                            { :column-opts column-opts
+                             :parser-fn {:text :mmap-string}})
+              )]
+      ds
+      ))
+
+  (def all
+    (mapv file->ds files)
+    )
+
+  (def one
+    (apply ds/concat-inplace all))
+
+
+  ;; (-> one :text
+  ;;     (#(.data %)) (#(.positions %)))
 
   )

@@ -275,17 +275,20 @@
 
 
 (defn make-fixed-parser
-  [cname parser-kwd]
-  (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
-        [failed-values failed-indexes] (when relaxed?
-                                         [(dtype/make-container :list :object 0)
-                                          (bitmap/->bitmap)])
-        container (column-base/make-container dtype)
-        missing-value (column-base/datatype->missing-value dtype)
-        missing (bitmap/->bitmap)]
-    (FixedTypeParser. container dtype missing-value parse-fn
-                      missing failed-values failed-indexes
-                      cname -1)))
+  ([cname parser-kwd column-options]
+   (println "make-fixed-parser:" cname parser-kwd)
+   (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
+         [failed-values failed-indexes] (when relaxed?
+                                          [(dtype/make-container :list :object 0)
+                                           (bitmap/->bitmap)])
+         container (column-base/make-container dtype 0  (get column-options cname))
+         missing-value (column-base/datatype->missing-value dtype)
+         missing (bitmap/->bitmap)]
+     (FixedTypeParser. container dtype missing-value parse-fn
+                       missing failed-values failed-indexes
+                       cname -1)))
+  ([cname parser-kwd]
+   (make-fixed-parser cname parser-kwd nil)))
 
 
 (defn parser-kwd-list->parser-tuples
