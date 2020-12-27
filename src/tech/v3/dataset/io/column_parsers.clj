@@ -276,7 +276,6 @@
 
 (defn make-fixed-parser
   ([cname parser-kwd column-options]
-   (println "make-fixed-parser:" cname parser-kwd)
    (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
          [failed-values failed-indexes] (when relaxed?
                                           [(dtype/make-container :list :object 0)

@@ -61,12 +61,12 @@
      :mmap-string (let [mmap-file
                         (or  (:mmap-file column-options)
                              (java.io.File/createTempFile "tmd" ".mmap"))
-                        positions (or (:positions column-options) (atom []))
-                        mmap-file-output-stream (or (:mmap-file-output-stream column-options) (FileOutputStream. mmap-file true) )]
+                        mmap-file-output-stream (or (:mmap-file-output-stream column-options) (FileOutputStream. mmap-file true) )
+                        ]
                     (mmap-str/->MmapStringList
                      mmap-file
                      mmap-file-output-stream
-                     positions
+                     (atom [])
                      (atom nil)
                      ))
      (dtype/make-container :list dtype n-elems)))

@@ -6,6 +6,7 @@
             [tech.v3.datatype.mmap-string-list :as string-list]
             )
   (:import [java.nio.charset Charset]
+           [java.io FileOutputStream]
            [tech.v3.datatype ObjectReader ]
 
            )
@@ -49,7 +50,9 @@
 (comment
 
   (def column-opts
-    {:text {:mmap-file "/tmp/corpus.mmap" :positions (atom [])}
+    {:text {:mmap-file "/tmp/corpus.mmap"
+            :mmap-file-output-stream (FileOutputStream. "/tmp/corpus.mmap" true)
+            }
      })
 
   (def files
@@ -70,6 +73,7 @@
       ds
       ))
 
+
   (def all
     (mapv file->ds files)
     )
@@ -77,6 +81,9 @@
   (def one
     (apply ds/concat-inplace all))
 
+  (time
+   (reduce +
+           (map count (:text one))))
 
   ;; (-> one :text
   ;;     (#(.data %)) (#(.positions %)))
