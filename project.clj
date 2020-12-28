@@ -29,8 +29,6 @@
                  ;;Many things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]
 
-                 [pppmap "0.2.0"]
-
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
