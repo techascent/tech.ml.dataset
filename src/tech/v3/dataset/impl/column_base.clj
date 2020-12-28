@@ -1,17 +1,15 @@
 (ns tech.v3.dataset.impl.column-base
-  (:require [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.packing :as packing]
-            [tech.v3.datatype.casting :as casting]
-            [tech.v3.dataset.string-table :as str-table]
-            [tech.v3.datatype.mmap-string-list :as mmap-str]
+  (:require [tech.v3.dataset.string-table :as str-table]
             [tech.v3.datatype :as dtype]
-            [clojure.java.io :as io]
-            )
-  (:import [java.util Map List]
-           [tech.v3.datatype PrimitiveList]
-           [tech.v3.dataset Text]
-           [java.io FileOutputStream]))
-
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.mmap-list :as mmap-list]
+            [tech.v3.datatype.packing :as packing])
+  (:import java.nio.channels.FileChannel
+           java.nio.file.StandardOpenOption
+           [java.util List Map]
+           tech.v3.dataset.Text
+           tech.v3.datatype.PrimitiveList))
 
 (def ^Map dtype->missing-val-map
   {:boolean false
@@ -61,11 +59,16 @@
      :mmap-string (let [mmap-file
                         (or  (:mmap-file column-options)
                              (java.io.File/createTempFile "tmd" ".mmap"))
-                        mmap-file-output-stream (or (:mmap-file-output-stream column-options) (FileOutputStream. mmap-file true) )
-                        ]
-                    (mmap-str/->MmapStringList
-                     mmap-file
-                     mmap-file-output-stream
+                        mmap-file-channel
+                        (or (:mmap-file-channel column-options)
+                            (FileChannel/open  (.toPath mmap-file)
+                                               (into-array [StandardOpenOption/APPEND])))]
+                    (mmap-list/->MmapList
+                     #(String. %)
+                     #(.getBytes %)
+                     :mmap-string
+                     (.getPath mmap-file)
+                     mmap-file-channel
                      (atom [])
                      (atom nil)
                      ))
