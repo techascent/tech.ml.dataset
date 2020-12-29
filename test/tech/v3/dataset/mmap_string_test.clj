@@ -5,7 +5,7 @@
   (:import java.nio.channels.FileChannel
            java.nio.file.StandardOpenOption))
 
-(deftest "parsing as :mmap-string works"
+(deftest parsing-as-mmap-string-works
   (let [ds
         (-> "./test/data/medical-text.csv"
             (ds/->dataset {:key-fn keyword
@@ -18,7 +18,7 @@
     (is (str/starts-with? (first (:abstract ds)) "OBJECTIVE"))
     (is (= 99 (ds/row-count ds)))))
 
-(deftest "can use column options"
+(deftest can-use-column-options
   (let [file (java.io.File/createTempFile "tmd" ".mmap")
         channel
         (FileChannel/open (.toPath file)
