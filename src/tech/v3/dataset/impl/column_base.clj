@@ -3,6 +3,7 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.file-backed-text :as file-backed-text]
             [tech.v3.datatype :as dtype])
   (:import [java.util Map List]
            [tech.v3.datatype PrimitiveList]
@@ -49,7 +50,7 @@
   (^PrimitiveList [dtype n-elems]
    (case dtype
      :string (str-table/make-string-table n-elems "")
-     :text (let [^List list-data (dtype/make-container :list :text 0)]
+     :text (let [^PrimitiveList list-data (file-backed-text/file-backed-text)]
              (dotimes [iter n-elems]
                (.add list-data nil))
              list-data)
