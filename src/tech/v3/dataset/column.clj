@@ -122,18 +122,25 @@ Implementations should check their metadata before doing calculations."
   must return one of parsed-value, :tech.ml.dataset.parse/missing in which case a
   missing value will be added or :tech.ml.dataset.parse/parse-failure in which case the
   a missing index will be added and the string value will be recorded in the metadata's
-  :unparsed-data, :unparsed-indexes entries."
-  ([datatype col]
+  :unparsed-data, :unparsed-indexes entries.
+
+  Options:
+
+  Same options roughly as ->dataset, specifically of interest may be `:text-temp-file`.
+  "
+  ([datatype col options]
    (let [colname (column-name col)
          col-reader (dtype/emap #(when % (str %)) :string col)
-         col-parser (column-parsers/make-fixed-parser colname datatype)
+         col-parser (column-parsers/make-fixed-parser colname datatype options)
          n-elems (dtype/ecount col-reader)]
      (dotimes [iter n-elems]
        (column-parsers/add-value! col-parser iter (col-reader iter)))
 
      (let [{:keys [data missing metadata]}
            (column-parsers/finalize! col-parser n-elems)]
-       (new-column colname data metadata missing)))))
+       (new-column colname data metadata missing))))
+  ([datatype col]
+   (parse-column datatype col nil)))
 
 
 (defn new-column

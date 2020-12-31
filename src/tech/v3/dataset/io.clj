@@ -138,11 +138,19 @@
   - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301
-  - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the header
-     row.  Works across both csv and spreadsheet datasets.
+  - `:text-temp-dir` - The temporary directory to use for file-backed text.  Setting
+     this value to boolean 'false' turns off file backed text.  If a tech.v3.resource
+     stack context is opened the file will be deleted when the context closes else it
+     will be deleted when the gc cleans up the dataset.  A shutdown hook is added as
+     a last resort to ensure the file is cleaned up. Each column's data filefile will
+     be created in `(System/getProperty \"java.io.tmpdir\")` by default.
+  - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the
+     header row.  Works across both csv and spreadsheet datasets.
   - `:parser-fn` -
-      - `keyword?` - all columns parsed to this datatype. For example: `{:parser-fn :string}`
-      - `map?` - `{column-name parse-method}` parse each column with specified `parse-method`.
+      - `keyword?` - all columns parsed to this datatype. For example:
+        `{:parser-fn :string}`
+      - `map?` - `{column-name parse-method}` parse each column with specified
+        `parse-method`.
         The `parse-method` can be:
           - `keyword?` - parse the specified column to this datatype. For example:
             `{:parser-fn {:answer :boolean :id :int32}}`
@@ -159,10 +167,11 @@
                  added to missing, the unparsed the column's :unparsed-values and
                  :unparsed-indexes will be updated.
               - `string?` - for datetime types, this will turned into a DateTimeFormatter via
-                 DateTimeFormatter/ofPattern.  For encoded-text, this has to be a valid
-                 argument to Charset/forName.
+                 DateTimeFormatter/ofPattern.  For `:text` you can specify the backing file
+                 to use.
               - `DateTimeFormatter` - use with the appropriate temporal parse static function
                  to parse the value.
+
    - `map?` - the header-name-or-idx is used to lookup value.  If not nil, then
            value can be any of the above options.  Else the default column parser
            is used.

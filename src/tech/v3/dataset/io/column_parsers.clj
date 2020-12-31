@@ -264,20 +264,21 @@
                                          (DateTimeFormatter/ofPattern parser-fn))
            (and (dtype-dt/datetime-datatype? parser-datatype)
                 (instance? DateTimeFormatter parser-fn))
-           (datetime-formatter-parser-fn parser-datatype
-                                         parser-fn)
+           (datetime-formatter-parser-fn parser-datatype parser-fn)
+           (= :text parser-datatype)
+           [(find-fixed-parser parser-datatype)]
            :else
            (errors/throwf "Unrecoginzed parser fn type: %s" (type parser-fn)))]))
     [parser-kwd [(find-fixed-parser parser-kwd) false]]))
 
 
 (defn make-fixed-parser
-  [cname parser-kwd]
+  [cname parser-kwd options]
   (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
         [failed-values failed-indexes] (when relaxed?
                                          [(dtype/make-container :list :object 0)
                                           (bitmap/->bitmap)])
-        container (column-base/make-container dtype)
+        container (column-base/make-container dtype options)
         missing-value (column-base/datatype->missing-value dtype)
         missing (bitmap/->bitmap)]
     (FixedTypeParser. container dtype missing-value parse-fn
@@ -297,10 +298,9 @@
 
 
 (defn- promote-container
-  ^PrimitiveList [old-container ^RoaringBitmap missing new-dtype]
+  ^PrimitiveList [old-container ^RoaringBitmap missing new-dtype options]
   (let [n-elems (dtype/ecount old-container)
-        container (column-base/make-container
-                   new-dtype 0)
+        container (column-base/make-container new-dtype options)
         missing-value (column-base/datatype->missing-value new-dtype)
         ;;Ensure we unpack a container if we have to promote it.
         old-container (packing/unpack old-container)]
@@ -323,7 +323,8 @@
                                   ;;List of datatype,parser-fn tuples
                                   ^List promotion-list
                                   column-name
-                                  ^:unsynchronized-mutable ^long max-idx]
+                                  ^:unsynchronized-mutable ^long max-idx
+                                  options]
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
   PParser
@@ -384,7 +385,8 @@
                                      (new-parser-fn value)
                                      value)
                       new-container (promote-container container missing
-                                                       parser-datatype)
+                                                       parser-datatype
+                                                       options)
                       new-missing-value (column-base/datatype->missing-value
                                          parser-datatype)]
                   (set! container new-container)
@@ -407,9 +409,13 @@
 
 
 (defn promotional-string-parser
-  ([column-name parser-datatype-sequence]
+  ([column-name parser-datatype-sequence options]
    (let [first-dtype (first parser-datatype-sequence)]
-     (PromotionalStringParser. (column-base/make-container (if (= :bool first-dtype) :boolean first-dtype))
+     (PromotionalStringParser. (column-base/make-container
+                                (if (= :bool first-dtype)
+                                  :boolean
+                                  first-dtype)
+                                options)
                                first-dtype
                                false
                                (default-coercers first-dtype)
@@ -417,9 +423,10 @@
                                (mapv (juxt identity default-coercers)
                                      parser-datatype-sequence)
                                column-name
-                               -1)))
-  ([column-name]
-   (promotional-string-parser column-name default-parser-datatype-sequence)))
+                               -1
+                               options)))
+  ([column-name options]
+   (promotional-string-parser column-name default-parser-datatype-sequence options)))
 
 
 (deftype PromotionalObjectParser [^{:unsynchronized-mutable true
@@ -428,7 +435,8 @@
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^RoaringBitmap missing
                                   column-name
-                                  ^:unsynchronized-mutable ^long max-idx]
+                                  ^:unsynchronized-mutable ^long max-idx
+                                  options]
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
   PParser
@@ -443,7 +451,7 @@
                 (= container-dtype packed-dtype))
           (do
             (when (== 0 container-ecount)
-              (set! container (column-base/make-container packed-dtype))
+              (set! container (column-base/make-container packed-dtype options))
               (set! container-dtype packed-dtype)
               (set! missing-value (column-base/datatype->missing-value packed-dtype)))
             (when-not (== container-ecount idx)
@@ -454,7 +462,8 @@
                                  org-datatype)]
             (when-not (= widest-datatype container-dtype)
               (let [new-container (promote-container container
-                                                     missing widest-datatype)]
+                                                     missing widest-datatype
+                                                     options)]
                 (set! container new-container)
                 (set! container-dtype widest-datatype)
                 (set! missing-value (column-base/datatype->missing-value
@@ -468,10 +477,11 @@
 
 
 (defn promotional-object-parser
-  [column-name]
+  [column-name options]
   (PromotionalObjectParser. (dtype/make-container :list :boolean 0)
                             :boolean
                             false
                             (bitmap/->bitmap)
                             column-name
-                            -1))
+                            -1
+                            options))

@@ -1,10 +1,11 @@
 (ns tech.v3.dataset.impl.column-base
-  (:require [tech.v3.datatype.datetime :as dtype-dt]
+  (:require [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.file-backed-text :as file-backed-text]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.dataset.string-table :as str-table]
-            [tech.v3.dataset.file-backed-text :as file-backed-text]
-            [tech.v3.datatype :as dtype])
+            [tech.v3.datatype :as dtype]
+            [clojure.tools.logging :as log])
   (:import [java.util Map List]
            [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]))
@@ -46,14 +47,35 @@
            (casting/cast 0 dtype)))))
 
 
+(defonce ^:private warn-atom* (atom false))
+(defonce file-backed-text-enabled* (atom true))
+
+(defn set-file-backed-text-enabled
+  [enabled]
+  (reset! file-backed-text-enabled* enabled)
+  enabled)
+
 (defn make-container
-  (^PrimitiveList [dtype n-elems]
+  (^PrimitiveList [dtype options]
    (case dtype
-     :string (str-table/make-string-table n-elems "")
-     :text (let [^PrimitiveList list-data (file-backed-text/file-backed-text)]
-             (dotimes [iter n-elems]
-               (.add list-data nil))
+     :string (str-table/make-string-table 0 "")
+     :text
+     (let [^PrimitiveList list-data
+           (try
+             (if (and (not= false (:text-temp-dir options))
+                      @file-backed-text-enabled*)
+               (let [tmp-dir (:text-temp-dir options)]
+                 (file-backed-text/file-backed-text (merge
+                                                     {:suffix ".txt"}
+                                                     (when tmp-dir
+                                                       {:temp-dir tmp-dir}))))
+               (dtype/make-list :text))
+             (catch Throwable e
+               (when-not @warn-atom*
+                 (reset! warn-atom* true)
+                 (log/warn e "File backed text failed.  Falling back to in-memory"))
+               (dtype/make-list :text)))]
              list-data)
-     (dtype/make-container :list dtype n-elems)))
+     (dtype/make-list dtype)))
   (^PrimitiveList [dtype]
-   (make-container dtype 0)))
+   (make-container dtype nil)))
