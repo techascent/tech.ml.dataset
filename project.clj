@@ -13,12 +13,12 @@
                   :exclusions [commons-codec]]
                  [org.dhatim/fastexcel-reader      "0.10.12"
                   :exclusions [org.apache.poi/poi-ooxml]]
-                 [com.github.haifengl/smile-core   "2.5.3"
+                 [com.github.haifengl/smile-core   "2.6.0"
                   :exclusions [org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-io     "2.5.3"
+                 [com.github.haifengl/smile-io     "2.6.0"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-nlp    "2.5.3"
+                 [com.github.haifengl/smile-nlp    "2.6.0"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
                  ;;In your projects you may want to use exclusions.
