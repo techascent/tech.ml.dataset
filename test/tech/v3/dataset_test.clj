@@ -709,6 +709,44 @@
   (let [ds (ds/->dataset [])]
     (is (== 0 (.hashCode ds)))))
 
+(deftest dataset-equality
+  (let [ds0 (ds/->dataset {:foo "foo" :bar "bar"}) ;;equal to 3
+        ds1 (ds/->dataset {:foo "foo" :bar "bar" :baz "baz"})
+        ds2 (ds/->dataset {:foo "foo" :bar "beer"})
+        ds3 (ds/->dataset {:foo "foo" :bar "bar"}) ;;equal to 0
+        datasets [ds0 ds1 ds2 ds3]
+        hashmaps (mapv (fn [ds] (into {} ds)) datasets)
+        mapify #(reduce (fn [^java.util.Map m [k v]]
+                          (doto m (.put k v)))
+                         (java.util.HashMap.) %)
+        mutmaps (mapv mapify datasets)
+        xs        (range (count datasets))
+        dsresults (->> (for [i xs
+                             j xs]
+                       [i j (= (nth datasets i) (nth datasets j))])
+                     (filter last)
+                     (map (juxt first second))
+                     set)
+        hashresults (->> (for [i xs
+                               j xs]
+                           [i j (= (nth datasets i) (nth hashmaps j))])
+                         (filter last)
+                         (map (juxt first second))
+                         set)
+        mapresults (->> (for [i xs
+                              j xs]
+                          [i j (= (nth datasets i) (nth mutmaps j))])
+                        (filter last)
+                        (map (juxt first second))
+                        set)
+        expected  #{[0 0] [1 1] [2 2] [3 3] [3 0] [0 3]}]
+    (is (= dsresults expected)
+        "Datasets should obey map equivalence when compared to datasets.")
+    (is (= hashresults expected)
+        "Datasets should obey map equivalence when compared to IPersistentMap.")
+    (is (= mapresults expected)
+        "Datasets should obey map equivalence when compared to java.util.Map
+         like HashMap.")))
 
 (deftest columns-are-persistent-vectors
   (let [ds (-> (ds/->dataset "test/data/stocks.csv")

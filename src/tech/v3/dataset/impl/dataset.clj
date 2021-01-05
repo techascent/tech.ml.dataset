@@ -31,7 +31,8 @@
         :else (let [^java.util.Map m o]
                 (and (= (.size m) (count this))
                      (every? (fn [k]
-                               (.containsKey m k)) (keys this))))))
+                               (and (.containsKey m k)
+                                    (= (this k) (.get m k)))) (keys this))))))
 
 
 (defn- shorten-or-extend
@@ -209,8 +210,6 @@
                        (clojure.lang.APersistentMap/mapEquals this o)))
 
   (equiv [this o] (or (identical? this o)
-                      (and (instance? clojure.lang.IHashEq o)
-                           (== (hash this) (hash o)))
                       (map-equiv this o)))
 
   ds-proto/PColumnarDataset
