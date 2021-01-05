@@ -999,6 +999,10 @@
     (is (dfn/equals (ds-col/to-double-array col1) [1 2 3]))))
 
 
+(deftest first-last-desc-stats
+  (let []))
+
+
 (comment
 
   (def test-ds (ds/->dataset

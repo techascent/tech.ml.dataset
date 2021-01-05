@@ -702,7 +702,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   []
   [:col-name :datatype :n-valid :n-missing
    :min :quartile-1 :mean :mode :median :quartile-3 :max
-   :standard-deviation :skew :n-values :values :histogram])
+   :standard-deviation :skew :n-values :values :histogram
+   :first :last])
 
 
 (defn descriptive-stats
@@ -738,7 +739,9 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                          {:col-name (ds-col/column-name ds-col)
                           :datatype col-dtype
                           :n-valid n-valid
-                          :n-missing n-missing}
+                          :n-missing n-missing
+                          :first (first ds-col)
+                          :last (nth ds-col (dec (dtype/ecount ds-col)))}
                          (cond
                            (dtype-dt/datetime-datatype? col-dtype)
                            (dtype-dt/millisecond-descriptive-statistics
