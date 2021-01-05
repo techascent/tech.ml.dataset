@@ -405,7 +405,7 @@
   (let [stats-data (ds/descriptive-stats src-ds)
         corr-data (ds-math/correlation-table src-ds :colname-seq ["SalePrice"])]
     (is (= #{:min :n-missing :col-name :mean :datatype :skew :mode
-             :standard-deviation :n-valid :max}
+             :standard-deviation :n-valid :max :first :last}
            (set (ds/column-names stats-data))))
     (is (= 35
            (->> corr-data
