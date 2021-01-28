@@ -15,6 +15,7 @@
   PrimitiveList
   (lsize [this] (.lsize offsets))
   (elemwiseDatatype [this] :text)
+  (ensureCapacity [this amt])
   (addBoolean [this data] (errors/throw-unimplemented))
   (addLong [this data] (errors/throw-unimplemented))
   (addDouble [this data] (errors/throw-unimplemented))
