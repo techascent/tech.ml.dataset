@@ -5,8 +5,8 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.00-beta-19"]
-                 [techascent/tech.io               "4.02"
+                 [cnuernber/dtype-next             "6.00-beta-20"]
+                 [techascent/tech.io               "4.03"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "4.1.2"

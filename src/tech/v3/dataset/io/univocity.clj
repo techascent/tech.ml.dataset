@@ -286,7 +286,7 @@
 
 (defn- data->string
   ^String [data-item]
-  (if data-item
+  (if-not (nil? data-item)
     (cond
       (string? data-item) data-item
       (keyword? data-item) (name data-item)

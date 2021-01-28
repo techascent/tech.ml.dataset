@@ -999,8 +999,13 @@
     (is (dfn/equals (ds-col/to-double-array col1) [1 2 3]))))
 
 
-(deftest first-last-desc-stats
-  (let []))
+(deftest boolean-csv-column-names
+  (try
+    (ds/write!
+     (ds/->dataset {false [1]}) "test/out.csv")
+    (is (= ["false"] (-> (ds/->dataset "test/out.csv")
+                         (ds/column-names))))
+    (finally (.delete (java.io.File. "test/out.csv")))))
 
 
 (comment
