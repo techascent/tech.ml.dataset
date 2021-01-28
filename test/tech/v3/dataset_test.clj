@@ -1008,6 +1008,14 @@
     (finally (.delete (java.io.File. "test/out.csv")))))
 
 
+(deftest to-double-array-returns-double-array
+  (let [data (ds/->dataset [{:a 1.0 :b 2.0}
+                            {:a 3.0}])]
+    (is (instance? (Class/forName "[D") (ds-col/to-double-array (data :a))))
+    (is (every? identity (dfn/eq [2.0 Double/NaN]
+                                 (ds-col/to-double-array (data :b)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
