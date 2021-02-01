@@ -363,7 +363,7 @@ user> (ds-reduce/group-by-column-agg
                       (aget ^objects (aget ary-data row-idx) col-idx))))
                 nil
                 (bitmap/->bitmap)))
-             (range n-elems) cnames (first results))
+             (range (count cnames)) cnames (first results))
             (ds-impl/new-dataset {:dataset-name (str colname "-aggregation")})))))
   ([colname agg-map ds-seq]
    (group-by-column-agg colname agg-map nil ds-seq)))
