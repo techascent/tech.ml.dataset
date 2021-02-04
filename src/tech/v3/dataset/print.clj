@@ -216,3 +216,31 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
              (dataset-data->str ds options))))
   ([ds]
    (dataset->str ds {})))
+
+
+(defn print-range
+  "Convenience function to set the number of rows to print."
+  [dataset index-range]
+  (-> dataset
+      (vary-meta assoc :print-index-range index-range)))
+
+
+(defn print-policy
+  "Convenience function to vary printing behavior"
+  [dataset line-policy]
+  (-> dataset
+      (vary-meta assoc :print-line-policy line-policy)))
+
+
+(defn print-width
+  "Convenience function to set the max width of a column when printing."
+  [dataset column-width]
+  (-> dataset
+      (vary-meta assoc :print-column-max-width column-width)))
+
+
+(defn print-types
+  "Convenience function to show/hide column types"
+  [dataset column-types]
+  (-> dataset
+      (vary-meta assoc :print-column-types? column-types)))
