@@ -29,6 +29,8 @@
 (def ^:dynamic ^:no-doc *default-print-line-policy* :repl)
 ;;The default max width with 'nil' indicating no limit.
 (def ^:dynamic ^:no-doc *default-print-column-max-width* nil)
+;;The default to show/hide column types
+(def ^:dynamic ^:no-doc *default-print-column-types?* false)
 
 
 
@@ -104,6 +106,7 @@ as an options map.  The options map overrides the dataset metadata.
      - `:markdown` - lines delimited by <br>
      - `:single` - Only print first line
   * `:print-column-max-width` - set the max width of a column when printing.
+  * `:print-column-types?` - show/hide column types.
 
 
 Example for conservative printing:
@@ -117,7 +120,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
   ([dataset]
    (dataset-data->str dataset {}))
   ([dataset options]
-   (let [{:keys [print-index-range print-line-policy print-column-max-width]}
+   (let [{:keys [print-index-range print-line-policy print-column-max-width print-column-types?]}
          (merge (meta dataset) options)
          index-range (or print-index-range
                          (range
@@ -125,8 +128,10 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                *default-table-row-print-length*)))
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
+         column-types? (or print-column-types? *default-print-column-types?*)
          print-ds (ds-proto/select dataset :all index-range)
          column-names (map #(.toString ^Object %) (keys print-ds))
+         column-types (map #(str (:datatype (meta %))) (vals print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (packing/unpack)
                                   (reader->string-lines (ds-col-proto/missing %)
@@ -142,7 +147,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          _ (.addAll row-heights (repeat n-rows 1))
          column-widths
          (->> string-columns
-              (map (fn [colname coldata]
+              (map (fn [coltype colname coldata]
                      (->> coldata
                           (map-indexed
                            (fn [row-idx lines]
@@ -151,7 +156,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                    (max (int (.get row-heights row-idx))
                                         (count lines)))
                              (apply max 0 (map count lines))))
-                          (apply max (count colname))))
+                          (apply max (count coltype) (count colname))))
+                   column-types
                    column-names))
          spacers (map #(apply str (repeat % "-")) column-widths)
          fmts (map #(str "%" % "s") column-widths)
@@ -164,6 +170,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                         trailer))
          builder (StringBuilder.)]
      (append-line! builder (fmt-row "| " " | " " |" column-names))
+     (when column-types? (append-line! builder (fmt-row "| " " | " " |" column-types)))
      (append-line!
       builder
       (apply str
