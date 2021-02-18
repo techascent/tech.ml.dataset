@@ -138,11 +138,44 @@
                   (make-buffer ~'missing ~'data)))
            ~'cached-vector)))
 
+
+(defn make-index-structure [data missing]
+  (println [:making-index-structure])
+  (cond (-> data dtype/elemwise-datatype casting/numeric-type?)
+        (java.util.TreeMap.)
+        :else
+        nil))
+
+(comment
+  (def cx (new-column "x"
+                      (dtype/make-reader :float32 9 (rand))
+                      nil
+                      nil))
+  (class (index-structure cx))
+
+  (def cy (new-column "y"
+                      (dtype/make-reader :string 9 "hi!")
+                      nil
+                      nil))
+
+  (class (index-structure cy)))
+
+
+(defprotocol PHasIndexStructure
+  (index-structure [this]))
+
+
 (deftype Column
     [^RoaringBitmap missing
      data
      ^IPersistentMap metadata
-     ^:unsynchronized-mutable ^ListPersistentVector cached-vector]
+     ^:unsynchronized-mutable ^ListPersistentVector cached-vector
+     *index-structure]
+
+  PHasIndexStructure
+  (index-structure [this]
+    @*index-structure)
+
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [this]
     (and (.isEmpty missing)
@@ -160,10 +193,12 @@
   (elemwise-datatype [this] (dtype-proto/elemwise-datatype data))
   dtype-proto/PElemwiseCast
   (elemwise-cast [this new-dtype]
-    (Column. missing
-             (dtype-proto/elemwise-cast data new-dtype)
-             metadata
-             nil))
+    (let [new-data (dtype-proto/elemwise-cast data new-dtype)]
+      (Column. missing
+               new-data
+               metadata
+               nil
+               (delay (make-index-structure new-data missing)))))
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
@@ -198,8 +233,12 @@
         (let [new-missing (dtype-proto/set-and
                            missing
                            (bitmap/->bitmap (range offset (+ offset len))))
-              new-data (dtype-proto/sub-buffer data offset len)]
-          (Column. new-missing new-data metadata nil)))))
+              new-data    (dtype-proto/sub-buffer data offset len)]
+          (Column. new-missing
+                   new-data
+                   metadata
+                   nil
+                   (delay (make-index-structure new-data new-missing)))))))
   dtype-proto/PClone
   (clone [col]
     (let [new-data (if (or (dtype/writer? data)
@@ -208,11 +247,13 @@
                      (dtype/clone data)
                      ;;It is important that the result of this operation be writeable.
                      (dtype/make-container :jvm-heap
-                                           (dtype/get-datatype data) data))]
-      (Column. (dtype/clone missing)
+                                           (dtype/get-datatype data) data))
+          cloned-missing (dtype/clone missing)]
+      (Column. cloned-missing
                new-data
                metadata
-               nil)))
+               nil
+               (delay (make-index-structure new-data cloned-missing)))))
   Iterable
   (iterator [this]
     (.iterator (dtype-proto/->buffer this)))
@@ -220,8 +261,11 @@
   (is-column? [this] true)
   col-proto/PColumn
   (column-name [col] (:name metadata))
-  (set-name [col name] (Column. missing data (assoc metadata :name name)
-                                cached-vector))
+  (set-name [col name] (Column. missing
+                                data
+                                (assoc metadata :name name)
+                                cached-vector
+                                *index-structure))
   (supported-stats [col] stats/all-descriptive-stats-names)
   (missing [col] missing)
   (is-missing? [col idx] (.contains missing (long idx)))
@@ -244,7 +288,8 @@
       (Column. bitmap
                data
                metadata
-               nil)))
+               nil
+               (delay (make-index-structure data bitmap)))))
   (unique [this]
     (->> (parallel-unique this)
          (into #{})))
@@ -263,20 +308,26 @@
     (let [idx-rdr (->efficient-reader idx-rdr)]
       (if (== 0 (dtype/ecount missing))
         ;;common case
-        (Column. (->bitmap) (dtype/indexed-buffer idx-rdr data)
-                 metadata
-                 nil)
+        (let [bitmap (->bitmap)
+              new-data (dtype/indexed-buffer idx-rdr data)]
+          (Column. bitmap
+                   new-data
+                   metadata
+                   nil
+                   (delay (make-index-structure data bitmap))))
         ;;Uggh.  Construct a new missing set
         (let [idx-rdr (dtype/->reader idx-rdr)
               n-idx-elems (.lsize idx-rdr)
               ^RoaringBitmap result-set (->bitmap)]
           (dotimes [idx n-idx-elems]
-           (when (.contains missing (.readLong idx-rdr idx))
-             (.add result-set idx)))
-          (Column. result-set
-                   (dtype/indexed-buffer idx-rdr data)
-                   metadata
-                   nil)))))
+            (when (.contains missing (.readLong idx-rdr idx))
+              (.add result-set idx)))
+          (let [new-data (dtype/indexed-buffer idx-rdr data)]
+            (Column. result-set
+                     data
+                     metadata
+                     nil
+                     (delay (make-index-structure data result-set))))))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
@@ -287,13 +338,18 @@
                     (= :object col-dtype)
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
+      (dtype/make-container :jvm-heap :float64 (dtype-proto/elemwise-reader-cast
+                                                col :float64))))
   IObj
   (meta [this]
     (assoc metadata
            :datatype (dtype-proto/elemwise-datatype this)
            :n-elems (dtype-proto/ecount this)))
-  (withMeta [this new-meta] (Column. missing data new-meta cached-vector))
+  (withMeta [this new-meta] (Column. missing
+                                     data
+                                     new-meta
+                                     cached-vector
+                                     *index-structure))
   Counted
   (count [this] (int (dtype/ecount data)))
   Indexed
@@ -342,7 +398,8 @@
     (Column. (->bitmap)
              (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
              {}
-             nil))
+             nil
+             (delay nil)))
   (equiv [this o] (or (identical? this o)
                       (.equiv (cached-vector!) o))))
 
@@ -415,7 +472,11 @@
                     (assoc metadata :categorical? true)
                     metadata)]
      (.runOptimize missing)
-     (Column. missing data (assoc metadata :name name) nil)))
+     (Column. missing
+              data
+              (assoc metadata :name name)
+              nil
+              (delay (make-index-structure data missing)))))
   ([name data metadata]
    (new-column name data metadata (->bitmap)))
   ([name data]
