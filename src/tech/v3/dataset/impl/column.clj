@@ -139,18 +139,31 @@
            ~'cached-vector)))
 
 
-(defn make-index-structure [data missing]
-  (println [:making-index-structure])
-  (cond (-> data dtype/elemwise-datatype casting/numeric-type?)
-        (java.util.TreeMap.)
-        :else
-        nil))
+(defn make-index-structure
+  "Returns an index structure that used to optimize certain data operations."
+  [data missing]
+  (let [data-datatype (-> data (dtype/elemwise-datatype))
+        collect-row-nums (fn [memo [k v]]
+                           (if-let [existing (get memo k)]
+                             (assoc memo k (into existing v))
+                             (assoc memo k v)))
+        idx-map (->> data
+                     (map-indexed (fn [row-number elem]
+                                    [elem [row-number]]))
+                     (reduce collect-row-nums {}))]
+    (cond
+      (casting/numeric-type? data-datatype) 
+      (java.util.TreeMap. ^java.util.Map idx-map)
+
+      :else
+      nil)))
 
 (comment
   (def cx (new-column "x"
                       (dtype/make-reader :float32 9 (rand))
                       nil
                       nil))
+
   (class (index-structure cx))
 
   (def cy (new-column "y"
