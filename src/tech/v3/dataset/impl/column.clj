@@ -219,12 +219,8 @@
 
   )
 
-
 (defprotocol PHasIndexStructure
   (index-structure [this]))
-
-(def protocol PCanCreateIndexStructure
-  (make-index-structure [this]))
 
 (deftype Column
     [^RoaringBitmap missing
