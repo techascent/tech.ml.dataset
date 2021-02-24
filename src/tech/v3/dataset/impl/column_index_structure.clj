@@ -4,7 +4,7 @@
             [tech.v3.datatype.datetime.base :as datetime-base]))
 
 
-(defn build-idx-to-rows-map [data]
+(defn build-idx-to-rows-map
   "Returns a mapping of data's values to its row positions(s).
    This mapping can be passed to a datastructure like TreeMap.
 
@@ -12,6 +12,7 @@
 
      input:   [1 2 2]
      output:  {1 [0] 2 [1 2]}"
+  [data]
   (let [collect-row-nums (fn [memo [k v]]
                            (if-let [existing (get memo k)]
                              (assoc memo k (into existing v))
