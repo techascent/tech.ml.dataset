@@ -1,31 +1,14 @@
 (ns tech.v3.dataset.impl.column-index-structure
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.casting :as casting]))
-
-
-(defn build-idx-to-rows-map
-  "Returns a mapping of data's values to its row positions(s).
-   This mapping can be passed to a datastructure like TreeMap.
-
-   Example:
-
-     input:   [1 2 2]
-     output:  {1 [0] 2 [1 2]}"
-  [data]
-  (let [collect-row-nums (fn [memo [k v]]
-                           (if-let [existing (get memo k)]
-                             (assoc memo k (into existing v))
-                             (assoc memo k v)))]
-    (->> data
-         (map-indexed (fn [row-number elem] [elem [row-number]]))
-         (reduce collect-row-nums {}))))
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.argops :refer [arggroup]]))
 
 
 (defn index-structure-kind [data]
   (let [data-datatype (dtype/elemwise-datatype data)]
     (cond
       (casting/numeric-type? data-datatype)
-      ::numeric-type
+      ::numeric
 
       :else
       data-datatype)))
@@ -36,9 +19,9 @@
   (fn [data _] (index-structure-kind data)))
 
 
-(defmethod make-index-structure :numeric
+(defmethod make-index-structure ::numeric
   [data missing]
-  (let [idx-map (build-idx-to-row-map data)]
+  (let [idx-map (arggroup data)]
     (java.util.TreeMap. ^java.util.Map idx-map)))
 
 
