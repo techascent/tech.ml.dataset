@@ -1,7 +1,6 @@
 (ns tech.v3.dataset.impl.column-index-structure
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.casting :as casting]
-            [tech.v3.datatype.datetime.base :as datetime-base]))
+            [tech.v3.datatype.casting :as casting]))
 
 
 (defn build-idx-to-rows-map
