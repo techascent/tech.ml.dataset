@@ -226,14 +226,22 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
 
 
 (defn print-range
-  "Convenience function to set the number of rows to print."
+  "Convenience function to set the number of rows to print.\n
+   Defaults to (range *default-table-row-print-length*) - one of:
+   - n - prints the first n rows
+   - range - prints the rows at positions corresponding to the range
+   - `:all` - prints all the rows in a dataset"
   [dataset index-range]
   (-> dataset
       (vary-meta assoc :print-index-range index-range)))
 
 
 (defn print-policy
-  "Convenience function to vary printing behavior"
+  "Convenience function to vary printing behavior.\n
+   Defaults to `:repl` - one of:
+   - `:repl` - multiline table - default nice printing for repl
+   - `:markdown` - lines delimited by <br>
+   - `:single` - Only print first line"
   [dataset line-policy]
   (-> dataset
       (vary-meta assoc :print-line-policy line-policy)))
