@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "5.01-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.01"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -79,6 +79,7 @@
                                    tech.v3.dataset.join
                                    tech.v3.dataset.modelling
                                    tech.v3.dataset.column
+                                   tech.v3.dataset.clipboard
                                    tech.v3.dataset.neanderthal
                                    tech.v3.dataset.categorical
                                    tech.v3.dataset.reductions
