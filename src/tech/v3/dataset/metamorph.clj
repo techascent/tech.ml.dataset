@@ -22,8 +22,8 @@
 
 
 
-(def ^:private includes-dataset
-  '#{categorical->number categorical->one-hot})
+(def ^:private excludes-dataset
+  '#{bind-> all-descriptive-stats-names major-version})
 
 
 
@@ -31,7 +31,7 @@
   []
   (let [ps (ns-publics 'tech.v3.dataset)]
     `(do ~@(for [[f v] ps
-                 :when (includes-dataset f)
+                 :when (not (excludes-dataset f))
                  :let [m (meta v)
                        f (symbol "tech.v3.dataset" (name f))]]
              `(build-pipelined-function ~f ~m)))))
