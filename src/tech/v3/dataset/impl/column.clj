@@ -152,6 +152,16 @@
      *index-structure]
 
   PHasIndexStructure
+  ;; This index-structure returned by this function can be invalid if
+  ;; the column's reader is based on a non-deterministic computation.
+  ;; For now, we think this may be okay because it's a unique edge-case.
+  ;; What value could an index have on data that is random and changing?
+  ;; We think it is reasonable to expect the user of tech.ml.dataset, which
+  ;; is a somewhat low-level library, to know that it wouldn't make sense
+  ;; to request the index structure on a column consisting of such data.
+  ;; For more, see this discussion on Clojurians Zulip: https://bit.ly/3dRa9MY
+  ;;
+  ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
   (index-structure [this]
     @*index-structure)
 
