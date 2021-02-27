@@ -1,7 +1,10 @@
 (ns tech.v3.dataset.metamorph
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as ds-mod]
-             [tech.v3.protocols.dataset :as prot]))
+            [tech.v3.protocols.dataset :as prot])
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
+                            rand-nth update])
+  )
 
 (defn dataset?
   "Is `ds` a `dataset` type?"
