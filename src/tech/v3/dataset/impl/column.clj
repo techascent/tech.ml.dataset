@@ -146,6 +146,10 @@
                    dtype/elemwise-datatype
                    casting/datatype->object-class)))
 
+;; When tech.datatype does not know what something is it describes it
+;; as an object (see tech.v3.datatype.casting/elemwise-datatype). This
+;; dispatch method then serves as a default unless someone has extended
+;; this multimethod to catch a more specific datatype.
 (defmethod make-index-structure java.lang.Object
   [data missing]
   (let [idx-map (arggroup data)]
