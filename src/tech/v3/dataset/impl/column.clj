@@ -8,6 +8,7 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
