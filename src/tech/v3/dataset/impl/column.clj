@@ -11,8 +11,7 @@
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
-            [tech.v3.dataset.impl.column-data-process :as column-data-process]
-            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]])
+            [tech.v3.dataset.impl.column-data-process :as column-data-process])
   (:import [java.util ArrayList HashSet Collections Set List Map]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
@@ -138,6 +137,18 @@
                  (ListPersistentVector.
                   (make-buffer ~'missing ~'data)))
            ~'cached-vector)))
+
+
+(defmulti make-index-structure
+  "Returns an index structure based on the type of data in the column."
+  (fn [data _] (-> data
+                   dtype/elemwise-datatype
+                   casting/datatype->object-class)))
+
+(defmethod make-index-structure java.lang.Object
+  [data missing]
+  (let [idx-map (arggroup data)]
+    (java.util.TreeMap. ^java.util.Map idx-map)))
 
 
 (defprotocol PHasIndexStructure
