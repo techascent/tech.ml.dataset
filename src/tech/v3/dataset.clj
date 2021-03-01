@@ -333,7 +333,7 @@
 
 
 (defn categorical->number
-  "Convert string columns to numeric columns.
+  "Convert columns into a discrete , numeric representation
   See tech.v3.dataset.categorical/fit-categorical-map."
   ([dataset filter-fn-or-ds]
    (categorical->number dataset filter-fn-or-ds nil nil))

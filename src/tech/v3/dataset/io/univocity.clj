@@ -248,9 +248,17 @@
     settings))
 
 
-(defn- write!
+(defn rows->csv!
+  "Given an something convertible to an output stream, an optional set of headers
+  as string arrays, and a sequence of string arrows, write a CSV or a TSV file.
+
+  Options:
+
+  * `:separator` - Defaults to \tab.
+  * `:quoted-columns` - For csv, specify which columns should always be quoted
+    regardless of their data."
   ([output header-string-array row-string-array-seq]
-   (write! output header-string-array row-string-array-seq {}))
+   (rows->csv! output header-string-array row-string-array-seq {}))
   ([output header-string-array row-string-array-seq
     {:keys [separator]
      :or {separator \tab}
@@ -351,7 +359,7 @@
                                  {:separator \tab})
                           (merge options
                                  {:separator \,}))]
-     (write! output headers str-rdr output-options)))
+     (rows->csv! output headers str-rdr output-options)))
   ([ds output]
    (write-csv! ds output {})))
 

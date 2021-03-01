@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.00-beta-30-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.02-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure              "1.10.2-alpha1"]
+  :dependencies [[org.clojure/clojure              "1.10.2"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.00"]
+                 [cnuernber/dtype-next             "6.02"]
                  [techascent/tech.io               "4.03"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -79,6 +79,7 @@
                                    tech.v3.dataset.join
                                    tech.v3.dataset.modelling
                                    tech.v3.dataset.column
+                                   tech.v3.dataset.clipboard
                                    tech.v3.dataset.neanderthal
                                    tech.v3.dataset.categorical
                                    tech.v3.dataset.reductions
