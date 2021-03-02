@@ -1,7 +1,10 @@
 (ns tech.v3.dataset.metamorph
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as ds-mod]
-             [tech.v3.protocols.dataset :as prot]))
+            [tech.v3.protocols.dataset :as prot])
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
+                            rand-nth update])
+  )
 
 (defn dataset?
   "Is `ds` a `dataset` type?"
@@ -22,8 +25,8 @@
 
 
 
-(def ^:private includes-dataset
-  '#{categorical->number categorical->one-hot})
+(def ^:private excludes-dataset
+  '#{bind-> all-descriptive-stats-names major-version ->dataset ->>dataset})
 
 
 
@@ -31,7 +34,7 @@
   []
   (let [ps (ns-publics 'tech.v3.dataset)]
     `(do ~@(for [[f v] ps
-                 :when (includes-dataset f)
+                 :when (not (excludes-dataset f))
                  :let [m (meta v)
                        f (symbol "tech.v3.dataset" (name f))]]
              `(build-pipelined-function ~f ~m)))))
