@@ -329,10 +329,10 @@
               (.add result-set idx)))
           (let [new-data (dtype/indexed-buffer idx-rdr data)]
             (Column. result-set
-                     data
+                     new-data
                      metadata
                      nil
-                     (delay (make-index-structure data result-set))))))))
+                     (delay (make-index-structure new-data result-set))))))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
