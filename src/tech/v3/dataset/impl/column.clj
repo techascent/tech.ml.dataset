@@ -343,8 +343,7 @@
                     (= :object col-dtype)
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/make-container :jvm-heap :float64 (dtype-proto/elemwise-reader-cast
-                                                col :float64))))
+      (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64)))))
   IObj
   (meta [this]
     (assoc metadata
