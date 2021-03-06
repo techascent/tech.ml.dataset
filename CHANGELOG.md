@@ -1,4 +1,9 @@
 # Changelog
+
+## 5.02
+ * Fix for fastexcel files containing formulas.
+ * Codox org.ow2.asm fix from dtype-next.
+
 ## 5.00
  * Large upgrade to [`dtype-next`](https://github.com/cnuernber/dtype-next/).
  * All public functions are dataset-first.  This breaks compatibility with sort-by
