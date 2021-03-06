@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.02-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.02"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.06"]
+                 [cnuernber/dtype-next             "6.07"]
                  [techascent/tech.io               "4.03"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -64,8 +64,8 @@
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
               :test-paths ["test" "neanderthal"]}
              :codox
-             {:dependencies [[codox-theme-rdash "0.1.2"]]
-              :plugins [[lein-codox "0.10.7"]]
+             {:dependencies [[codox-theme-rdash "0.1.2"]
+                             [codox "0.10.7" :exclusions [org.ow2.asm/asm-all]]]
               :codox {:project {:name "tech.ml.dataset"}
                       :metadata {:doc/format :markdown}
                       :themes [:rdash]
@@ -103,5 +103,5 @@
              :larray {:source-paths ["graal-native"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"]
-  :aliases {"codox" ["with-profile" "codox,dev" "codox"]
+  :aliases {"codox" ["with-profile" "codox,dev" "run" "-m" "tech.v3.libs.lein-codox"]
             "larray" ["with-profile" "larray" "run" "-m" "tech.v3.dataset.unpack-larray"]})
