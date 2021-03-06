@@ -33,21 +33,31 @@
       (= cell-type CellType/ERROR)))
 
 
+(defn- try-parse-double
+  [^Cell cell]
+  (try
+    (Double/parseDouble (.getRawValue cell))
+    (catch Exception e
+      (.getRawValue cell))))
+
+
 (defn- wrap-cell
   [^Cell cell]
   (reify
     dtype-proto/PElemwiseDatatype
     (elemwise-datatype [this]
       (let [cell-type (.getType cell)]
-        (if (formula-type? cell-type )
-          :float64
+        (if (formula-type? cell-type)
+          (if (number? (try-parse-double cell))
+            :float64
+            :string)
           (cell-type->keyword cell-type))))
     Spreadsheet$Cell
     (getColumnNum [this] (.getColumnIndex cell))
     (missing [this] (= :none (dtype/get-datatype this)))
     (value [this]
       (if (formula-type? (.getType cell))
-        (Double/parseDouble (.getRawValue cell))
+        (try-parse-double cell)
         (case (dtype-proto/elemwise-datatype this)
           :none nil
           :string (.getRawValue cell)
