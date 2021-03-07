@@ -324,8 +324,10 @@
             (<= (count columns) (long max-num-columns))
             "Too many columns detected (%d) for max-num-columns (%d)"
             (count columns) max-num-columns)
-         headers (into-array String
-                             (map (comp data->string :name meta) columns))
+
+         headers (when-not (:skip-headers options)
+                   (into-array String
+                               (map (comp data->string :name meta) columns)))
          column-names (mapv (comp :name meta) columns)
          ^List str-readers
          (mapv (comp dtype/->reader #(ds-col/column-map data->string :string %)) columns)
