@@ -43,5 +43,7 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
 
 
 (defprotocol PHasIndexStructure
-  (index-structure [this]))
+  (index-structure [this])
+  (with-index-structure
+    [this datatype-keyword klass custom-make-index-structure-fn]))
 

@@ -176,6 +176,13 @@
   ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
   (index-structure [this]
     @*index-structure)
+  (with-index-structure [this datatype-keyword klass make-index-structure-fn]
+    (casting/add-object-datatype! datatype-keyword klass true)
+    (Column. missing
+             data
+             metadata
+             cached-vector
+             (delay (make-index-structure-fn data missing))))
 
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [this]
