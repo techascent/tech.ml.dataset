@@ -156,10 +156,6 @@
     (java.util.TreeMap. ^java.util.Map idx-map)))
 
 
-(defprotocol PHasIndexStructure
-  (index-structure [this]))
-
-
 (deftype Column
     [^RoaringBitmap missing
      data
@@ -167,7 +163,7 @@
      ^:unsynchronized-mutable ^ListPersistentVector cached-vector
      *index-structure]
 
-  PHasIndexStructure
+  col-proto/PHasIndexStructure
   ;; This index-structure returned by this function can be invalid if
   ;; the column's reader is based on a non-deterministic computation.
   ;; For now, we think this may be okay because it's a unique edge-case.
