@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.03
+ * group-by now is done with a linkedhashmap thus the keys are ordered in terms
+   of first found in the data.  This is useful for operations such as re-indexing
+   a previously sorted dataset as it.
+
 ## 5.02
  * Fix for fastexcel files containing formulas.
  * Codox org.ow2.asm fix from dtype-next.
