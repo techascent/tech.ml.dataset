@@ -310,7 +310,8 @@
   At this time writing to json is not supported.
   options -
   :separator - in case output isn't a string, you can use either \\, or \\tab to switch
-    between csv or tsv output respectively."
+    between csv or tsv output respectively.
+  :headers? - if csv headers are written, defaults to true."
   ([ds output options]
    (let [{:keys [gzipped? file-type]}
          (merge
@@ -324,8 +325,10 @@
             (<= (count columns) (long max-num-columns))
             "Too many columns detected (%d) for max-num-columns (%d)"
             (count columns) max-num-columns)
-         headers (into-array String
-                             (map (comp data->string :name meta) columns))
+
+         headers (when (get options :headers? true)
+                   (into-array String
+                               (map (comp data->string :name meta) columns)))
          column-names (mapv (comp :name meta) columns)
          ^List str-readers
          (mapv (comp dtype/->reader #(ds-col/column-map data->string :string %)) columns)
