@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.04
+ * `headers?` now also works when writing csv/tsv documents (thanks to behrica).
+
 ## 5.03
  * group-by now is done with a linkedhashmap thus the keys are ordered in terms
    of first found in the data.  This is useful for operations such as re-indexing
