@@ -43,7 +43,15 @@ test/data/stocks.csv [5 4]:
 |   MSFT | 2000-04-01 | 28.37 |  3 |
 |   MSFT | 2000-05-01 | 25.45 |  4 |
 </code></pre>
-<p>There are many different datatypes currently used in the datatype system - the primitive numeric types: * <code>:boolean</code> - convert to and from 0 (false) or 1 (true) when used as a number. * <code>:int8</code>,<code>:uint8</code> - signed/unsigned bytes. * <code>:int16</code>,<code>:uint16</code> - signed/unsigned shorts. * <code>:int32</code>,<code>:uint32</code> - signed/unsigned ints. * <code>:int64</code> - signed longs (haven’t figured out unsigned longs really yet). * <code>:float32</code>, <code>float64</code> - floats, doubles respectively.</p>
+<p>There are many different datatypes currently used in the datatype system - the primitive numeric types:</p>
+<ul>
+  <li><code>:boolean</code> - convert to and from 0 (false) or 1 (true) when used as a number.</li>
+  <li><code>:int8</code>,<code>:uint8</code> - signed/unsigned bytes.</li>
+  <li><code>:int16</code>,<code>:uint16</code> - signed/unsigned shorts.</li>
+  <li><code>:int32</code>,<code>:uint32</code> - signed/unsigned ints.</li>
+  <li><code>:int64</code> - signed longs (haven’t figured out unsigned longs really yet).</li>
+  <li><code>:float32</code>, <code>float64</code> - floats, doubles respectively.</li>
+</ul>
 <p>There are more types that can be represented by primitives (they ‘alias’ the primitive type) but we will leave that for another article.</p>
 <p>Outside of the primitive types (and types aliased to primitive types), we have an infinite object types. Any datatype the system doesn’t understand it will treat as type :object during generic options.</p>
 <p>One very important aspect to note is that columns marked as <code>:object</code> datatypes will use the Clojure numerics stack during mathematical operations. This is important because Clojure number tower, similar to the APL number tower, actively promotes values to the next appropriate size and is thus less error prone to use if you aren’t absolutely certain of your value range how it interacts with your arithmetic pathways.</p>
