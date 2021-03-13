@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.05
+ * Ragged per-row arrays are partially support for parquet.
+
 ## 5.04
  * `headers?` now also works when writing csv/tsv documents (thanks to behrica).
 

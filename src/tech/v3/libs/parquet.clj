@@ -432,16 +432,17 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (defn- rep-count-indexes
-  (^Buffer [^ints max-rep-counts]
+  (^Buffer [^ints max-rep-counts ^RoaringBitmap original-missing]
    (let [n-rows (alength max-rep-counts)
          index-data (dtype/make-list :int32)
          missing (RoaringBitmap.)]
      (dotimes [row-idx n-rows]
-       (dotimes [repeat-idx (aget max-rep-counts row-idx)]
-         (when-not (== 0 repeat-idx) (.add missing (.size index-data)))
-         (.addLong index-data row-idx)))
+       (let [missing? (.contains original-missing row-idx)]
+         (dotimes [repeat-idx (aget max-rep-counts row-idx)]
+           (when (or missing? (not= repeat-idx 0)) (.add missing (.size index-data)))
+           (.addLong index-data row-idx))))
      [(dtype/as-array-buffer index-data) missing]))
-  (^Buffer [^ints max-rep-counts col-rep-counts]
+  (^Buffer [^ints max-rep-counts ^RoaringBitmap original-missing col-rep-counts]
    (let [n-rows (alength max-rep-counts)
          index-data (dtype/make-list :int32)
          col-rep-counts (dtype/->buffer col-rep-counts)
@@ -452,7 +453,10 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
          (let [col-n-repeat (.readLong col-rep-counts row-idx)
                end-col-idx (unchecked-dec (+ col-n-repeat col-original-idx))]
            (dotimes [col-idx col-n-repeat]
-             (.addLong index-data (+ col-idx col-original-idx)))
+             (let [rel-missing (+ col-idx col-original-idx)]
+               (when (.contains original-missing rel-missing)
+                 (.add missing (.size index-data)))
+               (.addLong index-data rel-missing)))
            (dotimes [extra-idx (- (aget max-rep-counts row-idx)
                                   col-n-repeat)]
              (.add missing (.size index-data))
@@ -473,17 +477,24 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
      (loop [col-idx 0
             max-val 0]
        (if (< col-idx n-rep-cols)
-         (recur (unchecked-inc col-idx) (max max-val (long ((row-rep-counts col-idx) row-idx))))
+         (recur (unchecked-inc col-idx) (max max-val (long ((row-rep-counts col-idx)
+                                                            row-idx))))
          (aset max-rep-counts (int row-idx) (int max-val)))))
-    (->> columns
-         (mapv (fn [column]
-                 (let [[col-indexes new-missing]
-                       (if-let [col-rep-counts (:row-rep-counts (meta column))]
-                         (rep-count-indexes max-rep-counts col-rep-counts)
-                         (rep-count-indexes max-rep-counts))
-                       new-col (ds-col/select column col-indexes)]
-                   (.or ^RoaringBitmap new-missing (ds-col/missing new-col))
-                   (ds-col/set-missing new-col new-missing)))))))
+    (->>
+     columns
+     (pmap (fn [column]
+             (let [original-missing (ds-col/missing column)
+                   [col-indexes new-missing]
+                   (if-let [col-rep-counts (:row-rep-counts (meta column))]
+                     (rep-count-indexes max-rep-counts original-missing col-rep-counts)
+                     (rep-count-indexes max-rep-counts original-missing))
+                   ;;We clear the old missing set because that was taken care of above.
+                   ;;and select, when it has a missing set, has to go index by index and
+                   ;;make a new missing set.
+                   new-col (-> (ds-col/set-missing column nil)
+                               (ds-col/select col-indexes))]
+               (ds-col/set-missing new-col new-missing))))
+     (vec))))
 
 
 (defn- row-group->ds
