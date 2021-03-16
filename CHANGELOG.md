@@ -1,4 +1,20 @@
 # Changelog
+
+## 5.05
+ * Ragged per-row arrays are partially support for parquet.
+
+## 5.04
+ * `headers?` now also works when writing csv/tsv documents (thanks to behrica).
+
+## 5.03
+ * group-by now is done with a linkedhashmap thus the keys are ordered in terms
+   of first found in the data.  This is useful for operations such as re-indexing
+   a previously sorted dataset as it.
+
+## 5.02
+ * Fix for fastexcel files containing formulas.
+ * Codox org.ow2.asm fix from dtype-next.
+
 ## 5.00
  * Large upgrade to [`dtype-next`](https://github.com/cnuernber/dtype-next/).
  * All public functions are dataset-first.  This breaks compatibility with sort-by

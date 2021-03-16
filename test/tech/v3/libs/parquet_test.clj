@@ -94,3 +94,10 @@
         (is (= [1] (vec (dtype/->reader (ds/missing nds))))))
       (finally
         (.delete (java.io.File. "test.parquet"))))))
+
+
+(deftest nested-parquet
+  (let [ds (ds/->dataset "test/data/nested.parquet")]
+    (is (= [1 nil 2 nil 3 nil nil] (vec (ds "id"))))
+    (is (= ["a" "b" "a" "b" "a" "b" "c"] (vec (ds "val.key_value.key"))))
+    (is (= ["va" "vb" nil nil "vb" nil nil] (vec (ds "val2.key_value.key"))))))

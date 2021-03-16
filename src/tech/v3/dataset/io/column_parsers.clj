@@ -171,7 +171,7 @@
     :missing missing
       :force-datatype? true}
    (when (and failed-values
-                (not= 0 (dtype/ecount failed-values)))
+              (not= 0 (dtype/ecount failed-values)))
      {:metadata {:unparsed-data failed-values
                  :unparsed-indexes failed-indexes}})))
 
@@ -180,6 +180,7 @@
   [value]
   (or (nil? value)
       (.equals "" value)
+      (= value :tech.ml.dataset.parse/missing)
       (and (string? value) (.equalsIgnoreCase ^String value "na"))))
 
 

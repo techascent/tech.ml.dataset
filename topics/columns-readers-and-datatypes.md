@@ -75,6 +75,8 @@ test/data/stocks.csv [5 4]:
 
 There are many different datatypes currently used in the datatype system -
 the primitive numeric types:
+
+
 * `:boolean` - convert to and from 0 (false) or 1 (true) when used as a number.
 * `:int8`,`:uint8` - signed/unsigned bytes.
 * `:int16`,`:uint16` - signed/unsigned shorts.

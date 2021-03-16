@@ -54,6 +54,9 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.parallel.for :as parallel-for]
+            [clojure.string :as s]
             [clojure.set :as set]
             [clojure.tools.logging :as log])
   (:import [smile.io HadoopInput]
@@ -90,6 +93,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
     (require '[tech.v3.dataset.utils :as ds-utils])
     (ds-utils/set-slf4j-log-level :info))
   )
+
 
 (set! *warn-on-reflection* true)
 
@@ -199,204 +203,298 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   (and (>= cmin 0)
        (<= cmax 65535)))
 
+(defn- col-def->col-type
+  [^ColumnDescriptor col-def]
+  (-> col-def
+      (.getPrimitiveType)
+      (.getPrimitiveTypeName)))
 
-(defn- col-reader->iterable
-  ^Iterable [^ColumnReader col-rdr ^ColumnDescriptor col-def n-rows metadata]
+
+(defn- col-def->col-orig-type
+  ^OriginalType [^ColumnDescriptor col-def]
+  (-> col-def
+      (.getPrimitiveType)
+      (.getOriginalType)))
+
+
+(defn- col-metadata->min-max
+  [metadata]
+  (when (and (get-in metadata [:statistics :min])
+             (get-in metadata [:statistics :max]))
+    [(get-in metadata [:statistics :min]) (get-in metadata [:statistics :max])]))
+
+
+(defn- make-column-iterator
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def read-fn]
+  (ColumnIterator. col-rdr read-fn
+                   (.getMaxDefinitionLevel col-def)
+                   (.getTotalValueCount col-rdr)))
+
+
+(defn- make-column-iterable
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def dtype read-fn]
+  (reify
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [rdr] dtype)
+    Iterable
+    (iterator [rdr] (make-column-iterator col-rdr col-def read-fn))))
+
+
+(defmulti ^:private typed-col->iterable
+  (fn [col-rdr col-def metadata]
+    (col-def->col-type col-def)))
+
+
+(defmethod typed-col->iterable :default
+  [col-rdr col-def metadata]
+  (make-column-iterable col-rdr col-def :object read-byte-array))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BOOLEAN
+  [col-rdr col-def metadata]
+  (make-column-iterable col-rdr col-def :boolean read-boolean))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BINARY
+  [col-rdr col-def metadata]
+  (let [org-type (col-def->col-orig-type col-def)]
+    (if (= org-type OriginalType/UTF8)
+      (make-column-iterable col-rdr col-def :string read-str)
+      (make-column-iterable col-rdr col-def :object read-byte-array))))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT96
+  [col-rdr col-def metadata]
+  (make-column-iterable col-rdr col-def :instant read-instant))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT32
+  [col-rdr col-def metadata]
+  (let [org-type (col-def->col-orig-type col-def)]
+    (if (= org-type OriginalType/DATE)
+      (make-column-iterable col-rdr col-def :epoch-days read-int)
+      (let [[col-min col-max] (col-metadata->min-max metadata)
+            dtype (cond
+                    (and col-min col-max)
+                    (let [col-min (long col-min)
+                          col-max (long col-max)]
+                      (cond
+                        (byte-range? col-min col-max) :int8
+                        (ubyte-range? col-min col-max) :uint8
+                        (short-range? col-min col-max) :int16
+                        (ushort-range? col-min col-max) :uint16
+                        :else :int32))
+                    (= org-type OriginalType/INT_8)
+                    :int8
+                    (= org-type OriginalType/UINT_8)
+                    :uint8
+                    (= org-type OriginalType/INT_16)
+                    :int16
+                    (= org-type OriginalType/UINT_16)
+                    :uint16
+                    :else
+                    :int32)]
+        (make-column-iterable col-rdr col-def dtype read-int)))))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT64
+  [col-rdr col-def metadata]
+  (let [org-type (col-def->col-orig-type col-def)
+        [col-min col-max] (col-metadata->min-max metadata)]
+    (condp = org-type
+      OriginalType/TIMESTAMP_MILLIS
+      (make-column-iterable col-rdr col-def :instant
+                            #(-> (read-long %)
+                                 (dtype-dt/milliseconds-since-epoch->instant)))
+      OriginalType/TIMESTAMP_MICROS
+      (make-column-iterable col-rdr col-def :instant
+                            #(-> (read-long %)
+                                 (dtype-dt/microseconds-since-epoch->instant)))
+      (let [dtype (cond
+                    (and col-min col-max)
+                    (let [col-min (long col-min)
+                          col-max (long col-max)]
+                      (cond
+                        (byte-range? col-min col-max) :int8
+                        (ubyte-range? col-min col-max) :uint8
+                        (short-range? col-min col-max) :int16
+                        (ushort-range? col-min col-max) :uint16
+                        :else :int64))
+                    (= org-type OriginalType/UINT_32)
+                    :uint32
+                    :else
+                    :int64)]
+        (make-column-iterable col-rdr col-def dtype read-long)))))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/DOUBLE
+  [col-rdr col-def metadata]
+  (make-column-iterable col-rdr col-def :float64 read-double))
+
+
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/FLOAT
+  [col-rdr col-def metadata]
+  (make-column-iterable col-rdr col-def :float32 read-float))
+
+
+(defn- dot-notation
+  [str-ary]
+  (s/join "." str-ary))
+
+
+(defn- fixed-datatype-parser
+  [dtype]
+  (let [container-dtype (packing/pack-datatype dtype)
+        container (col-base/make-container container-dtype)
+        missing-value (col-base/datatype->missing-value
+                       (packing/unpack-datatype container-dtype))
+        missing (bitmap/->bitmap)]
+    (reify col-parsers/PParser
+      (add-value! [p idx value]
+        (if (= value :tech.ml.dataset.parse/missing)
+          (do
+            (.addObject container missing-value)
+            (.add missing (long idx)))
+          (.addObject container value)))
+      (finalize! [p n-rows]
+        (col-parsers/finalize-parser-data! container missing nil nil
+                                           missing-value n-rows)))))
+
+
+(defn- parse-column-data
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def n-rows
+   parse-context key-fn metadata]
   (let [n-rows (long n-rows)
-        pf (.getPrimitiveType col-def)
-        prim-type (.getPrimitiveTypeName pf)
-        org-type (.getOriginalType pf)
-        max-def-level (.getMaxDefinitionLevel col-def)
-        col-min (get-in metadata [:statistics :min])
-        col-max (get-in metadata [:statistics :max])
-        ;;TODO - get dictionaries working.  Columns readers throw exceptions
-        ;;no matter what if the dictionary id is queried.
-        dictionary? (or (contains? (:encodings metadata) :plain-dictionary)
-                        (contains? (:encodings metadata) :rle-dictionary))]
-    (condp = prim-type
-      PrimitiveType$PrimitiveTypeName/BOOLEAN
-      (reify
-        dtype-proto/PElemwiseDatatype
-        (elemwise-datatype [rdr] :boolean)
-        Iterable
-        (iterator [rdr] (ColumnIterator. col-rdr read-boolean
-                                         max-def-level n-rows)))
-      PrimitiveType$PrimitiveTypeName/BINARY
-      (if (= org-type OriginalType/UTF8)
-        (if false
-          (let [dict-data (HashMap.)
-                compute-fn (reify java.util.function.Function
-                             (apply [this value]
-                               (read-str col-rdr)))
-                read-fn (fn [^ColumnReader rdr]
-                          ;;This always throws an exception independent of if the column
-                          ;;has a dictionary encoding
-                          (let [dict-id (.getCurrentValueDictionaryID rdr)]
-                            (.computeIfAbsent dict-data dict-id compute-fn)))]
-            (reify
-              dtype-proto/PElemwiseDatatype
-              (elemwise-datatype [rdr] :string)
-              Iterable
-              (iterator [rdr] (ColumnIterator. col-rdr read-fn
-                                               max-def-level n-rows))))
-          (reify
-            dtype-proto/PElemwiseDatatype
-            (elemwise-datatype [rdr] :string)
-            Iterable
-            (iterator [rdr] (ColumnIterator. col-rdr read-str
-                                             max-def-level n-rows))))
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :object)
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-byte-array
-                                           max-def-level n-rows))))
-      PrimitiveType$PrimitiveTypeName/INT96
-      (reify
-        dtype-proto/PElemwiseDatatype
-        (elemwise-datatype [rdr] :instant)
-        Iterable
-        (iterator [rdr] (ColumnIterator. col-rdr read-instant
-                                         max-def-level n-rows)))
-      PrimitiveType$PrimitiveTypeName/INT32
-      (if (= org-type OriginalType/DATE)
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :epoch-days)
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-int
-                                           max-def-level n-rows)))
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr]
-            (cond
-              (and col-min col-max)
-              (let [col-min (long col-min)
-                    col-max (long col-max)]
-                (cond
-                  (byte-range? col-min col-max) :int8
-                  (ubyte-range? col-min col-max) :uint8
-                  (short-range? col-min col-max) :int16
-                  (ushort-range? col-min col-max) :uint16
-                  :else :int32))
-              (= org-type OriginalType/INT_8)
-              :int8
-              (= org-type OriginalType/UINT_8)
-              :uint8
-              (= org-type OriginalType/INT_16)
-              :int16
-              (= org-type OriginalType/UINT_16)
-              :uint16
-              :else
-              :int32))
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-int
-                                           max-def-level n-rows))))
-      PrimitiveType$PrimitiveTypeName/INT64
-      (condp = org-type
-        OriginalType/TIMESTAMP_MILLIS
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :instant)
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr #(dtype-dt/milliseconds-since-epoch->instant
-                                                     (read-long %))
-                                           max-def-level n-rows)))
-        OriginalType/TIMESTAMP_MICROS
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr] :instant)
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr #(dtype-dt/microseconds-since-epoch->instant
-                                                     (read-long %))
-                                           max-def-level n-rows)))
-        (reify
-          dtype-proto/PElemwiseDatatype
-          (elemwise-datatype [rdr]
-            (cond
-              (and col-min col-max)
-              (let [col-min (long col-min)
-                    col-max (long col-max)]
-                (cond
-                  (byte-range? col-min col-max) :int8
-                  (ubyte-range? col-min col-max) :uint8
-                  (short-range? col-min col-max) :int16
-                  (ushort-range? col-min col-max) :uint16
-                  :else :int64))
-              (= org-type OriginalType/UINT_32)
-              :uint32
-              :else
-              :int64))
-          Iterable
-          (iterator [rdr] (ColumnIterator. col-rdr read-long
-                                           max-def-level n-rows))))
-      PrimitiveType$PrimitiveTypeName/DOUBLE
-      (reify
-        dtype-proto/PElemwiseDatatype
-        (elemwise-datatype [rdr] :float64)
-        Iterable
-        (iterator [rdr] (ColumnIterator. col-rdr read-double
-                                         max-def-level n-rows)))
-      PrimitiveType$PrimitiveTypeName/FLOAT
-      (reify
-        dtype-proto/PElemwiseDatatype
-        (elemwise-datatype [rdr] :float32)
-        Iterable
-        (iterator [rdr] (ColumnIterator. col-rdr read-float
-                                         max-def-level n-rows)))
-      ;;Default case, just return the byte arrays
-      (reify
-        dtype-proto/PElemwiseDatatype
-        (elemwise-datatype [rdr] :object)
-        Iterable
-        (iterator [rdr] (ColumnIterator. col-rdr read-byte-array
-                                         max-def-level n-rows))))))
-
-
-(defn- parse-column
-  [col-rdr ^ColumnDescriptor col-def n-rows parse-context key-fn metadata]
-  (let [n-rows (long n-rows)
-        col-name (.. col-def getPrimitiveType getName)
-        iterable (col-reader->iterable col-rdr col-def n-rows metadata)
+        col-name (dot-notation (.getPath col-def))
+        ^Iterable iterable (typed-col->iterable col-rdr col-def metadata)
         iterator (.iterator iterable)
-        col-parser (parse-context col-name)
+        col-parser (or (parse-context col-name)
+                       (fixed-datatype-parser (dtype/elemwise-datatype iterable)))
+        ^Buffer row-rep-counts (when-not (== n-rows (.getTotalValueCount col-rdr))
+                                 (-> (int-array n-rows)
+                                     (dtype/->buffer)))
         {:keys [data missing metadata]}
-        (if col-parser
-          ;;The user specified a specific parser for this datatype
-          (loop [continue? (.hasNext iterator)
-                 row 0]
-            (if continue?
-              (let [col-data (.next iterator)]
-                (when-not (= col-data :tech.ml.dataset.parse/missing)
-                  (col-parsers/add-value! col-parser row col-data))
-                (recur (.hasNext iterator) (unchecked-inc row)))
-              (col-parsers/finalize! col-parser n-rows)))
-            (let [container-dtype (packing/pack-datatype
-                                   (dtype-base/elemwise-datatype iterable))
-                  container (col-base/make-container container-dtype)
-                  missing-value (col-base/datatype->missing-value
-                                 (packing/unpack-datatype container-dtype))
-                  missing (bitmap/->bitmap)]
-              ;;Faster to not use the generic system because we know what the type
-              ;;will be.
-              (loop [continue? (.hasNext iterator)
-                     row 0]
-              (if continue?
-                (let [col-data (.next iterator)]
-                  (if (.equals ^Object col-data :tech.ml.dataset.parse/missing)
-                    (do
-                      (try
-                        (.add missing row)
-                        (.addObject container missing-value)
-                        (catch Exception e
-                          (log/warnf e "Parse failure: %s(%s) - missing - %s"
-                                     col-name container-dtype missing-value)
-                          (throw e))))
-                    (.addObject container col-data))
-                  (recur (.hasNext iterator) (unchecked-inc row)))
-                {:data container
-                 :missing missing}))))]
-    (col-impl/new-column (key-fn col-name) data metadata missing)))
+        ;;The user specified a specific parser for this datatype
+        (loop [continue? (.hasNext iterator)
+               row-idx -1
+               row 0]
+          (if continue?
+            (let [rep-level (.getCurrentRepetitionLevel col-rdr)
+                  col-data (.next iterator)
+                  row-idx (if (== 0 rep-level) (unchecked-inc row-idx) row-idx)]
+              (col-parsers/add-value! col-parser row col-data)
+              (when row-rep-counts
+                (.accumPlusLong row-rep-counts row-idx 1))
+              (recur (.hasNext iterator) row-idx (unchecked-inc row)))
+            (col-parsers/finalize! col-parser n-rows)))]
+    (col-impl/new-column (key-fn col-name) data
+                         (merge metadata (when row-rep-counts
+                                           {:row-rep-counts row-rep-counts}))
+                         missing)))
+
+
+(defn- parse-parquet-column
+  [column-whitelist column-blacklist ^ColumnReadStoreImpl col-read-store
+   n-rows parse-context key-fn
+   ^ColumnDescriptor col-def col-metadata]
+  (let [n-rows (long n-rows)
+        cname (key-fn (.. col-def getPrimitiveType getName))
+        whitelisted? (or (not column-whitelist)
+                         (column-whitelist cname))
+        blacklisted? (and column-blacklist
+                          (column-blacklist cname))]
+    (when (and whitelisted? (not blacklisted?))
+      (try
+        (let [reader (.getColumnReader col-read-store col-def)
+              retval (parse-column-data reader col-def n-rows
+                                        parse-context key-fn col-metadata)
+              converter (condp = (dtype-base/elemwise-datatype retval)
+                          :string
+                          (fn [^Binary data] (String. (.getBytes data)))
+                          :text
+                          (fn [^Binary data] (String. (.getBytes data)))
+                          :packed-local-date
+                          (fn [^long data] (LocalDate/ofEpochDay data))
+                          ;;Strip non-numeric representations else we risk not being
+                          ;;able to save to nippy
+                          (fn [data] (if (number? data) data nil)))]
+          (vary-meta
+           retval
+           assoc
+           :statistics (-> (:statistics col-metadata)
+                           (update :min #(when % (converter %)))
+                           (update :max #(when % (converter %))))
+           :parquet-metadata (dissoc col-metadata :statistics :primitive-type)))
+        (catch Throwable e
+          (log/warnf e "Failed to parse column %s: %s"
+                     cname (.toString col-def))
+          nil)))))
+
+
+(defn- rep-count-indexes
+  (^Buffer [^ints max-rep-counts ^RoaringBitmap original-missing]
+   (let [n-rows (alength max-rep-counts)
+         index-data (dtype/make-list :int32)
+         missing (RoaringBitmap.)]
+     (dotimes [row-idx n-rows]
+       (let [missing? (.contains original-missing row-idx)]
+         (dotimes [repeat-idx (aget max-rep-counts row-idx)]
+           (when (or missing? (not= repeat-idx 0)) (.add missing (.size index-data)))
+           (.addLong index-data row-idx))))
+     [(dtype/as-array-buffer index-data) missing]))
+  (^Buffer [^ints max-rep-counts ^RoaringBitmap original-missing col-rep-counts]
+   (let [n-rows (alength max-rep-counts)
+         index-data (dtype/make-list :int32)
+         col-rep-counts (dtype/->buffer col-rep-counts)
+         missing (RoaringBitmap.)]
+     (loop [row-idx 0
+            col-original-idx 0]
+       (if (< row-idx n-rows)
+         (let [col-n-repeat (.readLong col-rep-counts row-idx)
+               end-col-idx (unchecked-dec (+ col-n-repeat col-original-idx))]
+           (dotimes [col-idx col-n-repeat]
+             (let [rel-missing (+ col-idx col-original-idx)]
+               (when (.contains original-missing rel-missing)
+                 (.add missing (.size index-data)))
+               (.addLong index-data rel-missing)))
+           (dotimes [extra-idx (- (aget max-rep-counts row-idx)
+                                  col-n-repeat)]
+             (.add missing (.size index-data))
+             (.addLong index-data end-col-idx))
+           (recur (unchecked-inc row-idx) (unchecked-inc end-col-idx)))))
+     [(dtype/as-array-buffer index-data) missing])))
+
+
+(defn- scatter-rows
+  [columns row-rep-counts]
+  (let [n-rows (count (first row-rep-counts))
+        max-rep-counts (int-array n-rows)
+        row-rep-counts (vec row-rep-counts)
+        n-rep-cols (count row-rep-counts)]
+    ;;Go row by row and for each row take the find the max repetition count
+    (parallel-for/parallel-for
+     row-idx n-rows
+     (loop [col-idx 0
+            max-val 0]
+       (if (< col-idx n-rep-cols)
+         (recur (unchecked-inc col-idx) (max max-val (long ((row-rep-counts col-idx)
+                                                            row-idx))))
+         (aset max-rep-counts (int row-idx) (int max-val)))))
+    (->>
+     columns
+     (pmap (fn [column]
+             (let [original-missing (ds-col/missing column)
+                   [col-indexes new-missing]
+                   (if-let [col-rep-counts (:row-rep-counts (meta column))]
+                     (rep-count-indexes max-rep-counts original-missing col-rep-counts)
+                     (rep-count-indexes max-rep-counts original-missing))
+                   ;;We clear the old missing set because that was taken care of above.
+                   ;;and select, when it has a missing set, has to go index by index and
+                   ;;make a new missing set.
+                   new-col (-> (ds-col/set-missing column nil)
+                               (ds-col/select col-indexes))]
+               (ds-col/set-missing new-col new-missing))))
+     (vec))))
 
 
 (defn- row-group->ds
@@ -412,42 +510,19 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                            (set (:column-whitelist options)))
         column-blacklist (when (seq (:column-blacklist options))
                            (set (:column-blacklist options)))
-        retval
-        (->> (map (fn [^ColumnDescriptor col-def col-metadata]
-                    (let [cname (key-fn (.. col-def getPrimitiveType getName))
-                          whitelisted? (or (not column-whitelist)
-                                           (column-whitelist cname))
-                          blacklisted? (and column-blacklist
-                                            (column-blacklist cname))]
-                      (when (and whitelisted?
-                                 (not blacklisted?))
-                        (try
-                          (let [reader (.getColumnReader col-read-store col-def)
-                                retval (parse-column reader col-def n-rows parse-context key-fn col-metadata)
-                                converter (condp = (dtype-base/elemwise-datatype retval)
-                                            :string
-                                            (fn [^Binary data] (String. (.getBytes data)))
-                                            :text
-                                            (fn [^Binary data] (String. (.getBytes data)))
-                                            :packed-local-date
-                                            (fn [^long data] (LocalDate/ofEpochDay data))
-                                            ;;Strip non-numeric representations else we risk not being able to
-                                            ;;save to nippy
-                                            (fn [data] (if (number? data) data nil)))]
-                            (vary-meta
-                             retval
-                             assoc
-                             :statistics (-> (:statistics col-metadata)
-                                             (update :min #(when % (converter %)))
-                                             (update :max #(when % (converter %))))
-                             :parquet-metadata (dissoc col-metadata :statistics :primitive-type)))
-                          (catch Throwable e
-                            (log/warnf e "Failed to parse column %s: %s"
-                                       cname (.toString col-def))
-                            nil)))))
-                  (.getColumns schema) (:columns block-metadata))
-             (remove nil?)
-             (ds-impl/new-dataset))]
+        col-parser (partial parse-parquet-column column-whitelist column-blacklist
+                            col-read-store n-rows parse-context key-fn)
+        initial-columns (->> (map col-parser (.getColumns schema) (:columns block-metadata))
+                             (remove nil?)
+                             (vec))
+        rep-counts (->> (map (comp :row-rep-counts meta) initial-columns)
+                        (remove nil?)
+                        (vec))
+        columns (if (seq rep-counts)
+                  (scatter-rows initial-columns rep-counts)
+                  ;;handle repetitions
+                  initial-columns)
+        retval (ds-impl/new-dataset options columns)]
     (vary-meta retval assoc :parquet-metadata (dissoc block-metadata :columns))))
 
 
