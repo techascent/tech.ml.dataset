@@ -1016,6 +1016,16 @@
                                  (ds-col/to-double-array (data :b)))))))
 
 
+(deftest write-with-nil-name
+  (let [data (-> (ds/->dataset [{:a 1.0 :b 2.0}
+                                {:a 3.0}])
+                 (vary-meta assoc :name nil))]
+    (try
+      (ds/write! data "test/data/nil-name.csv")
+      (finally
+        (.delete (java.io.File. "test/data/nil-name.csv"))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
