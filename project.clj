@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.12"]
+                 [cnuernber/dtype-next             "6.27"]
                  [techascent/tech.io               "4.03"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -28,7 +28,8 @@
                  [org.slf4j/slf4j-api "1.7.30"]
                  ;;Many things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]
-
+                 ;;High performance probabilistic stats
+                 [com.tdunning/t-digest "3.2"]
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]

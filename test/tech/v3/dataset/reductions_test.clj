@@ -35,15 +35,26 @@
 
 (deftest issue-201-incorrect-result-column-count
   (let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
-        agg-ds (-> (ds-reductions/group-by-column-agg
-                    :symbol
-                    {:n-elems (ds-reductions/row-count)
-                     :price-avg (ds-reductions/mean :price)
-                     :price-avg2 (ds-reductions/mean :price)
-                     :price-avg3 (ds-reductions/mean :price)
-                     :price-sum (ds-reductions/sum :price)
-                     :symbol (ds-reductions/first-value :symbol)
-                     :n-dates (ds-reductions/count-distinct :date :int32)}
-                    [stocks stocks stocks])
-                   (ds/sort-by-column :symbol))]
-    (is (= 7 (ds/column-count agg-ds)))))
+        agg-ds (ds-reductions/group-by-column-agg
+                :symbol
+                {:n-elems (ds-reductions/row-count)
+                 :price-avg (ds-reductions/mean :price)
+                 :price-avg2 (ds-reductions/mean :price)
+                 :price-avg3 (ds-reductions/mean :price)
+                 :price-sum (ds-reductions/sum :price)
+                 :price-med (ds-reductions/prob-median :price)
+                 :symbol (ds-reductions/first-value :symbol)
+                 :n-dates (ds-reductions/count-distinct :date :int32)}
+                [stocks stocks stocks])
+        simple-agg-ds (ds-reductions/aggregate
+                       {:n-elems (ds-reductions/row-count)
+                        :price-avg (ds-reductions/mean :price)
+                        :price-avg2 (ds-reductions/mean :price)
+                        :price-avg3 (ds-reductions/mean :price)
+                        :price-sum (ds-reductions/sum :price)
+                        :price-med (ds-reductions/prob-median :price)
+                        :symbol (ds-reductions/first-value :symbol)
+                        :n-dates (ds-reductions/count-distinct :date :int32)}
+                       [stocks stocks stocks])]
+    (is (= 8 (ds/column-count agg-ds)))
+    (is (= 8 (ds/column-count simple-agg-ds)))))
