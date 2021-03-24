@@ -99,7 +99,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (def ^:private test-file "test/data/parquet/userdata1.parquet")
-(def ^:private test-file-2 "../../perf-benchmark/performance-benchmark-data/part-00000-2211c4d6-c1a7-4bbb-9a27-302a2cb9f30f-c000.snappy.parquet")
+(def ^:private test-file-2 "test/data/part-00000-74d3eb51-bc9c-4ba5-9d13-9e0d71eea31f.c000.snappy.parquet")
+(def ^:private perf-benchmark "/home/chrisn/dev/geni-performance-benchmark/geni/data/performance-benchmark-data/part-00000-021194b8-aa1b-4cd8-b641-e9902dea79a6-c000.snappy.parquet")
 
 (declare primitive-converter)
 
