@@ -151,7 +151,7 @@
 ;; dispatch method then serves as a default unless someone has extended
 ;; this multimethod to catch a more specific datatype.
 (defmethod make-index-structure java.lang.Object
-  [data missing]
+  [data]
   (let [idx-map (arggroup data)]
     (java.util.TreeMap. ^java.util.Map idx-map)))
 
@@ -175,14 +175,16 @@
   ;;
   ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
   (index-structure [this]
-    @*index-structure)
+    (if (empty? missing)
+      @*index-structure
+      (throw (Exception. "Can't return index structure for a column with missin values."))))
   (with-index-structure [this datatype-keyword klass make-index-structure-fn]
     (casting/add-object-datatype! datatype-keyword klass true)
     (Column. missing
              data
              metadata
              cached-vector
-             (delay (make-index-structure-fn data missing))))
+             (delay (make-index-structure-fn data))))
 
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [this]
@@ -206,7 +208,7 @@
                new-data
                metadata
                nil
-               (delay (make-index-structure new-data missing)))))
+               (delay (make-index-structure new-data)))))
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
@@ -246,7 +248,7 @@
                    new-data
                    metadata
                    nil
-                   (delay (make-index-structure new-data new-missing)))))))
+                   (delay (make-index-structure new-data)))))))
   dtype-proto/PClone
   (clone [col]
     (let [new-data (if (or (dtype/writer? data)
@@ -261,7 +263,7 @@
                new-data
                metadata
                nil
-               (delay (make-index-structure new-data cloned-missing)))))
+               (delay (make-index-structure new-data)))))
   Iterable
   (iterator [this]
     (.iterator (dtype-proto/->buffer this)))
@@ -297,7 +299,7 @@
                data
                metadata
                nil
-               (delay (make-index-structure data bitmap)))))
+               (delay (make-index-structure data)))))
   (unique [this]
     (->> (parallel-unique this)
          (into #{})))
@@ -322,7 +324,7 @@
                    new-data
                    metadata
                    nil
-                   (delay (make-index-structure data bitmap))))
+                   (delay (make-index-structure data))))
         ;;Uggh.  Construct a new missing set
         (let [idx-rdr (dtype/->reader idx-rdr)
               n-idx-elems (.lsize idx-rdr)
@@ -335,7 +337,7 @@
                      new-data
                      metadata
                      nil
-                     (delay (make-index-structure new-data result-set))))))))
+                     (delay (make-index-structure new-data))))))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
@@ -483,7 +485,7 @@
               data
               (assoc metadata :name name)
               nil
-              (delay (make-index-structure data missing)))))
+              (delay (make-index-structure data)))))
   ([name data metadata]
    (new-column name data metadata (->bitmap)))
   ([name data]
