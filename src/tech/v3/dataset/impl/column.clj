@@ -161,7 +161,7 @@
   (index-structure [this]
     (if (empty? missing)
       @*index-structure
-      (throw (Exception. "Can't return index structure for a column with missin values."))))
+      (throw (Exception. "Cannot return an index structure for a column with missing values."))))
   (with-index-structure [this datatype-keyword klass make-index-structure-fn]
     (casting/add-object-datatype! datatype-keyword klass true)
     (Column. missing
