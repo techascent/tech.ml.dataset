@@ -1,4 +1,12 @@
 # Changelog
+## 5.07
+ * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) 
+  namespace now includes direct aggregations
+  including group-by aggregations and also t-dunnings' t-digest algorithm for
+  probabilistic cdf and quantile estimation.
+  
+## 5.06 
+ * Bugs introduced by t-digest version 3.2.  Ignore this release.
 
 ## 5.05
  * Ragged per-row arrays are partially support for parquet.

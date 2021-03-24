@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "5.07-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.07"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -29,7 +29,7 @@
                  ;;Many things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]
                  ;;High performance probabilistic stats
-                 [com.tdunning/t-digest "3.2"]
+                 [com.techascent/t-digest "4.0-pre-release-1"]
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
