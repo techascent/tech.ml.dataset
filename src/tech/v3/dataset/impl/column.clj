@@ -8,11 +8,11 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
-            [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
-            [tech.v3.dataset.impl.column-data-process :as column-data-process])
+            [tech.v3.dataset.impl.column-data-process :as column-data-process]
+            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure slice-index]])
   (:import [java.util ArrayList HashSet Collections Set List Map]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
@@ -138,22 +138,6 @@
                  (ListPersistentVector.
                   (make-buffer ~'missing ~'data)))
            ~'cached-vector)))
-
-
-(defmulti make-index-structure
-  "Returns an index structure based on the type of data in the column."
-  (fn [data _] (-> data
-                   dtype/elemwise-datatype
-                   casting/datatype->object-class)))
-
-;; When tech.datatype does not know what something is it describes it
-;; as an object (see tech.v3.datatype.casting/elemwise-datatype). This
-;; dispatch method then serves as a default unless someone has extended
-;; this multimethod to catch a more specific datatype.
-(defmethod make-index-structure java.lang.Object
-  [data]
-  (let [idx-map (arggroup data)]
-    (java.util.TreeMap. ^java.util.Map idx-map)))
 
 
 (deftype Column
