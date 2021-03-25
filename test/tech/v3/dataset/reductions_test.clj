@@ -2,6 +2,7 @@
   (:require [tech.v3.dataset.reductions :as ds-reductions]
             [tech.v3.dataset :as ds]
             [tech.v3.datatype.functional :as dfn]
+            [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [clojure.test :refer [deftest is]]))
 
 
@@ -58,3 +59,21 @@
                        [stocks stocks stocks])]
     (is (= 8 (ds/column-count agg-ds)))
     (is (= 8 (ds/column-count simple-agg-ds)))))
+
+
+(deftest data-sketches-test
+  (let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+        result (ds-reductions/aggregate
+                {:n-elems (ds-reductions/row-count)
+                 :n-dates (ds-reductions/count-distinct :date :int32)
+                 :n-dates-hll (ds-sketch/set-cardinality :date)
+                 :n-dates-theta (ds-sketch/set-cardinality :date
+                                                           {:algorithm :theta})
+                 :n-symbols-hll (ds-sketch/set-cardinality :symbol {:datatype :string})
+                 :n-symbols-theta (ds-sketch/set-cardinality :symbol
+                                                             {:algorithm :theta
+                                                              :datatype :string})}
+                [stocks stocks stocks])
+        {:keys [n-dates-hll n-dates-theta n-symbols-hll n-symbols-theta]} (first (ds/mapseq-reader result))]
+    (is (dfn/equals [123 123 5 5]
+                    [n-dates-hll n-dates-theta n-symbols-hll n-symbols-theta]))))
