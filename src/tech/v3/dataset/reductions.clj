@@ -154,20 +154,15 @@
 
 
 (deftype ^:private TDigestReducer
-    [^:unsynchronized-mutable ^IndexReduction reducer
-     colname
+    [colname
      value-paths
      compression
      final-reduce-fn]
   ds-reduce-impl/PReducerCombiner
-  (reducer-combiner-key [this] [colname :tdigest compression])
-  (combine-reducers! [reducer grouped-reducers]
-    (let [reducer (base-tdigest-reducer colname compression)]
-      (doseq [greducer grouped-reducers]
-        (ds-reduce-impl/set-combined-reducer! greducer reducer))
-      reducer))
-  (set-combined-reducer! [this greducer]
-    (set! reducer greducer))
+  (reducer-combiner-key [this]
+    [colname :tdigest compression])
+  (combine-reducers [reducer _combiner-key]
+    (base-tdigest-reducer colname compression))
   (finalize-combined-reducer [this ctx]
     (let [ctx ^TDigest ctx]
       (final-reduce-fn (mapv (fn [path]
@@ -188,7 +183,7 @@
   less than 10) multiple of this number."
 
   ([colname cdf compression]
-   (TDigestReducer. nil colname [[:cdf (double cdf)]] compression first))
+   (TDigestReducer. colname [[:cdf (double cdf)]] compression first))
   ([colname cdf]
    (prob-cdf colname cdf 100)))
 
@@ -204,7 +199,7 @@
   1000 is extremely large. The number of centroids retained will be a smallish (usually
   less than 10) multiple of this number."
   ([colname quantile compression]
-   (TDigestReducer. nil colname [[:quantile (double quantile)]] compression first))
+   (TDigestReducer. colname [[:quantile (double quantile)]] compression first))
   ([colname quantile]
    (prob-quantile colname quantile 100)))
 
@@ -223,104 +218,13 @@
   See `prob-quartile`.
   "
   ([colname compression]
-   (TDigestReducer. nil colname [[:quantile 0.75]
-                                 [:quantile 0.25]]
+   (TDigestReducer. colname [[:quantile 0.75]
+                             [:quantile 0.25]]
                     compression (fn [[third-q first-q]]
                                   (- (double third-q)
                                      (double first-q)))))
   ([colname]
    (prob-interquartile-range colname 100)))
-
-
-(defn- aggregate-reducer
-  "Create a reducer that aggregates to several other reducers.  Reducers are provided
-  in a map of reducer-name->reducer and the result is a map of `reducer-name` ->
-  `finalized` reducer value.
-
-  This algorithm allows multiple input reducers to be combined into a single
-  functional reducer for the reduction transparently from the outside caller."
-  ^IndexReduction [reducer-seq]
-  ;;We group reducers that can share a context.  In that case they mutably change
-  ;;themselves such that they all share reduction state via the above
-  ;;combine-reducers! API.
-  (let [input-reducers (vec reducer-seq)
-        combined-reducer-indexes
-        (->> (map-indexed vector reducer-seq)
-             (group-by (comp ds-reduce-impl/reducer-combiner-key second))
-             (mapcat (fn [[red-key red-seq]]
-                       (if (nil? red-key)
-                         ;;Irreducable/non combinable
-                         (map (fn [[red-idx red-obj]]
-                                [red-obj [red-idx]])
-                              red-seq)
-                         ;;Combine all combinable into one reducer
-                         (let [src-reducers (map second red-seq)
-                               src-indexes (mapv first red-seq)]
-                           [[(ds-reduce-impl/combine-reducers! (first src-reducers) src-reducers)
-                             src-indexes]])))))
-        reducer-ary (object-array (map first combined-reducer-indexes))
-        ;;map from reducer-idx->vector of input indexes
-        reducer-indexes (map second combined-reducer-indexes)
-        ;;get a vector of output indexes
-        reverse-indexes (->>
-                         (map-indexed (fn [out-idx in-idx-seq]
-                                        (map vector in-idx-seq (repeat out-idx)))
-                                      reducer-indexes)
-                         (apply concat)
-                         (sort-by first)
-                         (mapv second))
-        n-input-reducers (count input-reducers)
-        n-reducers (alength reducer-ary)]
-    (reify IndexReduction
-      (prepareBatch [this dataset]
-        (object-array (map #(.prepareBatch ^IndexReduction % dataset) reducer-ary)))
-      (reduceIndex [this ds-ctx obj-ctx idx]
-        (let [^objects ds-ctx ds-ctx
-              ^objects obj-ctx (if obj-ctx
-                                 obj-ctx
-                                 (object-array n-reducers))]
-          (dotimes [r-idx n-reducers]
-            (aset obj-ctx r-idx
-                  (.reduceIndex ^IndexReduction (aget reducer-ary r-idx)
-                                (aget ds-ctx r-idx)
-                                (aget obj-ctx r-idx)
-                                idx)))
-          obj-ctx))
-      (reduceReductions [this lhs-ctx rhs-ctx]
-        (let [^objects lhs-ctx lhs-ctx
-              ^objects rhs-ctx rhs-ctx]
-          (dotimes [r-idx n-reducers]
-            (aset lhs-ctx r-idx
-                  (.reduceReductions ^IndexReduction (aget reducer-ary r-idx)
-                                     (aget lhs-ctx r-idx)
-                                     (aget rhs-ctx r-idx))))
-          lhs-ctx))
-      ;;reduce a list of reductions down to one reduction
-      ;;the aggregate form of reduceReductions
-      (reduceReductionList [this red-ctx-list]
-        (let [retval (object-array n-reducers)
-              n-inputs (.size red-ctx-list)]
-          (if (== n-inputs 1)
-            (first red-ctx-list)
-            (dotimes [r-idx n-reducers]
-              (aset retval r-idx
-                    (.reduceReductionList ^IndexReduction (aget reducer-ary r-idx)
-                                          ;;in-place transpose the data
-                                          (reify ObjectReader
-                                            (lsize [this] n-inputs)
-                                            (readObject [this idx]
-                                              (aget ^objects (.get red-ctx-list idx)
-                                                    r-idx)))))))))
-      (finalize [this ctx]
-        (let [^objects ctx ctx
-              output-ary (object-array (count input-reducers))]
-          (dotimes [idx n-input-reducers]
-            (aset output-ary idx
-                  (ds-reduce-impl/finalize-combined-reducer
-                   (input-reducers idx)
-                   (aget ctx (unchecked-int
-                              (reverse-indexes idx))))))
-          output-ary)))))
 
 
 (defn group-by-column-agg
@@ -367,7 +271,7 @@ user> (ds-reduce/group-by-column-agg
          ;;group by using this reducer followed by this consumer fn.
          _ (ds-reduce-impl/group-by-column-aggregate-impl
             colname
-            (aggregate-reducer (vals agg-map))
+            (ds-reduce-impl/aggregate-reducer (vals agg-map))
             (assoc options
                    :finalize-type
                    (fn [_column-value reduce-data]
@@ -429,7 +333,7 @@ user> (ds-reduce/group-by-column-agg
 ```"
   ([agg-map options ds-seq]
    (let [cnames (vec (keys agg-map))
-         reducer (aggregate-reducer (vals agg-map))
+         reducer (ds-reduce-impl/aggregate-reducer (vals agg-map))
          ctx-map (ConcurrentHashMap.)]
      (doseq [ds ds-seq]
        (let [batch-data (.prepareBatch reducer ds)]
@@ -445,7 +349,8 @@ user> (ds-reduce/group-by-column-agg
                          (.reduceIndex reducer batch-data ctx idx))
                   (.put ctx-map tid ctx))))))))
      (ds-io/->dataset [(->> (.values ctx-map)
-                            (reduce #(.reduceReductions reducer %1 %2))
+                            (vec)
+                            (.reduceReductionList reducer)
                             (.finalize reducer)
                             (map vector cnames)
                             (into {}))]
