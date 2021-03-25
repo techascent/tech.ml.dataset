@@ -1,4 +1,7 @@
 # Changelog
+## 5.10
+ * apache data sketch set-cardinality algorithms hyper-log-log and theta.
+
 ## 5.07
  * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) 
   namespace now includes direct aggregations
