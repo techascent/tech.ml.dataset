@@ -87,9 +87,9 @@
 
 
 (defmethod make-sketch :hyper-log-log
-  [colname {:keys [hll-k hll-type datatype]
-            :or {hll-k 14 hll-type 8}}]
-  (let [build-fn #(HllSketch. hll-k
+  [colname {:keys [hll-lgk hll-type datatype]
+            :or {hll-lgk 14 hll-type 8}}]
+  (let [build-fn #(HllSketch. (int hll-lgk)
                               ^TgtHllType (case (long hll-type)
                                             4 TgtHllType/HLL_4
                                             6 TgtHllType/HLL_6
@@ -173,10 +173,15 @@
   * `:algorithm` - defaults to :hyper-log-log.  Further algorithm-specific options
     may be included in the options map.
 
-  Algorithm options:
+  Algorithm specific options:
+
   * [:hyper-log-log](https://datasketches.apache.org/docs/HLL/HLL.html)
-        * `:hll-k` - defaults to 14.
-        * `:hll-type` - One of #{4,6,8}; defaults to 8.
+        * `:hll-lgk` - defaults to 12, this is log-base2 of k, so k = 4096. lgK can be from 4 to 21.
+        * `:hll-type` - One of #{4,6,8}, defaults to 8.  The HLL_4, HLL_6 and HLL_8 represent different
+            levels of compression of the final HLL array where the 4, 6 and 8 refer to the number
+            of bits each bucket of the HLL array is compressed down to. The HLL_4 is the most
+            compressed but generally slightly slower than the other two, especially during union
+            operations.
   * [:theta](https://datasketches.apache.org/docs/Theta/ThetaSketchFramework.html)"
   ([colname {:keys [algorithm datatype]
              :or {algorithm :hyper-log-log

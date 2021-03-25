@@ -7,7 +7,7 @@
 <p>Algorithms included here are:</p>
 <h3><a href="#set-cardinality" name="set-cardinality"></a>Set Cardinality</h3>
 <ul>
-  <li><a href="https://datasketches.apache.org/api/java/snapshot/apidocs/org/apache/datasketches/hll/HllSketch.html">hyper-log-log</a></li>
+  <li><a href="https://datasketches.apache.org/docs/HLL/HLL.html">hyper-log-log</a></li>
   <li><a href="https://datasketches.apache.org/docs/Theta/ThetaSketchFramework.html">theta</a></li>
 </ul></div></div><div class="public anchor" id="var-set-cardinality"><h3>set-cardinality</h3><div class="usage"><code>(set-cardinality colname {:keys [algorithm datatype], :or {algorithm :hyper-log-log, datatype :float64}, :as options})</code><code>(set-cardinality colname)</code></div><div class="doc"><div class="markdown"><p>Get the probabilistic set cardinality.</p>
 <p>Options:</p>
@@ -15,4 +15,13 @@
   <li><code>:datatype</code> - One of <code>#{:float64 :string}</code>. Unspecified defaults to <code>:float64</code>.</li>
   <li><code>:algorithm</code> - defaults to :hyper-log-log. Further algorithm-specific options  may be included in the options map.</li>
 </ul>
-<p>Algorithm options: * <a href="https://datasketches.apache.org/api/java/snapshot/apidocs/org/apache/datasketches/hll/HllSketch.html">:hyper-log-log</a>  * <code>:hll-k</code> - defaults to 14.  * <code>:hll-type</code> - One of #{4,6,8}; defaults to 8. * <a href="https://datasketches.apache.org/docs/Theta/ThetaSketchFramework.html">:theta</a></p></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/reductions/apache_data_sketch.clj#L167">view source</a></div></div></div></body></html>
+<p>Algorithm specific options:</p>
+<ul>
+  <li><a href="https://datasketches.apache.org/docs/HLL/HLL.html">:hyper-log-log</a>
+    <ul>
+      <li><code>:hll-lgk</code> - defaults to 12, this is log-base2 of k, so k = 4096. lgK can be from 4 to 21.</li>
+      <li><code>:hll-type</code> - One of #{4,6,8}, defaults to 8. The HLL_4, HLL_6 and HLL_8 represent different  levels of compression of the final HLL array where the 4, 6 and 8 refer to the number  of bits each bucket of the HLL array is compressed down to. The HLL_4 is the most  compressed but generally slightly slower than the other two, especially during union  operations.</li>
+    </ul>
+  </li>
+  <li><a href="https://datasketches.apache.org/docs/Theta/ThetaSketchFramework.html">:theta</a></li>
+</ul></div></div><div class="src-link"><a href="https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/reductions/apache_data_sketch.clj#L167">view source</a></div></div></div></body></html>
