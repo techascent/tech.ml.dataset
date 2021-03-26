@@ -13,7 +13,35 @@
 
 ### Quantiles
    * [doubles](https://datasketches.apache.org/api/java/snapshot/apidocs/index.html)
-  "
+
+
+  Example:
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+11:04:44.508 [nREPL-session-e40a19c2-8d41-40a8-8853-abe1293abe20] DEBUG tech.v3.tensor.dimensions.global-to-local - insn custom indexing enabled!
+nil
+user> (require '[tech.v3.dataset.reductions :as ds-reduce])
+nil
+user> (require '[tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch])
+#'user/stocks
+user> (def stocks (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword}))
+  #'user/stocks
+user> (ds-reduce/group-by-column-agg
+       :symbol
+       {:symbol (ds-reduce/first-value :symbol)
+        :price-quantiles (ds-sketch/prob-quantiles :price [0.25 0.5 0.75])
+        :price-cdfs (ds-sketch/prob-cdfs :price [25 50 75])}
+       [stocks stocks stocks])
+:symbol-aggregation [5 3]:
+
+| :symbol |      :price-quantiles |              :price-cdfs |
+|---------|-----------------------|--------------------------|
+|    AAPL | [11.03, 36.81, 105.1] | [0.4065, 0.5528, 0.6423] |
+|     IBM | [77.26, 88.70, 102.4] |   [0.000, 0.000, 0.1382] |
+|    AMZN | [30.12, 41.50, 67.00] | [0.2249, 0.6396, 0.8103] |
+|    MSFT | [21.75, 24.11, 27.34] |   [0.5772, 1.000, 1.000] |
+|    GOOG | [338.5, 421.6, 510.0] |    [0.000, 0.000, 0.000] |
+```"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.dataset.reductions.impl :as ds-reduce-impl])
   (:import [org.apache.datasketches.hll HllSketch TgtHllType]
@@ -226,7 +254,7 @@
   (value [this] sketch))
 
 
-(defn doubles-updater-fn
+(defn- doubles-updater-fn
   [k]
   #(-> (DoublesSketch/builder)
        (.setK (long k))
@@ -234,7 +262,7 @@
        (DoublesUpdateConsumer.)))
 
 
-(deftype DoublesSketchCombiner [colname k finalize-fn]
+(deftype ^:private DoublesSketchCombiner [colname k finalize-fn]
   ds-reduce-impl/PReducerCombiner
   (reducer-combiner-key [this]
     [colname :doubles-sketch k])
