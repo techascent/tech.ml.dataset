@@ -1,4 +1,10 @@
 # Changelog
+
+## 5.11
+ * Many more algorithms exposed and documentation updated for the 
+   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) 
+   namespace.
+
 ## 5.10
  * apache data sketch set-cardinality algorithms hyper-log-log and theta.
 
