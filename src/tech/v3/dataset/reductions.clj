@@ -75,15 +75,15 @@
       (pmath/+ (long lhs) (long rhs)))))
 
 
-(deftype BitmapConsumer [^{:unsynchronized-mutable true
-                           :tag RoaringBitmap} bitmap]
+(deftype BitmapConsumer [^RoaringBitmap bitmap]
   LongConsumer
   (accept [this lval]
     (.add bitmap (unchecked-int lval)))
   Consumers$StagedConsumer
-  (inplaceCombine [this other]
+  (combine [this other]
     (let [^BitmapConsumer other other]
-      (.or bitmap (.bitmap other))))
+      (-> (RoaringBitmap/or bitmap (.bitmap other))
+          (BitmapConsumer.))))
   (value [this]
     bitmap))
 
@@ -105,9 +105,9 @@
   (accept [this objdata]
     (.add data objdata))
   Consumers$StagedConsumer
-  (inplaceCombine [this other]
+  (combine [this other]
     (let [^SetConsumer other other]
-      (.addAll data (.data other))))
+      (.addAll ^HashSet (.clone data) (.data other))))
   (value [this] data))
 
 

@@ -111,8 +111,7 @@
      (reduceReductions [this# lhs# rhs#]
        (let [lhs# (as-staged-consumer lhs#)
              rhs# (as-staged-consumer rhs#)]
-         (.inplaceCombine lhs# rhs#)
-         lhs#))
+         (.combine lhs# rhs#)))
      (reduceReductionList [this# item-list#]
        (if (== 1 (.size item-list#))
          (.get item-list# 0)
