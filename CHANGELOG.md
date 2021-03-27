@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.12
+ * All statistical/reduction summations now use  [Kahan's compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm).  This makes summation
+   much more accurate for very large streams of data.
+ * [Issue 220](https://github.com/techascent/tech.ml.dataset/issues/220) - confusing behavior on dataset creation.  This may result in different
+   behavior than was expected previously when using maps of columns as dataset constructors.
+
 ## 5.11
  * Many more algorithms exposed and documentation updated for the 
    [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) 
