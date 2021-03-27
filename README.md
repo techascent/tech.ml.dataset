@@ -12,7 +12,7 @@
 currently in-memory columnwise databases and we support parsing from file or
 input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
 and sequences of maps** as input sources.  [SQL bindings](https://github.com/techascent/tech.ml.dataset.sql)
-are provided as a separate library. 
+are provided as a separate library.
 
 Data size in memory is [minimized](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37)
 (primitive arrays), datetime types are often converted to an integer representation
@@ -23,13 +23,23 @@ columnwise operations on the dataset are very fast.
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
-Upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We support 
+Upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We support
 copying pathway using the standard api -- data is copied from disk into buffers.  We also
 support a more or less [from-scratch implementation](src/tech/v3/libs/arrow/in_place.clj) of an in-place
 pathway built expressly to enable both datasets that are larger than machine
 RAM and purely for performance on top of the
 ['tech.v3.datatype.mmap'](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/mmap.clj#L16)
 namespace.
+
+
+Large aggregations of potentially out-of-memory datasets are represented by a sequence of datatsets.
+This is consistent with the design of the parquet and arrow data storage systems and aggregation
+operations involving large-scale datasets are efficiently implemented in the
+[tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) namespace.  We have
+started to integrate algorithms from the [Apache Data Sketches](https://datasketches.apache.org/) system in
+the [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) namespace.
+Summations/means in this area are implemented using the
+[Kahan compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm) algorithm.
 
 
 * An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
@@ -293,7 +303,7 @@ https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5
 ### Parquet Support
 
 Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.
-That means we should be able to load most Parquet files.  Failure to load a parquet file quickly and accurately 
+That means we should be able to load most Parquet files.  Failure to load a parquet file quickly and accurately
 with correct missing values is a issue.
 
 
