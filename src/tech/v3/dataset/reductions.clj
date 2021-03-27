@@ -1,10 +1,46 @@
 (ns tech.v3.dataset.reductions
   "Specific high performance reductions intended to be performend over a sequence
-  of datasets.
+  of datasets.  This allows aggregations to be done in situations where the dataset is
+  larger than what will fit in memory on a normal machine.  Due to this fact, summation
+  is implemented using Kahan algorithm and various statistical methods are done in using
+  statistical estimation techniques and thus are prefixed with `prob-` which is short
+  for `probabilistic`.
 
   * `aggregate` - Perform a multi-dataset aggregation. Returns a dataset with row.
   * `group-by-column-agg` - Perform a multi-dataset group-by followed by
-    an aggregation.  Returns a dataset with one row per key."
+    an aggregation.  Returns a dataset with one row per key.
+
+  Examples:
+
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (require '[tech.v3.datatype.datetime :as dtype-dt])
+nil
+user> (def stocks (-> (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword})
+                      (ds/update-column :date #(dtype-dt/datetime->epoch :epoch-days %))))
+#'user/stocks
+user> (require '[tech.v3.dataset.reductions :as ds-reduce])
+nil
+user> (ds-reduce/group-by-column-agg
+       :symbol
+       {:symbol (ds-reduce/first-value :symbol)
+        :price-avg (ds-reduce/mean :price)
+        :price-sum (ds-reduce/sum :price)
+        :price-med (ds-reduce/prob-median :price)}
+       (repeat 3 stocks))
+:symbol-aggregation [5 4]:
+
+| :symbol |   :price-avg | :price-sum |   :price-med |
+|---------|--------------|------------|--------------|
+|     IBM |  91.26121951 |   33675.39 |  88.70468750 |
+|    AAPL |  64.73048780 |   23885.55 |  37.05281250 |
+|    MSFT |  24.73674797 |    9127.86 |  24.07277778 |
+|    AMZN |  47.98707317 |   17707.23 |  41.35142361 |
+|    GOOG | 415.87044118 |   84837.57 | 422.69722222 |
+  ```
+
+    * [zero-one benchmark winner](https://github.com/zero-one-group/geni-performance-benchmark/blob/da4d02e54de25a72214f72c4864ebd3d307520f8/dataset/src/dataset/optimised_by_chris.clj)"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.errors :as errors]
@@ -376,11 +412,11 @@ user> (ds-reduce/group-by-column-agg
    [stocks stocks stocks])
 
   (group-by-column-agg
-       :symbol
-       {:symbol (first-value :symbol)
-        :price-avg (mean :price)
-        :price-sum (sum :price)
-        :price-med (prob-median :price)}
-       [stocks stocks stocks])
+   :symbol
+   {:symbol (first-value :symbol)
+    :price-avg (mean :price)
+    :price-sum (sum :price)
+    :price-med (prob-median :price)}
+   [stocks stocks stocks])
 
   )
