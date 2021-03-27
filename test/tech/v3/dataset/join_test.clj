@@ -13,9 +13,11 @@
   (let [lhs (ds/->dataset {:a (range 10)
                            :b (range 10)})
         rhs (ds/->dataset {:a (->> (range 10)
-                                   (mapcat (partial repeat 2)))
+                                   (mapcat (partial repeat 2))
+                                   (vec))
                            :c (->> (range 10)
-                                   (mapcat (partial repeat 2)))})
+                                   (mapcat (partial repeat 2))
+                                   (vec))})
         {:keys [inner rhs-missing]} (ds-join/hash-join :a lhs rhs)]
     (is (dfn/equals (inner :a) (inner :b)))
     (is (dfn/equals (inner :b) (inner :c)))
@@ -23,9 +25,11 @@
   (let [lhs (ds/->dataset {:a (range 10)
                            :b (range 10)})
         rhs (ds/->dataset {:a (->> (range 15)
-                                   (mapcat (partial repeat 2)))
+                                   (mapcat (partial repeat 2))
+                                   (vec))
                            :c (->> (range 15)
-                                   (mapcat (partial repeat 2)))})
+                                   (mapcat (partial repeat 2))
+                                   (vec))})
         {:keys [inner rhs-missing]} (ds-join/hash-join [:b :c] lhs rhs
                                                        {:rhs-missing? true})]
     (is (dfn/equals (inner :a) (inner :b)))
@@ -34,9 +38,11 @@
   (let [lhs (ds/->dataset {:a (range 15)
                            :b (range 15)})
         rhs (ds/->dataset {:a (->> (range 10)
-                                   (mapcat (partial repeat 2)))
+                                   (mapcat (partial repeat 2))
+                                   (vec))
                            :c (->> (range 10)
-                                   (mapcat (partial repeat 2)))})
+                                   (mapcat (partial repeat 2))
+                                   (vec))})
         {:keys [inner lhs-missing]} (ds-join/hash-join :a lhs rhs
                                                        {:lhs-missing? true})]
     (is (dfn/equals (inner :a) (inner :b)))
