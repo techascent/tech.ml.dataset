@@ -6,8 +6,9 @@
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.parallel.for :as pfor]
+            [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.dataset.impl.dataset :as ds-impl])
-  (:import [java.util HashMap Map]
+  (:import [java.util HashMap Map Map$Entry]
            [java.util.function Function]))
 
 
@@ -47,20 +48,38 @@
 
 (defn column-map->dataset
   ([options column-map]
-   (let [parse-context (parse-context/options->parser-fn options :object)]
+   (let [parse-context (parse-context/options->parser-fn options :object)
+         n-rows
+         (->> (vals column-map)
+              (reduce (fn [n-rows next-col]
+                        (if (= :reader (argtypes/arg-type next-col))
+                          (max (long n-rows) (dtype/ecount next-col))
+                          n-rows))
+                      1)
+              (long))]
      (->> column-map
-          (pmap (fn [[colname coldata]]
-                  ;;Fastpath for non-object already-niceified data
-                  (if (and (dtype/reader? coldata)
-                           (not= :object (dtype/elemwise-datatype coldata)))
-                    {:name colname
-                     :data coldata}
-                    (let [parser (parse-context colname)]
-                      (pfor/consume!
-                       #(column-parsers/add-value! parser (first %) (second %))
-                       (map-indexed vector coldata))
-                      (assoc (column-parsers/finalize! parser (dtype/ecount parser))
-                             :name colname)))))
+          (pmap
+           (fn [^Map$Entry mapentry]
+             (let [colname (.getKey mapentry)
+                   coldata (.getValue mapentry)
+                   argtype (argtypes/arg-type coldata)
+                   coldata (if (= argtype :iterable)
+                             (take n-rows coldata)
+                             coldata)]
+               (if (= :scalar argtype)
+                 {:name colname
+                  :data (dtype/const-reader coldata n-rows)}
+                 (if (and (= :reader argtype)
+                          (not= :object (dtype/elemwise-datatype coldata)))
+                   {:name colname
+                    :data coldata}
+                   ;;Actually attempt to parse the data
+                   (let [parser (parse-context colname)]
+                     (pfor/consume!
+                      #(column-parsers/add-value! parser (first %) (second %))
+                      (map-indexed vector coldata))
+                     (assoc (column-parsers/finalize! parser (dtype/ecount parser))
+                            :name colname)))))))
           (ds-impl/new-dataset options))))
   ([column-map]
    (column-map->dataset nil column-map)))
