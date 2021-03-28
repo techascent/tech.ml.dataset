@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.06-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.13-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "6.12"]
+                 [cnuernber/dtype-next             "7.01"]
                  [techascent/tech.io               "4.03"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -28,6 +28,10 @@
                  [org.slf4j/slf4j-api "1.7.30"]
                  ;;Many things require guava, so we may as well have latest version
                  [com.google.guava/guava "28.0-jre"]
+
+                 ;;High performance probabilistic stats
+                 [com.techascent/t-digest "4.0-pre-release-1"]
+                 [org.apache.datasketches/datasketches-java "2.0.0"]
 
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
@@ -83,6 +87,7 @@
                                    tech.v3.dataset.neanderthal
                                    tech.v3.dataset.categorical
                                    tech.v3.dataset.reductions
+                                   tech.v3.dataset.reductions.apache-data-sketch
                                    tech.v3.dataset.column-filters
                                    tech.v3.dataset.io.datetime
                                    tech.v3.dataset.io.univocity

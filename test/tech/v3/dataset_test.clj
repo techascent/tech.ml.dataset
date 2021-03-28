@@ -1016,6 +1016,27 @@
                                  (ds-col/to-double-array (data :b)))))))
 
 
+(deftest write-with-nil-name
+  (let [data (-> (ds/->dataset [{:a 1.0 :b 2.0}
+                                {:a 3.0}])
+                 (vary-meta assoc :name nil))]
+    (try
+      (ds/write! data "test/data/nil-name.csv")
+      (finally
+        (.delete (java.io.File. "test/data/nil-name.csv"))))))
+
+
+(deftest create-dataset-scalars
+  (let [data (ds/->dataset {:a [1 2 3 4]
+                            :b "hey"
+                            :c (range)
+                            :d 1})]
+    (is (= ["hey" "hey" "hey" "hey"]
+           (vec (data :b))))
+    (is (= [:int64 :string :int64 :int64]
+           (mapv (comp :datatype meta) (vals data))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

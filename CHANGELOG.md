@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.12
+ * All statistical/reduction summations now use  [Kahan's compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm).  This makes summation
+   much more accurate for very large streams of data.
+ * [Issue 220](https://github.com/techascent/tech.ml.dataset/issues/220) - confusing behavior on dataset creation.  This may result in different
+   behavior than was expected previously when using maps of columns as dataset constructors.
+
+## 5.11
+ * Many more algorithms exposed and documentation updated for the 
+   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) 
+   namespace.
+
+## 5.10
+ * apache data sketch set-cardinality algorithms hyper-log-log and theta.
+
+## 5.07
+ * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) 
+  namespace now includes direct aggregations
+  including group-by aggregations and also t-dunnings' t-digest algorithm for
+  probabilistic cdf and quantile estimation.
+  
+## 5.06 
+ * Bugs introduced by t-digest version 3.2.  Ignore this release.
+
 ## 5.05
  * Ragged per-row arrays are partially support for parquet.
 

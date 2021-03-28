@@ -5,7 +5,8 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers])
-  (:import [java.io InputStream File]))
+  (:import [java.io InputStream File]
+           [java.util Map]))
 
 
 (defn str->file-info
@@ -202,11 +203,11 @@
                                   options)
                            options)]
              (data->dataset dataset options))
-           (map? dataset)
+           (instance? Map dataset)
            (parse-mapseq-colmap/column-map->dataset options dataset)
            ;;Not everything has a conversion to seq.
-           (map? (try (first (seq dataset))
-                      (catch Throwable e nil)))
+           (instance? Map (try (first (seq dataset))
+                               (catch Throwable e nil)))
            (parse-mapseq-colmap/mapseq->dataset options dataset)
            (nil? (seq dataset))
            (ds-impl/new-dataset options nil))]
@@ -253,4 +254,3 @@ Options:
      (dataset->data! dataset output-path options)))
   ([dataset output-path]
    (write! dataset output-path nil)))
-

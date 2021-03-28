@@ -1,10 +1,46 @@
 (ns tech.v3.dataset.reductions
   "Specific high performance reductions intended to be performend over a sequence
-  of datasets.
+  of datasets.  This allows aggregations to be done in situations where the dataset is
+  larger than what will fit in memory on a normal machine.  Due to this fact, summation
+  is implemented using Kahan algorithm and various statistical methods are done in using
+  statistical estimation techniques and thus are prefixed with `prob-` which is short
+  for `probabilistic`.
 
-  Currently there is one major reduction, `group-by-column-agg` which does
-  a group-by operation followed by a user-defined aggregation
-  into a new dataset."
+  * `aggregate` - Perform a multi-dataset aggregation. Returns a dataset with row.
+  * `group-by-column-agg` - Perform a multi-dataset group-by followed by
+    an aggregation.  Returns a dataset with one row per key.
+
+  Examples:
+
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (require '[tech.v3.datatype.datetime :as dtype-dt])
+nil
+user> (def stocks (-> (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword})
+                      (ds/update-column :date #(dtype-dt/datetime->epoch :epoch-days %))))
+#'user/stocks
+user> (require '[tech.v3.dataset.reductions :as ds-reduce])
+nil
+user> (ds-reduce/group-by-column-agg
+       :symbol
+       {:symbol (ds-reduce/first-value :symbol)
+        :price-avg (ds-reduce/mean :price)
+        :price-sum (ds-reduce/sum :price)
+        :price-med (ds-reduce/prob-median :price)}
+       (repeat 3 stocks))
+:symbol-aggregation [5 4]:
+
+| :symbol |   :price-avg | :price-sum |   :price-med |
+|---------|--------------|------------|--------------|
+|     IBM |  91.26121951 |   33675.39 |  88.70468750 |
+|    AAPL |  64.73048780 |   23885.55 |  37.05281250 |
+|    MSFT |  24.73674797 |    9127.86 |  24.07277778 |
+|    AMZN |  47.98707317 |   17707.23 |  41.35142361 |
+|    GOOG | 415.87044118 |   84837.57 | 422.69722222 |
+  ```
+
+    * [zero-one benchmark winner](https://github.com/zero-one-group/geni-performance-benchmark/blob/da4d02e54de25a72214f72c4864ebd3d307520f8/dataset/src/dataset/optimised_by_chris.clj)"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.errors :as errors]
@@ -15,11 +51,12 @@
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.parallel.for :as parallel-for]
             [primitive-math :as pmath])
   (:import [tech.v3.datatype IndexReduction Buffer]
            [java.util Map Map$Entry HashMap List Set HashSet ArrayList]
-           [java.util.concurrent ConcurrentHashMap]
+           [java.util.concurrent ConcurrentHashMap ArrayBlockingQueue]
            [java.util.function BiFunction BiConsumer Function DoubleConsumer
             LongConsumer Consumer]
            [java.util.stream Stream]
@@ -29,127 +66,13 @@
            [tech.v3.datatype DoubleConsumers$Sum DoubleConsumers$MinMaxSum]
            [it.unimi.dsi.fastutil.ints Int2ObjectMap
             Int2ObjectOpenHashMap]
-           [clojure.lang IFn])
+           [clojure.lang IFn]
+           [com.tdunning.math.stats TDigest])
   (:refer-clojure :exclude [distinct]))
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
-
-
-(defn ^:no-doc group-by-column-aggregate-impl
-  "Perform a group by over a sequence of datasets where the reducer is handed each index
-  and the context is stored in a map.  The reduction in this case is unordered so your
-  indexes will arrive out of order.  The index-reductions's prepare-batch method will be
-  called once with each dataset before iterating over that dataset's items.
-
-  There are three possible return value types for this function.  Called with no options
-  tuples of key to finalized value will be returned via a parallel java stream.  There is
-  an option to pass in your own consumer so you your function will get called for every
-  k,v tuple and finally there is an option to get the unfinalized ConcurrentHashMap.
-
-  Options:
-
-  * `:finalize-type` - One of three options, defaults to `:stream`.
-       * `:stream` - The finalized results will be returned in the form of k,v tuples in a
-          `java.util.stream.Stream`.
-       * An instant of `clojure.lang.IFn` - This function, which must accept 2 arguments,
-         will be called on each k,v pair and no value will be returned.
-       * `:skip` - The entire java.util.ConcurrentHashMap will be returned with the value
-         in an unfinalized state.  It will be up to the caller to call the reducer's
-         finalize method on all the values.
-
-  * `:map-initial-capacity` - initial capacity -- this can have a big effect on
-    overall algorithm speed according to the
-    [documentation](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html)."
-  ([column-name
-    ^IndexReduction reducer
-    {:keys [finalize-type
-            map-initial-capacity]
-     :or {map-initial-capacity 100000
-          finalize-type :stream}}
-    ds-seq]
-   (let [reduction (ConcurrentHashMap. (int map-initial-capacity))]
-     (doseq [dataset ds-seq]
-       (let [batch-data (.prepareBatch reducer dataset)]
-         (dtype-reductions/unordered-group-by-reduce
-          reducer batch-data (ds-base/column dataset column-name) reduction)))
-     (cond
-       (= :stream finalize-type)
-       (-> (.entrySet reduction)
-           (.parallelStream)
-           (.map (reify Function
-                   (apply [this v]
-                     (let [v ^Map$Entry v]
-                       [(.getKey v)
-                        (.finalize reducer (.getValue v))])))))
-       (= :skip finalize-type)
-       reduction
-       (instance? IFn finalize-type)
-       (.forEach
-        reduction
-        1
-        (reify BiConsumer
-          (accept [this k v]
-            (finalize-type k (.finalize reducer v)))))
-       :else
-       (errors/throwf "Unrecognized finalize-type: %s" finalize-type))))
-  ([column-name ^IndexReduction reducer ds-seq]
-   (group-by-column-aggregate-impl column-name reducer nil ds-seq)))
-
-
-(defn stream->array
-  "Convert a java stream into an object array."
-  ^objects [^Stream data]
-  (.toArray data))
-
-
-(defn stream->vec
-  "Convert a java stream into a persistent vector."
-  ^List [^Stream data]
-  (-> (.toArray data)
-      vec))
-
-
-(defn- as-double-consumer ^DoubleConsumer [item] item)
-(defn- as-long-consumer ^LongConsumer [item] item)
-(defn- as-consumer ^Consumer [item] item)
-(defn- as-buffer ^Buffer [item] item)
-(defn- as-staged-consumer ^Consumers$StagedConsumer [item] item)
-(defn- as-list ^List [item] item)
-
-
-(defmacro ^:private typed-accept
-  [datatype consumer buffer idx]
-  (case datatype
-    :float64 `(.accept (as-double-consumer ~consumer)
-                       (.readDouble (as-buffer ~buffer) ~idx))
-    :int64 `(.accept (as-long-consumer ~consumer)
-                     (.readLong (as-buffer ~buffer) ~idx))
-    `(.accept (as-consumer ~consumer)
-              (.readObject (as-buffer ~buffer) ~idx))))
-
-
-
-(defmacro ^:private make-reducer
-  [datatype colname staged-consumer-constructor-fn finalize-fn]
-  `(reify IndexReduction
-     (prepareBatch [this# ds#]
-       (dtype/->reader (ds-base/column ds# ~colname) ~datatype))
-     (reduceIndex [this# reader# ctx# idx#]
-       (let [ctx# (if ctx#
-                    ctx#
-                    (~staged-consumer-constructor-fn))]
-         (typed-accept ~datatype ctx# reader# idx#)
-         ctx#))
-     (reduceReductions [this# lhs# rhs#]
-       (let [lhs# (as-staged-consumer lhs#)
-             rhs# (as-staged-consumer rhs#)]
-         (.inplaceCombine lhs# rhs#)
-         lhs#))
-     (finalize [this# lhs#]
-       (~finalize-fn
-        (.value (as-staged-consumer lhs#))))))
 
 
 (defn first-value
@@ -166,7 +89,7 @@
 (defn sum
   "Create a double consumer which will sum the values."
   [colname]
-  (make-reducer :float64 colname
+  (ds-reduce-impl/staged-consumer-reducer :float64 colname
                 #(DoubleConsumers$Sum.)
                 #(get % :sum)))
 
@@ -174,9 +97,9 @@
 (defn mean
   "Create a double consumer which will produce a mean of the column."
   [colname]
-  (make-reducer :float64 colname #(DoubleConsumers$Sum.)
-                #(pmath// (double (get % :sum))
-                          (double (get % :n-elems)))))
+  (ds-reduce-impl/staged-consumer-reducer :float64 colname #(DoubleConsumers$Sum.)
+                                          #(pmath// (double (get % :sum))
+                                                    (double (get % :n-elems)))))
 
 (defn row-count
   "Create a simple reducer that returns the number of times reduceIndex was called."
@@ -188,15 +111,15 @@
       (pmath/+ (long lhs) (long rhs)))))
 
 
-(deftype BitmapConsumer [^{:unsynchronized-mutable true
-                           :tag RoaringBitmap} bitmap]
+(deftype BitmapConsumer [^RoaringBitmap bitmap]
   LongConsumer
   (accept [this lval]
     (.add bitmap (unchecked-int lval)))
   Consumers$StagedConsumer
-  (inplaceCombine [this other]
+  (combine [this other]
     (let [^BitmapConsumer other other]
-      (.or bitmap (.bitmap other))))
+      (-> (RoaringBitmap/or bitmap (.bitmap other))
+          (BitmapConsumer.))))
   (value [this]
     bitmap))
 
@@ -205,8 +128,9 @@
   "Get the set of distinct items given you know the space is no larger than int32
   space.  The optional finalizer allows you to post-process the data."
   ([colname finalizer]
-   (make-reducer :int64 colname #(BitmapConsumer. (bitmap/->bitmap))
-                 (or finalizer identity)))
+   (ds-reduce-impl/staged-consumer-reducer
+    :int64 colname #(BitmapConsumer. (bitmap/->bitmap))
+    (or finalizer identity)))
   ([colname]
    (distinct-int32 colname nil)))
 
@@ -217,17 +141,18 @@
   (accept [this objdata]
     (.add data objdata))
   Consumers$StagedConsumer
-  (inplaceCombine [this other]
+  (combine [this other]
     (let [^SetConsumer other other]
-      (.addAll data (.data other))))
+      (.addAll ^HashSet (.clone data) (.data other))))
   (value [this] data))
 
 
 (defn distinct
   "Create a reducer that will return a "
   ([colname finalizer]
-   (make-reducer :object colname #(SetConsumer. (HashSet.))
-                 (or finalizer identity)))
+   (ds-reduce-impl/staged-consumer-reducer
+    :object colname #(SetConsumer. (HashSet.))
+    (or finalizer identity)))
   ([colname]
    (distinct colname nil)))
 
@@ -241,43 +166,101 @@
    (count-distinct colname :object)))
 
 
-(defn- aggregate-reducer
-  "Create a reducer that aggregates to several other reducers.  Reducers are provided in a map
-  of reducer-name->reducer and the result is a map of reducer-name -> finalized reducer value."
-  ^IndexReduction [reducer-seq]
-  (let [reducer-seq (object-array reducer-seq)
-        n-reducers (alength reducer-seq)]
-    (reify IndexReduction
-      (prepareBatch [this dataset]
-        (object-array (map #(.prepareBatch ^IndexReduction % dataset) reducer-seq)))
-      (reduceIndex [this ds-ctx obj-ctx idx]
-        (let [^objects ds-ctx ds-ctx
-              ^objects obj-ctx (if obj-ctx
-                                 obj-ctx
-                                 (object-array n-reducers))]
-          (dotimes [r-idx n-reducers]
-            (aset obj-ctx r-idx
-                  (.reduceIndex ^IndexReduction (aget reducer-seq r-idx)
-                                (aget ds-ctx r-idx)
-                                (aget obj-ctx r-idx)
-                                idx)))
-          obj-ctx))
-      (reduceReductions [this lhs-ctx rhs-ctx]
-        (let [^objects lhs-ctx lhs-ctx
-              ^objects rhs-ctx rhs-ctx]
-          (dotimes [r-idx n-reducers]
-            (aset lhs-ctx r-idx
-                  (.reduceReductions ^IndexReduction (aget reducer-seq r-idx)
-                                     (aget lhs-ctx r-idx)
-                                     (aget rhs-ctx r-idx))))
-          lhs-ctx))
-      (finalize [this ctx]
-        (let [^objects ctx ctx]
-          (dotimes [idx (alength ctx)]
-            (let [^IndexReduction reducer (aget reducer-seq idx)
-                  fin-val (.finalize ^IndexReduction reducer (aget ctx idx))]
-              (aset ctx idx fin-val)))
-          ctx)))))
+(defn- base-tdigest-reducer
+  [colname compression]
+  (reify
+    IndexReduction
+    (prepareBatch [this dataset]
+      (dtype/->buffer (dataset colname)))
+    (reduceIndex [this ds-ctx obj-ctx idx]
+      (let [^Buffer ds-ctx ds-ctx
+            ^TDigest ctx (or obj-ctx (TDigest/createMergingDigest compression))]
+        (.add ctx (.readDouble ds-ctx idx))
+        ctx))
+    (reduceReductions [this lhs-ctx rhs-ctx]
+      (.add ^TDigest lhs-ctx (java.util.Collections/singletonList rhs-ctx))
+      lhs-ctx)
+    (reduceReductionList [this list-data]
+      (let [^TDigest digest (.get list-data 0)
+            ^List rest-data (dtype/sub-buffer list-data 1)]
+        (.add ^TDigest digest rest-data)
+        digest))
+    (finalize [this ctx]
+      ctx)))
+
+
+(deftype ^:private TDigestReducer
+    [colname
+     value-paths
+     compression
+     final-reduce-fn]
+  ds-reduce-impl/PReducerCombiner
+  (reducer-combiner-key [this]
+    [colname :tdigest compression])
+  (combine-reducers [reducer _combiner-key]
+    (base-tdigest-reducer colname compression))
+  (finalize-combined-reducer [this ctx]
+    (let [ctx ^TDigest ctx]
+      (final-reduce-fn (mapv (fn [path]
+                               (case (first path)
+                                 :cdf (.cdf ctx (double (second path)))
+                                 :quantile (.quantile ctx (double (second path)))))
+                             value-paths)))))
+
+
+(defn prob-cdf
+  "Probabilistic CDF using using tdunning/TDigest. Returns the fraction of all
+  points added which are `<= cdf`.
+
+  * `colname` - Column to run algorithm
+  * `cdf` - cdf
+  * `compression` - The compression parameter.  100 is a common value for normal uses.
+  1000 is extremely large. The number of centroids retained will be a smallish (usually
+  less than 10) multiple of this number."
+
+  ([colname cdf compression]
+   (TDigestReducer. colname [[:cdf (double cdf)]] compression first))
+  ([colname cdf]
+   (prob-cdf colname cdf 100)))
+
+
+(defn prob-quantile
+  "Probabilistic quantile using tdunning/TDigest. Returns an estimate of the cutoff
+   such that a specified fraction of the data added to this TDigest would be less
+   than or equal to the cutoff.
+
+  * `colname` - Column to run algorithm
+  * `quantile` - Specified fraction from 0.0-1.0.  0.5 returns the median.
+  * `compression` - The compression parameter.  100 is a common value for normal uses.
+  1000 is extremely large. The number of centroids retained will be a smallish (usually
+  less than 10) multiple of this number."
+  ([colname quantile compression]
+   (TDigestReducer. colname [[:quantile (double quantile)]] compression first))
+  ([colname quantile]
+   (prob-quantile colname quantile 100)))
+
+
+(defn prob-median
+  "Probabilistic median using Use tdunning/TDigest.  See `prob-quartile`."
+  ([colname compression]
+   (prob-quantile colname 0.5 compression))
+  ([colname] (prob-median colname 100)))
+
+
+(defn prob-interquartile-range
+    "Probabilistic interquartile range using tdunning/TDigest.  The interquartile
+  range is defined as `(- (quartile 0.75) (quartile 0.25)).`
+
+  See `prob-quartile`.
+  "
+  ([colname compression]
+   (TDigestReducer. colname [[:quantile 0.75]
+                             [:quantile 0.25]]
+                    compression (fn [[third-q first-q]]
+                                  (- (double third-q)
+                                     (double first-q)))))
+  ([colname]
+   (prob-interquartile-range colname 100)))
 
 
 (defn group-by-column-agg
@@ -322,10 +305,9 @@ user> (ds-reduce/group-by-column-agg
          results (ArrayList. 100000)
          cnames (vec (keys agg-map))
          ;;group by using this reducer followed by this consumer fn.
-         _ (group-by-column-aggregate-impl
+         _ (ds-reduce-impl/group-by-column-aggregate-impl
             colname
-            (aggregate-reducer (vals agg-map))
-            ;;This is recommended but I didn't see a large result by setting it.
+            (ds-reduce-impl/aggregate-reducer (vals agg-map))
             (assoc options
                    :finalize-type
                    (fn [_column-value reduce-data]
@@ -369,6 +351,50 @@ user> (ds-reduce/group-by-column-agg
    (group-by-column-agg colname agg-map nil ds-seq)))
 
 
+(defn aggregate
+  "Create a set of aggregate statistics over a sequence of datasets.  Returns a
+  dataset with a single row and uses the same interface group-by-column-agg.
+
+  Example:
+
+```clojure
+  (ds-reduce/aggregate
+   {:n-elems (ds-reduce/row-count)
+    :price-avg (ds-reduce/mean :price)
+    :price-sum (ds-reduce/sum :price)
+    :price-med (ds-reduce/prob-median :price)
+    :price-iqr (ds-reduce/prob-interquartile-range :price)
+    :n-dates (ds-reduce/count-distinct :date :int32)}
+   ds-seq])
+```"
+  ([agg-map options ds-seq]
+   (let [cnames (vec (keys agg-map))
+         reducer (ds-reduce-impl/aggregate-reducer (vals agg-map))
+         ctx-map (ConcurrentHashMap.)]
+     (doseq [ds ds-seq]
+       (let [batch-data (.prepareBatch reducer ds)]
+         (parallel-for/indexed-map-reduce
+          (ds-base/row-count ds)
+          (fn [^long start-idx ^long group-len]
+            (let [tid (.getId (Thread/currentThread))
+                  end-idx (+ start-idx group-len)]
+              (loop [idx start-idx
+                     ctx (.get ctx-map tid)]
+                (if (< idx end-idx)
+                  (recur (unchecked-inc idx)
+                         (.reduceIndex reducer batch-data ctx idx))
+                  (.put ctx-map tid ctx))))))))
+     (ds-io/->dataset [(->> (.values ctx-map)
+                            (vec)
+                            (.reduceReductionList reducer)
+                            (.finalize reducer)
+                            (map vector cnames)
+                            (into {}))]
+                      options)))
+  ([agg-map ds-seq]
+   (aggregate agg-map nil ds-seq)))
+
+
 (comment
   (require '[tech.v3.dataset :as ds])
   (require '[tech.v3.datatype.datetime :as dtype-dt])
@@ -376,14 +402,21 @@ user> (ds-reduce/group-by-column-agg
                   (ds/update-column :date #(dtype-dt/datetime->epoch :epoch-days %))))
 
 
-  (group-by-column-agg
-   :symbol
+  (aggregate
    {:n-elems (row-count)
     :price-avg (mean :price)
     :price-sum (sum :price)
-    :symbol (first-value :symbol)
+    :price-med (prob-median :price)
+    :price-iqr (prob-interquartile-range :price)
     :n-dates (count-distinct :date :int32)}
    [stocks stocks stocks])
 
+  (group-by-column-agg
+   :symbol
+   {:symbol (first-value :symbol)
+    :price-avg (mean :price)
+    :price-sum (sum :price)
+    :price-med (prob-median :price)}
+   [stocks stocks stocks])
 
   )
