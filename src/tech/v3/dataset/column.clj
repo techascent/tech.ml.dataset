@@ -2,6 +2,7 @@
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
+            [tech.v3.dataset.impl.column-index-structure :as col-index-structure]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
@@ -190,3 +191,10 @@ Implementations should check their metadata before doing calculations."
                        (apply dtype/emap map-fn res-dtype args)
                        nil
                        (reduce dtype-proto/set-or (map col-proto/missing args))))
+
+
+(defn slice-index
+  ([index-structure to from]
+   (slice-index index-structure to true from true))
+  ([index-structure to to-inclusive? from from-inclusive?]
+   (col-index-structure/slice-index index-structure to to-inclusive? from from-inclusive?)))
