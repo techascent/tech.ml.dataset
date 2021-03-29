@@ -48,7 +48,7 @@
   (let [label-columns (or label-columns (inference-target-column-names dataset))]
     (errors/when-not-errorf
      (= 1 (count label-columns))
-     "Multiple label columns found: %s" label-columns)
+     "Multiple or zero label columns found: %s" label-columns)
     (-> (ds-base/column dataset (first label-columns))
         (meta)
         (get-in [:categorical-map :lookup-table]))))
