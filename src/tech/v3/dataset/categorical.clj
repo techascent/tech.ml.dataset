@@ -55,7 +55,12 @@
 (defn fit-categorical-map
   "Given a column, map it into an numeric space via a discrete map of values
   to integers.  This fits the categorical transformation onto the column and returns
-  the transformation."
+  the transformation. 
+  
+  If `table-args` is not given, the distinct column values will be mapped into 0..x without any specific order.
+  
+  'table-args` allows to specify the precise mapping as a sequence of pairs of [val idx] or as a sorted seq of values.
+"
   ^CategoricalMap [dataset colname & [table-args res-dtype]]
   (create-categorical-map
    (reduce (fn [categorical-map col-val]
