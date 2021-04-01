@@ -59,9 +59,9 @@
                                     :column-name (key-fn colname)
                                     :column-parser (parse-context colname)})))
         col-idx->parser (fn [col-idx]
-                          (:column-parser
-                           (.computeIfAbsent parsers (long col-idx)
-                                             colparser-compute-fn)))]
+                          ((.computeIfAbsent parsers (long col-idx)
+                                             colparser-compute-fn)
+                           :column-parser))]
     {:parsers parsers
      :col-idx->parser col-idx->parser}))
 
