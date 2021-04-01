@@ -38,6 +38,7 @@
 (def parse-failure :tech.ml.dataset.parse/parse-failure)
 (def missing :tech.ml.dataset.parse/missing)
 
+
 (defn make-safe-parse-fn
   [parser-fn]
   (fn [str-val]
@@ -46,13 +47,6 @@
       (catch Throwable e
         parse-failure))))
 
-(defn- packed-parser
-  [datatype str-parse-fn]
-  (make-safe-parse-fn (packing/wrap-with-packing
-                       datatype
-                       #(if (= datatype (dtype/elemwise-datatype %))
-                          %
-                          (str-parse-fn %)))))
 
 (def default-coercers
   (merge
@@ -142,24 +136,13 @@
 (defn add-missing-values!
   [^PrimitiveList container ^RoaringBitmap missing
    missing-value ^long idx]
-  (let [n-elems (.lsize container)
-        simple-dtype (casting/simple-operation-space
-                      (dtype/elemwise-datatype missing-value))]
-    (loop [n-elems n-elems]
-      (when (< n-elems idx)
-        (case simple-dtype
-          :bool
-          (.addBoolean container false)
-          :boolean
-          (.addBoolean container false)
-          :int64
-          (.addLong container (long missing-value))
-          :float64
-          (.addDouble container (double missing-value))
-          :object
-          (.addObject container missing-value))
-        (.add missing n-elems)
-        (recur (unchecked-inc n-elems))))))
+  (let [n-elems (.lsize container)]
+    (when (< n-elems idx)
+      (loop [n-elems n-elems]
+        (when (< n-elems idx)
+          (.addObject container missing-value)
+          (.add missing n-elems)
+          (recur (unchecked-inc n-elems)))))))
 
 
 (defn finalize-parser-data!
@@ -178,10 +161,13 @@
 
 (defn- missing-value?
   [value]
-  (or (nil? value)
-      (.equals "" value)
-      (= value :tech.ml.dataset.parse/missing)
-      (and (string? value) (.equalsIgnoreCase ^String value "na"))))
+  ;;fastpath for numbers
+  (if (instance? Number value)
+    false
+    (or (nil? value)
+        (.equals "" value)
+        (identical? value :tech.ml.dataset.parse/missing)
+        (and (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
 (defn- not-missing?
@@ -335,14 +321,14 @@
       (let [idx (long idx)]
         (let [value-dtype (dtype/elemwise-datatype value)]
           (cond
-            (= value-dtype container-dtype)
+            (identical? value-dtype container-dtype)
             (do
               (add-missing-values! container missing missing-value idx)
               (.add container value))
             parse-fn
             (let [parsed-value (parse-fn value)]
               (cond
-                (= parsed-value parse-failure)
+                (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
                 (let [start-idx (argops/index-of (mapv first promotion-list) container-dtype)
                       n-elems (.size promotion-list)
                       next-idx (if (== start-idx -1)

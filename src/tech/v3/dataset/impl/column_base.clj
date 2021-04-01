@@ -39,8 +39,9 @@
 
 (defn datatype->missing-value
   [dtype]
-  (let [dtype (if (packing/packed-datatype? dtype)
-                dtype
+  (let [packed? (packing/packed-datatype? dtype)
+        dtype (if packed?
+                (packing/unpack-datatype dtype)
                 (casting/un-alias-datatype dtype))]
     (get dtype->missing-val-map dtype
          (when (casting/numeric-type? dtype)
