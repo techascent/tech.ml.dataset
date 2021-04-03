@@ -3,7 +3,7 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [java.util.function Function]
-           [java.util HashMap ArrayList Arrays]
+           [java.util HashMap ArrayList Arrays Map]
            [tech.v3.datatype ObjectBuffer ArrayHelpers]))
 
 
@@ -86,21 +86,19 @@
                               (let [parser (.apply colparser-compute-fn col-idx)]
                                 (.writeObject parsers col-idx parser)
                                 (parser :column-parser)))))]
-    {:parsers (->> parsers
-                   (map-indexed (fn [idx item]
-                                  (when item
-                                    [idx item])))
-                   (remove nil?)
-                   (into {}))
+    {:parsers parsers
      :col-idx->parser col-idx->parser}))
 
 
 (defn parsers->dataset
   ([options parsers row-count]
-   (let [all-parsers (vals parsers)
+   (let [parsers (if (instance? Map parsers)
+                   (vals parsers)
+                   parsers)
+         all-parsers (->> parsers
+                          (remove nil?))
          row-count (long row-count)]
      (->> all-parsers
-          (sort-by :column-idx)
           (mapv (fn [{:keys [column-name column-parser]}]
                   (assoc (column-parsers/finalize! column-parser row-count)
                          :name column-name)))
@@ -108,4 +106,4 @@
   ([options parsers]
    (parsers->dataset options parsers
                      (apply max 0 (map (comp dtype/ecount :column-parser)
-                                       (vals parsers))))))
+                                       parsers)))))
