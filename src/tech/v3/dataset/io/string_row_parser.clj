@@ -26,16 +26,15 @@
                                      initial-row
                                      []))
         n-header-cols (count header-row)
-        row-seq (if header-row?
-                  (rest row-seq)
-                  row-seq)
         {:keys [parsers col-idx->parser]}
         (parse-context/options->col-idx-parse-context
          options :string (fn [^long col-idx]
                            (when (< col-idx n-header-cols)
                              (header-row col-idx))))]
     ;;side effecting loop
-    (->> row-seq
+    (->> (if header-row?
+           (rest row-seq)
+           row-seq)
          (map-indexed vector)
          (pfor/consume!
           (fn [[^long row-idx ^"[Ljava.lang.String;" row]]

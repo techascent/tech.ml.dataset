@@ -3,7 +3,11 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [java.util.function Function]
-           [java.util HashMap]))
+           [java.util HashMap ArrayList Arrays]
+           [tech.v3.datatype ObjectBuffer ArrayHelpers]))
+
+
+(set! *warn-on-reflection* true)
 
 
 (defn options->parser-fn
@@ -41,6 +45,23 @@
     rd))
 
 
+(deftype ObjectArrayList [^{:unsynchronized-mutable true
+                            :tag 'objects} data]
+  ObjectBuffer
+  (lsize [this] (alength ^objects data))
+  (writeObject [this idx value]
+    (when (>= idx (alength ^objects data))
+      (let [old-len (alength ^objects data)
+            new-len (* 2 idx)
+            new-data (object-array new-len)]
+        (System/arraycopy data 0 new-data 0 old-len)
+        (set! data new-data)))
+    (ArrayHelpers/aset ^objects data idx value))
+  (readObject [this idx]
+    (when (< idx (alength ^objects data))
+      (aget ^objects data idx))))
+
+
 (defn options->col-idx-parse-context
   "Given an option map and a parse type, return a map of parsers
   and a function to get a parser from a given column idx.
@@ -49,7 +70,7 @@
    :col-idx->parser - given a column idx, get a parser.  Mutates parsers."
   [options parse-type col-idx->colname]
   (let [parse-context (options->parser-fn options parse-type)
-        parsers (HashMap.)
+        parsers (ObjectArrayList. (object-array 16))
         key-fn (:key-fn options identity)
         colparser-compute-fn (reify Function
                                (apply [this col-idx]
@@ -59,10 +80,18 @@
                                     :column-name (key-fn colname)
                                     :column-parser (parse-context colname)})))
         col-idx->parser (fn [col-idx]
-                          ((.computeIfAbsent parsers (long col-idx)
-                                             colparser-compute-fn)
-                           :column-parser))]
-    {:parsers parsers
+                          (let [col-idx (long col-idx)]
+                            (if-let [parser (.readObject parsers col-idx)]
+                              (parser :column-parser)
+                              (let [parser (.apply colparser-compute-fn col-idx)]
+                                (.writeObject parsers col-idx parser)
+                                (parser :column-parser)))))]
+    {:parsers (->> parsers
+                   (map-indexed (fn [idx item]
+                                  (when item
+                                    [idx item])))
+                   (remove nil?)
+                   (into {}))
      :col-idx->parser col-idx->parser}))
 
 
