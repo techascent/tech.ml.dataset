@@ -47,18 +47,22 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.sampling :as dt-sample]
+            [tech.v3.datatype.statistics :as dt-stats]
+            [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.io :as ds-io]
+            [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.parallel.for :as parallel-for]
             [primitive-math :as pmath])
-  (:import [tech.v3.datatype IndexReduction Buffer]
+  (:import [tech.v3.datatype IndexReduction Buffer PrimitiveList]
            [java.util Map Map$Entry HashMap List Set HashSet ArrayList]
            [java.util.concurrent ConcurrentHashMap ArrayBlockingQueue]
            [java.util.function BiFunction BiConsumer Function DoubleConsumer
-            LongConsumer Consumer]
+            LongConsumer Consumer LongSupplier]
            [java.util.stream Stream]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype LongReader BooleanReader ObjectReader DoubleReader
@@ -263,6 +267,31 @@ user> (ds-reduce/group-by-column-agg
    (prob-interquartile-range colname 100)))
 
 
+(defn reservoir-desc-stat
+  "Calculate a descriptive statistic using reservoir sampling.  A list of statistic
+  names are found in `tech.v3.datatype.statistics/all-descriptive-stats-names`.
+  Options are options used in
+  [double-reservoir](https://cnuernber.github.io/dtype-next/tech.v3.datatype.sampling.html#var-double-reservoir).
+
+  Note that this method will *not* convert datetime objects to milliseconds for you as
+  in descriptive-stats."
+  ([colname reservoir-size stat-name options]
+   (reify
+    ds-reduce-impl/PReducerCombiner
+    (reducer-combiner-key [reducer] [colname :reservoir-stats reservoir-size options])
+    (combine-reducers [reducer combiner-key]
+      (ds-reduce-impl/staged-consumer-reducer
+       :float64 colname #(dt-sample/double-reservoir reservoir-size options)
+       identity))
+    (finalize-combined-reducer [this ctx]
+      ((dt-stats/descriptive-statistics [stat-name] options @ctx) stat-name))))
+  ([colname reservoir-size stat-name]
+   (reservoir-desc-stat colname reservoir-size stat-name nil)))
+
+
+(export-symbols tech.v3.dataset.reductions.impl
+                reservoir-dataset)
+
 (defn group-by-column-agg
   "Group a sequence of datasets by a column and aggregate down into a new dataset.
 
@@ -408,15 +437,18 @@ user> (ds-reduce/group-by-column-agg
     :price-sum (sum :price)
     :price-med (prob-median :price)
     :price-iqr (prob-interquartile-range :price)
-    :n-dates (count-distinct :date :int32)}
+    :n-dates (count-distinct :date :int32)
+    :stddev (reservoir-desc-stat :price 100 :standard-deviation)
+    :sub-stocks (reservoir-dataset 100)}
    [stocks stocks stocks])
 
   (group-by-column-agg
    :symbol
    {:symbol (first-value :symbol)
-    :price-avg (mean :price)
-    :price-sum (sum :price)
-    :price-med (prob-median :price)}
+    :n-elems (row-count)
+    :price-med (prob-median :price)
+    :stddev (reservoir-desc-stat :price 100 :standard-deviation)
+    :sub-stocks (reservoir-dataset 100)}
    [stocks stocks stocks])
 
   )
