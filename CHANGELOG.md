@@ -1,4 +1,7 @@
 # Changelog
+## 5.15
+ * [Issue 224](https://github.com/techascent/tech.ml.dataset/issues/224) - dataset creating fails in map case when all vals are seqs.
+
 ## 5.14
  * Another set of smaller upgrades to csv parsing.
  * [Reservoir sampling](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html#var-reservoir-dataset) is supported for large aggregations.
