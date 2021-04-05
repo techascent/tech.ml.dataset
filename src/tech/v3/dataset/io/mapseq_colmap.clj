@@ -49,14 +49,15 @@
 (defn column-map->dataset
   ([options column-map]
    (let [parse-context (parse-context/options->parser-fn options :object)
-         n-rows
-         (->> (vals column-map)
-              (reduce (fn [n-rows next-col]
-                        (if (= :reader (argtypes/arg-type next-col))
-                          (max (long n-rows) (dtype/ecount next-col))
-                          n-rows))
-                      1)
-              (long))]
+         coltypes (->> (vals column-map)
+                       (group-by argtypes/arg-type))
+         n-rows (cond
+                  (:reader coltypes)
+                  (apply max (map dtype/ecount (coltypes :reader)))
+                  (:iterable coltypes)
+                  (count (apply map (constantly nil) (coltypes :iterable)))
+                  :else
+                  1)]
      (->> column-map
           (pmap
            (fn [^Map$Entry mapentry]

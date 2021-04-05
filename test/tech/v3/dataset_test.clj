@@ -1037,6 +1037,13 @@
            (mapv (comp :datatype meta) (vals data))))))
 
 
+(deftest create-dataset-seq
+  (let [data (ds/->dataset {:calendar-year '(2020 2021 2020 2021)
+                            :setting '("A" "A" "B" "B")
+                            :bigdata (cycle [1 2 3 4])})]
+    (is (= 4 (ds/row-count data)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
