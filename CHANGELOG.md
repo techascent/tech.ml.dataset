@@ -1,4 +1,11 @@
 # Changelog
+## 5.14
+ * Another set of smaller upgrades to csv parsing.
+ * Reservoir sampling is supported for large aggregations.
+ * tech.io (and thus nippy) is upgraded.
+
+## 5.13
+ * Various optimizations to csv parsing making it a bit (2x) faster.
 
 ## 5.12
  * All statistical/reduction summations now use  [Kahan's compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm).  This makes summation
@@ -7,20 +14,20 @@
    behavior than was expected previously when using maps of columns as dataset constructors.
 
 ## 5.11
- * Many more algorithms exposed and documentation updated for the 
-   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) 
+ * Many more algorithms exposed and documentation updated for the
+   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html)
    namespace.
 
 ## 5.10
  * apache data sketch set-cardinality algorithms hyper-log-log and theta.
 
 ## 5.07
- * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) 
+ * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html)
   namespace now includes direct aggregations
   including group-by aggregations and also t-dunnings' t-digest algorithm for
   probabilistic cdf and quantile estimation.
-  
-## 5.06 
+
+## 5.06
  * Bugs introduced by t-digest version 3.2.  Ignore this release.
 
 ## 5.05
