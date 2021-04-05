@@ -1,7 +1,7 @@
 # Changelog
 ## 5.14
  * Another set of smaller upgrades to csv parsing.
- * Reservoir sampling is supported for large aggregations.
+ * [Reservoir sampling](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html#var-reservoir-dataset) is supported for large aggregations.
  * tech.io (and thus nippy) is upgraded.
 
 ## 5.13
