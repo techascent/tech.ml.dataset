@@ -24,7 +24,6 @@
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
   (fn [data]
-    (println {:datatype (elemwise-datatype data) :klass (-> data elemwise-datatype datatype->object-class)})
     (-> data elemwise-datatype datatype->object-class)))
 
 
