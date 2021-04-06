@@ -303,8 +303,7 @@ https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5
 ### Parquet Support
 
 Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.
-That means we should be able to load most Parquet files.  Failure to load a parquet file quickly and accurately
-with correct missing values is a issue.
+That means we should be able to load most Parquet files and support their full range of datatypes.
 
 
 #### Parquet Dependencies
@@ -337,13 +336,10 @@ org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
 * [tech.v3.datatype](https://github.com/cnuernber/dtype-next) numeric subsystem
 
 
-## Keywords
- - csv, xlsx, pandas, dataframe, dplyr, data.table, modelling
-
 
 ## License
 
-Copyright © 2019 Complements of TechAscent, LLC
+Copyright © 2021 Complements of TechAscent, LLC
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
