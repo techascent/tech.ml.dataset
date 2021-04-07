@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.16
+## 5.17
  * [Issue 225](https://github.com/techascent/tech.ml.dataset/issues/224) - column/row selection should return empty datasets when no columns are selected.
  * nil headers now print fine - thanks to DavidVujic.
 
