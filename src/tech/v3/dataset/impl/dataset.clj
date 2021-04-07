@@ -266,6 +266,8 @@
     (let [map-selector? (instance? Map column-name-seq-or-map)
           n-rows (long (second (dtype/shape dataset)))
           indexes (cond
+                    (nil? index-seq)
+                    []
                     (= :all index-seq)
                     nil
                     (dtype-proto/convertible-to-bitmap? index-seq)

@@ -255,8 +255,7 @@
                     index-seq)]
     (if-not (or (nil? colname-seq)
                 (and (sequential? colname-seq)
-                     (nil? (seq colname-seq)))
-                (nil? index-seq))
+                     (nil? (seq colname-seq))))
       (ds-proto/select dataset colname-seq index-seq)
       (ds-impl/empty-dataset))))
 

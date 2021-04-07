@@ -1047,7 +1047,9 @@
 (deftest empty-dataset-on-select-nothing
   (let [dataset (ds/->dataset "test/data/stocks.csv")]
     (is (= 0 (ds/row-count (ds/select-columns dataset nil))))
-    (is (= 0 (ds/row-count (ds/select-rows dataset nil))))))
+    (is (= 0 (ds/row-count (ds/select-rows dataset nil))))
+    (is (= (ds/column-count dataset)
+           (ds/column-count (ds/select-rows dataset nil))))))
 
 
 (comment
