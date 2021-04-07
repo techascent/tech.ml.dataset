@@ -43,7 +43,7 @@
 
 
 ;; Build a custom hierarchy to identify categorical types. The types
-;; identified here matches the set identified as categorical in
+;; identified here matche the set identified as categorical in
 ;; the check in tech.v3.dataset.column/new-column that sets the `categorical?`
 ;; metadata, see:
 ;; https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/impl/column.clj#L41
