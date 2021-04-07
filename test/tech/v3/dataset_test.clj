@@ -1044,6 +1044,12 @@
     (is (= 4 (ds/row-count data)))))
 
 
+(deftest empty-dataset-on-select-nothing
+  (let [dataset (ds/->dataset "test/data/stocks.csv")]
+    (is (= 0 (ds/row-count (ds/select-columns dataset nil))))
+    (is (= 0 (ds/row-count (ds/select-rows dataset nil))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

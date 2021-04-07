@@ -242,7 +242,7 @@
   index-seq - either keyword :all or list of indexes.  May contain duplicates.
   "
   [dataset colname-seq index-seq]
-  (when (dtype-proto/has-constant-time-min-max? index-seq)
+  (when (and index-seq (dtype-proto/has-constant-time-min-max? index-seq))
     (let [lmin (long (dtype-proto/constant-time-min index-seq))
           lmax (long (dtype-proto/constant-time-max index-seq))]
       (errors/when-not-errorf
@@ -253,10 +253,12 @@
   (let [index-seq (if (number? index-seq)
                     [index-seq]
                     index-seq)]
-    (when-not (or (nil? colname-seq)
-                  (and (sequential? colname-seq)
-                       (nil? (seq colname-seq))))
-      (ds-proto/select dataset colname-seq index-seq))))
+    (if-not (or (nil? colname-seq)
+                (and (sequential? colname-seq)
+                     (nil? (seq colname-seq)))
+                (nil? index-seq))
+      (ds-proto/select dataset colname-seq index-seq)
+      (ds-impl/empty-dataset))))
 
 (defn select-by-index
   "Trim dataset according to this sequence of indexes.  Returns a new dataset.
