@@ -133,8 +133,8 @@
        (finally
          (when-not (identical? input workbook)
            (.close workbook))))))
-  ([workbook]
-   (workbook->datasets workbook {})))
+  ([input]
+   (workbook->datasets input {})))
 
 
 (defmethod ds-io/data->dataset :xlsx
