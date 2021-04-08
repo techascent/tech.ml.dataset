@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2" :scope "provided"]
                  [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "7.04"]
+                 [cnuernber/dtype-next             "7.07"]
                  [techascent/tech.io               "4.04"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -66,6 +66,8 @@
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
+              :source-paths ["src"]
+              :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]

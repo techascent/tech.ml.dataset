@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.18
+ * Graal-native friendly mmap pathways (no requiring resolve, you have to explicity set the implementation in your main.clj file).
+ * Parquet write pathway update to make more standard and more likely to work with future versions of parquet.  This means, however, that there will
+   no longer be a direct correlation between number of datasets and number of record batches in a parquet file as the standard pathway takes care
+   of writing out record batches when a memory constraint is triggered.  So if you save a dataset you may get a parquet file back that contains
+   a sequence of datasets.  There are many parquet options, see the documentation for 
+   [ds-seq->parquet](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html#var-ds-seq-.3Eparquet).
+
 ## 5.17
  * [Issue 225](https://github.com/techascent/tech.ml.dataset/issues/224) - column/row selection should return empty datasets when no columns are selected.
  * nil headers now print fine - thanks to DavidVujic.
