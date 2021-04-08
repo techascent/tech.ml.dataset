@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.18
+ * Graal-native friendly mmap pathways (no requiring resolve).
+ * Parquet write pathway update.
+
 ## 5.17
  * [Issue 225](https://github.com/techascent/tech.ml.dataset/issues/224) - column/row selection should return empty datasets when no columns are selected.
  * nil headers now print fine - thanks to DavidVujic.
