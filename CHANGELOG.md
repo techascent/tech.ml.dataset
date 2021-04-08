@@ -1,8 +1,8 @@
 # Changelog
 
 ## 5.18
- * Graal-native friendly mmap pathways (no requiring resolve).
- * Parquet write pathway update.
+ * Graal-native friendly mmap pathways (no requiring resolve, you have to explicity set the implementation in your main.clj file).
+ * Parquet write pathway update to make more standard and more likely to work with future versions of parquet.
 
 ## 5.17
  * [Issue 225](https://github.com/techascent/tech.ml.dataset/issues/224) - column/row selection should return empty datasets when no columns are selected.
