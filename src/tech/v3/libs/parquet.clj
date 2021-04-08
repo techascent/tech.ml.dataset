@@ -64,7 +64,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   ;; Behold my Kindom of Nouns...And Tremble!!!!
   (:import [smile.io HadoopInput]
            [tech.v3.datatype PrimitiveList Buffer]
-           [tech.v3.dataset Text ParquetRowWriter]
+           [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder]
            [org.apache.hadoop.conf Configuration]
            [java.time.temporal TemporalAccessor TemporalField ChronoField]
            [org.apache.parquet.hadoop ParquetFileReader ParquetWriter
@@ -840,6 +840,53 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                        (.toUri ^java.nio.file.Path nio-path)))]
       (Path. (str path-url)))))
 
+(defn- pos-out-stream
+  [str-path]
+  (let [fchannel (FileChannel/open
+                  (Paths/get str-path (into-array String []))
+                  (into-array OpenOption [StandardOpenOption/WRITE
+                                          StandardOpenOption/CREATE
+                                          StandardOpenOption/TRUNCATE_EXISTING]))]
+    (proxy [PositionOutputStream] []
+      (getPos [] (.position fchannel))
+      (close [] (.close fchannel))
+      (flush [] (.force fchannel false))
+      (write
+        ([data]
+         (if (bytes? data)
+           (let [^bytes data data]
+             (.write fchannel (ByteBuffer/wrap data)))
+           (let [data (unchecked-byte data)
+                 data-ary (byte-array [data])
+                 buf (ByteBuffer/wrap data-ary)]
+             (.write fchannel buf))))
+        ([data off len]
+         (let [byte-buf (ByteBuffer/wrap data)
+               off (long off)
+               len (long len)
+               _ (.position byte-buf off)
+               _ (.limit byte-buf (+ off len))]
+           (assert (== (.remaining byte-buf) len))
+           (.write fchannel byte-buf)))))))
+
+
+(defn- local-file-output-file
+  ^OutputFile [^String str-path]
+  (let [file (io/file str-path)
+        _ (errors/when-not-error
+           file
+           "Only writing to filesystem files is supported")
+        str-path (.getCanonicalPath file)]
+    (reify OutputFile
+      (create [f block-size-hint]
+        (pos-out-stream str-path))
+      (createOrOverwrite [f block-size-hint]
+        (pos-out-stream str-path))
+      (supportsBlockSize [f] false)
+      ;;Fair roll of the dice
+      (defaultBlockSize [f] 4096))))
+
+
 
 (defn ds-seq->parquet
   "Write a sequence of datasets to a parquet file.  Parquet will break the data
@@ -858,43 +905,42 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   * `:dictionary-enabled?` - Defaults to
      `ParquetWriter/DEFAULT_IS_DICTIONARY_ENABLED`.
   * `:validating?` - Defaults to `ParquetWriter/DEFAULT_IS_VALIDATING_ENABLED`.
+  * `:page-write-checksum?` - Defaults to true.  Output a crc check file in addition to
+     parquet file.
   * `:writer-version` - Defaults to `ParquetWriter/DEFAULT_WRITER_VERSION`."
   ([path {:keys [block-size page-size dictionary-page-size
                  dictionary-enabled? validating?
-                 writer-version]
-          :or {block-size ParquetWriter/DEFAULT_BLOCK_SIZE
-               page-size ParquetWriter/DEFAULT_PAGE_SIZE
-               dictionary-page-size ParquetWriter/DEFAULT_PAGE_SIZE
-               dictionary-enabled? ParquetWriter/DEFAULT_IS_DICTIONARY_ENABLED
-               validating? ParquetWriter/DEFAULT_IS_VALIDATING_ENABLED
-               writer-version ParquetWriter/DEFAULT_WRITER_VERSION
-               } :as options}
+                 writer-version] :as options}
     ds-seq]
    (let [ds-seq (map prepare-for-parquet ds-seq)
          first-ds (first ds-seq)
          ;;message type
          schema (ds->schema first-ds)
-         ^Configuration configuration
-         (or (:hadoop-configuration options)
-             (Configuration.))
-         row-writer (ParquetRowWriter. ds-row->parquet schema {})]
+         row-writer (ParquetRowWriter. ds-row->parquet schema {})
+         builder (ParquetRowWriter$WriterBuilder. (local-file-output-file path)
+                                                  row-writer)]
      (when (.exists (io/file path))
        (.delete (io/file path)))
-     (with-open [writer (ParquetWriter.
-                         (->hadoop-path path)
-                         ^ParquetFileWriter$Mode
-                         (if (io/exists? path)
-                           ParquetFileWriter$Mode/OVERWRITE
-                           ParquetFileWriter$Mode/CREATE)
-                         row-writer
-                         (compression-codec (:parquet-compression-codec options))
-                         (int block-size)
-                         (int page-size)
-                         (int dictionary-page-size)
-                         (boolean dictionary-enabled?)
-                         (boolean validating?)
-                         writer-version
-                         configuration)]
+     (doseq [[k v] (select-keys options
+                                [:hadoop-configuration
+                                 :compression-codec
+                                 :block-size
+                                 :page-size
+                                 :dictionary-page-size
+                                 :dictionary-enabled?
+                                 :validating?
+                                 :writer-version])]
+       (case k
+         :hadoop-configuration (.withConf builder ^Configuration v)
+         :compression-codec (.withCompressionCodec builder (compression-codec v))
+         :block-size (.withRowGroupSize builder (int v))
+         :page-size (.withPageSize builder (int v))
+         :dictionary-page-size (.withDictionaryPageSize builder (int v))
+         :dictionary-enabled? (.withDictionaryEncoding builder (boolean v))
+         :validating? (.withValidation builder (boolean v))
+        ;; :page-write-checksum? (.withPageWriteChecksumEnabled builder (boolean v))
+         :writer-version (.withWriterVersion builder v)))
+     (with-open [writer (.build builder)]
        (doseq [ds ds-seq]
          (set! (.dataset row-writer) (mapv (fn [col]
                                              ;;Deconstruct the column
