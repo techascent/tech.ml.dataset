@@ -795,7 +795,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                   (unchecked-long col-val))))
     (str-set datatype)
     (fn [^RecordConsumer consumer col-val]
-      (.addBinary consumer (Binary/fromString col-val)))
+      (.addBinary consumer (Binary/fromString (str col-val))))
 
     (identical? :float32 datatype)
     (fn [^RecordConsumer consumer col-val]
