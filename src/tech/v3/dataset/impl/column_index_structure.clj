@@ -1,15 +1,19 @@
 (ns tech.v3.dataset.impl.column-index-structure
-  (:import [java.util TreeMap])
+  (:import [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.datatype :refer [elemwise-datatype]]
             [tech.v3.datatype.argops :refer [arggroup]]
-            [tech.v3.datatype.casting :refer [datatype->object-class]]))
+            [tech.v3.datatype.casting :refer [datatype->object-class]]
+            [clojure.set :refer [difference]]))
 
 
 (defprotocol PIndexStructure
   (slice-index
     [index-structure from to]
     [index-structure from from-inclusive? to to-inclusive?]
-    "Slice by keys or range"))
+    "Slice by range `from` to `to`")
+  (select-from-index
+    [index-structure elements]
+    "Select by specific `elements` in the index."))
 
 
 (extend-type TreeMap
@@ -21,6 +25,16 @@
      (-> (.subMap ^TreeMap index-structure from from-inclusive? to to-inclusive?)))))
 
 
+(extend-type LinkedHashMap
+  PIndexStructure
+  (select-from-index [index-structure elements]
+    (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
+          s (difference (set (.keySet new-index-structure)) (set elements))]
+       (doseq [k s]
+         (.remove new-index-structure k))
+       new-index-structure)))
+
+
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
   (fn [data]
@@ -30,7 +44,7 @@
 (defmethod make-index-structure ::categorical
   [data]
   (let [idx-map (arggroup data)]
-    (java.util.LinkedHashMap. ^java.util.Map idx-map)))
+    (LinkedHashMap. ^java.util.Map idx-map)))
 
 ;; When tech.datatype does not know what something is it describes it
 ;; as an object (see tech.v3.datatype.casting/elemwise-datatype). This
