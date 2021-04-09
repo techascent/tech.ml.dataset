@@ -22,7 +22,13 @@
     ([index-structure from to]
      (slice-index index-structure from true to true))
     ([index-structure from from-inclusive? to to-inclusive?]
-     (-> (.subMap ^TreeMap index-structure from from-inclusive? to to-inclusive?)))))
+     (-> (.subMap ^TreeMap index-structure from from-inclusive? to to-inclusive?))))
+    (select-from-index [index-structure elements]
+          (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
+                s (difference (set (.keySet new-index-structure)) (set elements))]
+            (doseq [k s]
+              (.remove new-index-structure k)))))
+
 
 
 (extend-type LinkedHashMap
@@ -30,9 +36,9 @@
   (select-from-index [index-structure elements]
     (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
           s (difference (set (.keySet new-index-structure)) (set elements))]
-       (doseq [k s]
-         (.remove new-index-structure k))
-       new-index-structure)))
+      (doseq [k s]
+        (.remove new-index-structure k))
+      new-index-structure)))
 
 
 (defmulti make-index-structure
