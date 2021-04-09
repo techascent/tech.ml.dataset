@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.19
+ * Using builder model for parquet both for forward compatibility and so we can set an output stream
+   as opposed to a file path.  This allows a graal native pathway to work wtih parquet.
+
 ## 5.18
  * Graal-native friendly mmap pathways (no requiring resolve, you have to explicity set the implementation in your main.clj file).
  * Parquet write pathway update to make more standard and more likely to work with future versions of parquet.  This means, however, that there will
