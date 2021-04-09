@@ -45,6 +45,7 @@ Summations/means in this area are implemented using the
 * An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
 * Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
 * It's damn fast even with Parquet - [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/).
+* Graal native [example project](https://github.com/cnuernber/ds-graal).
 
 
 ## Mini Walkthrough
