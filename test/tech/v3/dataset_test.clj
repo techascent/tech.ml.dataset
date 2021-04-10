@@ -1052,6 +1052,15 @@
            (ds/column-count (ds/select-rows dataset nil))))))
 
 
+(deftest column-cast-test-cce-fail
+  (let [ds (ds/->dataset {:col1 [1 2 3 "NaN"]} {:parser-fn :string})]
+    (is (= [1.0 2.0 3.0]
+           (->> (ds/column-cast ds :col1 [:float64 :relaxed?])
+                (#(ds/column % :col1))
+                (take 3)
+                (vec))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

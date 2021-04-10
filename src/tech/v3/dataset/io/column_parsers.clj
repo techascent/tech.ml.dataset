@@ -172,7 +172,8 @@
 
 (defn- not-missing?
   [parsed-value missing-value]
-  (or (not= parsed-value missing-value)
+  (or (and (not= parsed-value missing-value)
+           (not (missing-value? parsed-value)))
       (= parsed-value false)))
 
 
@@ -199,7 +200,7 @@
               (.add container value))
             (let [parsed-value (parse-fn value)]
               (cond
-                (= parsed-value parse-failure)
+                (identical? parsed-value parse-failure)
                 (if failed-values
                   (do
                     (.addObject failed-values value)

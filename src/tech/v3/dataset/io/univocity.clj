@@ -130,30 +130,33 @@
       (CsvParser. settings))))
 
 
+(deftype RawRowIterator  [^:unsynchronized-mutable closer
+                          ^AbstractParser parser
+                          ^:unsynchronized-mutable next-val]
+  java.util.Iterator
+  (hasNext [this] (boolean next-val))
+  (next [this]
+    (let [retval next-val]
+      (set! next-val (.parseNext parser))
+      (when-not next-val
+        (when closer
+          (cond
+            (instance? Closeable closer)
+            (.close ^Closeable closer)
+            (instance? AutoCloseable closer)
+            (.close ^AutoCloseable closer))
+          (set! closer nil)))
+      retval)))
+
+
 (defn raw-row-iterable
   "Returns an iterable that produces string[]'s"
   (^Iterable [input ^AbstractParser parser]
    (reify Iterable
      (iterator [this]
-       (let [^Reader reader (io/reader input)
-             cur-row (atom nil)]
+       (let [^Reader reader (io/reader input)]
          (.beginParsing parser reader)
-         (reset! cur-row (.parseNext parser))
-         (reify
-           java.util.Iterator
-           (hasNext [this]
-             (not (nil? @cur-row)))
-           (next [this]
-             (let [retval @cur-row
-                   next-val (.parseNext parser)]
-               (reset! cur-row next-val)
-               (when-not next-val
-                 (cond
-                   (instance? Closeable reader)
-                   (.close ^Closeable reader)
-                   (instance? AutoCloseable reader)
-                   (.close ^AutoCloseable reader)))
-               retval)))))))
+         (RawRowIterator. reader parser (.parseNext parser))))))
   (^Iterable [input]
    (raw-row-iterable input (create-csv-parser {}))))
 
@@ -176,10 +179,9 @@
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301"
   ([input options]
-   (let [^Iterable rows (raw-row-iterable
-                         input
-                         (create-csv-parser options))]
-     (iterator-seq (.iterator rows))))
+   (raw-row-iterable
+    input
+    (create-csv-parser options)))
   ([input]
    (csv->rows input {})))
 
@@ -203,6 +205,7 @@
   :parser-scan-len"
   ([input options]
    (->> (csv->rows input options)
+        (seq)
         (row-parser/rows->dataset options)))
   ([input]
    (csv->dataset input {})))
