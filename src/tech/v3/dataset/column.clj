@@ -60,6 +60,12 @@
   (col-proto/set-missing col idx-seq))
 
 
+(defn index-structure
+  "Returns an index structure for the column."
+  [col]
+  (col-proto/index-structure col))
+
+
 (defn unique
   "Set of all unique values"
   [col]
