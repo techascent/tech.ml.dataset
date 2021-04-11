@@ -452,8 +452,7 @@
 
 (defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value.  Selecting which columns are used in the key-fn
-  using column-name-seq is optional but will greatly improve performance."
+  a map of colname->column-value."
   ([dataset key-fn]
    (when dataset
      (->> (group-by->indexes dataset key-fn)
