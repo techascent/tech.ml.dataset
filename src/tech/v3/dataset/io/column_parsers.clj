@@ -170,13 +170,6 @@
         (and (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
-(defn- not-missing?
-  [parsed-value missing-value]
-  (or (and (not= parsed-value missing-value)
-           (not (missing-value? parsed-value)))
-      (= parsed-value false)))
-
-
 (deftype FixedTypeParser [^PrimitiveList container
                           container-dtype
                           missing-value parse-fn
@@ -190,27 +183,34 @@
   PParser
   (add-value! [p idx value]
     (set! max-idx (max (long idx) max-idx))
-    (when-not (missing-value? value)
-      (let [idx (long idx)]
-        (let [value-dtype (dtype/datatype value)]
-          (if (and (not= container-dtype :string)
-                   (= value-dtype container-dtype))
-            (do
-              (add-missing-values! container missing missing-value idx)
-              (.add container value))
-            (let [parsed-value (parse-fn value)]
-              (cond
-                (identical? parsed-value parse-failure)
-                (if failed-values
-                  (do
-                    (.addObject failed-values value)
-                    (.add failed-indexes (unchecked-int idx)))
-                  (errors/throwf "Failed to parse value %s as datatype %s on row %d"
-                                 value container-dtype idx))
-                (not-missing? parsed-value missing-value)
-                (do
-                  (add-missing-values! container missing missing-value idx)
-                  (.addObject container parsed-value)))))))))
+    ;;First pass is to potentially parse the value.  It could already
+    ;;be in the space of the container or it could require the parse-fn
+    ;;to make it.
+    (let [parsed-value (cond
+                         (missing-value? value)
+                         :tech.ml.dataset.parse/missing
+                         (and (not= container-dtype :string)
+                              (= (dtype/datatype value) container-dtype))
+                         value
+                         :else
+                         (parse-fn value))
+          idx (long idx)]
+      (cond
+        ;;ignore it; we will add missing when we see the first valid value
+        (identical? :tech.ml.dataset.parse/missing parsed-value)
+        nil
+        ;;Record the original incoming value if we are parsing in relaxed mode.
+        (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
+        (if failed-values
+          (do
+            (.addObject failed-values value)
+            (.add failed-indexes (unchecked-int idx)))
+          (errors/throwf "Failed to parse value %s as datatype %s on row %d"
+                         value container-dtype idx))
+        :else
+        (do
+          (add-missing-values! container missing missing-value idx)
+          (.addObject container parsed-value)))))
   (finalize! [p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
                            missing-value rowcount)))
@@ -302,6 +302,46 @@
     container))
 
 
+(defn- find-next-parser
+  ^long [value container-dtype ^List promotion-list]
+  (let [start-idx (argops/index-of (mapv first promotion-list) container-dtype)
+        n-elems (.size promotion-list)]
+    (if (== start-idx -1)
+      -1
+      (long (loop [idx (inc start-idx)]
+              (if (< idx n-elems)
+                (let [[_container-datatype parser-fn]
+                      (.get promotion-list idx)
+                      parsed-value (parser-fn value)]
+                  (if (= parsed-value parse-failure)
+                    (recur (inc idx))
+                    idx))
+                -1))))))
+
+
+(defn- resolve-parser-index
+  "Resolve the next parser index returning a tuple of [parser-datatype new-parser-fn]"
+  [next-idx ^List container container-dtype missing ^List promotion-list]
+  (let [next-idx (long next-idx)]
+    (if (== -1 next-idx)
+      [:object nil]
+      (let [n-missing (dtype/ecount missing)
+            n-valid (- (dtype/ecount container) n-missing)
+            parser-data (.get promotion-list next-idx)
+            parser-datatype (first parser-data)]
+        ;;Figure out if our promotion process will result in a valid container.
+        (cond
+          (== 0 n-valid)
+          parser-data
+          (and (or (identical? :bool container-dtype)
+                   (identical? :boolean container-dtype)
+                   (casting/numeric-type? container-dtype))
+               (casting/numeric-type? (packing/unpack-datatype parser-datatype)))
+          parser-data
+          :else
+          [:string (default-coercers :string)])))))
+
+
 (deftype PromotionalStringParser [^{:unsynchronized-mutable true
                                     :tag PrimitiveList} container
                                   ^{:unsynchronized-mutable true} container-dtype
@@ -318,57 +358,25 @@
   PParser
   (add-value! [p idx value]
     (set! max-idx (max (long idx) max-idx))
-    (when-not (missing-value? value)
-      (let [idx (long idx)]
-        (let [value-dtype (dtype/elemwise-datatype value)]
+    (let [parsed-value
           (cond
-            (identical? value-dtype container-dtype)
-            (do
-              (add-missing-values! container missing missing-value idx)
-              (.add container value))
+            (missing-value? value)
+            :tech.ml.dataset.parse/missing
+
+            (identical? (dtype/datatype value) container-dtype)
+            value
+
+            ;;If we have a function to parse the data
             parse-fn
             (let [parsed-value (parse-fn value)]
-              (cond
-                (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
-                (let [start-idx (argops/index-of (mapv first promotion-list) container-dtype)
-                      n-elems (.size promotion-list)
-                      next-idx (if (== start-idx -1)
-                                 -1
-                                 (long (loop [idx (inc start-idx)]
-                                         (if (< idx n-elems)
-                                           (let [[_container-datatype parser-fn]
-                                                 (.get promotion-list idx)
-                                                 parsed-value (parser-fn value)]
-                                             (if (= parsed-value parse-failure)
-                                               (recur (inc idx))
-                                               idx))
-                                           -1))))
+              ;;If the value parsed successfully
+              (if (not (identical? :tech.ml.dataset.parse/parse-failure parsed-value))
+                parsed-value
+                ;;else Perform column promotion
+                (let [next-idx (find-next-parser value container-dtype promotion-list)
                       [parser-datatype new-parser-fn]
-                      (if (== -1 next-idx)
-                        [:object nil]
-                        (let [n-missing (dtype/ecount missing)
-                              n-valid (- (dtype/ecount container)
-                                         n-missing)
-                              [parser-datatype new-parser-fn :as
-                               parser-data]
-                              (.get promotion-list next-idx)]
-                          #_(println {:colname column-name
-                                      :value value
-                                      :column-dtype container-dtype
-                                      :parser-dtype parser-datatype
-                                      :n-missing n-missing
-                                      :n-valid n-valid} )
-                          (cond
-                            (== 0 n-valid)
-                            parser-data
-                            (and (or (= :bool container-dtype)
-                                     (= :boolean container-dtype)
-                                     (casting/numeric-type? container-dtype))
-                                 (casting/numeric-type?
-                                  (packing/unpack-datatype parser-datatype)))
-                            parser-data
-                            :else
-                            [:string (default-coercers :string)])))
+                      (resolve-parser-index next-idx container container-dtype
+                                            missing promotion-list)
                       parsed-value (if new-parser-fn
                                      (new-parser-fn value)
                                      value)
@@ -377,23 +385,27 @@
                                                        options)
                       new-missing-value (column-base/datatype->missing-value
                                          parser-datatype)]
+                  ;;Update member variables based on new parser
                   (set! container new-container)
                   (set! container-dtype parser-datatype)
                   (set! missing-value new-missing-value)
                   (set! parse-fn new-parser-fn)
-                  (add-missing-values! new-container missing new-missing-value idx)
-                  (.add new-container parsed-value))
-                (not-missing? parsed-value missing-value)
-                (do
-                  (add-missing-values! container missing missing-value idx)
-                  (.addObject container parsed-value))))
+                  parsed-value)))
+            ;;Else, nothing to parse with, just return string value
             :else
-            (do
-              (add-missing-values! container missing missing-value idx)
-              (.addObject container value)))))))
+            value)]
+      (cond
+        ;;Promotional parsers should not have parse failures.
+        (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
+        (errors/throwf "Parse failure detected in promotional parser - Please file issue.")
+        (identical? :tech.ml.dataset.parse/missing parsed-value)
+        nil ;;Skip, will add missing on next valid value
+        :else
+        (do
+          (add-missing-values! container missing missing-value idx)
+          (.addObject container parsed-value)))))
   (finalize! [p rowcount]
-    (finalize-parser-data! container missing nil nil
-                           missing-value rowcount)))
+    (finalize-parser-data! container missing nil nil missing-value rowcount)))
 
 
 (defn promotional-string-parser
