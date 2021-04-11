@@ -191,10 +191,3 @@ Implementations should check their metadata before doing calculations."
                        (apply dtype/emap map-fn res-dtype args)
                        nil
                        (reduce dtype-proto/set-or (map col-proto/missing args))))
-
-
-(defn slice-index
-  ([index-structure to from]
-   (slice-index index-structure to true from true))
-  ([index-structure to to-inclusive? from from-inclusive?]
-   (col-index-structure/slice-index index-structure to to-inclusive? from from-inclusive?)))
