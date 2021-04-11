@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.impl.column-index-structure
-  (:import [java.util TreeMap LinkedHashMap])
-  (:require [tech.v3.datatype :refer [elemwise-datatype]]
+  (:import [java.util TreeMap LinkedHashMap]
+           [tech.v3.datatype ListPersistentVector])
+  (:require [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
             [clojure.set :refer [difference]]))
@@ -41,6 +42,17 @@
       new-index-structure)))
 
 
+(defn build-value-to-index-position-map [column-data]
+  (let [idx-map (arggroup column-data)
+        vals->list-persistent-vector (fn [_ list-data]
+                                       (println (-> (clone list-data) ->buffer ListPersistentVector.))
+                                       (-> (clone list-data) ->buffer ListPersistentVector.))]
+    (.replaceAll idx-map (reify java.util.function.BiFunction
+                           (apply [this k v]
+                             (vals->list-persistent-vector k v))))
+    idx-map))
+
+
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
   (fn [data]
@@ -49,7 +61,7 @@
 
 (defmethod make-index-structure ::categorical
   [data]
-  (let [idx-map (arggroup data)]
+  (let [idx-map (build-value-to-index-position-map data)]
     (LinkedHashMap. ^java.util.Map idx-map)))
 
 ;; When tech.datatype does not know what something is it describes it
@@ -58,7 +70,7 @@
 ;; this multimethod to catch a more specific datatype.
 (defmethod make-index-structure java.lang.Object
   [data]
-  (let [idx-map (arggroup data)]
+  (let [idx-map (build-value-to-index-position-map data)]
     (TreeMap. ^java.util.Map idx-map)))
 
 
