@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.20
+ * Return an Iterable from csv->rows as opposed to a seq.  Iterator-seq has nontrivial overhead.
+ * Fixes for issues [229](https://github.com/techascent/tech.ml.dataset/issues/229), 
+   [230](https://github.com/techascent/tech.ml.dataset/issues/230), and [231](https://github.com/techascent/tech.ml.dataset/issues/231).
+
 ## 5.19
  * Using builder model for parquet both for forward compatibility and so we can set an output stream
    as opposed to a file path.  This allows a graal native pathway to work wtih parquet.
