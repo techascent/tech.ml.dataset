@@ -1061,6 +1061,24 @@
                 (vec))))))
 
 
+(deftest desc-stats-ok
+  (let [ds (ds/->dataset [])]
+    (is '()
+        (ds/brief ds))))
+
+
+(deftest desc-stats-also-ok
+  (let [ds (ds/->dataset {"col1" [] "col2" [1]})]
+    (is '()
+        (ds/brief ds))))
+
+
+(deftest desc-stats-oob
+  (let [ds (ds/->dataset {"col1" []})]
+    (is '()
+        (ds/brief ds))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
