@@ -12,7 +12,7 @@
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
-            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure slice-index]])
+            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]])
   (:import [java.util ArrayList HashSet Collections Set List Map]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
