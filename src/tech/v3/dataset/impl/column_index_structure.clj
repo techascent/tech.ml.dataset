@@ -4,42 +4,46 @@
   (:require [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
-            [clojure.set :refer [difference]]))
+            [clojure.set :refer [difference]]
+            ))
+
 
 
 (defprotocol PIndexStructure
-  (slice-index
-    [index-structure from to]
-    [index-structure from from-inclusive? to to-inclusive?]
-    "Slice by range `from` to `to`")
   (select-from-index
-    [index-structure elements]
-    "Select by specific `elements` in the index."))
+    [index-structure mode selection-spec]
+    "Select a subset of the index. Supports a variety of modes."))
 
 
 (extend-type TreeMap
   PIndexStructure
-  (slice-index
-    ([index-structure from to]
-     (slice-index index-structure from true to true))
-    ([index-structure from from-inclusive? to to-inclusive?]
-     (-> (.subMap ^TreeMap index-structure from from-inclusive? to to-inclusive?))))
-    (select-from-index [index-structure elements]
-          (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
-                s (difference (set (.keySet new-index-structure)) (set elements))]
-            (doseq [k s]
-              (.remove new-index-structure k)))))
+  (select-from-index [index-structure mode selection-spec]
+    (case mode
+      ::pick
 
+      (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
+            s (difference (set (.keySet new-index-structure)) (set selection-spec))]
+        (doseq [k s]
+          (.remove new-index-structure k))
+        new-index-structure)
+      ::slice
+      (let [{from            :from
+             from-inclusive? :from-inclusive?
+             to              :to
+             to-inclusive?   :to-inclusive?} selection-spec]
+        (.subMap ^TreeMap index-structure from (or from-inclusive? true) to (or to-inclusive? true))))))
 
 
 (extend-type LinkedHashMap
   PIndexStructure
-  (select-from-index [index-structure elements]
-    (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
-          s (difference (set (.keySet new-index-structure)) (set elements))]
-      (doseq [k s]
-        (.remove new-index-structure k))
-      new-index-structure)))
+  (select-from-index [index-structure mode selection-spec]
+    (case mode
+      ::pick
+      (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
+            s (difference (set (.keySet new-index-structure)) (set selection-spec))]
+        (doseq [k s]
+          (.remove new-index-structure k))
+        new-index-structure))))
 
 
 (defn build-value-to-index-position-map [column-data]
