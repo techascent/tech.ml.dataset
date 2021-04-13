@@ -49,7 +49,6 @@
 (defn build-value-to-index-position-map [column-data]
   (let [idx-map (arggroup column-data)
         vals->list-persistent-vector (fn [_ list-data]
-                                       (println (-> (clone list-data) ->buffer ListPersistentVector.))
                                        (-> (clone list-data) ->buffer ListPersistentVector.))]
     (.replaceAll idx-map (reify java.util.function.BiFunction
                            (apply [this k v]
