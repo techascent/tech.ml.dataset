@@ -4,8 +4,7 @@
   (:require [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
-            [clojure.set :refer [difference]]
-            ))
+            [clojure.set :refer [difference]]))
 
 
 
@@ -20,7 +19,6 @@
   (select-from-index [index-structure mode selection-spec]
     (case mode
       ::pick
-
       (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
             s (difference (set (.keySet new-index-structure)) (set selection-spec))]
         (doseq [k s]
