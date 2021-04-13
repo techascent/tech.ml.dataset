@@ -31,7 +31,11 @@
              from-inclusive? :from-inclusive?
              to              :to
              to-inclusive?   :to-inclusive?} selection-spec]
-        (.subMap ^TreeMap index-structure from (or from-inclusive? true) to (or to-inclusive? true))))))
+        (.subMap ^TreeMap index-structure
+                 from
+                 (if (nil? from-inclusive?) true from-inclusive?)
+                 to
+                 (if (nil? to-inclusive?) true to-inclusive?))))))
 
 
 (extend-type LinkedHashMap
