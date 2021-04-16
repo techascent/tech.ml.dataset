@@ -134,6 +134,9 @@
      options. If the option is :carry-on then we either create a new column or add
      missing values for columns that had no data for that row.
   - `:skip-bad-rows?` - Legacy option.  Use :bad-row-policy.
+  - `:disable-comment-skipping?` - As default, the `#` character is recognised as a
+     line comment when found in the beginning of a line of text in a CSV file,
+     and the row will be ignored. Set `true` to disable this behavior.
   - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
      will result in an exception.
   - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
