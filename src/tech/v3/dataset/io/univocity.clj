@@ -56,13 +56,23 @@
       (update :max-num-columns #(or % 8192))))
 
 
+
+(defn- apply-options-to-format!
+  ^CommonSettings [^CommonSettings settings {:keys [disable-comment-skipping?]}]
+  (when disable-comment-skipping?
+    (-> settings .getFormat (.setComment \0)))
+  settings)
+
+
+
 (defn- apply-options-to-settings!
   ^CommonSettings [^CommonSettings settings options]
   (let [{:keys [max-chars-per-column
                 max-num-columns]} (default-csv-options options)]
     (doto settings
       (.setMaxCharsPerColumn (long max-chars-per-column))
-      (.setMaxColumns (long max-num-columns))))
+      (.setMaxColumns (long max-num-columns))
+      (apply-options-to-format! options)))
   settings)
 
 
