@@ -63,22 +63,6 @@
     idx-map))
 
 
-;; (defmulti make-index-structure
-;;   "Returns an index structure based on the type of data in the column."
-;;   (fn [data meta]
-;;     (let [meta-marked-categorical? (:categorical meta)
-;;           data-dtype (-> data elemwise-datatype)
-;;           data-klass (-> data-dtype datatype->object-class)]
-;;       (if (nil? meta-marked-categorical?)
-;;         (if (categorical? data-dtype)
-;;           ::categorical
-;;           (if (tech.v3.datatype.casting/numeric-type? data-dtype)
-;;             ::numeric))
-;;         (if meta-marked-categorical?
-;;           ::categorical
-;;           data-klass)))))
-
-
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
   (fn [data meta]

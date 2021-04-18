@@ -6,5 +6,4 @@
             [tech.v3.datatype :as dtype-casting]
             [clojure.test :refer [testing deftest is]]))
 
-;; do some setup
-()
+;; TODO Possibly to add a test of the extenisibility?
