@@ -171,7 +171,7 @@
              data
              metadata
              cached-vector
-             (delay (make-index-structure-fn data))))
+             (delay (make-index-structure-fn data meta))))
 
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [this]
