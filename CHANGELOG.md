@@ -1,7 +1,9 @@
 # Changelog
 
 ## 5.21
- * [Issue 233] - Poi parser can now autodetect dates.
+ * [Issue 233](https://github.com/techascent/tech.ml.dataset/issues/233) - Poi xlsx parser can now autodetect dates.  Note that fastexcel is the default
+   xslx parser so in order to parse xlsx files using poi use `tech.v3.libs.poi/workbook->datasets`.
+ * [PR 232](https://github.com/techascent/tech.ml.dataset/pull/232) - Option - `:disable-comment-skipping?` - to disable comment skipping in csv files.
 
 
 ## 5.20

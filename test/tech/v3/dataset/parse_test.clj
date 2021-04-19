@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is]]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.libs.arrow :as arrow]
@@ -405,3 +406,29 @@
       (.delete (java.io.File. "text.csv"))
       (.delete (java.io.File. "text.nippy"))
       (.delete (java.io.File. "text.arrow")))))
+
+
+(deftest custom-parse-method
+  (try
+    (let [src-ds (ds/->dataset {:a ["1" "missing" "parse-failure" "2" "3"]})
+          _ (ds/write! src-ds "custom-parse.csv")
+          ds (ds/->dataset
+              "custom-parse.csv"
+              {:parser-fn {"a" [:int64
+                                (fn [str-val]
+                                  (cond
+                                    (= str-val "missing")
+                                    :tech.ml.dataset.parse/missing
+                                    (= str-val "parse-failure")
+                                    :tech.ml.dataset.parse/parse-failure
+                                    :else
+                                    (Long/parseLong str-val)))]}})]
+      (is (= [1 nil nil 2 3]
+             (vec (ds "a"))))
+      (is (= #{1 2} (set (ds/missing ds))))
+      (is (= #{2}
+             (set (:unparsed-indexes (meta (ds "a"))))))
+      (is (= ["parse-failure"]
+             (vec (:unparsed-data (meta (ds "a")))))))
+    (finally
+      (.delete (java.io.File. "custom-parse.csv")))))
