@@ -1,21 +1,19 @@
 (ns tech.v3.dataset.impl.column-index-structure
   (:import [java.util TreeMap LinkedHashMap]
            [tech.v3.datatype ListPersistentVector])
-  (:require [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
+  (:require [tech.v3.protocols.column :as col-proto]
+            [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
             [clojure.set :refer [difference]]))
 
 
-
-(defprotocol PIndexStructure
-  (select-from-index
-    [index-structure mode selection-spec]
-    "Select a subset of the index. Supports a variety of modes."))
+(defn select-from-index [index-structure mode selection-spec]
+  (col-proto/select-from-index index-structure mode selection-spec))
 
 
 (extend-type TreeMap
-  PIndexStructure
+  col-proto/PIndexStructure
   (select-from-index [index-structure mode selection-spec]
     (case mode
       ::pick
@@ -37,7 +35,7 @@
 
 
 (extend-type LinkedHashMap
-  PIndexStructure
+  col-proto/PIndexStructure
   (select-from-index [index-structure mode selection-spec]
     (case mode
       ::pick

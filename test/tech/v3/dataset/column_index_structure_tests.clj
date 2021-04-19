@@ -1,12 +1,12 @@
 (ns tech.v3.dataset.column-index-structure-tests
   (:import  [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.dataset :as ds]
-            [tech.v3.dataset.column :refer [new-column index-structure]]
+            [tech.v3.dataset.column :refer [index-structure]]
             [tech.v3.dataset.impl.column-index-structure :refer [select-from-index] :as col-index]
             [clojure.test :refer [testing deftest is]]))
 
 
-(testing "index-structure"
+(deftest test-index-structure
   (let [DS (ds/->dataset {:continuous  [1 2 3]
                           :categorical [:a :b :c]})]
     (is (= TreeMap

@@ -47,3 +47,9 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
   (with-index-structure
     [this datatype-keyword klass custom-make-index-structure-fn]))
 
+
+(defprotocol PIndexStructure
+  (select-from-index
+    [index-structure mode selection-spec]
+    "Select a subset of the index. Supports a variety of modes."))
+
