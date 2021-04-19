@@ -40,7 +40,7 @@
           <li>tuple - pair of <code>[datatype parse-data]</code> in which case container of type  <code>[datatype]</code> will be created. <code>parse-data</code> can be one of:
             <ul>
               <li><code>:relaxed?</code> - data will be parsed such that parse failures of the standard  parse functions do not stop the parsing process. :unparsed-values and  :unparsed-indexes are available in the metadata of the column that tell  you the values that failed to parse and their respective indexes.</li>
-              <li><code>fn?</code> - function from str-&gt; one of <code>:tech.ml.dataset.parser/missing</code>,  <code>:tech.ml.dataset.parser/parse-failure</code>, or the parsed value.  Exceptions here always kill the parse process. :missing will get marked  in the missing indexes, and :parse-failure will result in the index being  added to missing, the unparsed the column’s :unparsed-values and  :unparsed-indexes will be updated.</li>
+              <li><code>fn?</code> - function from str-&gt; one of <code>:tech.ml.dataset.parse/missing</code>,  <code>:tech.ml.dataset.parse/parse-failure</code>, or the parsed value.  Exceptions here always kill the parse process. :missing will get marked  in the missing indexes, and :parse-failure will result in the index being  added to missing, the unparsed the column’s :unparsed-values and  :unparsed-indexes will be updated.</li>
               <li><code>string?</code> - for datetime types, this will turned into a DateTimeFormatter via  DateTimeFormatter/ofPattern. For <code>:text</code> you can specify the backing file  to use.</li>
               <li><code>DateTimeFormatter</code> - use with the appropriate temporal parse static function  to parse the value.</li>
             </ul>
