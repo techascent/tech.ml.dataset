@@ -4,6 +4,7 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
             [tech.v3.dataset.io :as ds-io])
   (:import [java.lang AutoCloseable]
@@ -13,6 +14,7 @@
             Spreadsheet$Row Spreadsheet$Cell]
            [org.apache.poi.xssf.usermodel XSSFWorkbook]
            [org.apache.poi.hssf.usermodel HSSFWorkbook]
+           [org.apache.poi.ss.usermodel DateUtil]
            [org.roaringbitmap RoaringBitmap]
            [java.util ArrayList List HashMap]
            [java.util.function Function]
@@ -50,15 +52,21 @@
         (if (or (= cell-type CellType/FORMULA)
                 (= cell-type CellType/ERROR))
           (cell-type->keyword (.getCachedFormulaResultType cell))
-          (cell-type->keyword (.getCellType cell)))))
+          (let [dtype-kwd (cell-type->keyword (.getCellType cell))]
+            (if (and (identical? :float64 dtype-kwd)
+                     (DateUtil/isCellDateFormatted cell))
+              :local-date
+              dtype-kwd)))))
     Spreadsheet$Cell
     (getColumnNum [this] (.. cell getAddress getColumn))
-    (missing [this] (= :none (dtype/get-datatype this)))
+    (missing [this] (identical? :none (dtype/get-datatype this)))
     (value [this]
       (case (dtype-proto/elemwise-datatype this)
         :none nil
         :string (.getStringCellValue cell)
         :boolean (.getBooleanCellValue cell)
+        :local-date (-> (.getLocalDateTimeCellValue cell)
+                        (dtype-dt/local-date-time->local-date))
         (.getNumericCellValue cell)))
     (doubleValue [this] (.getNumericCellValue cell))
     (boolValue [this] (.getBooleanCellValue cell))))

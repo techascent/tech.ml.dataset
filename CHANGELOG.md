@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.21
+ * [Issue 233] - Poi parser can now autodetect dates.
+
+
 ## 5.20
  * Return an Iterable from csv->rows as opposed to a seq.  Iterator-seq has nontrivial overhead.
  * Fixes for issues [229](https://github.com/techascent/tech.ml.dataset/issues/229), 
