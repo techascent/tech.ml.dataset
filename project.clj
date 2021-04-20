@@ -4,9 +4,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.2" :scope "provided"]
-                 [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "7.08"]
-                 [techascent/tech.io               "4.04"
+                 [cnuernber/dtype-next             "7.09"]
+                 [techascent/tech.io               "4.06"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "4.1.2"
