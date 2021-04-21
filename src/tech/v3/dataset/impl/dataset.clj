@@ -61,26 +61,34 @@
     (cond
       (ds-col-proto/is-column? new-col-data)
       (vary-meta new-col-data assoc :name col-name)
-      (= argtype :scalar)
-      (col-impl/new-column col-name
-                           (dtype/const-reader new-col-data n-rows))
+      ;;maps are scalars in dtype-land but you can pass in column data maps
+      ;;so this next check is a bit hairy
+      (and (identical? argtype :scalar)
+           ;;This isn't a column data map.  Maps are
+           (not (and (instance? Map new-col-data)
+                     (.containsKey ^Map new-col-data :tech.v3.dataset/data))))
+      (col-impl/new-column col-name (dtype/const-reader new-col-data n-rows))
       :else
-      (let [{:keys [data missing]}
-            (if (= argtype :iterable)
-              (column-data-process/scan-data-for-missing
-               (take n-rows new-col-data))
+      (let [map-data
+            (if (or (= argtype :iterable)
+                    (map? new-col-data))
+              (column-data-process/prepare-column-data
+               (if (map? new-col-data)
+                 new-col-data
+                 (take n-rows new-col-data)))
               ;;Else has to be reader or tensor.
               (let [data-ecount (dtype/ecount new-col-data)
                     new-col-data (if (> data-ecount n-rows)
                                    (dtype/sub-buffer new-col-data 0 n-rows)
                                    new-col-data)]
-                (column-data-process/scan-data-for-missing
-                 new-col-data)))]
-        (col-impl/new-column
-         col-name (if-not (= 0 n-cols)
-                    (shorten-or-extend n-rows data)
-                    data)
-         nil missing)))))
+                (column-data-process/prepare-column-data new-col-data)))
+            map-data (-> (update map-data :tech.v3.dataset/data
+                                 (fn [data]
+                                   (if-not (= 0 n-cols)
+                                     (shorten-or-extend n-rows data)
+                                     data)))
+                         (assoc :tech.v3.dataset/name col-name))]
+        (col-impl/new-column map-data)))))
 
 
 (defn- nearest-range-start

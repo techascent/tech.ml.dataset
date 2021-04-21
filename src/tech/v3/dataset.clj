@@ -428,6 +428,7 @@ test/data/stocks.csv [5 4]:
    (column-map dataset result-colname map-fn nil (column-names dataset))))
 
 
+;; TODO - match inference expectations
 (defn column-cast
   "Cast a column to a new datatype.  This is never a lazy operation.  If the old
   and new datatypes match and no cast-fn is provided then dtype/clone is called
@@ -437,7 +438,7 @@ test/data/stocks.csv [5 4]:
 
   datatype may be a datatype enumeration or a tuple of
   [datatype cast-fn] where cast-fn may return either a new value,
-  :tech.v3.dataset.parse/missing, or :tech.v3.dataset.parse/parse-failure.
+  :tech.v3.dataset/missing, or :tech.v3.dataset/parse-failure.
   Exceptions are propagated to the caller.  The new column has at least the
   existing missing set (if no attempt returns :missing or :cast-failure).
   :cast-failure means the value gets added to metadata key :unparsed-data
@@ -499,11 +500,11 @@ test/data/stocks.csv [5 4]:
             (let [existing-val (col-reader idx)
                   new-val (cast-fn existing-val)]
               (cond
-                (= new-val :tech.ml.dataset.parse/missing)
+                (= new-val :tech.v3.dataset/missing)
                 (locking new-missing
                   (.add new-missing idx)
                   (res-writer idx missing-val))
-                (= new-val :tech.ml.dataset.parse/parse-failure)
+                (= new-val :tech.v3.dataset/parse-failure)
                 (locking new-missing
                   (res-writer idx missing-val)
                   (.add new-missing idx)

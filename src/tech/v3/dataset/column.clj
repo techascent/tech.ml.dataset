@@ -113,14 +113,14 @@ Implementations should check their metadata before doing calculations."
       (catch Throwable e
         nil))))
 
-
+;; TODO - match inference expectations
 (defn parse-column
   "parse a text or a str column, returning a new column with the same name but with
   a different datatype.  This method is single-threaded.
 
   parser-fn-or-kwd is nil by default and can the keyword :relaxed?  or a function that
-  must return one of parsed-value, :tech.ml.dataset.parse/missing in which case a
-  missing value will be added or :tech.ml.dataset.parse/parse-failure in which case the
+  must return one of parsed-value, :tech.v3.dataset/missing in which case a
+  missing value will be added or :tech.v3.dataset/parse-failure in which case the
   a missing index will be added and the string value will be recorded in the metadata's
   :unparsed-data, :unparsed-indexes entries.
 
@@ -147,20 +147,13 @@ Implementations should check their metadata before doing calculations."
   "Create a new column.  Data will scanned for missing values
   unless the full 4-argument pathway is used."
   ([name data]
-   (let [{coldata :data
-          scanned-missing :missing}
-         (column-data-process/scan-data-for-missing data)]
-     (new-column name coldata nil scanned-missing)))
+   (col-impl/new-column name data))
   ([name data metadata]
-   (let [{coldata :data
-          scanned-missing :missing}
-         (column-data-process/scan-data-for-missing data)]
-     (new-column name coldata metadata scanned-missing)))
+   (col-impl/new-column name data metadata))
   ([name data metadata missing]
-   (let [data (if-not (dtype/as-buffer data)
-                (:data (column-data-process/scan-data-for-missing data))
-                data)]
-     (col-impl/new-column name data metadata missing))))
+   (col-impl/new-column name data metadata missing))
+  ([data-or-data-map]
+   (col-impl/new-column data-or-data-map)))
 
 
 (defn extend-column-with-empty

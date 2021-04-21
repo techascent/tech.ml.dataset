@@ -350,53 +350,15 @@
 (dtype-pp/implement-tostring-print Column)
 
 
-(defn ensure-column
-  [item]
-  (cond
-    (col-proto/is-column? item)
-    item
-    (map? item)
-    (let [{:keys [name data missing metadata force-datatype?] :as cdata} item]
-      (when-not (and (contains? cdata :name) data)
-        (throw (Exception. "Column data map must have name and data")))
-      (let [{data :data
-             new-missing :missing}
-            (if-not force-datatype?
-              (column-data-process/scan-data-for-missing data)
-              {:data data
-               :missing (bitmap/->bitmap)})]
-        (new-column
-         name
-         data
-         metadata (or missing new-missing))))
-    :else
-    (throw (ex-info "item is not convertible to a column without further information"
-                    {:item item}))))
-
-
-(defn ensure-column-seq
-  [item-seq]
-  ;;mapv to force errors here instead of later
-  (mapv (fn [idx item]
-          (cond
-            (col-proto/is-column? item)
-            item
-            (map? item)
-            (ensure-column (update item :name
-                                   #(if (nil? %)
-                                      idx
-                                      %)))
-            (dtype/reader? item)
-            (let [{:keys [data missing]} (column-data-process/scan-data-for-missing item)]
-              (new-column idx data {} missing))
-            (instance? Iterable item)
-            (let [{:keys [data missing]} (column-data-process/scan-data-for-missing item)]
-              (new-column idx data {} missing))
-            :else
-            (throw (ex-info "Item does not appear to be either randomly accessable or iterable"
-                            {:item item}))))
-        (range (count item-seq))
-        item-seq))
+(defn column-datatype-categorical?
+  "Anything where we don't know the conversion to a number is considered
+  automatically categorical as it will need a ->number conversion before
+  any training/inference -- *except* object datatypes."
+  [col-dtype]
+  ;;All object datatypes flatten to object -- that is, they can be stored in an
+  ;;object array.
+  (and (identical? :object (casting/flatten-datatype col-dtype))
+       (not (identical? :object col-dtype))))
 
 
 (defn new-column
@@ -406,20 +368,36 @@
   column and datatype protocols to allow efficient columnwise operations of
   the rest of tech.ml.dataset"
   ([name data metadata missing]
-   (when-not (or (nil? metadata)
-                 (map? metadata))
-     (throw (Exception. "Metadata must be a persistent map")))
-   (let [missing (->bitmap missing)
-         metadata (if (and (not (contains? metadata :categorical?))
-                           (#{:string :keyword :symbol} (dtype/get-datatype data)))
-                    (assoc metadata :categorical? true)
-                    metadata)]
-     (.runOptimize missing)
-     (Column. missing data (assoc metadata :name name) nil)))
+   (new-column #:tech.v3.dataset{:name name
+                                 :data data
+                                 :metadata metadata
+                                 :missing missing}))
   ([name data metadata]
-   (new-column name data metadata (->bitmap)))
+   (new-column name data metadata nil))
   ([name data]
-   (new-column name data {} (->bitmap))))
+   (new-column name data {} nil))
+  ([data-or-column-data-map]
+   (let [coldata (column-data-process/prepare-column-data data-or-column-data-map)
+         data (coldata :tech.v3.dataset/data)
+         metadata (coldata :tech.v3.dataset/metadata)
+         name (coldata :tech.v3.dataset/name)
+         ;;Unless overidden, we now set the categorical? flag
+         metadata (if (and (not (contains? metadata :categorical?))
+                           (column-datatype-categorical?
+                            (dtype/elemwise-datatype data)))
+                    (assoc metadata :categorical? true)
+                    metadata)
+         missing (bitmap/->bitmap (coldata :tech.v3.dataset/missing))]
+     ;;compress bitmaps
+     (.runOptimize missing)
+     (Column. missing data (assoc metadata :name name) nil))))
+
+
+(defn ensure-column-seq
+  [coldata-seq]
+  (->> (column-data-process/prepare-column-data-seq coldata-seq)
+       ;;mapv so we get a real stacktrace when things go south.
+       (mapv new-column)))
 
 
 (defn extend-column-with-empty

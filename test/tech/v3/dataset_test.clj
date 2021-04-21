@@ -453,7 +453,7 @@
 (deftest mean-object-column
   (let [ds (-> (ds/->dataset [])
                (ds/add-or-update-column :a (map (fn [arg] (* 2 arg)) (range 9))))]
-    (is (= :object (dtype/get-datatype (ds :a))))
+    (is (= :int64 (dtype/get-datatype (ds :a))))
     (is (= 8.0 (dfn/mean (ds :a))))))
 
 

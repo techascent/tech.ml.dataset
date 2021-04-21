@@ -164,8 +164,8 @@
                  parse functions do not stop the parsing process.  :unparsed-values and
                  :unparsed-indexes are available in the metadata of the column that tell
                  you the values that failed to parse and their respective indexes.
-              - `fn?` - function from str-> one of `:tech.ml.dataset.parse/missing`,
-                 `:tech.ml.dataset.parse/parse-failure`, or the parsed value.
+              - `fn?` - function from str-> one of `:tech.v3.dataset/missing`,
+                 `:tech.v3.dataset/parse-failure`, or the parsed value.
                  Exceptions here always kill the parse process.  :missing will get marked
                  in the missing indexes, and :parse-failure will result in the index being
                  added to missing, the unparsed the column's :unparsed-values and
