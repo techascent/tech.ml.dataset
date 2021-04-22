@@ -1,12 +1,10 @@
 (ns tech.v3.dataset.column
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
-            [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.parallel.for :as pfor])
+            [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util List]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
@@ -177,7 +175,27 @@ Implementations should check their metadata before doing calculations."
   the union of all the other missing sets.  Column is named :_unnamed.
   This is the missing-set aware version of tech.v3.datatype/emap."
   [map-fn res-dtype & args]
-  (col-impl/new-column :_unnamed
-                       (apply dtype/emap map-fn res-dtype args)
-                       nil
-                       (reduce dtype-proto/set-or (map col-proto/missing args))))
+  (let [res-opt-map (if (keyword? res-dtype)
+                      {:datatype res-dtype}
+                      (or res-dtype {}))
+        ;;object readers get scanned to infer datatype
+        res-dtype (res-opt-map :datatype :object)
+        missing-fn (res-opt-map :missing-fn)]
+    (col-impl/new-column :_unnamed
+                         (apply dtype/emap map-fn res-dtype args)
+                         nil
+                         (if missing-fn
+                           (missing-fn args)
+                           nil))))
+
+
+(defn union-missing-sets
+  "Union the missing sets of the columns returning a roaring bitmap"
+  ^RoaringBitmap [col-seq]
+  (reduce dtype-proto/set-or (map col-proto/missing col-seq)))
+
+
+(defn intersect-missing-sets
+  "Union the missing sets of the columns returning a roaring bitmap"
+  ^RoaringBitmap [col-seq]
+  (reduce dtype-proto/set-and (map col-proto/missing col-seq)))

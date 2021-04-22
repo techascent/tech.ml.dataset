@@ -440,11 +440,35 @@
 
 (deftest typed-column-map-missing
   (let [ds (ds/bind-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]) ds
-             (assoc :a
-                    (ds-col/column-map (fn ^double [^double lhs ^double rhs]
-                                         (+ lhs rhs))
-                                       :float64
-                                       (ds :a) (ds :b))))]
+             (assoc :a (ds-col/column-map (fn [lhs rhs]
+                                            (when (and lhs rhs)
+                                              (+ (double lhs)
+                                                 (double rhs))))
+                                          nil
+                                          (ds :a) (ds :b))))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [false false true]
+           (vec (dfn/finite? (ds :a))))))
+
+  (let [ds (ds/bind-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]) ds
+             (assoc :a (ds-col/column-map (fn [lhs rhs]
+                                            (if (and lhs rhs)
+                                              (+ (double lhs)
+                                                 (double rhs))
+                                              Double/NaN))
+                                          :float64
+                                          (ds :a) (ds :b))))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [false false true]
+           (vec (dfn/finite? (ds :a))))))
+
+  (let [ds (ds/bind-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]) ds
+             (assoc :a (ds-col/column-map (fn [^double lhs ^double rhs]
+                                            (+ (double lhs)
+                                               (double rhs)))
+                                          {:missing-fn ds-col/union-missing-sets
+                                           :datatype :float64}
+                                          (ds :a) (ds :b))))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [false false true]
            (vec (dfn/finite? (ds :a)))))))
