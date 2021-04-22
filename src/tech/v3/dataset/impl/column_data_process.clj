@@ -48,6 +48,33 @@
          bmp)))))
 
 
+(defn scan-data
+  [obj-data missing]
+  (let [obj-data-datatype (dtype/elemwise-datatype obj-data)]
+    (if (and (dtype/reader? obj-data)
+             (not= :object obj-data-datatype))
+      ;;If the user knows the datatype they want, then we just scan for missing if it
+      ;;wasn't provided.
+      #:tech.v3.dataset{:data obj-data
+                        :force-datatype? true
+                        :missing (or missing (scan-missing obj-data))}
+      (let [obj-meta (meta obj-data)
+            parser (column-parsers/promotional-object-parser
+                    (:name obj-meta) obj-meta)
+            ;;At this point either you are convertible to a reader or you are
+            ;;iterable.
+            obj-data (or (dtype/as-reader obj-data) obj-data)
+            missing (bitmap/->bitmap missing)]
+        ;;serially consume the data promoting the container when necessary.
+        (parallel-for/indexed-consume!
+         ;;Do not read from a missing entry if missing is provided
+         #(column-parsers/add-value! parser %1
+                                     (when-not (.contains missing (unchecked-int %1))
+                                       %2))
+         obj-data)
+        (column-parsers/finalize! parser (dtype/ecount parser))))))
+
+
 (defn prepare-column-data
   "Scan data for missing values and to infer storage datatype.  Returns
    a map of least #tech.v3.dataset{:data :missing :force-datatype?}."
@@ -59,39 +86,22 @@
        (contains? ^Map obj-data :tech.v3.dataset/data)
        "Map constructors must contain at least :tech.v3.dataset/data")
       ;;ensure we do not re-scan this object
-      (merge
-       (if (and (obj-data :tech.v3.dataset/force-datatype?)
-                (dtype/reader? (obj-data :tech.v3.dataset/data)))
-         ;;skip scan of the data
-         obj-data
-         (prepare-column-data (obj-data :tech.v3.dataset/data)))
-       ;;allow missing/metadata to make it through
-       (dissoc obj-data :tech.v3.dataset/data)
-       #:tech.v3.dataset{:force-datatype? true}))
+      (let [{:keys [tech.v3.dataset/data
+                    tech.v3.dataset/missing
+                    tech.v3.dataset/force-datatype?]} obj-data]
+        (merge
+         (if (and (dtype/reader? data) force-datatype?)
+           ;;skip scan of the data, but potentially still scan for missing
+           {:tech.v3.dataset/data data
+            :tech.v3.dataset/missing (if missing missing (scan-missing data))}
+           (scan-data data missing))
+         ;;allow missing/metadata to make it through
+         (dissoc obj-data :tech.v3.dataset/data :tech.v3.dataset/missing)
+         #:tech.v3.dataset{:force-datatype? true})))
     (col-proto/is-column? obj-data)
-    #:tech.v3.dataset{:name (:name (meta obj-data))
-                      :data (dtype/->buffer obj-data)
-                      :missing (col-proto/missing obj-data)
-                      :metdata (meta obj-data)}
+    (col-proto/as-map obj-data)
     :else
-    (let [obj-data-datatype (dtype/elemwise-datatype obj-data)]
-      (if (and (dtype/reader? obj-data)
-               (not= :object obj-data-datatype))
-        ;;If the user knows the datatype they want, then we just scan for missing.
-        #:tech.v3.dataset{:data obj-data
-                          :force-datatype? true
-                          :missing (scan-missing obj-data)}
-        (let [obj-meta (meta obj-data)
-              parser (column-parsers/promotional-object-parser
-                      (:name obj-meta) obj-meta)
-              ;;At this point either you are convertible to a reader or you are
-              ;;iterable.
-              obj-data (or (dtype/as-reader obj-data) obj-data)]
-          ;;serially consume the data promoting the container when necessary.
-          (parallel-for/indexed-consume!
-           #(column-parsers/add-value! parser %1 %2)
-           obj-data)
-          (column-parsers/finalize! parser (dtype/ecount parser)))))))
+    (scan-data obj-data nil)))
 
 
 (defn prepare-column-data-seq
@@ -99,7 +109,8 @@
   (pmap (fn [idx item]
           (-> (if (map? item)
                 (update item :tech.v3.dataset/name
-                        #(or % idx))
+                        #(if (nil? %)
+                           idx %))
                 item)
               (prepare-column-data)))
         (range) column-seq))

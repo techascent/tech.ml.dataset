@@ -135,10 +135,8 @@ Implementations should check their metadata before doing calculations."
          n-elems (dtype/ecount col-reader)]
      (dotimes [iter n-elems]
        (column-parsers/add-value! col-parser iter (col-reader iter)))
-
-     (let [{:keys [data missing metadata]}
-           (column-parsers/finalize! col-parser n-elems)]
-       (new-column colname data metadata missing))))
+     (new-column (assoc (column-parsers/finalize! col-parser n-elems)
+                        :tech.v3.dataset/name colname))))
   ([datatype col]
    (parse-column datatype col nil)))
 

@@ -22,6 +22,11 @@
     "Return true if this index is missing.")
   (set-missing [col long-rdr]
     "Set this group of indexes as the missing set")
+  (buffer [col]
+    "Return the data buffer (if there is one) backing this column")
+  (as-map [col]
+    "Return data map representation of this column.  That representation must
+contain at least #:tech.v3.dataset{:name :data :missing :metadata}")
   (unique [col]
     "Set of all unique values")
   (stats [col stats-set]

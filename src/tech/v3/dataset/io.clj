@@ -211,7 +211,9 @@
            ;;Not everything has a conversion to seq.
            (instance? Map (try (first (seq dataset))
                                (catch Throwable e nil)))
-           (parse-mapseq-colmap/mapseq->dataset options dataset)
+           (try
+             "HERE!!!!"
+             (parse-mapseq-colmap/mapseq->dataset options dataset))
            (nil? (seq dataset))
            (ds-impl/new-dataset options nil))]
      (if dataset-name

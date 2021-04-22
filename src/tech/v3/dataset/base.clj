@@ -854,48 +854,53 @@
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
-   :columns (->> (columns ds)
-                 (mapv (fn [col]
-                         ;;Only store packed data.  This can sidestep serialization issues
-                         (let [metadata (meta col)
-                               col (packing/pack col)
-                               dtype (dtype/elemwise-datatype col)]
-                           {:metadata metadata
-                            :missing (dtype/->array
-                                      (bitmap/bitmap->efficient-random-access-reader (ds-col/missing col)))
-                            :name (:name metadata)
-                            :data (cond
-                                    (= :string dtype)
-                                    (column->string-data col)
-                                    (= :text dtype)
-                                    (column->text-data col)
-                                    ;;Nippy doesn't handle object arrays or arraylists
-                                    ;;very well.
-                                    (= :object (casting/flatten-datatype dtype))
-                                    (vec col)
-                                    ;;Store the data as a jvm-native array
-                                    :else
-                                    (dtype-cmc/->array dtype col))}))))})
+   :columns
+   (->>
+    (columns ds)
+    (mapv
+     (fn [col]
+       ;;Only store packed data.  This can sidestep serialization issues
+       (let [metadata (meta col)
+             col (packing/pack col)
+             dtype (dtype/elemwise-datatype col)]
+         {:metadata metadata
+          :missing (dtype/->array
+                    (bitmap/bitmap->efficient-random-access-reader
+                     (ds-col/missing col)))
+          :name (:name metadata)
+          :data (cond
+                  (= :string dtype)
+                  (column->string-data col)
+                  (= :text dtype)
+                  (column->text-data col)
+                  ;;Nippy doesn't handle object arrays or arraylists
+                  ;;very well.
+                  (= :object (casting/flatten-datatype dtype))
+                  (vec col)
+                  ;;Store the data as a jvm-native array
+                  :else
+                  (dtype-cmc/->array dtype col))}))))})
 
 
 (defn data->dataset
   "Convert a data-ized dataset created via dataset->data back into a
   full dataset"
   [{:keys [metadata columns] :as input}]
-  (->> columns
-       (map (fn [{:keys [metadata missing] :as coldata}]
-              (let [datatype (:datatype metadata)
-                    missing (bitmap/->bitmap missing)]
-                (->
-                 (cond
-                   (= :string datatype)
-                   (update coldata :data string-data->column-data)
-                   (= :text datatype)
-                   (update coldata :data #(text-data->column-data % missing))
-                   (= :object (casting/flatten-datatype datatype))
-                   (update coldata :data dtype/elemwise-cast datatype)
-                   :else
-                   (update coldata :data array-buffer/array-buffer datatype))
-                 (clojure.core/assoc :force-datatype? true)
-                 (clojure.core/update :missing (constantly missing))))))
-       (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))
+  (->>
+   columns
+   (map (fn [{:keys [metadata missing data]}]
+          (let [datatype (:datatype metadata)
+                missing (bitmap/->bitmap missing)]
+            #:tech.v3.dataset
+            {:name (:name metadata)
+             :missing missing
+             :force-datatype? true
+             :data (case datatype
+                     :string
+                     (string-data->column-data data)
+                     :text
+                     (text-data->column-data data missing)
+                     (if (identical? :object (casting/flatten-datatype datatype))
+                       (dtype/elemwise-cast data datatype)
+                       (array-buffer/array-buffer data datatype)))})))
+   (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))

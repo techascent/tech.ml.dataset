@@ -245,6 +245,12 @@
                data
                metadata
                nil)))
+  (buffer [this] data)
+  (as-map [this] #:tech.v3.dataset{:name (:name metadata)
+                                   :data data
+                                   :missing missing
+                                   :metadata metadata
+                                   :force-datatype? true})
   (unique [this]
     (->> (parallel-unique this)
          (into #{})))
