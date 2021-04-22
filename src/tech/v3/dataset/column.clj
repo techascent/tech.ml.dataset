@@ -66,6 +66,13 @@
   (col-proto/index-structure col))
 
 
+(defn with-index-structure
+  "Returns a copy of the column that will return an index-structure using the
+  provided `custom=make-index-strucutre-fn`."
+  [col datatype-keyword klass custom-make-index-structure-fn]
+  (col-proto/with-index-structure col datatype-keyword klass custom-make-index-structure-fn))
+
+
 (defn unique
   "Set of all unique values"
   [col]
