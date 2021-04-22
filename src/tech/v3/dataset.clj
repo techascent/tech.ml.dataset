@@ -428,7 +428,6 @@ test/data/stocks.csv [5 4]:
    (column-map dataset result-colname map-fn nil (column-names dataset))))
 
 
-;; TODO - match inference expectations
 (defn column-cast
   "Cast a column to a new datatype.  This is never a lazy operation.  If the old
   and new datatypes match and no cast-fn is provided then dtype/clone is called
