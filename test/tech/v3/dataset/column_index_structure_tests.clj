@@ -1,7 +1,7 @@
 (ns tech.v3.dataset.column-index-structure-tests
   (:import  [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.dataset :as ds]
-            [tech.v3.dataset.column :refer [index-structure]]
+            [tech.v3.dataset.column :refer [index-structure with-index-structure]]
             [tech.v3.dataset.impl.column-index-structure :refer [select-from-index] :as col-index]
             [clojure.test :refer [testing deftest is]]))
 
@@ -17,6 +17,14 @@
            (-> (:categorical DS)
                index-structure
                type)))))
+
+
+(deftest test-with-index-structure
+  (let [DS (ds/->dataset {:categorical [:a :b :c]})]
+    (is (= []
+        (-> (:categorical DS)
+            (with-index-structure :keyword clojure.lang.Keyword (fn [data metadata] []))
+            index-structure)))))
 
 
 (testing "select-from-index"
