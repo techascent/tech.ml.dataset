@@ -48,8 +48,9 @@
             (-> (:keywords DS)
                 index-structure
                 (select-from-index ::col-index/pick [:a :c]))))
-      (is (= {'a [0]
-              'c [2]}
-            (-> (:symbols DS)
-                index-structure
-                (select-from-index ::col-index/pick ['a 'c])))))))
+      ;; (is (= {'a [0]
+      ;;         'c [2]}
+      ;;       (-> (:symbols DS)
+      ;;           index-structure
+      ;;           (select-from-index ::col-index/pick ['a 'c]))))
+      )))
