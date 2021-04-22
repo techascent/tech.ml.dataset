@@ -95,8 +95,8 @@
            {:tech.v3.dataset/data data
             :tech.v3.dataset/missing (if missing missing (scan-missing data))}
            (scan-data data missing))
-         ;;allow missing/metadata to make it through
-         (dissoc obj-data :tech.v3.dataset/data :tech.v3.dataset/missing)
+         ;;allow missing/metadata to make it through so user can override
+         (dissoc obj-data :tech.v3.dataset/data)
          #:tech.v3.dataset{:force-datatype? true})))
     (col-proto/is-column? obj-data)
     (col-proto/as-map obj-data)
