@@ -418,9 +418,9 @@
                                 (fn [str-val]
                                   (cond
                                     (= str-val "missing")
-                                    :tech.ml.dataset.parse/missing
+                                    :tech.v3.dataset/missing
                                     (= str-val "parse-failure")
-                                    :tech.ml.dataset.parse/parse-failure
+                                    :tech.v3.dataset/parse-failure
                                     :else
                                     (Long/parseLong str-val)))]}})]
       (is (= [1 nil nil 2 3]

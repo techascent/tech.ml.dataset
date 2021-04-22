@@ -693,10 +693,10 @@
                    col (if unpack?
                          (packing/unpack col)
                          col)]
-               (assoc ds colname {:data (dtype-cmc/->array col)
-                                  :missing (ds-col/missing col)
-                                  :metadata (meta col)
-                                  :force-datatype? true})))
+               (assoc ds colname #:tech.v3.dataset{:data (dtype-cmc/->array col)
+                                                   :missing (ds-col/missing col)
+                                                   :metadata (meta col)
+                                                   :force-datatype? true})))
            ds
            (columns ds)))
   ([ds]
