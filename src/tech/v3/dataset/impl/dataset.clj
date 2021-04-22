@@ -21,7 +21,7 @@
 (set! *warn-on-reflection* true)
 
 
-(declare new-dataset map-entries)
+(declare new-dataset map-entries empty-dataset)
 
 ;;ported from clojure.lang.APersistentMap
 (defn- map-equiv [this o]
@@ -162,10 +162,7 @@
     (when-let [v (.valAt this k)]
       (clojure.lang.MapEntry. k v)))
   ;;No idea if this is correct behavior....
-  (empty [this] (new-dataset
-                 "_unnamed"
-                 {:name "_unnamed"}
-                 []))
+  (empty [this] (empty-dataset))
   ;;ported from clojure java impl.
   (cons [this e]
     (cond (instance? java.util.Map$Entry e)
@@ -269,6 +266,8 @@
     (let [map-selector? (instance? Map column-name-seq-or-map)
           n-rows (long (second (dtype/shape dataset)))
           indexes (cond
+                    (nil? index-seq)
+                    []
                     (= :all index-seq)
                     nil
                     (dtype-proto/convertible-to-bitmap? index-seq)
@@ -450,3 +449,10 @@
 (defn dataset?
   [ds]
   (instance? Dataset ds))
+
+
+(defn empty-dataset
+  []
+  (new-dataset
+   "_unnamed"
+   nil))

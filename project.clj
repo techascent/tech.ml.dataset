@@ -1,12 +1,11 @@
-(defproject techascent/tech.ml.dataset "5.13-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "5.22-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure              "1.10.2"]
-                 [camel-snake-kebab                "0.4.2"]
-                 [cnuernber/dtype-next             "7.01"]
-                 [techascent/tech.io               "4.03"
+  :dependencies [[org.clojure/clojure              "1.10.2" :scope "provided"]
+                 [cnuernber/dtype-next             "7.10"]
+                 [techascent/tech.io               "4.07"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "4.1.2"
@@ -66,6 +65,8 @@
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
+              :source-paths ["src"]
+              :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]

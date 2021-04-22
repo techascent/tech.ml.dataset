@@ -3,13 +3,19 @@
   (:require [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype :as dtype]
-            [tech.v3.dataset.base :as ds-base])
+            [tech.v3.datatype.sampling :as dt-sample]
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.impl.column-base :as col-base]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.column :as ds-col])
   (:import [java.util.function BiConsumer Function DoubleConsumer LongConsumer
             Consumer]
-           [java.util Map$Entry List]
+           [org.roaringbitmap RoaringBitmap]
+           [java.util Map$Entry List ArrayList]
+           [java.util.function LongSupplier]
            [java.util.concurrent ConcurrentHashMap]
            [tech.v3.datatype IndexReduction Buffer Consumers$StagedConsumer
-            ObjectReader]
+            ObjectReader PrimitiveList ECount]
            [clojure.lang IFn]))
 
 
@@ -230,3 +236,202 @@
                    (aget ctx (unchecked-int
                               (reverse-indexes idx))))))
           output-ary)))))
+
+
+;; Reservoir dataset implementation
+(defrecord ^:private ResDsCtx [^ArrayList new-columns
+                               ^LongSupplier sampler])
+
+
+(defrecord ^:private ResDsColData [col-data
+                                   ^RoaringBitmap missing]
+  ECount
+  (lsize [this] (.lsize ^ECount col-data)))
+
+
+(defn- add-or-missing
+  [^ResDsColData src-col ^long src-idx ^ResDsColData dst-col]
+  (let [^PrimitiveList dst-col-data (.col-data dst-col)]
+    (if (.contains ^RoaringBitmap (.missing src-col) (unchecked-int src-idx))
+      (do
+        (.add ^RoaringBitmap (.missing dst-col) (.lsize dst-col-data))
+        (.add dst-col-data
+              (col-base/datatype->missing-value (.elemwiseDatatype dst-col-data))))
+      (.add dst-col-data ((.col-data src-col) src-idx)))))
+
+
+(defn- replace-or-missing
+  [^ResDsColData src-col ^long src-idx
+   ^ResDsColData dst-col ^long dst-idx]
+  (let [^PrimitiveList dst-col-data (.col-data dst-col)]
+    (if (.contains ^RoaringBitmap (.missing src-col) (unchecked-int src-idx))
+      (do
+        (.add ^RoaringBitmap (.missing dst-col) (unchecked-int dst-idx))
+        (.writeObject dst-col-data dst-idx
+                      (col-base/datatype->missing-value
+                       (.elemwiseDatatype dst-col-data))))
+      (do
+        (.remove ^RoaringBitmap (.missing dst-col) (unchecked-int dst-idx))
+        (.writeObject dst-col-data dst-idx ((.col-data src-col) src-idx))))))
+
+
+(defn reservoir-dataset
+  "Create a new dataset consisting of these column names (or all the column names of
+  the first dataset in the sequence).  New dataset will have at most reservoir-size
+  rows.  There must be enough memory for N datasets during parallelized reduction
+  step where N is at least n-cores or n-keys in the group-by map.
+
+  Options are options for [double-reservoir](https://cnuernber.github.io/dtype-next/tech.v3.datatype.sampling.html#var-double-reservoir).
+
+  Example:
+
+```clojure
+tech.v3.dataset.reductions> (group-by-column-agg
+                             :symbol
+                             {:symbol (first-value :symbol)
+                              :n-elems (row-count)
+                              :price-med (prob-median :price)
+                              :stddev (reservoir-desc-stat :price 100 :standard-deviation)
+                              :sub-stocks (reservoir-dataset 5)}
+                             [stocks stocks stocks])
+:symbol-aggregation [5 5]:
+
+| :symbol | :n-elems |   :price-med |      :stddev |                         :sub-stocks |
+|---------|----------|--------------|--------------|-------------------------------------|
+|     IBM |      369 |  88.70468750 |  16.29366714 | _unnamed [5 3]:                     |
+|         |          |              |              |                                     |
+|         |          |              |              | \\| :symbol \\|   :date \\|  :price \\| |
+|         |          |              |              | \\|---------\\|---------\\|---------\\| |
+|         |          |              |              | \\|     IBM \\|   11992 \\|   79.16 \\| |
+|         |          |              |              | \\|     IBM \\|   12022 \\|   70.58 \\| |
+|         |          |              |              | \\|     IBM \\|   14610 \\|   121.9 \\| |
+|         |          |              |              | \\|     IBM \\|   14214 \\|   82.15 \\| |
+|         |          |              |              | \\|     IBM \\|   11292 \\|   76.47 \\| |
+|    MSFT |      369 |  24.07277778 |   4.20544368 | _unnamed [5 3]:                     |
+|         |          |              |              |                                     |
+|         |          |              |              | \\| :symbol \\|   :date \\|  :price \\| |
+|         |          |              |              | \\|---------\\|---------\\|---------\\| |
+|         |          |              |              | \\|    MSFT \\|   12904 \\|   23.82 \\| |
+|         |          |              |              | \\|    MSFT \\|   13604 \\|   28.30 \\| |
+|         |          |              |              | \\|    MSFT \\|   12874 \\|   23.28 \\| |
+|         |          |              |              | \\|    MSFT \\|   14610 \\|   28.05 \\| |
+|         |          |              |              | \\|    MSFT \\|   12753 \\|   24.52 \\| |
+|    AAPL |      369 |  37.05281250 |  61.61364337 | _unnamed [5 3]:                     |
+|         |          |              |              |                                     |
+|         |          |              |              | \\| :symbol \\|   :date \\|  :price \\| |
+|         |          |              |              | \\|---------\\|---------\\|---------\\| |
+|         |          |              |              | \\|    AAPL \\|   11566 \\|   7.760 \\| |
+|         |          |              |              | \\|    AAPL \\|   14641 \\|   204.6 \\| |
+|         |          |              |              | \\|    AAPL \\|   12173 \\|   8.980 \\| |
+|         |          |              |              | \\|    AAPL \\|   14276 \\|   89.31 \\| |
+|         |          |              |              | \\|    AAPL \\|   11869 \\|   7.630 \\| |
+|    AMZN |      369 |  41.35142361 |  26.92738019 | _unnamed [5 3]:                     |
+|         |          |              |              |                                     |
+|         |          |              |              | \\| :symbol \\|   :date \\|  :price \\| |
+|         |          |              |              | \\|---------\\|---------\\|---------\\| |
+|         |          |              |              | \\|    AMZN \\|   13483 \\|   39.46 \\| |
+|         |          |              |              | \\|    AMZN \\|   12570 \\|   54.40 \\| |
+|         |          |              |              | \\|    AMZN \\|   14641 \\|   118.4 \\| |
+|         |          |              |              | \\|    AMZN \\|   12935 \\|   33.09 \\| |
+|         |          |              |              | \\|    AMZN \\|   11992 \\|   23.35 \\| |
+|    GOOG |      204 | 422.69722222 | 132.23132957 | _unnamed [5 3]:                     |
+|         |          |              |              |                                     |
+|         |          |              |              | \\| :symbol \\|   :date \\|  :price \\| |
+|         |          |              |              | \\|---------\\|---------\\|---------\\| |
+|         |          |              |              | \\|    GOOG \\|   13787 \\|   707.0 \\| |
+|         |          |              |              | \\|    GOOG \\|   14153 \\|   359.4 \\| |
+|         |          |              |              | \\|    GOOG \\|   13634 \\|   497.9 \\| |
+|         |          |              |              | \\|    GOOG \\|   12935 \\|   294.2 \\| |
+|         |          |              |              | \\|    GOOG \\|   13269 \\|   371.8 \\| |
+```
+
+  "
+  ([reservoir-size colnames options]
+   (let [colnames-list (ArrayList.)
+         columns (ArrayList.)
+         _ (when (seq colnames)
+             (.addAll colnames-list (vec (distinct colnames))))
+         reservoir-size (long reservoir-size)]
+     (reify IndexReduction
+       (prepareBatch [this ds]
+         (when (.isEmpty colnames-list)
+           (.addAll colnames-list (ds-base/column-names ds)))
+         (.clear columns)
+         (doseq [colname colnames-list]
+           (let [src-col (ds-base/column ds colname)]
+             (.add columns (ResDsColData. (dtype/->reader src-col)
+                                          (ds-col/missing src-col)))))
+         columns)
+       (reduceIndex [this ds ctx row-idx]
+         (let [^ResDsCtx ctx
+               (or ctx
+                   (ResDsCtx. (let [new-columns (ArrayList.)]
+                                (doseq [col columns]
+                                  (.add new-columns
+                                        (ResDsColData. (col-base/make-container
+                                                        (dtype/elemwise-datatype col))
+                                                       (RoaringBitmap.))))
+                                new-columns)
+                              (dt-sample/reservoir-sampler reservoir-size options)))
+               ^ArrayList new-columns (.new-columns ctx)
+               ^LongSupplier sampler (.sampler ctx)
+               n-elems (.lsize ^ResDsColData (.get new-columns 0))]
+           (if (< n-elems reservoir-size)
+             (dotimes [col-idx (.size new-columns)]
+               (add-or-missing (.get columns col-idx) row-idx
+                               (.get new-columns col-idx)))
+             (let [sample-idx (.getAsLong sampler)]
+               (when (>= sample-idx 0)
+                 (dotimes [col-idx (.size new-columns)]
+                   (replace-or-missing (.get columns col-idx) row-idx
+                                       (.get new-columns col-idx) sample-idx)))))
+           ctx))
+       (reduceReductions [this lhs-ctx rhs-ctx]
+         (let [^ResDsCtx lhs-ctx lhs-ctx
+               ^ResDsCtx rhs-ctx rhs-ctx]
+           (let [^LongSupplier sampler (.sampler lhs-ctx)
+                 ^ArrayList lhs-cols (.new-columns lhs-ctx)
+                 ^ArrayList rhs-cols (.new-columns rhs-ctx)
+                 n-cols (.size lhs-cols)
+                 n-lhs (.lsize ^ResDsColData (.get lhs-cols (int 0)))
+                 n-rhs (.lsize ^ResDsColData (.get rhs-cols (int 0)))
+                 n-till-full (min (- reservoir-size n-lhs)
+                                  n-rhs)
+                 n-sample-rhs (- n-rhs n-till-full)
+                 ^longs samples (let [samples (long-array n-sample-rhs)]
+                                  (dotimes [sample-idx n-sample-rhs]
+                                    (aset samples sample-idx (.getAsLong sampler)))
+                                  samples)]
+             (->> (range n-cols)
+                  (pmap
+                   ;;Merge the two datasets resampling as necessary.
+                   (fn [col-idx]
+                     (let [^ResDsColData lhs-col (.get lhs-cols (int col-idx))
+                           ^ResDsColData rhs-col (.get rhs-cols (int col-idx))]
+                       ;;Ensure lhs is full.
+                       (dotimes [full-idx n-till-full]
+                         (add-or-missing rhs-col full-idx lhs-col))
+                       (dotimes [sample-idx n-sample-rhs]
+                         ;;replace this index
+                         (let [sidx (aget samples sample-idx)]
+                           (when (>= sidx 0)
+                             (replace-or-missing rhs-col (+ sample-idx n-till-full)
+                                                 lhs-col sidx)))))))
+                  (dorun)))
+           lhs-ctx))
+       (finalize [this ctx]
+         (let [^ResDsCtx ctx ctx]
+           (ds-impl/new-dataset options
+                                (map (fn [colname ^ResDsColData col-data]
+                                       {:name colname
+                                        :data (.col-data col-data)
+                                        :missing (.missing col-data)
+                                        ;;do *not* re-scan column to ascertain
+                                        ;;datatype
+                                        :force-datatype? true})
+                                     colnames-list
+                                     (.new-columns ctx))))))))
+  ([reservoir-size colnames]
+   (reservoir-dataset reservoir-size colnames nil))
+  ([reservoir-size]
+   (reservoir-dataset reservoir-size nil nil)))

@@ -1037,6 +1037,48 @@
            (mapv (comp :datatype meta) (vals data))))))
 
 
+(deftest create-dataset-seq
+  (let [data (ds/->dataset {:calendar-year '(2020 2021 2020 2021)
+                            :setting '("A" "A" "B" "B")
+                            :bigdata (cycle [1 2 3 4])})]
+    (is (= 4 (ds/row-count data)))))
+
+
+(deftest empty-dataset-on-select-nothing
+  (let [dataset (ds/->dataset "test/data/stocks.csv")]
+    (is (= 0 (ds/row-count (ds/select-columns dataset nil))))
+    (is (= 0 (ds/row-count (ds/select-rows dataset nil))))
+    (is (= (ds/column-count dataset)
+           (ds/column-count (ds/select-rows dataset nil))))))
+
+
+(deftest column-cast-test-cce-fail
+  (let [ds (ds/->dataset {:col1 [1 2 3 "NaN"]} {:parser-fn :string})]
+    (is (= [1.0 2.0 3.0]
+           (->> (ds/column-cast ds :col1 [:float64 :relaxed?])
+                (#(ds/column % :col1))
+                (take 3)
+                (vec))))))
+
+
+(deftest desc-stats-ok
+  (let [ds (ds/->dataset [])]
+    (is '()
+        (ds/brief ds))))
+
+
+(deftest desc-stats-also-ok
+  (let [ds (ds/->dataset {"col1" [] "col2" [1]})]
+    (is '()
+        (ds/brief ds))))
+
+
+(deftest desc-stats-oob
+  (let [ds (ds/->dataset {"col1" []})]
+    (is '()
+        (ds/brief ds))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

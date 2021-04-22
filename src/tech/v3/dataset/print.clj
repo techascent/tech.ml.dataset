@@ -130,7 +130,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)
          print-ds (ds-proto/select dataset :all index-range)
-         column-names (map #(.toString ^Object %) (keys print-ds))
+         column-names (map #(when (some? %) (.toString ^Object %)) (keys print-ds))
          column-types (map #(str (:datatype (meta %))) (vals print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (packing/unpack)

@@ -1,5 +1,43 @@
 # Changelog
 
+## 5.21
+ * [Issue 233](https://github.com/techascent/tech.ml.dataset/issues/233) - Poi xlsx parser can now autodetect dates.  Note that fastexcel is the default
+   xslx parser so in order to parse xlsx files using poi use `tech.v3.libs.poi/workbook->datasets`.
+ * [PR 232](https://github.com/techascent/tech.ml.dataset/pull/232) - Option - `:disable-comment-skipping?` - to disable comment skipping in csv files.
+
+
+## 5.20
+ * Return an Iterable from csv->rows as opposed to a seq.  Iterator-seq has nontrivial overhead.
+ * Fixes for issues [229](https://github.com/techascent/tech.ml.dataset/issues/229), 
+   [230](https://github.com/techascent/tech.ml.dataset/issues/230), and [231](https://github.com/techascent/tech.ml.dataset/issues/231).
+
+## 5.19
+ * Using builder model for parquet both for forward compatibility and so we can set an output stream
+   as opposed to a file path.  This allows a graal native pathway to work wtih parquet.
+
+## 5.18
+ * Graal-native friendly mmap pathways (no requiring resolve, you have to explicity set the implementation in your main.clj file).
+ * Parquet write pathway update to make more standard and more likely to work with future versions of parquet.  This means, however, that there will
+   no longer be a direct correlation between number of datasets and number of record batches in a parquet file as the standard pathway takes care
+   of writing out record batches when a memory constraint is triggered.  So if you save a dataset you may get a parquet file back that contains
+   a sequence of datasets.  There are many parquet options, see the documentation for 
+   [ds-seq->parquet](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html#var-ds-seq-.3Eparquet).
+
+## 5.17
+ * [Issue 225](https://github.com/techascent/tech.ml.dataset/issues/224) - column/row selection should return empty datasets when no columns are selected.
+ * nil headers now print fine - thanks to DavidVujic.
+
+## 5.15
+ * [Issue 224](https://github.com/techascent/tech.ml.dataset/issues/224) - dataset creating fails in map case when all vals are seqs.
+
+## 5.14
+ * Another set of smaller upgrades to csv parsing.
+ * [Reservoir sampling](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html#var-reservoir-dataset) is supported for large aggregations.
+ * tech.io (and thus nippy) is upgraded.
+
+## 5.13
+ * Various optimizations to csv parsing making it a bit (2x) faster.
+
 ## 5.12
  * All statistical/reduction summations now use  [Kahan's compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm).  This makes summation
    much more accurate for very large streams of data.
@@ -7,20 +45,20 @@
    behavior than was expected previously when using maps of columns as dataset constructors.
 
 ## 5.11
- * Many more algorithms exposed and documentation updated for the 
-   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) 
+ * Many more algorithms exposed and documentation updated for the
+   [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html)
    namespace.
 
 ## 5.10
  * apache data sketch set-cardinality algorithms hyper-log-log and theta.
 
 ## 5.07
- * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) 
+ * [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html)
   namespace now includes direct aggregations
   including group-by aggregations and also t-dunnings' t-digest algorithm for
   probabilistic cdf and quantile estimation.
-  
-## 5.06 
+
+## 5.06
  * Bugs introduced by t-digest version 3.2.  Ignore this release.
 
 ## 5.05

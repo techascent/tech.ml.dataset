@@ -134,6 +134,9 @@
      options. If the option is :carry-on then we either create a new column or add
      missing values for columns that had no data for that row.
   - `:skip-bad-rows?` - Legacy option.  Use :bad-row-policy.
+  - `:disable-comment-skipping?` - As default, the `#` character is recognised as a
+     line comment when found in the beginning of a line of text in a CSV file,
+     and the row will be ignored. Set `true` to disable this behavior.
   - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
      will result in an exception.
   - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
@@ -161,8 +164,8 @@
                  parse functions do not stop the parsing process.  :unparsed-values and
                  :unparsed-indexes are available in the metadata of the column that tell
                  you the values that failed to parse and their respective indexes.
-              - `fn?` - function from str-> one of `:tech.ml.dataset.parser/missing`,
-                 `:tech.ml.dataset.parser/parse-failure`, or the parsed value.
+              - `fn?` - function from str-> one of `:tech.ml.dataset.parse/missing`,
+                 `:tech.ml.dataset.parse/parse-failure`, or the parsed value.
                  Exceptions here always kill the parse process.  :missing will get marked
                  in the missing indexes, and :parse-failure will result in the index being
                  added to missing, the unparsed the column's :unparsed-values and

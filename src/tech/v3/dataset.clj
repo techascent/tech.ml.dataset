@@ -717,67 +717,69 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ([dataset]
    (descriptive-stats dataset {}))
   ([dataset options]
-   (let [stat-names (or (:stat-names options)
-                        (->> (all-descriptive-stats-names)
-                             ;;This just is too much information for small repls.
-                             (remove #{:median :values :n-values
-                                       :quartile-1 :quartile-3 :histogram})))
-         numeric-stats (set/intersection
-                        #{:min :quartile-1 :mean :median
-                          :quartile-3
-                          :max :standard-deviation :skew}
-                        (set stat-names))
-         stats-ds
-         (->> (->dataset dataset)
-              (columns)
-              (pmap (fn [ds-col]
-                      (let [n-missing (dtype/ecount (ds-col/missing ds-col))
-                            n-valid (- (dtype/ecount ds-col)
-                                       n-missing)
-                            col-dtype (dtype/get-datatype ds-col)]
-                        (merge
-                         {:col-name (ds-col/column-name ds-col)
-                          :datatype col-dtype
-                          :n-valid n-valid
-                          :n-missing n-missing
-                          :first (first ds-col)
-                          :last (nth ds-col (dec (dtype/ecount ds-col)))}
-                         (cond
-                           (dtype-dt/datetime-datatype? col-dtype)
-                           (dtype-dt/millisecond-descriptive-statistics
-                            numeric-stats
-                            nil
-                            ds-col)
-                           (and (not (:categorical? (meta ds-col)))
-                                (casting/numeric-type? col-dtype))
-                           (dfn/descriptive-statistics numeric-stats ds-col)
-                           :else
-                           (let [histogram (->> (frequencies ds-col)
-                                                (clojure.core/sort-by second >))
-                                 max-categorical-values (or (:n-categorical-values
-                                                             options) 21)]
-                             (merge
-                              {:mode (ffirst histogram)
-                               :n-values (count histogram)}
-                              {:values
-                               (->> (map first histogram)
-                                    (take max-categorical-values)
-                                    (vec))}
-                              (when (< (count histogram) max-categorical-values)
-                                {:histogram histogram}))))))))
-              (clojure.core/sort-by (comp str :col-name))
-              ->dataset)
-         existing-colname-set (->> (column-names stats-ds)
-                                   set)]
-     ;;This orders the columns by the ordering of stat-names but if for instance
-     ;;there were no numeric or no string columns it still works.
-     (-> stats-ds
-         (select-columns (->> stat-names
-                              (clojure.core/filter existing-colname-set)))
-         (set-dataset-name (str (dataset-name dataset) ": descriptive-stats"))
-         ;;Always print all the columns after descriptive stats
-         (vary-meta clojure.core/assoc
-                    :print-index-range (range (column-count dataset)))))))
+   (if (== 0 (row-count dataset))
+     (ds-impl/empty-dataset)
+     (let [stat-names (or (:stat-names options)
+                          (->> (all-descriptive-stats-names)
+                               ;;This just is too much information for small repls.
+                               (remove #{:median :values :n-values
+                                         :quartile-1 :quartile-3 :histogram})))
+           numeric-stats (set/intersection
+                          #{:min :quartile-1 :mean :median
+                            :quartile-3
+                            :max :standard-deviation :skew}
+                          (set stat-names))
+           stats-ds
+           (->> (->dataset dataset)
+                (columns)
+                (pmap (fn [ds-col]
+                        (let [n-missing (dtype/ecount (ds-col/missing ds-col))
+                              n-valid (- (dtype/ecount ds-col)
+                                         n-missing)
+                              col-dtype (dtype/get-datatype ds-col)]
+                          (merge
+                           {:col-name (ds-col/column-name ds-col)
+                            :datatype col-dtype
+                            :n-valid n-valid
+                            :n-missing n-missing
+                            :first (first ds-col)
+                            :last (nth ds-col (dec (dtype/ecount ds-col)))}
+                           (cond
+                             (dtype-dt/datetime-datatype? col-dtype)
+                             (dtype-dt/millisecond-descriptive-statistics
+                              numeric-stats
+                              nil
+                              ds-col)
+                             (and (not (:categorical? (meta ds-col)))
+                                  (casting/numeric-type? col-dtype))
+                             (dfn/descriptive-statistics numeric-stats ds-col)
+                             :else
+                             (let [histogram (->> (frequencies ds-col)
+                                                  (clojure.core/sort-by second >))
+                                   max-categorical-values (or (:n-categorical-values
+                                                               options) 21)]
+                               (merge
+                                {:mode (ffirst histogram)
+                                 :n-values (count histogram)}
+                                {:values
+                                 (->> (map first histogram)
+                                      (take max-categorical-values)
+                                      (vec))}
+                                (when (< (count histogram) max-categorical-values)
+                                  {:histogram histogram}))))))))
+                (clojure.core/sort-by (comp str :col-name))
+                ->dataset)
+           existing-colname-set (->> (column-names stats-ds)
+                                     set)]
+       ;;This orders the columns by the ordering of stat-names but if for instance
+       ;;there were no numeric or no string columns it still works.
+       (-> stats-ds
+           (select-columns (->> stat-names
+                                (clojure.core/filter existing-colname-set)))
+           (set-dataset-name (str (dataset-name dataset) ": descriptive-stats"))
+           ;;Always print all the columns after descriptive stats
+           (vary-meta clojure.core/assoc
+                      :print-index-range (range (column-count dataset))))))))
 
 
 (defn brief

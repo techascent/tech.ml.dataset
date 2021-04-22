@@ -53,7 +53,11 @@
                 (column-parsers/add-value! parser row-num (.value cell))))))))
     ;;Fill out columns that only have missing values
     (when-not (== 0 (count parsers))
-      (let [max-col-idx (apply max 0 (keys parsers))]
+      (let [max-col-idx (->> parsers
+                             (map-indexed (fn [idx parser]
+                                            (when parser idx)))
+                             (remove nil?)
+                             (last))]
         (dotimes [idx max-col-idx]
           (col-idx->parser idx))))
     (parse-context/parsers->dataset options parsers)))

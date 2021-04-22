@@ -75,8 +75,16 @@
 
 
 (deftest key-fn-number-columns
-  (let [ds (ds/->dataset xlsx-file {:key-fn keyword})]
+  (let [ds (first (xlsx-parse/workbook->datasets xlsx-file {:key-fn keyword}))]
     (is (= 0 (count (filter nil? (ds/column-names ds)))))
     (is (= #{:column-0 :Age :Country (keyword "First Name") :Gender :Date
              (keyword "Last Name") (keyword "Id")}
            (set (ds/column-names ds))))))
+
+
+(deftest auto-infer-dates
+  (let [ds (first (xlsx-parse/workbook->datasets "test/data/stocks-with-dates.xlsx"))]
+    (is (= #{:string :packed-local-date :float64}
+           (->> (vals ds)
+                (map (comp :datatype meta))
+                set)))))
