@@ -43,9 +43,12 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
 
 
 (defprotocol PHasIndexStructure
-  (index-structure [this])
+  (index-structure [this]
+    "Returns an index-structure for the column.")
   (with-index-structure
-    [this datatype-keyword klass custom-make-index-structure-fn]))
+    [this datatype-keyword klass custom-make-index-structure-fn]
+    "Returns a copy of the column that will use the provided `custom-make-index-structure-fn`
+to construct the index when the index structure is requested."))
 
 
 (defprotocol PIndexStructure
