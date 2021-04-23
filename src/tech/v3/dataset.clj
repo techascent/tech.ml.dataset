@@ -376,9 +376,6 @@
 (defn column-map
   "Produce a new (or updated) column as the result of mapping a fn over columns.
 
-  Missing set of the new column will be the union of the missing sets of the
-  original columns.
-
   * `dataset` - dataset.
   * `result-colname` - Name of new (or existing) column.
   * `map-fn` - function to map over columns.  Same rules as `tech.v3.datatype/emap`.
@@ -390,6 +387,7 @@
   Returns a new dataset with a new or updated column.
 
   Options:
+
   * `:datatype` - Set the dataype of the result column.  If not given result is scanned
   to infer result datatype and missing set.
   * `:missing-fn` - if given, columns are first passed to missing-fn as a sequence and
