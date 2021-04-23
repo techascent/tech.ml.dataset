@@ -83,10 +83,7 @@
   (let [idx-map (build-value-to-index-position-map data)]
     (LinkedHashMap. ^java.util.Map idx-map)))
 
-;; When tech.datatype does not know what something is it describes it
-;; as an object (see tech.v3.datatype.casting/elemwise-datatype). This
-;; dispatch method then serves as a default unless someone has extended
-;; this multimethod to catch a more specific datatype.
+
 (defmethod make-index-structure :default
   [data _]
   (let [idx-map (build-value-to-index-position-map data)]
