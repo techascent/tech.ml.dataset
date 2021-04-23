@@ -63,15 +63,17 @@
 
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
-  (fn [data meta]
-    (let [meta-marked-categorical? (:categorical meta)
-          data-dtype (-> data elemwise-datatype)
+  (fn [data metadata]
+    (let [data-dtype (-> data elemwise-datatype)
           data-klass (-> data-dtype datatype->object-class)]
-      (if (nil? meta-marked-categorical?)
-        (if (categorical? data-dtype)
+      (println {:meta metadata
+                :has-categorical-metadata (contains? metadata :categorical?)
+                :meta-marked-categorical? (:categorical? metadata)})
+      (if (contains? metadata :categorical?)
+        (if (:categorical? metadata)
           ::categorical
           data-klass)
-        (if meta-marked-categorical?
+        (if (categorical? data-dtype)
           ::categorical
           data-klass)))))
 
