@@ -19,6 +19,8 @@
     (inferred-equals #:tech.v3.dataset{:data [1 2 3 nil 4]
                                        :force-datatype? true}
                      [1 2 3 nil 4])
+    (inferred-equals (list 0 Double/NaN 1 nil nil)
+                     (double-array [0.0 Double/NaN 1.0 Double/NaN Double/NaN]))
     (is (= #{2 4}
            (set (ds/missing (-> (ds/->dataset [])
                                 (assoc :test-data [1 2 nil 3 nil]))))))

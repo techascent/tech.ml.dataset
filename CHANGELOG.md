@@ -32,6 +32,9 @@ Itemized Changes:
  * `assoc, ds/add-column, ds/update-column, ds/add-or-update-column` type operations all
     upgraded such that datatype and missing are inferred much more frequently.
  * `:tech.ml.dataset.parse/missing`, `:tech.ml.dataset.parse/parse-failure` -> `:tech.v3.dataset/missing`, `:tech.v3.dataset/parse-failure`.
+ * `column-map` - Now scans results to infer datatype if not provided as opposed to assuming result is the
+    widest of the input column types.  Also users can provide their own function that calculates missing sets as opposed to
+	the default behavior being the union of the input columns' missing sets.
 
 
 
