@@ -62,9 +62,6 @@
   (fn [data metadata]
     (let [data-dtype (-> data elemwise-datatype)
           data-klass (-> data-dtype datatype->object-class)]
-      (println {:meta metadata
-                :has-categorical-metadata (contains? metadata :categorical?)
-                :meta-marked-categorical? (:categorical? metadata)})
       (if (contains? metadata :categorical?)
         (if (:categorical? metadata)
           ::categorical
