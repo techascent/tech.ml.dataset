@@ -1,6 +1,9 @@
 # Changelog
 
-## 6.00
+## 6.00-beta-2
+ * Small bugfix so missing sets are correct set in `column-map`.
+
+## 6.00-beta-1
 
  Data types and missing values are much more aggressively inferred - which is
  `O(n-rows)`) throught the api. There is a new API to disable the inference - Either
