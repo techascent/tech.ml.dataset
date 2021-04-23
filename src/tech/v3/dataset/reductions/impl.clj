@@ -423,6 +423,7 @@ tech.v3.dataset.reductions> (group-by-column-agg
          (let [^ResDsCtx ctx ctx]
            (ds-impl/new-dataset options
                                 (map (fn [colname ^ResDsColData col-data]
+                                       #:tech.v3.dataset
                                        {:name colname
                                         :data (.col-data col-data)
                                         :missing (.missing col-data)

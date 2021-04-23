@@ -35,8 +35,8 @@
 ;; 2. If parse is specified, use parse if
 
 
-(def parse-failure :tech.ml.dataset.parse/parse-failure)
-(def missing :tech.ml.dataset.parse/missing)
+(def parse-failure :tech.v3.dataset/parse-failure)
+(def missing :tech.v3.dataset/missing)
 
 
 (defn make-safe-parse-fn
@@ -150,23 +150,24 @@
    missing-value rowcount]
   (add-missing-values! container missing missing-value rowcount)
   (merge
-   {:data container
-    :missing missing
-      :force-datatype? true}
+   #:tech.v3.dataset{:data container
+                     :missing missing
+                     :force-datatype? true}
    (when (and failed-values
               (not= 0 (dtype/ecount failed-values)))
-     {:metadata {:unparsed-data failed-values
-                 :unparsed-indexes failed-indexes}})))
+     #:tech.v3.dataset{:metadata {:unparsed-data failed-values
+                                  :unparsed-indexes failed-indexes}})))
 
 
 (defn- missing-value?
+  "Is this a missing value coming from a CSV file"
   [value]
   ;;fastpath for numbers
   (if (instance? Number value)
     false
     (or (nil? value)
         (.equals "" value)
-        (identical? value :tech.ml.dataset.parse/missing)
+        (identical? value :tech.v3.dataset/missing)
         (and (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
@@ -188,7 +189,7 @@
     ;;to make it.
     (let [parsed-value (cond
                          (missing-value? value)
-                         :tech.ml.dataset.parse/missing
+                         :tech.v3.dataset/missing
                          (and (not= container-dtype :string)
                               (= (dtype/datatype value) container-dtype))
                          value
@@ -197,10 +198,10 @@
           idx (long idx)]
       (cond
         ;;ignore it; we will add missing when we see the first valid value
-        (identical? :tech.ml.dataset.parse/missing parsed-value)
+        (identical? :tech.v3.dataset/missing parsed-value)
         nil
         ;;Record the original incoming value if we are parsing in relaxed mode.
-        (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
+        (identical? :tech.v3.dataset/parse-failure parsed-value)
         (if failed-values
           (do
             (.addObject failed-values value)
@@ -361,7 +362,7 @@
     (let [parsed-value
           (cond
             (missing-value? value)
-            :tech.ml.dataset.parse/missing
+            :tech.v3.dataset/missing
 
             (identical? (dtype/datatype value) container-dtype)
             value
@@ -370,7 +371,7 @@
             parse-fn
             (let [parsed-value (parse-fn value)]
               ;;If the value parsed successfully
-              (if (not (identical? :tech.ml.dataset.parse/parse-failure parsed-value))
+              (if (not (identical? :tech.v3.dataset/parse-failure parsed-value))
                 parsed-value
                 ;;else Perform column promotion
                 (let [next-idx (find-next-parser value container-dtype promotion-list)
@@ -396,9 +397,9 @@
             value)]
       (cond
         ;;Promotional parsers should not have parse failures.
-        (identical? :tech.ml.dataset.parse/parse-failure parsed-value)
+        (identical? :tech.v3.dataset/parse-failure parsed-value)
         (errors/throwf "Parse failure detected in promotional parser - Please file issue.")
-        (identical? :tech.ml.dataset.parse/missing parsed-value)
+        (identical? :tech.v3.dataset/missing parsed-value)
         nil ;;Skip, will add missing on next valid value
         :else
         (do

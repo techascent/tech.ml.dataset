@@ -136,7 +136,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
     (if (> n-rows 0)
       (let [retval (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
                      (read-fn col-rdr)
-                     :tech.ml.dataset.parse/missing)]
+                     :tech.v3.dataset/missing)]
         (set! n-rows (dec n-rows))
         (.consume col-rdr)
         retval)
@@ -354,7 +354,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         missing (bitmap/->bitmap)]
     (reify col-parsers/PParser
       (add-value! [p idx value]
-        (if (= value :tech.ml.dataset.parse/missing)
+        (if (= value :tech.v3.dataset/missing)
           (do
             (.addObject container missing-value)
             (.add missing (long idx)))
@@ -376,7 +376,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         ^Buffer row-rep-counts (when-not (== n-rows (.getTotalValueCount col-rdr))
                                  (-> (int-array n-rows)
                                      (dtype/->buffer)))
-        {:keys [data missing metadata]}
+        coldata
         ;;The user specified a specific parser for this datatype
         (loop [continue? (.hasNext iterator)
                row-idx -1
@@ -390,10 +390,12 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
                 (.accumPlusLong row-rep-counts row-idx 1))
               (recur (.hasNext iterator) row-idx (unchecked-inc row)))
             (col-parsers/finalize! col-parser n-rows)))]
-    (col-impl/new-column (key-fn col-name) data
-                         (merge metadata (when row-rep-counts
-                                           {:row-rep-counts row-rep-counts}))
-                         missing)))
+    (col-impl/new-column (cond-> (assoc coldata
+                                        :tech.v3.dataset/name
+                                        (key-fn col-name))
+                           row-rep-counts
+                           (update :tech.v3.dataset/metadata
+                                   assoc :row-rep-counts row-rep-counts)))))
 
 
 (defn- parse-parquet-column

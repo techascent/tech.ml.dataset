@@ -204,7 +204,7 @@
    :data typed reader/writer of data
    :metadata - optional map with unparsed-indexes and unparsed-values
   }
-  Supports a subset of tech.ml.dataset/->dataset options:
+  Supports a subset of tech.v3.dataset/->dataset options:
   :column-whitelist
   :column-blacklist
   :n-initial-skip-rows

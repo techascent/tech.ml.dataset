@@ -37,7 +37,7 @@
 
 (defn dense->dataset
   "Given a neanderthal matrix, convert its columns into the columns of a
-  tech.ml.dataset.  This does the conversion in-place.  If you would like to copy
+  tech.v3.dataset.  This does the conversion in-place.  If you would like to copy
   the neanderthal matrix into JVM arrays, then after method use dtype/clone."
   [matrix]
   (->> (n-core/cols matrix)

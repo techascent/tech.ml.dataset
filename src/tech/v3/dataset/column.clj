@@ -1,12 +1,10 @@
 (ns tech.v3.dataset.column
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
-            [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.parallel.for :as pfor])
+            [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util List]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
@@ -113,14 +111,14 @@ Implementations should check their metadata before doing calculations."
       (catch Throwable e
         nil))))
 
-
+;; TODO - match inference expectations
 (defn parse-column
   "parse a text or a str column, returning a new column with the same name but with
   a different datatype.  This method is single-threaded.
 
   parser-fn-or-kwd is nil by default and can the keyword :relaxed?  or a function that
-  must return one of parsed-value, :tech.ml.dataset.parse/missing in which case a
-  missing value will be added or :tech.ml.dataset.parse/parse-failure in which case the
+  must return one of parsed-value, :tech.v3.dataset/missing in which case a
+  missing value will be added or :tech.v3.dataset/parse-failure in which case the
   a missing index will be added and the string value will be recorded in the metadata's
   :unparsed-data, :unparsed-indexes entries.
 
@@ -135,10 +133,8 @@ Implementations should check their metadata before doing calculations."
          n-elems (dtype/ecount col-reader)]
      (dotimes [iter n-elems]
        (column-parsers/add-value! col-parser iter (col-reader iter)))
-
-     (let [{:keys [data missing metadata]}
-           (column-parsers/finalize! col-parser n-elems)]
-       (new-column colname data metadata missing))))
+     (new-column (assoc (column-parsers/finalize! col-parser n-elems)
+                        :tech.v3.dataset/name colname))))
   ([datatype col]
    (parse-column datatype col nil)))
 
@@ -147,20 +143,13 @@ Implementations should check their metadata before doing calculations."
   "Create a new column.  Data will scanned for missing values
   unless the full 4-argument pathway is used."
   ([name data]
-   (let [{coldata :data
-          scanned-missing :missing}
-         (column-data-process/scan-data-for-missing data)]
-     (new-column name coldata nil scanned-missing)))
+   (col-impl/new-column name data))
   ([name data metadata]
-   (let [{coldata :data
-          scanned-missing :missing}
-         (column-data-process/scan-data-for-missing data)]
-     (new-column name coldata metadata scanned-missing)))
+   (col-impl/new-column name data metadata))
   ([name data metadata missing]
-   (let [data (if-not (dtype/as-buffer data)
-                (:data (column-data-process/scan-data-for-missing data))
-                data)]
-     (col-impl/new-column name data metadata missing))))
+   (col-impl/new-column name data metadata missing))
+  ([data-or-data-map]
+   (col-impl/new-column data-or-data-map)))
 
 
 (defn extend-column-with-empty
@@ -186,7 +175,27 @@ Implementations should check their metadata before doing calculations."
   the union of all the other missing sets.  Column is named :_unnamed.
   This is the missing-set aware version of tech.v3.datatype/emap."
   [map-fn res-dtype & args]
-  (col-impl/new-column :_unnamed
-                       (apply dtype/emap map-fn res-dtype args)
-                       nil
-                       (reduce dtype-proto/set-or (map col-proto/missing args))))
+  (let [res-opt-map (if (keyword? res-dtype)
+                      {:datatype res-dtype}
+                      (or res-dtype {}))
+        ;;object readers get scanned to infer datatype
+        res-dtype (res-opt-map :datatype :object)
+        missing-fn (res-opt-map :missing-fn)]
+    (col-impl/new-column :_unnamed
+                         (apply dtype/emap map-fn res-dtype args)
+                         nil
+                         (if missing-fn
+                           (missing-fn args)
+                           nil))))
+
+
+(defn union-missing-sets
+  "Union the missing sets of the columns returning a roaring bitmap"
+  ^RoaringBitmap [col-seq]
+  (reduce dtype-proto/set-or (map col-proto/missing col-seq)))
+
+
+(defn intersect-missing-sets
+  "Union the missing sets of the columns returning a roaring bitmap"
+  ^RoaringBitmap [col-seq]
+  (reduce dtype-proto/set-and (map col-proto/missing col-seq)))
