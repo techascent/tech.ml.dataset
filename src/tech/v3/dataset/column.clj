@@ -171,9 +171,21 @@ Implementations should check their metadata before doing calculations."
 
 
 (defn column-map
-  "Map a scalar function across one or more columns.  New missing set becomes
-  the union of all the other missing sets.  Column is named :_unnamed.
-  This is the missing-set aware version of tech.v3.datatype/emap."
+  "Map a scalar function across one or more columns.
+  This is the semi-missing-set aware version of tech.v3.datatype/emap.
+
+  If res-dtype is nil then the result is scanned to infer datatype and
+  missing set.  res-dtype may also be a map of options:
+
+  Options:
+
+  * `:datatype` - Set the dataype of the result column.  If not given result is scanned
+  to infer result datatype and missing set.
+  * `:missing-fn` - if given, columns are first passed to missing-fn as a sequence and
+  this dictates the missing set.  Else the missing set is by scanning the results
+  during the inference process.  See `tech.v3.dataset.column/union-missing-sets` and
+  `tech.v3.dataset.column/intersect-missing-sets` for example functions to pass in
+  here."
   [map-fn res-dtype & args]
   (let [res-opt-map (if (keyword? res-dtype)
                       {:datatype res-dtype}

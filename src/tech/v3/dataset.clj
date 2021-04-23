@@ -392,7 +392,9 @@
   to infer result datatype and missing set.
   * `:missing-fn` - if given, columns are first passed to missing-fn as a sequence and
   this dictates the missing set.  Else the missing set is by scanning the results
-  during the inference process.
+  during the inference process. See `tech.v3.dataset.column/union-missing-sets` and
+  `tech.v3.dataset.column/intersect-missing-sets` for example functions to pass in
+  here.
 
   Example:
 
