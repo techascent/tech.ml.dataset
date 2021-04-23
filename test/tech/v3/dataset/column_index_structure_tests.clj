@@ -6,7 +6,7 @@
             [clojure.test :refer [testing deftest is]]))
 
 
-(deftest test-index-structure
+(deftest test-default-index-structure-type-dispatch
   (let [DS (ds/->dataset {:continuous  [1 2 3]
                           :categorical [:a :b :c]})]
     (is (= TreeMap
@@ -15,6 +15,17 @@
                type)))
     (is (= LinkedHashMap
            (-> (:categorical DS)
+               index-structure
+               type)))
+    ;; sensitive to :cateogrical? meta overrides
+    (is (= LinkedHashMap
+           (-> (:continuous DS)
+               (with-meta {:categorical? true})
+               index-structure
+               type)))
+    (is (= TreeMap
+           (-> (:categorical DS)
+               (with-meta {:categorical? false})
                index-structure
                type)))))
 
