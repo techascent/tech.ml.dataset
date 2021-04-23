@@ -76,33 +76,6 @@
   (col-proto/with-index-structure col datatype-keyword klass custom-make-index-structure-fn))
 
 
-(defn select-from-index
-  "Select a subset of the index as specified by the `mode` and
-  `selection-spec`. Each index-structure type supports different
-  modes. By default, tech.ml.dataset supports two index types:
-  `java.util.TreeMap` for non-categorical data, and `java.util.LinkedHashMap`
-  for categorical data.
-
-  Mode support for these types is as follows:
-
-  `java.util.TreeMap` - supports `::slice` and `::pick`.
-  `java.util.LinkedHashMap - support `::pick`
-
-  Usage by mode:
-
-  ::slice
-  (require '[tech.v3.dataset.column.column-index-structure :as col-index])
-  (select-from-index ::col-index/slice {:from 2 :to 5})
-  (select-from-index ::col-index/slice {:from 2 :from-inclusive? true :to 5 :to-inclusive? false})
-
-  ::pick
-  (require '[tech.v3.dataset.column.column-index-structure :as col-index])
-  (select-from-index ::col-index/pick [:a :c :e])
-
-  Note: Other index structures defined by other libraries may define other modes, so
-        consult documentation."
-  [index-structure mode selection-spec]
-  (col-proto/select-from-index index-structure mode selection-spec))
 
 
 (defn unique

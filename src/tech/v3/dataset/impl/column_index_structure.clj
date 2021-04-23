@@ -5,6 +5,7 @@
             [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
+            [tech.v3.dataset.column-index :as col-index]
             [clojure.set :refer [difference]]))
 
 
@@ -12,13 +13,13 @@
   col-proto/PIndexStructure
   (select-from-index [index-structure mode selection-spec]
     (case mode
-      ::pick
+      ::col-index/pick
       (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
             s (difference (set (.keySet new-index-structure)) (set selection-spec))]
         (doseq [k s]
           (.remove new-index-structure k))
         new-index-structure)
-      ::slice
+      ::col-index/slice
       (let [{from            :from
              from-inclusive? :from-inclusive?
              to              :to
@@ -34,7 +35,7 @@
   col-proto/PIndexStructure
   (select-from-index [index-structure mode selection-spec]
     (case mode
-      ::pick
+      ::col-index/pick
       (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
             s (difference (set (.keySet new-index-structure)) (set selection-spec))]
         (doseq [k s]
