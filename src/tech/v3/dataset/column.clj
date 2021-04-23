@@ -61,7 +61,11 @@
 
 
 (defn index-structure
-  "Returns an index structure for the column."
+  "Returns an index structure for the column. The index structure can help optimize
+  certain operations as they can provide faster lookup and subsetting of a column
+  or dataset.
+
+  Also see: tech.v3.dataset.column/select-from-index."
   [col]
   (col-proto/index-structure col))
 
