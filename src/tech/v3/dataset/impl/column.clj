@@ -345,7 +345,7 @@
                                      data
                                      new-meta
                                      cached-vector
-                                     *index-structure))
+                                     (delay (make-index-structure data new-meta))))
   Counted
   (count [this] (int (dtype/ecount data)))
   Indexed
