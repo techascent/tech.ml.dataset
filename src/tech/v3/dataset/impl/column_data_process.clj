@@ -88,7 +88,10 @@
       ;;ensure we do not re-scan this object
       (let [{:keys [tech.v3.dataset/data
                     tech.v3.dataset/missing
-                    tech.v3.dataset/force-datatype?]} obj-data]
+                    tech.v3.dataset/force-datatype?]} obj-data
+            obj-data (if (nil? missing)
+                       (dissoc obj-data :tech.v3.dataset/missing)
+                       obj-data)]
         (merge
          (if (and (dtype/reader? data) force-datatype?)
            ;;skip scan of the data, but potentially still scan for missing

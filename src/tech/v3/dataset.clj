@@ -423,6 +423,32 @@ test/data/stocks.csv [5 4]:
 |   MSFT | 2000-03-01 | 43.22 | 1867.9684 |
 |   MSFT | 2000-04-01 | 28.37 |  804.8569 |
 |   MSFT | 2000-05-01 | 25.45 |  647.7025 |
+
+
+
+user> (def ds1 (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]))
+#'user/ds1
+user> ds1
+_unnamed [3 2]:
+
+|  :b | :a |
+|----:|---:|
+|     |  1 |
+| 2.0 |    |
+| 3.0 |  2 |
+user> (ds/column-map ds1 :c (fn [a b]
+                              (when (and a b)
+                                (+ (double a) (double b))))
+                     [:a :b])
+_unnamed [3 3]:
+
+|  :b | :a |  :c |
+|----:|---:|----:|
+|     |  1 |     |
+| 2.0 |    |     |
+| 3.0 |  2 | 5.0 |
+user> (ds/missing (*1 :c))
+{0,1}
 ```"
   ([dataset result-colname map-fn res-dtype-or-opts filter-fn-or-ds]
    (update dataset filter-fn-or-ds #(assoc % result-colname
