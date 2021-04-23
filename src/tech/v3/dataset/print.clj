@@ -120,7 +120,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
   ([dataset]
    (dataset-data->str dataset {}))
   ([dataset options]
-   (let [{:keys [print-index-range print-line-policy print-column-max-width print-column-types?]}
+   (let [{:keys [print-index-range print-line-policy
+                 print-column-max-width print-column-types?]}
          (merge (meta dataset) options)
          index-range (or print-index-range
                          (range
@@ -131,7 +132,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          column-types? (or print-column-types? *default-print-column-types?*)
          print-ds (ds-proto/select dataset :all index-range)
          column-names (map #(when (some? %) (.toString ^Object %)) (keys print-ds))
-         column-types (map #(str (:datatype (meta %))) (vals print-ds))
+         column-types (map #(str (when column-types? (:datatype (meta %))))
+                           (vals print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (packing/unpack)
                                   (reader->string-lines (ds-col-proto/missing %)
@@ -142,6 +144,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   (dtype/clone)
                                   (dtype/->reader))
                              (vals print-ds))
+
          n-rows (long (second (dtype/shape print-ds)))
          row-heights (ArrayList.)
          _ (.addAll row-heights (repeat n-rows 1))
@@ -184,8 +187,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                          (if numeric?
                                            ":"
                                            "-"))))
-                             spacers (map dtype/get-datatype
-                                          print-ds))
+                             spacers (map dtype/elemwise-datatype
+                                          (vals print-ds)))
                      ["|"])))
      (dotimes [idx n-rows]
        (let [row-height (long (.get row-heights idx))]

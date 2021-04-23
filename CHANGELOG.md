@@ -1,5 +1,47 @@
 # Changelog
 
+## 6.00-beta-2
+ * Small bugfix so missing sets are correct set in `column-map`.
+
+## 6.00-beta-1
+
+ Data types and missing values are much more aggressively inferred - which is
+ `O(n-rows)`) throught the api. There is a new API to disable the inference - Either
+ pass something that is already a column or pass in a map with keys:
+```clojure
+  #:tech.v3.dataset{:data ... :missing ... :metadata ... :force-datatype? true}
+```
+  Put another way, the input to `#{assoc ds/update-column ds/add-column
+  ds/add-or-update-column}`  is already a column
+  (see `tech.v3.dataset.column/new-column`) or if `:tech.v3.dataset/force-datatype?` is
+  true **and** `:tech.v3.dataset/data` is convertible to a reader then the data will not
+  be scanned for datatype or missing values.  If the input data is a primitive-typed
+  container then it will be scanned for missing values alone and anything else is
+  passed through the object parsing system which is what is used for sequences of maps,
+  maps of sequences and spreadsheets.
+
+  In this way in general the system will do more work than before - more scans of the
+  result of things like transducer pathways and persistent vectors but in return the
+  dataset's column datatypes should match the user's expectations.  If too much time is
+  being taken up via attempting to infer datatypes and missing sets then the user has
+  the option to pass in explicitly constructed columns or column data representations
+  both of which will disable the scanning.  Once the data is typed elementwise
+  mathematical operations of the type in `:tech.v3.datatype.function` **will not**
+  result in further scans the data.
+
+
+Itemized Changes:
+
+ * `assoc, ds/add-column, ds/update-column, ds/add-or-update-column` type operations all
+    upgraded such that datatype and missing are inferred much more frequently.
+ * `:tech.ml.dataset.parse/missing`, `:tech.ml.dataset.parse/parse-failure` -> `:tech.v3.dataset/missing`, `:tech.v3.dataset/parse-failure`.
+ * `column-map` - Now scans results to infer datatype if not provided as opposed to assuming result is the
+    widest of the input column types.  Also users can provide their own function that calculates missing sets as opposed to
+	the default behavior being the union of the input columns' missing sets.
+
+
+
+
 ## 5.21
  * [Issue 233](https://github.com/techascent/tech.ml.dataset/issues/233) - Poi xlsx parser can now autodetect dates.  Note that fastexcel is the default
    xslx parser so in order to parse xlsx files using poi use `tech.v3.libs.poi/workbook->datasets`.
@@ -8,7 +50,7 @@
 
 ## 5.20
  * Return an Iterable from csv->rows as opposed to a seq.  Iterator-seq has nontrivial overhead.
- * Fixes for issues [229](https://github.com/techascent/tech.ml.dataset/issues/229), 
+ * Fixes for issues [229](https://github.com/techascent/tech.ml.dataset/issues/229),
    [230](https://github.com/techascent/tech.ml.dataset/issues/230), and [231](https://github.com/techascent/tech.ml.dataset/issues/231).
 
 ## 5.19
@@ -20,7 +62,7 @@
  * Parquet write pathway update to make more standard and more likely to work with future versions of parquet.  This means, however, that there will
    no longer be a direct correlation between number of datasets and number of record batches in a parquet file as the standard pathway takes care
    of writing out record batches when a memory constraint is triggered.  So if you save a dataset you may get a parquet file back that contains
-   a sequence of datasets.  There are many parquet options, see the documentation for 
+   a sequence of datasets.  There are many parquet options, see the documentation for
    [ds-seq->parquet](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html#var-ds-seq-.3Eparquet).
 
 ## 5.17

@@ -376,17 +376,25 @@
 (defn column-map
   "Produce a new (or updated) column as the result of mapping a fn over columns.
 
-  Missing set of the new column will be the union of the missing sets of the
-  original columns.
-
   * `dataset` - dataset.
   * `result-colname` - Name of new (or existing) column.
   * `map-fn` - function to map over columns.  Same rules as `tech.v3.datatype/emap`.
-  * `res-dtype` - Defaults to the unified result of the input column datasets.
+  * `res-dtype-or-opts` - If not given result is scanned to infer missing and datatype.
+  If using an option map, options are described below.
   * `filter-fn-or-ds` - A dataset, a sequence of columns, or a `tech.v3.datasets/column-filters`
      column filter function.  Defaults to all the columns of the existing dataset.
 
   Returns a new dataset with a new or updated column.
+
+  Options:
+
+  * `:datatype` - Set the dataype of the result column.  If not given result is scanned
+  to infer result datatype and missing set.
+  * `:missing-fn` - if given, columns are first passed to missing-fn as a sequence and
+  this dictates the missing set.  Else the missing set is by scanning the results
+  during the inference process. See `tech.v3.dataset.column/union-missing-sets` and
+  `tech.v3.dataset.column/intersect-missing-sets` for example functions to pass in
+  here.
 
   Example:
 
@@ -417,11 +425,37 @@ test/data/stocks.csv [5 4]:
 |   MSFT | 2000-03-01 | 43.22 | 1867.9684 |
 |   MSFT | 2000-04-01 | 28.37 |  804.8569 |
 |   MSFT | 2000-05-01 | 25.45 |  647.7025 |
+
+
+
+user> (def ds1 (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]))
+#'user/ds1
+user> ds1
+_unnamed [3 2]:
+
+|  :b | :a |
+|----:|---:|
+|     |  1 |
+| 2.0 |    |
+| 3.0 |  2 |
+user> (ds/column-map ds1 :c (fn [a b]
+                              (when (and a b)
+                                (+ (double a) (double b))))
+                     [:a :b])
+_unnamed [3 3]:
+
+|  :b | :a |  :c |
+|----:|---:|----:|
+|     |  1 |     |
+| 2.0 |    |     |
+| 3.0 |  2 | 5.0 |
+user> (ds/missing (*1 :c))
+{0,1}
 ```"
-  ([dataset result-colname map-fn res-dtype filter-fn-or-ds]
+  ([dataset result-colname map-fn res-dtype-or-opts filter-fn-or-ds]
    (update dataset filter-fn-or-ds #(assoc % result-colname
                                            (apply ds-col/column-map map-fn
-                                                  res-dtype (columns %)))))
+                                                  res-dtype-or-opts (columns %)))))
   ([dataset result-colname map-fn filter-fn-or-ds]
    (column-map dataset result-colname map-fn nil filter-fn-or-ds))
   ([dataset result-colname map-fn]
@@ -437,7 +471,7 @@ test/data/stocks.csv [5 4]:
 
   datatype may be a datatype enumeration or a tuple of
   [datatype cast-fn] where cast-fn may return either a new value,
-  :tech.v3.dataset.parse/missing, or :tech.v3.dataset.parse/parse-failure.
+  :tech.v3.dataset/missing, or :tech.v3.dataset/parse-failure.
   Exceptions are propagated to the caller.  The new column has at least the
   existing missing set (if no attempt returns :missing or :cast-failure).
   :cast-failure means the value gets added to metadata key :unparsed-data
@@ -499,11 +533,11 @@ test/data/stocks.csv [5 4]:
             (let [existing-val (col-reader idx)
                   new-val (cast-fn existing-val)]
               (cond
-                (= new-val :tech.ml.dataset.parse/missing)
+                (= new-val :tech.v3.dataset/missing)
                 (locking new-missing
                   (.add new-missing idx)
                   (res-writer idx missing-val))
-                (= new-val :tech.ml.dataset.parse/parse-failure)
+                (= new-val :tech.v3.dataset/parse-failure)
                 (locking new-missing
                   (res-writer idx missing-val)
                   (.add new-missing idx)

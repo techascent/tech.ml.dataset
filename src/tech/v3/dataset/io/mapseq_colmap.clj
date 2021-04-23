@@ -68,19 +68,19 @@
                              (take n-rows coldata)
                              coldata)]
                (if (= :scalar argtype)
-                 {:name colname
-                  :data (dtype/const-reader coldata n-rows)}
+                 #:tech.v3.dataset{:name colname
+                                   :data (dtype/const-reader coldata n-rows)}
                  (if (and (= :reader argtype)
                           (not= :object (dtype/elemwise-datatype coldata)))
-                   {:name colname
-                    :data coldata}
+                   #:tech.v3.dataset{:name colname
+                                     :data coldata}
                    ;;Actually attempt to parse the data
                    (let [parser (parse-context colname)]
                      (pfor/consume!
                       #(column-parsers/add-value! parser (first %) (second %))
                       (map-indexed vector coldata))
                      (assoc (column-parsers/finalize! parser (dtype/ecount parser))
-                            :name colname)))))))
+                            :tech.v3.dataset/name colname)))))))
           (ds-impl/new-dataset options))))
   ([column-map]
    (column-map->dataset nil column-map)))

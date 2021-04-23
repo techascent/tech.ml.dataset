@@ -91,7 +91,7 @@
 
 
 (deftest reservoir-sampling-test
-  #_(let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+  (let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
         ds-seq [stocks stocks stocks]
         small-ds-seq [(-> (ds/shuffle stocks)
                           (ds/select-rows (range 50)))]

@@ -101,7 +101,7 @@
      (->> all-parsers
           (mapv (fn [{:keys [column-name column-parser]}]
                   (assoc (column-parsers/finalize! column-parser row-count)
-                         :name column-name)))
+                         :tech.v3.dataset/name column-name)))
           (ds-impl/new-dataset options))))
   ([options parsers]
    (parsers->dataset options parsers
