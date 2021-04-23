@@ -171,7 +171,7 @@
              data
              metadata
              cached-vector
-             (delay (make-index-structure-fn data meta))))
+             (delay (make-index-structure-fn data metadata))))
 
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [this]
@@ -195,7 +195,7 @@
                new-data
                metadata
                nil
-               (delay (make-index-structure new-data meta)))))
+               (delay (make-index-structure new-data metadata)))))
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
@@ -235,7 +235,7 @@
                    new-data
                    metadata
                    nil
-                   (delay (make-index-structure new-data meta)))))))
+                   (delay (make-index-structure new-data metadata)))))))
   dtype-proto/PClone
   (clone [col]
     (let [new-data (if (or (dtype/writer? data)
@@ -250,7 +250,7 @@
                new-data
                metadata
                nil
-               (delay (make-index-structure new-data meta)))))
+               (delay (make-index-structure new-data metadata)))))
   Iterable
   (iterator [this]
     (.iterator (dtype-proto/->buffer this)))
@@ -286,7 +286,7 @@
                data
                metadata
                nil
-               (delay (make-index-structure data meta)))))
+               (delay (make-index-structure data metadata)))))
   (unique [this]
     (->> (parallel-unique this)
          (into #{})))
@@ -311,7 +311,7 @@
                    new-data
                    metadata
                    nil
-                   (delay (make-index-structure data meta))))
+                   (delay (make-index-structure data metadata))))
         ;;Uggh.  Construct a new missing set
         (let [idx-rdr (dtype/->reader idx-rdr)
               n-idx-elems (.lsize idx-rdr)
@@ -324,7 +324,7 @@
                      new-data
                      metadata
                      nil
-                     (delay (make-index-structure new-data meta))))))))
+                     (delay (make-index-structure new-data metadata))))))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
@@ -472,7 +472,7 @@
               data
               (assoc metadata :name name)
               nil
-              (delay (make-index-structure data meta)))))
+              (delay (make-index-structure data metadata)))))
   ([name data metadata]
    (new-column name data metadata (->bitmap)))
   ([name data]
