@@ -47,8 +47,8 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
     "Returns an index-structure for the column.")
   (with-index-structure
     [this datatype-keyword klass custom-make-index-structure-fn]
-    "Returns a copy of the column that will use the provided `custom-make-index-structure-fn`
-to construct the index when the index structure is requested."))
+    "Returns a copy of the column that will return an index-structure using the
+provided `custom-make-index-strucutre-fn`."
 
 
 (defprotocol PIndexStructure

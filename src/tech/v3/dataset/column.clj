@@ -68,7 +68,9 @@
 
 (defn with-index-structure
   "Returns a copy of the column that will return an index-structure using the
-  provided `custom=make-index-strucutre-fn`."
+  provided `custom-make-index-strucutre-fn`. It also registers `klass` as
+  `datatype-keyword` with so it can be identified by as a datatype by the typing
+  system."
   [col datatype-keyword klass custom-make-index-structure-fn]
   (col-proto/with-index-structure col datatype-keyword klass custom-make-index-structure-fn))
 
