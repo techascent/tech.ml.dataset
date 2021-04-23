@@ -8,10 +8,6 @@
             [clojure.set :refer [difference]]))
 
 
-(defn select-from-index [index-structure mode selection-spec]
-  (col-proto/select-from-index index-structure mode selection-spec))
-
-
 (extend-type TreeMap
   col-proto/PIndexStructure
   (select-from-index [index-structure mode selection-spec]

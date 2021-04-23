@@ -74,6 +74,13 @@
   (col-proto/with-index-structure col datatype-keyword klass custom-make-index-structure-fn))
 
 
+(defn select-from-index
+  "Select a subset of the index as specified by the `mode` and
+`selection-spec`."
+  [index-structure mode selection-spec]
+  (col-proto/select-from-index index-structure mode selection-spec))
+
+
 (defn unique
   "Set of all unique values"
   [col]
