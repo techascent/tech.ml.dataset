@@ -463,13 +463,39 @@ user> (ds/missing (*1 :c))
    (column-map dataset result-colname map-fn nil (column-names dataset))))
 
 
+(defn- safe-symbol
+  [str-name]
+  (-> (.replace ^String str-name "." "-")
+      (symbol)))
+
+
 (defmacro column-map-m
   "Map a function across one or more columns via a macro.
-  The function will have arguments in the order of the src-colnames"
-  [ds result-colname src-colnames & body]
-  (let [src-col-symbols (mapv (comp symbol ds-utils/column-safe-name) src-colnames)]
+  The function will have arguments in the order of the src-colnames.  column names of
+  the form `right.id` will be bound to variables named `right-id`.
+
+  Example:
+
+```clojure
+user> (-> (ds/->dataset [{:a.a 1} {:b 2.0} {:a.a 2 :b 3.0}])
+          (ds/column-map-m :a [:a.a :b]
+                           (when (and a-a b)
+                             (+ (double a-a) (double b)))))
+_unnamed [3 3]:
+
+|  :b | :a.a |  :a |
+|----:|-----:|----:|
+|     |    1 |     |
+| 2.0 |      |     |
+| 3.0 |    2 | 5.0 |
+```
+  "
+  [ds result-colname src-colnames body]
+  (let [src-col-symbols (mapv (comp safe-symbol
+                                    ds-utils/column-safe-name)
+                              src-colnames)]
     `(column-map ~ds ~result-colname
-                 (fn ~src-col-symbols ~@body)
+                 (fn ~src-col-symbols ~body)
                  ~src-colnames)))
 
 
