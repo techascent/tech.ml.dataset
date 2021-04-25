@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.00-beta-7
+ * Final upgrade for geni benchmark and moved a utility function to make
+   it more generally accessible.
+
 ## 6.00-beta-5
  * Perf upgrades - ensuring geni benchmark speed stays constant.
 
