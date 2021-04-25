@@ -2,6 +2,8 @@
   (:import [java.util TreeMap LinkedHashMap]
            [tech.v3.datatype ListPersistentVector])
   (:require [tech.v3.protocols.column :as col-proto]
+            [tech.v3.dataset.impl.column-base :refer [column-datatype-categorical?]]
+
             [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
@@ -66,7 +68,7 @@
         (if (:categorical? metadata)
           ::categorical
           data-klass)
-        (if (categorical? data-dtype)
+        (if (column-datatype-categorical? data-dtype)
           ::categorical
           data-klass)))))
 
