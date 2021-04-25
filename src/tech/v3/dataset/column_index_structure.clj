@@ -1,6 +1,5 @@
-(ns tech.v3.dataset.column-index
+(ns tech.v3.dataset.column-index-structure
   (:require [tech.v3.protocols.column :as col-proto]))
-
 
 (defn select-from-index
   "Select a subset of the index as specified by the `mode` and

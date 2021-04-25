@@ -2,7 +2,7 @@
   (:import  [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :refer [index-structure with-index-structure]]
-            [tech.v3.dataset.column-index :refer [select-from-index]]
+            [tech.v3.dataset.column-index-structure :refer [select-from-index]]
             [tech.v3.datatype.datetime :as datetime]
             [clojure.test :refer [testing deftest is]]))
 
