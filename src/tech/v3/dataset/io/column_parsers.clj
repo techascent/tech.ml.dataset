@@ -159,7 +159,9 @@
    missing-value rowcount]
   (add-missing-values! container missing missing-value rowcount)
   (merge
-   #:tech.v3.dataset{:data container
+   #:tech.v3.dataset{:data (or (dtype/as-array-buffer container)
+                               (dtype/as-native-buffer container)
+                               container)
                      :missing missing
                      :force-datatype? true}
    (when (and failed-values

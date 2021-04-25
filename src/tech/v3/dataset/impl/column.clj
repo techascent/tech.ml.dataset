@@ -356,17 +356,6 @@
 (dtype-pp/implement-tostring-print Column)
 
 
-(defn column-datatype-categorical?
-  "Anything where we don't know the conversion to a number is considered
-  automatically categorical as it will need a ->number conversion before
-  any training/inference -- *except* object datatypes."
-  [col-dtype]
-  ;;All object datatypes flatten to object -- that is, they can be stored in an
-  ;;object array.
-  (and (identical? :object (casting/flatten-datatype col-dtype))
-       (not (identical? :object col-dtype))))
-
-
 (defn new-column
   "Given a map of (something convertible to a long reader) missing indexes,
   (something convertible to a reader) data
@@ -389,7 +378,7 @@
          name (coldata :tech.v3.dataset/name)
          ;;Unless overidden, we now set the categorical? flag
          metadata (if (and (not (contains? metadata :categorical?))
-                           (column-datatype-categorical?
+                           (column-base/column-datatype-categorical?
                             (dtype/elemwise-datatype data)))
                     (assoc metadata :categorical? true)
                     metadata)
