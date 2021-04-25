@@ -16,14 +16,12 @@
 
   Usage by mode:
 
-  ::slice
-  (require '[tech.v3.dataset.column-index :as col-index])
-  (select-from-index ::col-index/slice {:from 2 :to 5})
-  (select-from-index ::col-index/slice {:from 2 :from-inclusive? true :to 5 :to-inclusive? false})
+  :slice
+  (select-from-index :slice {:from 2 :to 5})
+  (select-from-index :slice {:from 2 :from-inclusive? true :to 5 :to-inclusive? false})
 
-  ::pick
-  (require '[tech.v3.dataset.column-index :as col-index])
-  (select-from-index ::col-index/pick [:a :c :e])
+  :pick
+  (select-from-index :pick [:a :c :e])
 
   Note: Other index structures defined by other libraries may define other modes, so
         consult documentation."

@@ -2,7 +2,7 @@
   (:import  [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :refer [index-structure with-index-structure]]
-            [tech.v3.dataset.column-index :refer [select-from-index] :as col-index]
+            [tech.v3.dataset.column-index :refer [select-from-index]]
             [clojure.test :refer [testing deftest is]]))
 
 
@@ -45,11 +45,11 @@
               10 [3]}
              (-> (:continuous DS)
                  index-structure
-                 (select-from-index ::col-index/slice {:from 5 :to 10}))))
+                 (select-from-index :slice {:from 5 :to 10}))))
       (is (= {9 [2]}
              (-> (:continuous DS)
                  index-structure
-                 (select-from-index ::col-index/slice {:from 5 :from-inclusive? false
+                 (select-from-index :slice {:from 5 :from-inclusive? false
                                                        :to 10  :to-inclusive? false}))))))
 
 
@@ -61,14 +61,14 @@
               "c" [2]}
              (-> (:strings DS)
                  index-structure
-                 (select-from-index ::col-index/pick ["a" "c"]))))
+                 (select-from-index :pick ["a" "c"]))))
       (is (= {:a [0]
               :c [2]}
              (-> (:keywords DS)
                  index-structure
-                 (select-from-index ::col-index/pick [:a :c]))))
+                 (select-from-index :pick [:a :c]))))
       (is (= {'a [0]
               'c [2]}
              (-> (:symbols DS)
                  index-structure
-                 (select-from-index ::col-index/pick ['a 'c])))))))
+                 (select-from-index :pick ['a 'c])))))))
