@@ -65,6 +65,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   (:import [smile.io HadoopInput]
            [tech.v3.datatype PrimitiveList Buffer]
            [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder]
+           [tech.v3.dataset.io.column_parsers PParser]
            [org.apache.hadoop.conf Configuration]
            [java.time.temporal TemporalAccessor TemporalField ChronoField]
            [org.apache.parquet.hadoop ParquetFileReader ParquetWriter
@@ -103,6 +104,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed)
 
 
 (def ^:private test-file "test/data/parquet/userdata1.parquet")
@@ -129,7 +131,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
 (deftype ^:private ColumnIterator [^ColumnReader col-rdr
                                    read-fn
                                    ^long max-def-level
-                                   ^:unsynchronized-mutable n-rows]
+                                   ^{:unsynchronized-mutable true
+                                     :tag long} n-rows]
   Iterator
   (hasNext [it] (> n-rows 0))
   (next [it]
@@ -137,7 +140,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
       (let [retval (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
                      (read-fn col-rdr)
                      :tech.v3.dataset/missing)]
-        (set! n-rows (dec n-rows))
+        (set! n-rows (unchecked-dec n-rows))
         (.consume col-rdr)
         retval)
       (throw (java.util.NoSuchElementException.)))))
@@ -352,14 +355,52 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         missing-value (col-base/datatype->missing-value
                        (packing/unpack-datatype container-dtype))
         missing (bitmap/->bitmap)]
-    (reify col-parsers/PParser
-      (add-value! [p idx value]
-        (if (= value :tech.v3.dataset/missing)
+    (reify PParser
+      (addValue [p idx value]
+        (if (identical? value :tech.v3.dataset/missing)
           (do
             (.addObject container missing-value)
-            (.add missing (long idx)))
+            (.add missing (unchecked-int idx)))
           (.addObject container value)))
-      (finalize! [p n-rows]
+      (finalize [p n-rows]
+        (col-parsers/finalize-parser-data! container missing nil nil
+                                           missing-value n-rows)))))
+
+
+(defn- fixed-datatype-parser-long
+  [dtype]
+  (let [container-dtype (packing/pack-datatype dtype)
+        container (col-base/make-container container-dtype)
+        missing-value (long (col-base/datatype->missing-value
+                             (packing/unpack-datatype container-dtype)))
+        missing (bitmap/->bitmap)]
+    (reify PParser
+      (addValue [p idx value]
+        (if (identical? value :tech.v3.dataset/missing)
+          (do
+            (.addLong container missing-value)
+            (.add missing (unchecked-int idx)))
+          (.addLong container (unchecked-long value))))
+      (finalize [p n-rows]
+        (col-parsers/finalize-parser-data! container missing nil nil
+                                           missing-value n-rows)))))
+
+
+(defn- fixed-datatype-parser-double
+  [dtype]
+  (let [container-dtype (packing/pack-datatype dtype)
+        container (col-base/make-container container-dtype)
+        missing-value (double (col-base/datatype->missing-value
+                               (packing/unpack-datatype container-dtype)))
+        missing (bitmap/->bitmap)]
+    (reify PParser
+      (addValue [p idx value]
+        (if (identical? value :tech.v3.dataset/missing)
+          (do
+            (.addDouble container missing-value)
+            (.add missing (unchecked-int idx)))
+          (.addDouble container (unchecked-double value))))
+      (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
                                            missing-value n-rows)))))
 
@@ -372,7 +413,16 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         ^Iterable iterable (typed-col->iterable col-rdr col-def metadata)
         iterator (.iterator iterable)
         col-parser (or (parse-context col-name)
-                       (fixed-datatype-parser (dtype/elemwise-datatype iterable)))
+                       (let [iter-dtype (dtype/elemwise-datatype iterable)]
+                         (cond
+                           (packing/packed-datatype? iter-dtype)
+                           (fixed-datatype-parser iter-dtype)
+                           (casting/integer-type? iter-dtype)
+                           (fixed-datatype-parser-long iter-dtype)
+                           (casting/float-type? iter-dtype)
+                           (fixed-datatype-parser-double iter-dtype)
+                           :else
+                           (fixed-datatype-parser iter-dtype))))
         ^Buffer row-rep-counts (when-not (== n-rows (.getTotalValueCount col-rdr))
                                  (-> (int-array n-rows)
                                      (dtype/->buffer)))

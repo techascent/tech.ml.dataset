@@ -110,9 +110,9 @@ user> (ds-reduce/group-by-column-agg
   []
   (reify IndexReduction
     (reduceIndex [this batch-ctx ctx idx]
-      (unchecked-inc (long (or ctx 0))))
+      (unchecked-inc (unchecked-long (or ctx 0))))
     (reduceReductions [this lhs rhs]
-      (pmath/+ (long lhs) (long rhs)))))
+      (pmath/+ (unchecked-long lhs) (unchecked-long rhs)))))
 
 
 (deftype BitmapConsumer [^RoaringBitmap bitmap]

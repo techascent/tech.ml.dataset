@@ -128,9 +128,18 @@
         (into {}))))
 
 
-(defprotocol PParser
-  (add-value! [p idx value])
-  (finalize! [p rowcount]))
+(definterface PParser
+  (addValue [^long idx value])
+  (finalize [^long rowcount]))
+
+(defn add-value!
+  [^PParser p ^long idx value]
+  (.addValue p idx value))
+
+
+(defn finalize!
+  [^PParser p ^long rowcount]
+  (.finalize p rowcount))
 
 
 (defn add-missing-values!
@@ -150,7 +159,9 @@
    missing-value rowcount]
   (add-missing-values! container missing missing-value rowcount)
   (merge
-   #:tech.v3.dataset{:data container
+   #:tech.v3.dataset{:data (or (dtype/as-array-buffer container)
+                               (dtype/as-native-buffer container)
+                               container)
                      :missing missing
                      :force-datatype? true}
    (when (and failed-values
@@ -182,37 +193,37 @@
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
   PParser
-  (add-value! [p idx value]
-    (set! max-idx (max (long idx) max-idx))
-    ;;First pass is to potentially parse the value.  It could already
-    ;;be in the space of the container or it could require the parse-fn
-    ;;to make it.
-    (let [parsed-value (cond
-                         (missing-value? value)
-                         :tech.v3.dataset/missing
-                         (and (not= container-dtype :string)
-                              (= (dtype/datatype value) container-dtype))
-                         value
-                         :else
-                         (parse-fn value))
-          idx (long idx)]
-      (cond
-        ;;ignore it; we will add missing when we see the first valid value
-        (identical? :tech.v3.dataset/missing parsed-value)
-        nil
-        ;;Record the original incoming value if we are parsing in relaxed mode.
-        (identical? :tech.v3.dataset/parse-failure parsed-value)
-        (if failed-values
+  (addValue [this idx value]
+    (let [idx (unchecked-long idx)]
+      (set! max-idx (max idx max-idx))
+      ;;First pass is to potentially parse the value.  It could already
+      ;;be in the space of the container or it could require the parse-fn
+      ;;to make it.
+      (let [parsed-value (cond
+                           (missing-value? value)
+                           :tech.v3.dataset/missing
+                           (and (identical? (dtype/datatype value) container-dtype)
+                                (not (instance? String value)))
+                           value
+                           :else
+                           (parse-fn value))]
+        (cond
+          ;;ignore it; we will add missing when we see the first valid value
+          (identical? :tech.v3.dataset/missing parsed-value)
+          nil
+          ;;Record the original incoming value if we are parsing in relaxed mode.
+          (identical? :tech.v3.dataset/parse-failure parsed-value)
+          (if failed-values
+            (do
+              (.addObject failed-values value)
+              (.add failed-indexes (unchecked-int idx)))
+            (errors/throwf "Failed to parse value %s as datatype %s on row %d"
+                           value container-dtype idx))
+          :else
           (do
-            (.addObject failed-values value)
-            (.add failed-indexes (unchecked-int idx)))
-          (errors/throwf "Failed to parse value %s as datatype %s on row %d"
-                         value container-dtype idx))
-        :else
-        (do
-          (add-missing-values! container missing missing-value idx)
-          (.addObject container parsed-value)))))
-  (finalize! [p rowcount]
+            (add-missing-values! container missing missing-value idx)
+            (.addObject container parsed-value))))))
+  (finalize [p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
                            missing-value rowcount)))
 
@@ -357,8 +368,8 @@
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
   PParser
-  (add-value! [p idx value]
-    (set! max-idx (max (long idx) max-idx))
+  (addValue [p idx value]
+    (set! max-idx (max idx max-idx))
     (let [parsed-value
           (cond
             (missing-value? value)
@@ -405,7 +416,7 @@
         (do
           (add-missing-values! container missing missing-value idx)
           (.addObject container parsed-value)))))
-  (finalize! [p rowcount]
+  (finalize [p rowcount]
     (finalize-parser-data! container missing nil nil missing-value rowcount)))
 
 
@@ -441,11 +452,10 @@
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
   PParser
-  (add-value! [p idx value]
-    (set! max-idx (max (long idx) max-idx))
+  (addValue [p idx value]
+    (set! max-idx (max idx max-idx))
     (when-not (missing-value? value)
-      (let [idx (long idx)
-            org-datatype (dtype/datatype value)
+      (let [org-datatype (dtype/datatype value)
             packed-dtype (packing/pack-datatype org-datatype)
             container-ecount (.lsize container)]
         (if (or (== 0 container-ecount)
@@ -472,7 +482,7 @@
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
             (.addObject container value))))))
-  (finalize! [p rowcount]
+  (finalize [p rowcount]
     (finalize-parser-data! container missing nil nil
                            missing-value rowcount)))
 

@@ -473,7 +473,25 @@
                                           (ds :a) (ds :b))))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [false false true]
-           (vec (dfn/finite? (ds :a)))))))
+           (vec (dfn/finite? (ds :a))))))
+  (let [ds (-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}])
+               (ds/column-map-m :a [:a :b]
+                                (when (and a b)
+                                  (+ (double a) (double b)))))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [false false true]
+           (vec (dfn/finite? (ds :a)))))
+    (is (= #{0 1}
+           (set (ds/missing (ds :a))))))
+  (let [ds (-> (ds/->dataset [{:a.a 1} {:b 2.0} {:a.a 2 :b 3.0}])
+               (ds/column-map-m :a [:a.a :b]
+                                (when (and a-a b)
+                                  (+ (double a-a) (double b)))))]
+    (is (= :float64 (dtype/get-datatype (ds :a))))
+    (is (= [false false true]
+           (vec (dfn/finite? (ds :a)))))
+    (is (= #{0 1}
+           (set (ds/missing (ds :a)))))))
 
 
 (deftest mean-object-column

@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.00-beta-7
+ * Final upgrade for geni benchmark and moved a utility function to make
+   it more generally accessible.
+
+## 6.00-beta-5
+ * Perf upgrades - ensuring geni benchmark speed stays constant.
+
+## 6.00-beta-4
+ * `[column-map-m](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-map-m)
+
 ## 6.00-beta-2
  * Small bugfix so missing sets are correct set in `column-map`.
 
