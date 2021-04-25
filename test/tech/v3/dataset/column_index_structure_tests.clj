@@ -3,18 +3,24 @@
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :refer [index-structure with-index-structure]]
             [tech.v3.dataset.column-index :refer [select-from-index]]
+            [tech.v3.datatype.datetime :as datetime]
             [clojure.test :refer [testing deftest is]]))
 
 
 (deftest test-default-index-structure-type-dispatch
   (let [DS (ds/->dataset {:continuous  [1 2 3]
-                          :categorical [:a :b :c]})]
+                          :categorical [:a :b :c]
+                          :temporal    (datetime/plus-temporal-amount (datetime/local-date) (range 3) :days)})]
     (is (= TreeMap
            (-> (:continuous DS)
                index-structure
                type)))
     (is (= LinkedHashMap
            (-> (:categorical DS)
+               index-structure
+               type)))
+    (is (= TreeMap
+           (-> (:temporal DS)
                index-structure
                type)))
     ;; sensitive to :cateogrical? meta overrides
