@@ -81,13 +81,11 @@
   (^PrimitiveList [dtype]
    (make-container dtype nil)))
 
+
 (defn column-datatype-categorical?
-  "Anything where we don't know the conversion to a number is considered
-  automatically categorical as it will need a ->number conversion before
-  any training/inference -- *except* object datatypes."
+  "Anything where we don't know the conversion to a scalar double or integer
+  number is considered automatically categorical."
   [col-dtype]
-  ;;All object datatypes flatten to object -- that is, they can be stored in an
-  ;;object array.
-  (and (identical? :object (casting/flatten-datatype col-dtype))
-       (not (identical? :object col-dtype))
+  (and (not (casting/numeric-type? col-dtype))
+       (not (identical? col-dtype :boolean))
        (not (dtype-dt/datetime-datatype? col-dtype))))
