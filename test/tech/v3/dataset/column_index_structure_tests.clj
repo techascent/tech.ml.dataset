@@ -40,7 +40,7 @@
   (let [DS (ds/->dataset {:categorical [:a :b :c]})]
     (is (= []
         (-> (:categorical DS)
-            (with-index-structure :keyword clojure.lang.Keyword (fn [data metadata] []))
+            (with-index-structure (fn [data metadata] []))
             index-structure)))))
 
 

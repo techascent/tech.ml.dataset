@@ -51,7 +51,7 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
   (index-structure [this]
     "Returns an index-structure for the column.")
   (with-index-structure
-    [this datatype-keyword klass custom-make-index-structure-fn]
+    [this custom-make-index-structure-fn]
     "Returns a copy of the column that will return an index-structure using the
 provided `custom-make-index-strucutre-fn`."))
 

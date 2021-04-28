@@ -72,10 +72,8 @@
   "Returns a copy of the column that will return an index-structure using the
   provided `custom-make-index-strucutre-fn`. It also registers `klass` aliased
   to `datatype-keyword` so it can be identified by the typing system."
-  [col datatype-keyword klass custom-make-index-structure-fn]
-  (col-proto/with-index-structure col datatype-keyword klass custom-make-index-structure-fn))
-
-
+  [col custom-make-index-structure-fn]
+  (col-proto/with-index-structure col custom-make-index-structure-fn))
 
 
 (defn unique

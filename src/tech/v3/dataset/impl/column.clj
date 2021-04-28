@@ -165,8 +165,7 @@
               (str "Cannot obtain an index for column `"
                    (col-proto/column-name this)
                    "` because it contains missing values.")))))
-  (with-index-structure [this datatype-keyword klass make-index-structure-fn]
-    (casting/add-object-datatype! datatype-keyword klass true)
+  (with-index-structure [this make-index-structure-fn]
     (Column. missing
              data
              metadata
