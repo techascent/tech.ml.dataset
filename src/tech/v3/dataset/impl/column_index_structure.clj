@@ -3,7 +3,6 @@
            [tech.v3.datatype ListPersistentVector])
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column-base :refer [column-datatype-categorical?]]
-
             [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
             [tech.v3.datatype.argops :refer [arggroup]]
             [tech.v3.datatype.casting :refer [datatype->object-class]]
@@ -15,10 +14,9 @@
   (select-from-index [index-structure mode selection-spec]
     (case mode
       :pick
-      (let [^TreeMap new-index-structure (.clone ^TreeMap index-structure)
-            s (difference (set (.keySet new-index-structure)) (set selection-spec))]
-        (doseq [k s]
-          (.remove new-index-structure k))
+      (let [^TreeMap new-index-structure (TreeMap.)]
+        (doseq [k selection-spec]
+          (.put new-index-structure k (.get index-structure k)))
         new-index-structure)
       :slice
       (let [{from            :from
@@ -37,10 +35,9 @@
   (select-from-index [index-structure mode selection-spec]
     (case mode
       :pick
-      (let [^LinkedHashMap new-index-structure (.clone ^LinkedHashMap index-structure)
-            s (difference (set (.keySet new-index-structure)) (set selection-spec))]
-        (doseq [k s]
-          (.remove new-index-structure k))
+      (let [^LinkedHashMap new-index-structure (LinkedHashMap.)]
+        (doseq [k selection-spec]
+            (.put new-index-structure k (.get index-structure k)))
         new-index-structure))))
 
 
