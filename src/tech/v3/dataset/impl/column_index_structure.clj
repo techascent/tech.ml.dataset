@@ -44,11 +44,6 @@
         new-index-structure))))
 
 
-;; https://github.com/techascent/tech.ml.dataset/blob/master/src/tech/v3/dataset/impl/column.clj#L41
-(defn categorical? [dtype]
-  (boolean (#{:string :keyword :symbol} dtype)))
-
-
 (defn build-value-to-index-position-map [column-data]
   (let [idx-map (arggroup column-data)
         vals->list-persistent-vector (fn [_ list-data]
