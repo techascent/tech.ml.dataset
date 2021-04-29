@@ -49,7 +49,11 @@ Finally, any missing values should be indicated by a NaN of the expected type.")
 
 (defprotocol PHasIndexStructure
   (index-structure [this]
-    "Returns an index-structure for the column.")
+    "Returns an index-structure for the column. The index-structure will only be
+generated the first time this is function is called.")
+  (index-structure-realized? [this]
+    "Returns true if the index-structure value has been produced. The index-structure
+is only produced the first time it is requested.")
   (with-index-structure
     [this custom-make-index-structure-fn]
     "Returns a copy of the column that will return an index-structure using the

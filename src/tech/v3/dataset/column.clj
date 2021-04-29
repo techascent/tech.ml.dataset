@@ -68,6 +68,13 @@
   (col-proto/index-structure col))
 
 
+(defn index-structure-realized?
+   "Returns true if the index-structure value has been produced. The index-structure
+is only produced the first time it is requested."
+  [col]
+  (col-proto/index-structure-realized? col))
+
+
 (defn with-index-structure
   "Returns a copy of the column that will return an index-structure using the
   provided `custom-make-index-strucutre-fn`. It also registers `klass` aliased

@@ -1,7 +1,8 @@
 (ns tech.v3.dataset.column-index-structure-tests
   (:import  [java.util TreeMap LinkedHashMap])
   (:require [tech.v3.dataset :as ds]
-            [tech.v3.dataset.column :refer [index-structure with-index-structure]]
+            [tech.v3.dataset.column :refer [index-structure with-index-structure
+                                            index-structure-realized?]]
             [tech.v3.dataset.column-index-structure :refer [select-from-index]]
             [tech.v3.datatype.datetime :as datetime]
             [clojure.test :refer [testing deftest is]]))
@@ -34,6 +35,17 @@
                (with-meta {:categorical? false})
                index-structure
                type)))))
+
+
+(deftest test-index-structure-realized?
+  (is (= false
+         (-> (:A (ds/->dataset {:A [1 2 3]}))
+             (index-structure-realized?))))
+  (is (= true
+         (let [DS (ds/->dataset {:A [1 2 3]})]
+           (index-structure (:A DS))
+           (index-structure-realized? (:A DS))))))
+
 
 
 (deftest test-with-index-structure

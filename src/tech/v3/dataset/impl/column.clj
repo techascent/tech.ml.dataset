@@ -165,6 +165,8 @@
               (str "Cannot obtain an index for column `"
                    (col-proto/column-name this)
                    "` because it contains missing values.")))))
+  (index-structure-realized? [this]
+    (realized? *index-structure))
   (with-index-structure [this make-index-structure-fn]
     (Column. missing
              data
