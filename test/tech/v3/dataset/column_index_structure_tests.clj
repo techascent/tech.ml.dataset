@@ -7,11 +7,11 @@
             [tech.v3.datatype.datetime :as datetime]
             [clojure.test :refer [testing deftest is]]))
 
-
 (deftest test-default-index-structure-type-dispatch
   (let [DS (ds/->dataset {:continuous  [1 2 3]
                           :categorical [:a :b :c]
-                          :temporal    (datetime/plus-temporal-amount (datetime/local-date) (range 3) :days)})]
+                          :local-dates (datetime/plus-temporal-amount (datetime/local-date) (range 3) :days)
+                          :years       (datetime/plus-temporal-amount (java.time.Year/parse "1970") (range 3) :years)})]
     (is (= TreeMap
            (-> (:continuous DS)
                index-structure
@@ -21,10 +21,13 @@
                index-structure
                type)))
     (is (= TreeMap
-           (-> (:temporal DS)
+           (-> (:local-dates DS)
                index-structure
                type)))
-    ;; sensitive to :cateogrical? meta overrides
+    (is (= TreeMap
+           (-> (:years DS)
+               index-structure
+               type)))
     (is (= LinkedHashMap
            (-> (:continuous DS)
                (with-meta {:categorical? true})
@@ -34,7 +37,13 @@
            (-> (:categorical DS)
                (with-meta {:categorical? false})
                index-structure
+               type)))
+    (is (= LinkedHashMap
+           (-> (:years DS)
+               (with-meta {:categorical? true})
+               index-structure
                type)))))
+
 
 
 (deftest test-index-structure-realized?

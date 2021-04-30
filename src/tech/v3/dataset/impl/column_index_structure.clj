@@ -54,24 +54,19 @@
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
   (fn [data metadata]
-    (let [data-dtype (-> data elemwise-datatype)
-          data-klass (-> data-dtype datatype->object-class)]
-      (if (contains? metadata :categorical?)
-        (if (:categorical? metadata)
-          ::categorical
-          data-klass)
-        (if (column-datatype-categorical? data-dtype)
-          ::categorical
-          data-klass)))))
-
-
-(defmethod make-index-structure ::categorical
-  [data _]
-  (let [idx-map (build-value-to-index-position-map data)]
-    (LinkedHashMap. ^java.util.Map idx-map)))
+    (if (= (:datatype metadata) :object)
+      (elemwise-datatype data)
+      (:datatype metadata))))
 
 
 (defmethod make-index-structure :default
-  [data _]
-  (let [idx-map (build-value-to-index-position-map data)]
-    (TreeMap. ^java.util.Map idx-map)))
+  [data metadata]
+  (let [^java.util.Map idx-map (build-value-to-index-position-map data)
+        data-datatype (elemwise-datatype data)]
+    (if (contains? metadata :categorical?)
+      (if (:categorical? metadata)
+        (LinkedHashMap. idx-map)
+        (TreeMap. idx-map))
+      (if (column-datatype-categorical? data-datatype)
+        (LinkedHashMap. idx-map)
+        (TreeMap. idx-map)))))
