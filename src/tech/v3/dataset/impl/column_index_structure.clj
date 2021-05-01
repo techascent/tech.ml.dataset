@@ -9,12 +9,7 @@
             [clojure.set :refer [difference]]))
 
 
-(defn select-index-positions [keys index-structure]
-  (let [merge-vals-into #(into %1 (.get ^Map index-structure %2))]
-    (reduce merge-vals-into (ListPersistentVector. []) keys)))
-
-
-(defn subset-index-structure [keys index-structure new-index-structure]
+(defn pick-from-index-structure [keys index-structure new-index-structure]
   (doseq [k keys]
     (.put ^Map new-index-structure k (.get ^Map index-structure k)))
   new-index-structure)
@@ -26,20 +21,25 @@
                                                           :or {as-index-structure false}}]
    (case mode
      :pick
-     (if as-index-structure
-       (subset-index-structure selection-spec index-structure ^TreeMap (TreeMap.))
-       (select-index-positions selection-spec index-structure))
-
+     (let [picked-map (pick-from-index-structure selection-spec
+                                              index-structure
+                                              ^TreeMap (TreeMap.))]
+       (if as-index-structure
+         picked-map
+         (reduce into (ListPersistentVector. []) (.values picked-map))))
      :slice
      (let [{from            :from
             from-inclusive? :from-inclusive?
             to              :to
-            to-inclusive?   :to-inclusive?} selection-spec]
-       (.subMap ^TreeMap index-structure
-                from
-                (if (nil? from-inclusive?) true from-inclusive?)
-                to
-                (if (nil? to-inclusive?) true to-inclusive?))))))
+            to-inclusive?   :to-inclusive?} selection-spec
+           submap (.subMap ^TreeMap index-structure
+                    from
+                    (if (nil? from-inclusive?) true from-inclusive?)
+                    to
+                    (if (nil? to-inclusive?) true to-inclusive?))]
+       (if as-index-structure
+         submap
+         (reduce into (ListPersistentVector. []) (.values submap)))))))
 
 
 (extend-type LinkedHashMap
@@ -48,9 +48,12 @@
                                                            :or {as-index-structure false}}]
     (case mode
       :pick
-      (if as-index-structure
-        (subset-index-structure selection-spec index-structure ^LinkedHashMap (LinkedHashMap.))
-        (select-index-positions selection-spec index-structure)))))
+      (let [picked-map (pick-from-index-structure selection-spec
+                                               index-structure
+                                               ^LinkedHashMap (LinkedHashMap.))]
+        (if as-index-structure
+          picked-map
+          (reduce into (ListPersistentVector. []) (.values picked-map)))))))
 
 
 (defn build-value-to-index-position-map [column-data]

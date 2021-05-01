@@ -65,21 +65,20 @@
             index-structure)))))
 
 
-(testing "select-from-index"
-  (deftest test-with-continuous-data
+(deftest test-select-with-index
+  (testing "continuous data"
     (let [DS (ds/->dataset {:continuous [-1 4 9 10]})]
-      (is (= {9 [2]
-              10 [3]}
+      (is (= [2 3] 
              (-> (:continuous DS)
                  index-structure
                  (select-from-index :slice {:from 5 :to 10}))))
-      (is (= {9 [2]}
+      (is (= [2]
              (-> (:continuous DS)
                  index-structure
                  (select-from-index :slice {:from 5 :from-inclusive? false
                                             :to 10  :to-inclusive? false}))))))
 
-  (deftest test-categorical-data
+  (testing "cateogrical data"
     (let [DS (ds/->dataset {:keywords [:a :b :c]
                             :strings  ["a" "b" "c"]
                             :symbols  ['a 'b 'c]})]
@@ -96,9 +95,28 @@
                  index-structure
                  (select-from-index :pick ['a 'c]))))))
 
-  (deftest test-as-index-structure-option
-    (is (= {2 [1], 3 [2]}
-        (-> (:A (ds/->dataset {:A [1 2 3]}))
-            index-structure
-            (select-from-index :slice {:from 2 :to 3}))))))
+  (testing ":as-index-structure option"
+    (let [DS (ds/->dataset {:continuous  [1 2 3]
+                            :categorical [:a :b :c]})]
+      (is (= {2 [1], 3 [2]}
+             (-> (:continuous DS)
+                 index-structure
+                 (select-from-index :slice
+                                    {:from 2 :to 3}
+                                    {:as-index-structure true}))))
+      (is (= {2 [1], 3 [2]}
+             (-> (:continuous DS)
+                 index-structure
+                 (select-from-index :pick [2 3]
+                                    {:as-index-structure true}))))
+      (is (= {:b [1], :c [2]}
+             (-> (:categorical DS)
+                 index-structure
+                 (select-from-index :pick
+                                    [:b :c]
+                                    {:as-index-structure true})))))))
+
+
+
+
 
