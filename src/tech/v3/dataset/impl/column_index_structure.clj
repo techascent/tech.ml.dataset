@@ -1,5 +1,5 @@
 (ns tech.v3.dataset.impl.column-index-structure
-  (:import [java.util TreeMap LinkedHashMap]
+  (:import [java.util Map TreeMap LinkedHashMap]
            [tech.v3.datatype ListPersistentVector])
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column-base :refer [column-datatype-categorical?]]
@@ -9,36 +9,48 @@
             [clojure.set :refer [difference]]))
 
 
+(defn select-index-positions [keys index-structure]
+  (let [merge-vals-into #(into %1 (.get ^Map index-structure %2))]
+    (reduce merge-vals-into (ListPersistentVector. []) keys)))
+
+
+(defn subset-index-structure [keys index-structure new-index-structure]
+  (doseq [k keys]
+    (.put ^Map new-index-structure k (.get ^Map index-structure k)))
+  new-index-structure)
+
+
 (extend-type TreeMap
   col-proto/PIndexStructure
-  (select-from-index [index-structure mode selection-spec]
-    (case mode
-      :pick
-      (let [^TreeMap new-index-structure (TreeMap.)]
-        (doseq [k selection-spec]
-          (.put new-index-structure k (.get index-structure k)))
-        new-index-structure)
-      :slice
-      (let [{from            :from
-             from-inclusive? :from-inclusive?
-             to              :to
-             to-inclusive?   :to-inclusive?} selection-spec]
-        (.subMap ^TreeMap index-structure
-                 from
-                 (if (nil? from-inclusive?) true from-inclusive?)
-                 to
-                 (if (nil? to-inclusive?) true to-inclusive?))))))
+  (select-from-index [index-structure mode selection-spec {:keys [as-index-structure]
+                                                          :or {as-index-structure false}}]
+   (case mode
+     :pick
+     (if as-index-structure
+       (subset-index-structure selection-spec index-structure ^TreeMap (TreeMap.))
+       (select-index-positions selection-spec index-structure))
+
+     :slice
+     (let [{from            :from
+            from-inclusive? :from-inclusive?
+            to              :to
+            to-inclusive?   :to-inclusive?} selection-spec]
+       (.subMap ^TreeMap index-structure
+                from
+                (if (nil? from-inclusive?) true from-inclusive?)
+                to
+                (if (nil? to-inclusive?) true to-inclusive?))))))
 
 
 (extend-type LinkedHashMap
   col-proto/PIndexStructure
-  (select-from-index [index-structure mode selection-spec]
+  (select-from-index [index-structure mode selection-spec {:keys [as-index-structure]
+                                                           :or {as-index-structure false}}]
     (case mode
       :pick
-      (let [^LinkedHashMap new-index-structure (LinkedHashMap.)]
-        (doseq [k selection-spec]
-            (.put new-index-structure k (.get index-structure k)))
-        new-index-structure))))
+      (if as-index-structure
+        (subset-index-structure selection-spec index-structure ^LinkedHashMap (LinkedHashMap.))
+        (select-index-positions selection-spec index-structure)))))
 
 
 (defn build-value-to-index-position-map [column-data]

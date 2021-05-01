@@ -77,25 +77,28 @@
              (-> (:continuous DS)
                  index-structure
                  (select-from-index :slice {:from 5 :from-inclusive? false
-                                                       :to 10  :to-inclusive? false}))))))
-
+                                            :to 10  :to-inclusive? false}))))))
 
   (deftest test-categorical-data
     (let [DS (ds/->dataset {:keywords [:a :b :c]
                             :strings  ["a" "b" "c"]
                             :symbols  ['a 'b 'c]})]
-      (is (= {"a" [0]
-              "c" [2]}
+      (is (= [0 2]
              (-> (:strings DS)
                  index-structure
                  (select-from-index :pick ["a" "c"]))))
-      (is (= {:a [0]
-              :c [2]}
+      (is (= [0 2]
              (-> (:keywords DS)
                  index-structure
                  (select-from-index :pick [:a :c]))))
-      (is (= {'a [0]
-              'c [2]}
+      (is (= [0 2]
              (-> (:symbols DS)
                  index-structure
-                 (select-from-index :pick ['a 'c])))))))
+                 (select-from-index :pick ['a 'c]))))))
+
+  (deftest test-as-index-structure-option
+    (is (= {2 [1], 3 [2]}
+        (-> (:A (ds/->dataset {:A [1 2 3]}))
+            index-structure
+            (select-from-index :slice {:from 2 :to 3}))))))
+

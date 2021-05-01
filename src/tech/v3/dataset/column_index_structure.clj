@@ -24,5 +24,7 @@
 
   Note: Other index structures defined by other libraries may define other modes, so
         consult documentation."
-  [index-structure mode selection-spec]
-  (col-proto/select-from-index index-structure mode selection-spec))
+  ([index-structure mode selection-spec]
+   (select-from-index index-structure mode selection-spec {:as-index-structure false}))
+  ([index-structure mode selection-spec options]
+   (col-proto/select-from-index index-structure mode selection-spec options)))

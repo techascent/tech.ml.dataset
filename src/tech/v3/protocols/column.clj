@@ -62,6 +62,6 @@ provided `custom-make-index-strucutre-fn`."))
 
 (defprotocol PIndexStructure
   (select-from-index
-    [index-structure mode selection-spec]
+    [index-structure mode selection-spec options]
     "Select a subset of the index. Supports a variety of modes."))
 
