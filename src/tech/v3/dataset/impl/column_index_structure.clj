@@ -9,7 +9,7 @@
             [clojure.set :refer [difference]]))
 
 
-(defn pick-from-index-structure [keys index-structure new-index-structure]
+(defn- pick-from-index-structure [keys index-structure new-index-structure]
   (doseq [k keys]
     (.put ^Map new-index-structure k (.get ^Map index-structure k)))
   new-index-structure)
