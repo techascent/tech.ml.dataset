@@ -10,8 +10,7 @@
 (deftest test-default-index-structure-type-dispatch
   (let [DS (ds/->dataset {:continuous  [1 2 3]
                           :categorical [:a :b :c]
-                          :local-dates (datetime/plus-temporal-amount (datetime/local-date) (range 3) :days)
-                          :years       (datetime/plus-temporal-amount (java.time.Year/parse "1970") (range 3) :years)})]
+                          :local-dates (datetime/plus-temporal-amount (datetime/local-date) (range 3) :days)})]
     (is (= TreeMap
            (-> (:continuous DS)
                index-structure
@@ -24,10 +23,6 @@
            (-> (:local-dates DS)
                index-structure
                type)))
-    (is (= TreeMap
-           (-> (:years DS)
-               index-structure
-               type)))
     (is (= LinkedHashMap
            (-> (:continuous DS)
                (with-meta {:categorical? true})
@@ -36,11 +31,6 @@
     (is (= TreeMap
            (-> (:categorical DS)
                (with-meta {:categorical? false})
-               index-structure
-               type)))
-    (is (= LinkedHashMap
-           (-> (:years DS)
-               (with-meta {:categorical? true})
                index-structure
                type)))))
 
