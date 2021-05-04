@@ -68,10 +68,8 @@
 
 (defmulti make-index-structure
   "Returns an index structure based on the type of data in the column."
-  (fn [data metadata]
-    (if (= (:datatype metadata) :object)
-      (elemwise-datatype data)
-      (:datatype metadata))))
+  (fn [data _] (elemwise-datatype data)))
+
 
 
 (defmethod make-index-structure :default
