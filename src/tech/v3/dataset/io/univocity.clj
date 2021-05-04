@@ -60,7 +60,7 @@
 (defn- apply-options-to-format!
   ^CommonSettings [^CommonSettings settings {:keys [disable-comment-skipping?]}]
   (when disable-comment-skipping?
-    (-> settings .getFormat (.setComment \0)))
+    (-> settings .getFormat (.setComment \u0000)))
   settings)
 
 
