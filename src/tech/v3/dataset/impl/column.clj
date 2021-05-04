@@ -270,7 +270,7 @@
       (if (== 0 (dtype/ecount missing))
         ;;common case
         (Column. (->bitmap) (dtype/indexed-buffer idx-rdr data)
-                 metadata
+                 (dissoc metadata :statistics)
                  nil)
         ;;Uggh.  Construct a new missing set
         (let [idx-rdr (dtype/->reader idx-rdr)
@@ -281,7 +281,7 @@
              (.add result-set idx)))
           (Column. result-set
                    (dtype/indexed-buffer idx-rdr data)
-                   metadata
+                   (dissoc metadata :statistics)
                    nil)))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)

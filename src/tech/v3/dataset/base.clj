@@ -492,13 +492,33 @@
 
 
 (defn sort-by-column
-  "Sort a dataset by a given column using the given compare fn."
+  "Sort a dataset by a given column using the given compare fn.
+
+  If `compare-fn` is one of the special values `:tech.numerics/<` or
+  `tech.numerics/>` then not only is the sort faster as a datatype-specific
+  comparator will be used but the column metadata is setup to indicate that
+  this column has a known sort order."
   ([dataset colname compare-fn]
    (when dataset
-     (->> (argops/argsort compare-fn (dataset colname))
-          (select dataset :all))))
+     (let [retval (->> (argops/argsort compare-fn (dataset colname))
+                       (select dataset :all))]
+       (if (keyword? compare-fn)
+         (let [col-data (dataset colname)
+               row-count (row-count dataset)
+               [min-value max-value] (when-not (== 0 row-count)
+                                       (case compare-fn
+                                         :tech.numerics/<
+                                         [(col-data 0) (col-data (dec row-count))]
+                                         :tech.numerics/>
+                                         [(col-data (dec row-count)) (col-data 0)]))]
+           (update-column retval colname
+                          #(vary-meta % assoc :statistics {:order compare-fn
+                                                           :comparator compare-fn
+                                                           :min min-value
+                                                           :max max-value})))
+         retval))))
   ([dataset colname]
-   (sort-by-column dataset colname nil)))
+   (sort-by-column dataset colname :tech.numerics/<)))
 
 
 (defn- do-concat

@@ -11,7 +11,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util UUID List HashMap]
-           [java.util.function Function]
+           [java.util.function Function Consumer]
            [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]
            [org.roaringbitmap RoaringBitmap]
@@ -156,18 +156,25 @@
 
 (defn finalize-parser-data!
   [container missing failed-values failed-indexes
-   missing-value rowcount]
+   missing-value column-statistics* rowcount]
   (add-missing-values! container missing missing-value rowcount)
-  (merge
-   #:tech.v3.dataset{:data (or (dtype/as-array-buffer container)
-                               (dtype/as-native-buffer container)
-                               container)
-                     :missing missing
-                     :force-datatype? true}
-   (when (and failed-values
-              (not= 0 (dtype/ecount failed-values)))
-     #:tech.v3.dataset{:metadata {:unparsed-data failed-values
-                                  :unparsed-indexes failed-indexes}})))
+  (let [unparsed-metadata (when (and failed-values
+                                     (not= 0 (dtype/ecount failed-values)))
+                            {:unparsed-data failed-values
+                             :unparsed-indexes failed-indexes})
+        col-stats-meta (when column-statistics*
+                         {:statistics @column-statistics*})]
+    (merge
+     #:tech.v3.dataset{:data (or (dtype/as-array-buffer container)
+                                 (dtype/as-native-buffer container)
+                                 container)
+                       :missing missing
+                       :force-datatype? true}
+     (when (or unparsed-metadata
+               col-stats-meta)
+       #:tech.v3.dataset{:metadata
+                         (merge unparsed-metadata
+                                col-stats-meta)}))))
 
 
 (defn- missing-value?
@@ -189,6 +196,7 @@
                           ^PrimitiveList failed-values
                           ^RoaringBitmap failed-indexes
                           column-name
+                          ^Consumer column-statistics
                           ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
@@ -222,10 +230,11 @@
           :else
           (do
             (add-missing-values! container missing missing-value idx)
+            (.accept column-statistics parsed-value)
             (.addObject container parsed-value))))))
   (finalize [p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
-                           missing-value rowcount)))
+                           missing-value column-statistics rowcount)))
 
 
 (defn- find-fixed-parser
@@ -280,10 +289,12 @@
                                           (bitmap/->bitmap)])
         container (column-base/make-container dtype options)
         missing-value (column-base/datatype->missing-value dtype)
-        missing (bitmap/->bitmap)]
+        missing (bitmap/->bitmap)
+        colstats (when (:column-statistics? options)
+                   (column-base/column-statistics-consumer dtype options))]
     (FixedTypeParser. container dtype missing-value parse-fn
                       missing failed-values failed-indexes
-                      cname -1)))
+                      cname colstats -1)))
 
 
 (defn parser-kwd-list->parser-tuples
@@ -312,6 +323,37 @@
                                (old-container idx)
                                new-dtype))))
     container))
+
+
+(defn- promote-column-statistics
+  [old-dtype dtype old-col-statistics]
+  (when (or (casting/numeric-type? dtype)
+            (dtype-dt/datetime-datatype? dtype))
+    (let [new-col-stats (column-base/column-statistics-consumer dtype)]
+      (if (or (nil? old-col-statistics)
+              (== 0 (dtype/ecount old-col-statistics)))
+        new-col-stats
+        (try
+          (let [{:keys [min-value max-value order]} @old-col-statistics
+                old-dtype (dtype/datatype min-value)
+                new-dtype (packing/unpack-datatype dtype)
+                min-value (dtype/cast min-value dtype)
+                max-value (dtype/cast max-value dtype)]
+            (when-not (identical? :object
+                                  (casting/simple-operation-space
+                                   old-dtype new-dtype))
+              (case order
+                :tech.v3.dataset/== (.accept new-col-stats min-value)
+                :tech.v3.dataset/> (do (.accept new-col-stats min-value)
+                                       (.accept new-col-stats max-value))
+                :tech.v3.dataset/< (do (.accept new-col-stats max-value)
+                                       (.accept new-col-stats min-value))
+                :tech.v3.dataset/unordered (do (.accept new-col-stats min-value)
+                                               (.accept new-col-stats max-value)
+                                               (.accept new-col-stats min-value)))
+              new-col-stats))
+          (catch Exception e
+            nil))))))
 
 
 (defn- find-next-parser
@@ -364,6 +406,8 @@
                                   ^List promotion-list
                                   column-name
                                   ^:unsynchronized-mutable ^long max-idx
+                                  ^{:unsynchronized-mutable true
+                                    :tag Consumer} column-statistics
                                   options]
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
@@ -395,6 +439,8 @@
                       new-container (promote-container container missing
                                                        parser-datatype
                                                        options)
+                      new-col-stats (promote-column-statistics
+                                     container-dtype parser-datatype column-statistics)
                       new-missing-value (column-base/datatype->missing-value
                                          parser-datatype)]
                   ;;Update member variables based on new parser
@@ -402,6 +448,7 @@
                   (set! container-dtype parser-datatype)
                   (set! missing-value new-missing-value)
                   (set! parse-fn new-parser-fn)
+                  (set! column-statistics new-col-stats)
                   parsed-value)))
             ;;Else, nothing to parse with, just return string value
             :else
@@ -409,15 +456,20 @@
       (cond
         ;;Promotional parsers should not have parse failures.
         (identical? :tech.v3.dataset/parse-failure parsed-value)
-        (errors/throwf "Parse failure detected in promotional parser - Please file issue.")
+        (errors/throwf
+         "Parse failure detected in promotional parser - Please file issue.")
         (identical? :tech.v3.dataset/missing parsed-value)
         nil ;;Skip, will add missing on next valid value
         :else
         (do
           (add-missing-values! container missing missing-value idx)
-          (.addObject container parsed-value)))))
+
+          (.addObject container parsed-value)
+          (when column-statistics
+            (.accept column-statistics parsed-value))))))
   (finalize [p rowcount]
-    (finalize-parser-data! container missing nil nil missing-value rowcount)))
+    (finalize-parser-data! container missing nil nil missing-value
+                           column-statistics rowcount)))
 
 
 (defn promotional-string-parser
@@ -436,6 +488,7 @@
                                      parser-datatype-sequence)
                                column-name
                                -1
+                               nil
                                options)))
   ([column-name options]
    (promotional-string-parser column-name default-parser-datatype-sequence options)))
@@ -448,6 +501,8 @@
                                   ^RoaringBitmap missing
                                   column-name
                                   ^:unsynchronized-mutable ^long max-idx
+                                  ^{:unsynchronized-mutable true
+                                    :tag Consumer} column-statistics
                                   options]
   dtype-proto/PECount
   (ecount [this] (inc max-idx))
@@ -464,27 +519,36 @@
             (when (== 0 container-ecount)
               (set! container (column-base/make-container packed-dtype options))
               (set! container-dtype packed-dtype)
+              (set! column-statistics (column-base/column-statistics-consumer
+                                       org-datatype))
               (set! missing-value (column-base/datatype->missing-value packed-dtype)))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
-            (.addObject container value))
+            (.addObject container value)
+            (when column-statistics
+              (.accept column-statistics value)))
           (let [widest-datatype (casting/widest-datatype
                                  (packing/unpack-datatype container-dtype)
                                  org-datatype)]
             (when-not (= widest-datatype container-dtype)
               (let [new-container (promote-container container
                                                      missing widest-datatype
-                                                     options)]
+                                                     options)
+                    new-stats (promote-column-statistics
+                               container-dtype widest-datatype column-statistics)]
                 (set! container new-container)
                 (set! container-dtype widest-datatype)
                 (set! missing-value (column-base/datatype->missing-value
-                                     widest-datatype))))
+                                     widest-datatype))
+                (set! column-statistics new-stats)))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
-            (.addObject container value))))))
+            (.addObject container value)
+            (when column-statistics
+              (.accept column-statistics value)))))))
   (finalize [p rowcount]
     (finalize-parser-data! container missing nil nil
-                           missing-value rowcount)))
+                           missing-value column-statistics rowcount)))
 
 
 (defn promotional-object-parser
@@ -495,4 +559,5 @@
                             (bitmap/->bitmap)
                             column-name
                             -1
+                            nil
                             options))

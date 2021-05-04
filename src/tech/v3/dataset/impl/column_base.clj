@@ -4,11 +4,14 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype :as dtype]
             [clojure.tools.logging :as log])
-  (:import [java.util Map List]
-           [tech.v3.datatype PrimitiveList]
-           [tech.v3.dataset Text]))
+  (:import [java.util Map List Comparator]
+           [java.util.function Consumer]
+           [tech.v3.datatype PrimitiveList ECount]
+           [tech.v3.dataset Text]
+           [clojure.lang IDeref]))
 
 
 (def ^Map dtype->missing-val-map
@@ -89,3 +92,63 @@
   (and (not (casting/numeric-type? col-dtype))
        (not (identical? col-dtype :boolean))
        (not (dtype-dt/datetime-datatype? col-dtype))))
+
+
+(defn- value-order
+  [prev-val next-val ^Comparator comparator]
+  (let [comp (.compare comparator prev-val next-val)]
+    (if (== comp 0)
+      :tech.numerics/==
+      (if (> comp 0)
+        :tech.numerics/>
+        :tech.numerics/<))))
+
+
+(deftype ColumnStatistics [^:unsynchronized-mutable min-value
+                           ^:unsynchronized-mutable max-value
+                           ^:unsynchronized-mutable last-value
+                           ^:unsynchronized-mutable order
+                           ^{:unsynchronized-mutable true
+                             :tag long} n-elems
+                           user-comparator
+                           ^Comparator comparator]
+  Consumer
+  (accept [this val]
+    (if (== 0 n-elems )
+      (do (set! min-value val)
+          (set! max-value val)
+          (set! order :tech.numerics/==))
+      (let [new-order (value-order last-value val comparator)]
+        (when-not (identical? new-order order)
+          (if (== n-elems 1)
+            (set! order new-order)
+            (set! order :tech.numerics/unordered)))
+        (let [max-comp (.compare comparator max-value val)
+              min-comp (.compare comparator min-value val)]
+          (when (< max-comp 0)
+            (set! max-value val))
+          (when (> min-comp 0)
+            (set! min-value val)))))
+    (set! n-elems (unchecked-inc n-elems))
+    (set! last-value val))
+  ECount
+  (lsize [this] n-elems)
+  IDeref
+  (deref [this]
+    {:min min-value
+     :max max-value
+     :order order
+     :comparator user-comparator}))
+
+
+(defn column-statistics-consumer
+  (^Consumer [dtype options]
+   (let [user-comparator (:comparator options :tech.numerics/<)
+         comparator (-> (argops/find-base-comparator
+                         user-comparator dtype)
+                        (argops/->comparator))]
+     (ColumnStatistics. nil nil nil :tech.v3.dataset/unordered 0
+                        (when (keyword? user-comparator) user-comparator)
+                        comparator)))
+  (^Consumer [dtype]
+   (column-statistics-consumer dtype nil)))
