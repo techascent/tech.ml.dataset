@@ -110,44 +110,63 @@
                            ^:unsynchronized-mutable order
                            ^{:unsynchronized-mutable true
                              :tag long} n-elems
+                           cast-fn
                            user-comparator
                            ^Comparator comparator]
   Consumer
   (accept [this val]
-    (if (== 0 n-elems )
-      (do (set! min-value val)
-          (set! max-value val)
-          (set! order :tech.numerics/==))
-      (let [new-order (value-order last-value val comparator)]
-        (when-not (identical? new-order order)
-          (if (== n-elems 1)
-            (set! order new-order)
-            (set! order :tech.numerics/unordered)))
-        (let [max-comp (.compare comparator max-value val)
-              min-comp (.compare comparator min-value val)]
-          (when (< max-comp 0)
-            (set! max-value val))
-          (when (> min-comp 0)
-            (set! min-value val)))))
-    (set! n-elems (unchecked-inc n-elems))
-    (set! last-value val))
+    ;;overshadow val of val with correct type
+    (let [val (cast-fn val)]
+      (if (== 0 n-elems )
+        (do (set! min-value val)
+            (set! max-value val)
+            (set! order :tech.numerics/==))
+        (let [new-order (value-order last-value val comparator)]
+          (when-not (identical? new-order order)
+            (if (== n-elems 1)
+              (set! order new-order)
+              (set! order :tech.numerics/unordered)))
+          (let [max-comp (.compare comparator max-value val)
+                min-comp (.compare comparator min-value val)]
+            (when (< max-comp 0)
+              (set! max-value val))
+            (when (> min-comp 0)
+              (set! min-value val)))))
+      (set! n-elems (unchecked-inc n-elems))
+      (set! last-value val)))
   ECount
   (lsize [this] n-elems)
   IDeref
   (deref [this]
-    {:min min-value
-     :max max-value
-     :order order
-     :comparator user-comparator}))
+    (merge
+     {:min min-value
+      :max max-value
+      :order order}
+     (when-not (identical? user-comparator :tech.numerics/<)
+       {:comparator user-comparator}))))
+
+
+(defn column-statistics-datatype?
+  [dtype]
+  (or (and (not (identical? dtype :char))
+           (casting/numeric-type? dtype))
+      (dtype-dt/datetime-datatype? dtype)))
 
 
 (defn column-statistics-consumer
   (^Consumer [dtype options]
    (let [user-comparator (:comparator options :tech.numerics/<)
+         dtype (-> (packing/unpack-datatype dtype)
+                   (casting/simple-operation-space))
          comparator (-> (argops/find-base-comparator
                          user-comparator dtype)
-                        (argops/->comparator))]
+                        (argops/->comparator))
+         cast-fn (case dtype
+                   :int64 #(unchecked-long %)
+                   :float64 #(unchecked-double %)
+                   identity)]
      (ColumnStatistics. nil nil nil :tech.v3.dataset/unordered 0
+                        cast-fn
                         (when (keyword? user-comparator) user-comparator)
                         comparator)))
   (^Consumer [dtype]

@@ -82,7 +82,7 @@
                                 (test [this val] (not= val nil))))
                      (.iterator))]
         (reify java.util.Iterator
-          (hasNext [this] (.hasNext iter))
+          (hasNext [this] (try (.hasNext iter) (catch Exception e false)))
           (next [this] (wrap-cell (.next iter))))))))
 
 (defn- wrap-sheet

@@ -2,6 +2,7 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
@@ -75,6 +76,17 @@
         (column-parsers/finalize! parser (dtype/ecount parser))))))
 
 
+(defn- range->col-stats
+  [rng]
+  (let [dt-rng (dt-proto/->range rng nil)
+        inc (double (dt-proto/range-increment dt-rng))]
+    {:min (dt-proto/range-min dt-rng)
+     :max (dt-proto/range-max dt-rng)
+     :order (if (> inc 0.0)
+              :tech.numerics/<
+              :tech.numerics/>)}))
+
+
 (defn prepare-column-data
   "Scan data for missing values and to infer storage datatype.  Returns
    a map of least #tech.v3.dataset{:data :missing :force-datatype?}."
@@ -88,10 +100,19 @@
       ;;ensure we do not re-scan this object
       (let [{:keys [tech.v3.dataset/data
                     tech.v3.dataset/missing
-                    tech.v3.dataset/force-datatype?]} obj-data
+                    tech.v3.dataset/force-datatype?
+                    tech.v3.dataset/metadata]} obj-data
             obj-data (if (nil? missing)
                        (dissoc obj-data :tech.v3.dataset/missing)
-                       obj-data)]
+                       obj-data)
+            [missing metadata] (if (dt-proto/convertible-to-range? data)
+                                 ;;ranges have no missing values unless user specified
+                                 ;;them explicitly
+                                 [(or missing (bitmap/->bitmap))
+                                  (merge
+                                   {:statistics (range->col-stats data)}
+                                   metadata)]
+                                 [missing metadata])]
         (merge
          (if (and (dtype/reader? data) force-datatype?)
            ;;skip scan of the data, but potentially still scan for missing
@@ -99,8 +120,9 @@
             :tech.v3.dataset/missing (if missing missing (scan-missing data))}
            (scan-data data missing))
          ;;allow missing/metadata to make it through so user can override
-         (dissoc obj-data :tech.v3.dataset/data)
-         #:tech.v3.dataset{:force-datatype? true})))
+         (dissoc obj-data :tech.v3.dataset/data :tech.v3.dataset/metadata)
+         #:tech.v3.dataset{:force-datatype? true
+                           :metadata metadata})))
     (col-proto/is-column? obj-data)
     (col-proto/as-map obj-data)
     :else

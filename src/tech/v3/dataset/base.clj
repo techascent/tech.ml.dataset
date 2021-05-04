@@ -914,6 +914,7 @@
             #:tech.v3.dataset
             {:name (:name metadata)
              :missing missing
+             :metadata metadata
              :force-datatype? true
              :data (case datatype
                      :string

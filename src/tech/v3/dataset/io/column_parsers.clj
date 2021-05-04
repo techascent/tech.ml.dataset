@@ -230,7 +230,7 @@
           :else
           (do
             (add-missing-values! container missing missing-value idx)
-            (.accept column-statistics parsed-value)
+            (when column-statistics (.accept column-statistics parsed-value))
             (.addObject container parsed-value))))))
   (finalize [p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
@@ -327,31 +327,28 @@
 
 (defn- promote-column-statistics
   [old-dtype dtype old-col-statistics]
-  (when (or (casting/numeric-type? dtype)
-            (dtype-dt/datetime-datatype? dtype))
+  (when (column-base/column-statistics-datatype? dtype)
     (let [new-col-stats (column-base/column-statistics-consumer dtype)]
       (if (or (nil? old-col-statistics)
               (== 0 (dtype/ecount old-col-statistics)))
+        ;;attempt promotion to new datatype
         new-col-stats
         (try
-          (let [{:keys [min-value max-value order]} @old-col-statistics
-                old-dtype (dtype/datatype min-value)
-                new-dtype (packing/unpack-datatype dtype)
+          (let [{min-value :min
+                 max-value :max
+                 order :order} @old-col-statistics
                 min-value (dtype/cast min-value dtype)
                 max-value (dtype/cast max-value dtype)]
-            (when-not (identical? :object
-                                  (casting/simple-operation-space
-                                   old-dtype new-dtype))
-              (case order
-                :tech.v3.dataset/== (.accept new-col-stats min-value)
-                :tech.v3.dataset/> (do (.accept new-col-stats min-value)
-                                       (.accept new-col-stats max-value))
-                :tech.v3.dataset/< (do (.accept new-col-stats max-value)
-                                       (.accept new-col-stats min-value))
-                :tech.v3.dataset/unordered (do (.accept new-col-stats min-value)
-                                               (.accept new-col-stats max-value)
-                                               (.accept new-col-stats min-value)))
-              new-col-stats))
+            (case order
+              :tech.numerics/== (.accept new-col-stats min-value)
+              :tech.numerics/> (do (.accept new-col-stats min-value)
+                                   (.accept new-col-stats max-value))
+              :tech.numerics/< (do (.accept new-col-stats max-value)
+                                   (.accept new-col-stats min-value))
+              :tech.numerics/unordered (do (.accept new-col-stats min-value)
+                                           (.accept new-col-stats max-value)
+                                           (.accept new-col-stats min-value)))
+            new-col-stats)
           (catch Exception e
             nil))))))
 
@@ -519,8 +516,9 @@
             (when (== 0 container-ecount)
               (set! container (column-base/make-container packed-dtype options))
               (set! container-dtype packed-dtype)
-              (set! column-statistics (column-base/column-statistics-consumer
-                                       org-datatype))
+              (set! column-statistics
+                    (when (column-base/column-statistics-datatype? org-datatype)
+                      (column-base/column-statistics-consumer org-datatype)))
               (set! missing-value (column-base/datatype->missing-value packed-dtype)))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
