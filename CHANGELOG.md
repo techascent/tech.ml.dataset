@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.00-beta-8
+ * Fix for [issue 238](https://github.com/techascent/tech.ml.dataset/issues/238)
+
 ## 6.00-beta-7
  * Final upgrade for geni benchmark and moved a utility function to make
    it more generally accessible.

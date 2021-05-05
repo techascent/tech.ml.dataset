@@ -10,7 +10,7 @@
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "4.1.2"
                   :exclusions [commons-codec]]
-                 [org.dhatim/fastexcel-reader      "0.10.12"
+                 [org.dhatim/fastexcel-reader      "0.12.8"
                   :exclusions [org.apache.poi/poi-ooxml]]
                  [com.github.haifengl/smile-core   "2.6.0"
                   :exclusions [org.slf4j/slf4j-api]]
