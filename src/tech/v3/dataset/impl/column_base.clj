@@ -104,6 +104,26 @@
         :tech.numerics/<))))
 
 
+(defn- value-order-long
+  [^long prev-val ^long next-val]
+  (let [comp (Long/compare prev-val next-val)]
+    (if (== comp 0)
+      :tech.numerics/==
+      (if (> comp 0)
+        :tech.numerics/>
+        :tech.numerics/<))))
+
+
+(defn- value-order-double
+  [^double prev-val ^double next-val]
+  (let [comp (Double/compare prev-val next-val)]
+    (if (== comp 0)
+      :tech.numerics/==
+      (if (> comp 0)
+        :tech.numerics/>
+        :tech.numerics/<))))
+
+
 (deftype ColumnStatistics [^:unsynchronized-mutable min-value
                            ^:unsynchronized-mutable max-value
                            ^:unsynchronized-mutable last-value
@@ -138,12 +158,91 @@
   (lsize [this] n-elems)
   IDeref
   (deref [this]
-    (merge
-     {:min min-value
-      :max max-value
-      :order order}
-     (when-not (identical? user-comparator :tech.numerics/<)
-       {:comparator user-comparator}))))
+    (when-not (== 0 n-elems)
+      (merge
+       {:min min-value
+        :max max-value
+        :order order}
+       (when-not (identical? user-comparator :tech.numerics/<)
+         {:comparator user-comparator})))))
+
+
+(deftype ColumnStatisticsLong [^{:unsynchronized-mutable true
+                                 :tag long} min-value
+                               ^{:unsynchronized-mutable true
+                                 :tag long} max-value
+                               ^{:unsynchronized-mutable true
+                                 :tag long} last-value
+                               ^:unsynchronized-mutable order
+                               ^{:unsynchronized-mutable true
+                                 :tag long} n-elems]
+  Consumer
+  (accept [this val]
+    ;;overshadow val of val with correct type
+    (let [val (unchecked-long val)]
+      (if (== 0 n-elems )
+        (do (set! min-value val)
+            (set! max-value val)
+            (set! order :tech.numerics/==))
+        (let [new-order (value-order-long last-value val)]
+          (when-not (identical? new-order order)
+            (if (== n-elems 1)
+              (set! order new-order)
+              (set! order :tech.numerics/unordered)))
+          (when (> val max-value)
+            (set! max-value val))
+          (when (< val min-value)
+            (set! min-value val))))
+      (set! n-elems (unchecked-inc n-elems))
+      (set! last-value val)))
+  ECount
+  (lsize [this] n-elems)
+  IDeref
+  (deref [this]
+    (when-not (== 0 n-elems)
+      (merge
+       {:min min-value
+        :max max-value
+        :order order}))))
+
+
+(deftype ColumnStatisticsDouble [^{:unsynchronized-mutable true
+                                   :tag double} min-value
+                                 ^{:unsynchronized-mutable true
+                                   :tag double} max-value
+                                 ^{:unsynchronized-mutable true
+                                   :tag double} last-value
+                                 ^:unsynchronized-mutable order
+                                 ^{:unsynchronized-mutable true
+                                   :tag long} n-elems]
+  Consumer
+  (accept [this val]
+    ;;overshadow val of val with correct type
+    (let [val (unchecked-double val)]
+      (if (== 0 n-elems )
+        (do (set! min-value val)
+            (set! max-value val)
+            (set! order :tech.numerics/==))
+        (let [new-order (value-order-double last-value val)]
+          (when-not (identical? new-order order)
+            (if (== n-elems 1)
+              (set! order new-order)
+              (set! order :tech.numerics/unordered)))
+          (when (> val max-value)
+            (set! max-value val))
+          (when (< val min-value)
+            (set! min-value val))))
+      (set! n-elems (unchecked-inc n-elems))
+      (set! last-value val)))
+  ECount
+  (lsize [this] n-elems)
+  IDeref
+  (deref [this]
+    (when-not (== 0 n-elems)
+      (merge
+       {:min min-value
+        :max max-value
+        :order order}))))
 
 
 (defn column-statistics-datatype?
@@ -160,14 +259,16 @@
                    (casting/simple-operation-space))
          comparator (-> (argops/find-base-comparator
                          user-comparator dtype)
-                        (argops/->comparator))
-         cast-fn (case dtype
-                   :int64 #(unchecked-long %)
-                   :float64 #(unchecked-double %)
-                   identity)]
-     (ColumnStatistics. nil nil nil :tech.v3.dataset/unordered 0
-                        cast-fn
-                        (when (keyword? user-comparator) user-comparator)
-                        comparator)))
+                        (argops/->comparator))]
+     (case dtype
+       :int64 (ColumnStatisticsLong. Long/MIN_VALUE Long/MIN_VALUE Long/MIN_VALUE
+                                     :tech.v3.dataset/unordered 0)
+       :float64 (ColumnStatisticsDouble. Double/NaN Double/NaN Double/NaN
+                                         :tech.v3.dataset/unordered 0)
+       ;;default case
+       (ColumnStatistics. nil nil nil :tech.v3.dataset/unordered 0
+                          identity
+                          (when (keyword? user-comparator) user-comparator)
+                          comparator))))
   (^Consumer [dtype]
    (column-statistics-consumer dtype nil)))
