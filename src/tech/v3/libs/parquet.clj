@@ -354,17 +354,21 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         container (col-base/make-container container-dtype)
         missing-value (col-base/datatype->missing-value
                        (packing/unpack-datatype container-dtype))
-        missing (bitmap/->bitmap)]
+        missing (bitmap/->bitmap)
+        col-stats (when (col-base/column-statistics-datatype? container-dtype)
+                    (col-base/column-statistics-consumer container-dtype nil))]
     (reify PParser
       (addValue [p idx value]
         (if (identical? value :tech.v3.dataset/missing)
           (do
             (.addObject container missing-value)
             (.add missing (unchecked-int idx)))
-          (.addObject container value)))
+          (do
+            (.addObject container value)
+            (when col-stats (.accept col-stats value)))))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
-                                           missing-value n-rows)))))
+                                           missing-value col-stats n-rows)))))
 
 
 (defn- fixed-datatype-parser-long
@@ -373,17 +377,20 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         container (col-base/make-container container-dtype)
         missing-value (long (col-base/datatype->missing-value
                              (packing/unpack-datatype container-dtype)))
-        missing (bitmap/->bitmap)]
+        missing (bitmap/->bitmap)
+        col-stats (col-base/column-statistics-consumer container-dtype nil)]
     (reify PParser
       (addValue [p idx value]
         (if (identical? value :tech.v3.dataset/missing)
           (do
             (.addLong container missing-value)
             (.add missing (unchecked-int idx)))
-          (.addLong container (unchecked-long value))))
+          (do
+            (.addLong container (unchecked-long value))
+            (.accept col-stats value))))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
-                                           missing-value n-rows)))))
+                                           missing-value col-stats n-rows)))))
 
 
 (defn- fixed-datatype-parser-double
@@ -392,17 +399,20 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         container (col-base/make-container container-dtype)
         missing-value (double (col-base/datatype->missing-value
                                (packing/unpack-datatype container-dtype)))
-        missing (bitmap/->bitmap)]
+        missing (bitmap/->bitmap)
+        col-stats (col-base/column-statistics-consumer container-dtype nil)]
     (reify PParser
       (addValue [p idx value]
         (if (identical? value :tech.v3.dataset/missing)
           (do
             (.addDouble container missing-value)
             (.add missing (unchecked-int idx)))
-          (.addDouble container (unchecked-double value))))
+          (do
+            (.addDouble container (unchecked-double value))
+            (.accept col-stats value))))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
-                                           missing-value n-rows)))))
+                                           missing-value col-stats n-rows)))))
 
 
 (defn- parse-column-data
@@ -476,9 +486,10 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
           (vary-meta
            retval
            assoc
-           :statistics (-> (:statistics col-metadata)
-                           (update :min #(when % (converter %)))
-                           (update :max #(when % (converter %))))
+           :statistics (merge (get (meta retval) :statistics)
+                              (-> (:statistics col-metadata)
+                                  (update :min #(when % (converter %)))
+                                  (update :max #(when % (converter %)))))
            :parquet-metadata (dissoc col-metadata :statistics :primitive-type)))
         (catch Throwable e
           (log/warnf e "Failed to parse column %s: %s"

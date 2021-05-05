@@ -513,7 +513,6 @@
                                          [(col-data (dec row-count)) (col-data 0)]))]
            (update-column retval colname
                           #(vary-meta % assoc :statistics {:order compare-fn
-                                                           :comparator compare-fn
                                                            :min min-value
                                                            :max max-value})))
          retval))))
