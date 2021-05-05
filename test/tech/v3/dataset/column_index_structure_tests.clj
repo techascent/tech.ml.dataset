@@ -7,6 +7,7 @@
             [tech.v3.datatype.datetime :as datetime]
             [clojure.test :refer [testing deftest is]]))
 
+
 (deftest test-default-index-structure-type-dispatch
   (let [DS (ds/->dataset {:continuous  [1 2 3]
                           :categorical [:a :b :c]
@@ -35,7 +36,6 @@
                type)))))
 
 
-
 (deftest test-index-structure-realized?
   (is (= false
          (-> (:A (ds/->dataset {:A [1 2 3]}))
@@ -44,7 +44,6 @@
          (let [DS (ds/->dataset {:A [1 2 3]})]
            (index-structure (:A DS))
            (index-structure-realized? (:A DS))))))
-
 
 
 (deftest test-with-index-structure

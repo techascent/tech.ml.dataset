@@ -71,7 +71,6 @@
   (fn [data _] (elemwise-datatype data)))
 
 
-
 (defmethod make-index-structure :default
   [data metadata]
   (let [^java.util.Map idx-map (build-value-to-index-position-map data)
