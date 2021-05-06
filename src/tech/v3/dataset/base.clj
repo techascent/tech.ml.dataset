@@ -18,7 +18,8 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
-            [primitive-math :as pmath])
+            [primitive-math :as pmath]
+            [clojure.set :as set])
   (:import [java.io InputStream File]
            [tech.v3.datatype Buffer ObjectReader PrimitiveList]
            [tech.v3.dataset.impl.dataset Dataset]
@@ -138,19 +139,24 @@
       retval)))
 
 
+(declare select-columns)
+
+
 (defn remove-columns
   "Remove columns indexed by column name seq or column filter function.
   For example:
 
-  ```clojure
+```clojure
   (remove-columns DS [:A :B])
   (remove-columns DS cf/categorical)
-  ```"
+```"
   [dataset colname-seq-or-fn]
-  (let [colname-seq (if (fn? colname-seq-or-fn)
-                          (column-names (colname-seq-or-fn dataset))
-                          colname-seq-or-fn)]
-    (reduce ds-proto/remove-column dataset colname-seq)))
+  (let [colname-seq (set (if (fn? colname-seq-or-fn)
+                           (column-names (colname-seq-or-fn dataset))
+                           colname-seq-or-fn))
+        all-cols (set (column-names dataset))
+        leftover (set/difference all-cols colname-seq)]
+    (select-columns dataset leftover)))
 
 
 (defn drop-columns

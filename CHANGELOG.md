@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.00-beta-9
+* [issue 240](https://github.com/techascent/tech.ml.dataset/issues/240) - poor remove columns perf.
+
+
 ## 6.00-beta-8
  * Fix for [issue 238](https://github.com/techascent/tech.ml.dataset/issues/238)
 
