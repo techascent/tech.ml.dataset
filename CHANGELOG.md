@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.00-beta-8
+ * [issue 240](https://github.com/techascent/tech.ml.dataset/issues/240) - poor remove columns perf.
+
+
 ## 6.00-beta-7
  * Final upgrade for geni benchmark and moved a utility function to make
    it more generally accessible.
