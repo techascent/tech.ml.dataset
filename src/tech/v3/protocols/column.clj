@@ -45,3 +45,23 @@ Supported types are:
     "Convert to a java primitive array of a given datatype.  For strings,
 an implicit string->double mapping is expected.  For booleans, true=1 false=0.
 Finally, any missing values should be indicated by a NaN of the expected type."))
+
+
+(defprotocol PHasIndexStructure
+  (index-structure [this]
+    "Returns an index-structure for the column. The index-structure will only be
+generated the first time this is function is called.")
+  (index-structure-realized? [this]
+    "Returns true if the index-structure value has been produced. The index-structure
+is only produced the first time it is requested.")
+  (with-index-structure
+    [this custom-make-index-structure-fn]
+    "Returns a copy of the column that will return an index-structure using the
+provided `custom-make-index-strucutre-fn`."))
+
+
+(defprotocol PIndexStructure
+  (select-from-index
+    [index-structure mode selection-spec options]
+    "Select a subset of the index. Supports a variety of modes."))
+

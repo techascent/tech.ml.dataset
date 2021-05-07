@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.column
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.column-index-structure :as col-index-structure]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
@@ -55,6 +56,31 @@
   underlying data store."
   [col idx-seq]
   (col-proto/set-missing col idx-seq))
+
+
+(defn index-structure
+  "Returns an index structure for the column. The index structure can help optimize
+  certain operations as they can provide faster lookup and subsetting of a column
+  or dataset.
+
+  Also see: tech.v3.dataset.column/select-from-index."
+  [col]
+  (col-proto/index-structure col))
+
+
+(defn index-structure-realized?
+   "Returns true if the index-structure value has been produced. The index-structure
+is only produced the first time it is requested."
+  [col]
+  (col-proto/index-structure-realized? col))
+
+
+(defn with-index-structure
+  "Returns a copy of the column that will return an index-structure using the
+  provided `custom-make-index-strucutre-fn`. It also registers `klass` aliased
+  to `datatype-keyword` so it can be identified by the typing system."
+  [col custom-make-index-structure-fn]
+  (col-proto/with-index-structure col custom-make-index-structure-fn))
 
 
 (defn unique
