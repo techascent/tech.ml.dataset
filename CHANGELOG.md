@@ -2,6 +2,7 @@
 
 ## 6.00-beta-9
 * [issue 240](https://github.com/techascent/tech.ml.dataset/issues/240) - poor remove columns perf.
+* Thorough fix to make `column-map` be a bit more predictable and forgiving.
 
 
 ## 6.00-beta-8
