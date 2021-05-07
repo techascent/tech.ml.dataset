@@ -1123,6 +1123,27 @@
         (ds/brief ds))))
 
 
+(deftest column-map-regression-1
+  (let [testds (ds/->dataset [{:a 1.0 :b 2.0} {:a 3.0 :b 5.0} {:a 4.0 :b nil}])]
+    ;;result scanned for both datatype and missing set
+    (is (= (vec [3.0 6.0 nil])
+           (:b2 (ds/column-map testds :b2 #(when % (inc %)) [:b]))))
+    ;;result scanned for missing set only.  Result used in-place.
+    (is (= (vec [3.0 6.0 nil])
+           (:b2 (ds/column-map testds :b2 #(when % (inc %))
+                               {:datatype :float64} [:b]))))
+    ;;Nothing scanned at all.
+    (is (= (vec [3.0 6.0 nil])
+           (:b2 (ds/column-map testds :b2 #(inc %)
+                               {:datatype :float64
+                                :missing-fn ds-col/union-missing-sets} [:b]))))
+    ;;Missing set scanning causes NPE at inc.
+    (is (thrown? Throwable
+                 (ds/column-map testds :b2 #(inc %)
+                                {:datatype :float64}
+                                [:b])))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

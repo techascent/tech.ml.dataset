@@ -65,13 +65,18 @@
             ;;iterable.
             obj-data (or (dtype/as-reader obj-data) obj-data)
             missing (bitmap/->bitmap missing)]
-        ;;serially consume the data promoting the container when necessary.
-        (parallel-for/indexed-consume!
-         ;;Do not read from a missing entry if missing is provided
-         #(column-parsers/add-value! parser %1
-                                     (when-not (.contains missing (unchecked-int %1))
-                                       %2))
-         obj-data)
+        (if-let [rdr (dtype/as-reader obj-data)]
+          (dotimes [idx (.lsize rdr)]
+            (column-parsers/add-value! parser idx
+                                       (when-not (.contains missing idx)
+                                         (.readObject rdr idx))))
+          ;;serially consume the data promoting the container when necessary.
+          (parallel-for/indexed-consume!
+           ;;Do not read from a missing entry if missing is provided
+           #(column-parsers/add-value! parser %1
+                                       (when-not (.contains missing (unchecked-int %1))
+                                         %2))
+           obj-data))
         (column-parsers/finalize! parser (dtype/ecount parser))))))
 
 
