@@ -1144,6 +1144,14 @@
                                 [:b])))))
 
 
+(deftest remove-columns-issue-242
+  (is (= [:a "c" :d :e]
+         (vec (-> (tech.v3.dataset/->dataset {:a [1] :b [2] "c" [3]
+                                              :d [4] :e [5]})
+                  (tech.v3.dataset/drop-columns [:b])
+                  (ds/column-names))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

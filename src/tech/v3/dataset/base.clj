@@ -153,10 +153,10 @@
   [dataset colname-seq-or-fn]
   (let [colname-seq (set (if (fn? colname-seq-or-fn)
                            (column-names (colname-seq-or-fn dataset))
-                           colname-seq-or-fn))
-        all-cols (set (column-names dataset))
-        leftover (set/difference all-cols colname-seq)]
-    (select-columns dataset leftover)))
+                           colname-seq-or-fn))]
+    (select-columns dataset
+                    (->> (column-names dataset)
+                         (clojure.core/filter (complement colname-seq))))))
 
 
 (defn drop-columns
