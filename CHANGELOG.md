@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.00-beta-10
+ * [issue 242](https://github.com/techascent/tech.ml.dataset/issues/242) - drop-columns
+   reorders columns.
+
 ## 6.00-beta-9
 * [issue 240](https://github.com/techascent/tech.ml.dataset/issues/240) - poor remove columns perf.
 * Thorough fix to make `column-map` be a bit more predictable and forgiving.
