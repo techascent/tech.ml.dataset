@@ -432,3 +432,10 @@
              (vec (:unparsed-data (meta (ds "a")))))))
     (finally
       (.delete (java.io.File. "custom-parse.csv")))))
+
+
+(deftest stocks-v5
+  (let [v5 (ds/->dataset "test/data/stocks-v5.nippy")
+        cur (ds/->dataset "test/data/stocks.csv")]
+    (is (= (vec (v5 "date"))
+           (vec (cur "date"))))))

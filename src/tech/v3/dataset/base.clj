@@ -21,7 +21,9 @@
             [primitive-math :as pmath]
             [clojure.set :as set])
   (:import [java.io InputStream File]
-           [tech.v3.datatype Buffer ObjectReader PrimitiveList]
+           [tech.v3.datatype Buffer ObjectReader PrimitiveList
+            ;;Dataset-specific to account for version changes
+            PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
@@ -860,6 +862,7 @@
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
+   :version 2
    :columns
    (->>
     (columns ds)
@@ -891,7 +894,8 @@
 (defn data->dataset
   "Convert a data-ized dataset created via dataset->data back into a
   full dataset"
-  [{:keys [metadata columns] :as input}]
+  [{:keys [metadata version columns] :as input
+    :or {version 1}}]
   (->>
    columns
    (map (fn [{:keys [metadata missing data]}]
@@ -908,5 +912,16 @@
                      (text-data->column-data data missing)
                      (if (identical? :object (casting/flatten-datatype datatype))
                        (dtype/elemwise-cast data datatype)
-                       (array-buffer/array-buffer data datatype)))})))
+                       (if (= version 2)
+                         (array-buffer/array-buffer data datatype)
+                         ;; Convert from packed local dates of old version to new
+                         ;; version.
+                         (if (= datatype :packed-local-date)
+                           (-> (dtype/emap #(when-not (== 0 (long %))
+                                              (PackedLocalDate/asLocalDate
+                                               (unchecked-int %)))
+                                           :local-date data)
+                               (packing/pack)
+                               (dtype/clone))
+                           (dtype/elemwise-cast data datatype)))))})))
    (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))
