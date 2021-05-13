@@ -127,38 +127,60 @@
        src-column))))
 
 
+(defn- dataset-indexes
+  [^long n-rows {:keys [randomize-dataset?]
+                 :or {randomize-dataset? true}
+                 :as options}]
+  (if randomize-dataset?
+    (argops/argshuffle n-rows options)
+    (range n-rows)))
+
+
 (defn k-fold-datasets
   "Given 1 dataset, prepary K datasets using the k-fold algorithm.
   Randomize dataset defaults to true which will realize the entire dataset
-  so use with care if you have large datasets."
-  ([dataset k {:keys [randomize-dataset?]
-               :or {randomize-dataset? true}}]
-   (let [[_n-cols n-rows] (dtype/shape dataset)
-         indexes (cond-> (range n-rows)
-                   randomize-dataset? shuffle)
+  so use with care if you have large datasets.
+
+  Options:
+
+  * `:randomize-dataset? - When true, shuffle the dataset.  In that case 'seed' may be
+     provided.  Defaults to true.
+  * `:seed` -  when `:randomize-dataset?` is true then this can either be an
+     implementation of java.util.Random or an integer seed which will be used to
+     construct java.util.Random."
+  ([dataset k options]
+   (let [n-rows (ds-base/row-count dataset)
+         indexes (dataset-indexes n-rows options)
          fold-size (inc (quot (long n-rows) k))
          folds (vec (partition-all fold-size indexes))]
      (for [i (range k)]
-       {:test-ds (ds-base/select-rows dataset
-                                      (nth folds i))
+       {:test-ds (ds-base/select-rows dataset (nth folds i))
         :train-ds (ds-base/select-rows dataset
                                        (->> (keep-indexed #(if (not= %1 i) %2) folds)
-                                            (apply concat )))})))
+                                            (apply concat)))})))
   ([dataset k]
    (k-fold-datasets dataset k {})))
 
 
 (defn train-test-split
-  "Probabilistically split the dataset returning a map of `{:train-ds :test-ds}`."
-  ([dataset {:keys [randomize-dataset? train-fraction]
-             :or {randomize-dataset? true
-                  train-fraction 0.7}}]
+  "Probabilistically split the dataset returning a map of `{:train-ds :test-ds}`.
+
+  Options:
+
+  * `:randomize-dataset? - When true, shuffle the dataset.  In that case 'seed' may be
+     provided.  Defaults to true.
+  * `:seed` -  when `:randomize-dataset?` is true then this can either be an
+     implementation of java.util.Random or an integer seed which will be used to
+     construct java.util.Random.
+  * `:train-fraction` - Fraction of the dataset to use as training set.  Defaults to
+     0.7."
+  ([dataset {:keys [train-fraction]
+             :or {train-fraction 0.7}
+             :as options}]
    (let [[_n-cols n-rows] (dtype/shape dataset)
-         indexes (cond-> (range n-rows)
-                   randomize-dataset? shuffle)
+         indexes (dataset-indexes n-rows options)
          n-elems (long n-rows)
-         n-training (long (Math/round (* n-elems
-                                         (double train-fraction))))]
+         n-training (long (Math/round (* n-elems (double train-fraction))))]
      {:train-ds (ds-base/select-rows dataset (take n-training indexes))
       :test-ds (ds-base/select-rows dataset (drop n-training indexes))}))
   ([dataset]
