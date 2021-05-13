@@ -2,6 +2,9 @@
 
 ## 6.00-beta-11
  * [issue 244](https://github.com/techascent/tech.ml.dataset/issues/242) - NPE with packed column.
+ * [issue 243](https://github.com/techascent/tech.ml.dataset/issues/243) - xls, xlsx parsing documentation.
+ * [issue 208](https://github.com/techascent/tech.ml.dataset/issues/208) - k-fold, train-test-split both now take random seed
+   similar to shuffle.
 
 
 ## 6.00-beta-10
