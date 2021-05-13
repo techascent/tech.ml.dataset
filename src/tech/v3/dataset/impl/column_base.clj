@@ -11,6 +11,14 @@
            [tech.v3.dataset Text]))
 
 
+(defn- pack-nil
+  ^long [unpacked-datatype]
+  (let [unpacked-container (dtype/make-container unpacked-datatype [nil])
+        packed-container (packing/pack unpacked-container)]
+    (-> (dtype/as-buffer packed-container)
+        (.readLong 0))))
+
+
 (def ^Map dtype->missing-val-map
   {:boolean false
    :int8 Byte/MIN_VALUE
@@ -19,9 +27,9 @@
    :int64 Long/MIN_VALUE
    :float32 Float/NaN
    :float64 Double/NaN
-   :packed-instant (packing/pack (dtype-dt/milliseconds-since-epoch->instant 0))
-   :packed-local-date (packing/pack (dtype-dt/milliseconds-since-epoch->local-date 0))
-   :packed-duration 0
+   :packed-instant (pack-nil :instant)
+   :packed-local-date (pack-nil :local-date)
+   :packed-duration (pack-nil :duration)
    :instant nil
    :zoned-date-time nil
    :local-date-time nil
@@ -46,6 +54,13 @@
     (get dtype->missing-val-map dtype
          (when (casting/numeric-type? dtype)
            (casting/cast 0 dtype)))))
+
+
+(defn datatype->packed-missing-value
+  [dtype]
+  (get dtype->missing-val-map dtype
+       (when (casting/numeric-type? dtype)
+         (casting/cast 0 dtype))))
 
 
 (defonce ^:private warn-atom* (atom false))

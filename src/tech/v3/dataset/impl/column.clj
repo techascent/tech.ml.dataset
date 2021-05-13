@@ -49,7 +49,8 @@
    (let [^Buffer src (dtype-proto/->buffer data)
          {:keys [unpacking-read packing-write]}
          (packing/buffer-packing-pair dtype)
-         missing-value (column-base/datatype->missing-value dtype)]
+         missing-value (column-base/datatype->missing-value dtype)
+         primitive-missing-value (column-base/datatype->packed-missing-value dtype)]
      ;;Sometimes we can utilize a pure passthrough.
      (if (and (.isEmpty missing)
               (not unpacking-read))
@@ -65,31 +66,31 @@
              (.readBoolean src idx)))
          (readByte [this idx]
            (if (.contains missing idx)
-             (unchecked-byte missing-value)
+             (unchecked-byte primitive-missing-value)
              (.readByte src idx)))
          (readShort [this idx]
            (if (.contains missing idx)
-             (unchecked-short missing-value)
+             (unchecked-short primitive-missing-value)
              (.readShort src idx)))
          (readChar [this idx]
            (if (.contains missing idx)
-             (char missing-value)
+             (char primitive-missing-value)
              (.readChar src idx)))
          (readInt [this idx]
            (if (.contains missing idx)
-             (unchecked-int missing-value)
+             (unchecked-int primitive-missing-value)
              (.readInt src idx)))
          (readLong [this idx]
            (if (.contains missing idx)
-             (unchecked-long missing-value)
+             (unchecked-long primitive-missing-value)
              (.readLong src idx)))
          (readFloat [this idx]
            (if (.contains missing idx)
-             (float missing-value)
+             (float primitive-missing-value)
              (.readFloat src idx)))
          (readDouble [this idx]
            (if (.contains missing idx)
-             (double missing-value)
+             (double primitive-missing-value)
              (.readDouble src idx)))
          (readObject [this idx]
            (when-not (.contains missing idx)

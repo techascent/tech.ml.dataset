@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.00-beta-11
+ * [issue 244](https://github.com/techascent/tech.ml.dataset/issues/242) - NPE with packed column.
+
+
 ## 6.00-beta-10
  * [issue 242](https://github.com/techascent/tech.ml.dataset/issues/242) - drop-columns
    reorders columns.

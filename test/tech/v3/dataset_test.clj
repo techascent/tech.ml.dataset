@@ -1152,6 +1152,14 @@
                   (ds/column-names))))))
 
 
+(deftest column-cast-packed-date
+  (let [x (ds/->dataset [{:a 0 :b "2020-03-05"} {:a 1 :b nil}])
+        y (ds/column-cast x :b :packed-local-date)]
+    (is (= (vec (.data (y :b)))
+           (vec (y :b))))
+    (is (nil? ((y :b) 1)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
