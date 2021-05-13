@@ -1,5 +1,14 @@
 (ns tech.v3.libs.poi
-  "xls, xlsx formats."
+  "Parse a dataset in xls or xlsx format.  This namespace auto-registers a handler for
+  the `xls` file type so that when using ->dataset, `xls` will automatically map to
+  `(first (workbook->datasets))`.
+
+  Note that this namespace does **not** auto-register a handler for the `xlsx` file
+  type. `xlsx` is handled by the fastexcel namespace.
+
+  If you have an `xlsx` or `xls` file that contains multiple sheets and you want a
+  dataset out of each sheet you have to use `workbook->datasets` as opposed to the
+  higher level `->dataset` operator."
   (:require [tech.v3.io :as io]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
@@ -135,14 +144,17 @@
 
 
 (defn workbook->datasets
-  "Returns a sequence of dataset named after the sheets.  This supports a subset of
-  the arguments for tech.v3.dataset/->dataset.  Specifically:
+  "Given a workbook, an string filename or an input stream return a sequence of
+  dataset named after the sheets.
 
+  Options are a subset of the arguments for tech.v3.dataset/->dataset:
+
+  * `:file-type` - either `:xls` or `:xlsx` - inferred from the filename when input is
+     a string.  If input is a stream defaults to `:xlsx`.
   * `:header-row?`
-  * `:parser-fn`
-  * `:parser-scan-len`
-
-  Returns a non-lazy sequence of datasets."
+  * `:num-rows`
+  * `:n-initial-skip-rows`
+  * `:parser-fn`"
   ([input options]
    (let [workbook (input->workbook input options)]
      (try
@@ -150,8 +162,8 @@
        (finally
          (when-not (identical? input workbook)
            (.close workbook))))))
-  ([workbook]
-   (workbook->datasets workbook {})))
+  ([input]
+   (workbook->datasets input {})))
 
 
 (defmethod ds-io/data->dataset :xls

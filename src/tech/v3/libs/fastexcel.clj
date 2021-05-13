@@ -1,5 +1,15 @@
 (ns tech.v3.libs.fastexcel
-  "Fast xlsx parsing."
+  "Parse a dataset in xlsx format.  This namespace auto-registers a handler for
+  the 'xlsx' file type so that when using ->dataset, `xlsx` will automatically map to
+  `(first (workbook->datasets))`.
+
+  Note that this namespace does **not** auto-register a handler for the `xls` file type.
+  `xls` is handled by the poi namespace.
+
+
+  If you have an xlsx file that contains multiple sheets and you want a dataset
+  out of each sheet you have to use `workbook->datasets` as opposed to the higher level
+  `->dataset` operator."
   (:require [tech.v3.io :as io]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
@@ -120,14 +130,15 @@
 
 
 (defn workbook->datasets
-  "Returns a sequence of dataset named after the sheets.  This supports a subset of
-  the arguments for tech.v3.dataset/->dataset.  Specifically:
+  "Given a workbook, an string filename or an input stream return a sequence of
+  dataset named after the sheets.
+
+  Options are a subset of the arguments for tech.v3.dataset/->dataset:
 
   * `:header-row?`
-  * `:parser-fn`
-  * `:parser-scan-len`
-
-  Returns a non-lazy sequence of datasets."
+  * `:num-rows`
+  * `:n-initial-skip-rows`
+  * `:parser-fn`"
   ([input options]
    (let [workbook (input->workbook input options)]
      (try

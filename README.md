@@ -67,6 +67,8 @@ test/data/stocks.csv [5 3]:
 |   MSFT | 2000-04-01 | 28.37 |
 |   MSFT | 2000-05-01 | 25.45 |
 
+;; tech.v3.libs.poi registers xls, tech.v3.libs.fastexcel registers xlsx.  If you want
+;; to use poi for everything use workbook->datasets in the tech.v3.libs.poi namespace.
 user> (require '[tech.v3.libs.poi])
 nil
 user> (def xls-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))

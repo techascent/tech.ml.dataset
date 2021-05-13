@@ -143,7 +143,7 @@
 
   Options:
 
-  * `:randomize-dataset? - When true, shuffle the dataset.  In that case 'seed' may be
+  * `:randomize-dataset?` - When true, shuffle the dataset.  In that case 'seed' may be
      provided.  Defaults to true.
   * `:seed` -  when `:randomize-dataset?` is true then this can either be an
      implementation of java.util.Random or an integer seed which will be used to
@@ -167,7 +167,7 @@
 
   Options:
 
-  * `:randomize-dataset? - When true, shuffle the dataset.  In that case 'seed' may be
+  * `:randomize-dataset?` - When true, shuffle the dataset.  In that case 'seed' may be
      provided.  Defaults to true.
   * `:seed` -  when `:randomize-dataset?` is true then this can either be an
      implementation of java.util.Random or an integer seed which will be used to
