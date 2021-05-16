@@ -18,23 +18,41 @@
   * `:parser-fn`
 
 
-  Please include these dependencies in your project:
+  Please include these dependencies in your project and be sure to read the notes
+  later in this document:
 
 ```clojure
-[org.apache.parquet/parquet-hadoop \"1.11.0\"]
-[org.apache.hadoop/hadoop-common
-  \"3.1.1\"
-  :exclusions [org.slf4j/slf4j-log4j12
-               log4j
-               com.google.guava/guava
-               commons-codec
-               commons-logging
-               com.google.code.findbugs/jsr305
-               com.fasterxml.jackson.core/jackson-databind]]
+org.apache.parquet/parquet-hadoop {:mvn/version \"1.12.0\"
+                                   :exclusions [org.slf4j/slf4j-log4j12]}
+org.apache.hadoop/hadoop-common {:mvn/version \"3.3.0\"
+                                 :exclusions [org.slf4j/slf4j-log4j12]}
+;; We literally need this for 1 POJO formatting object.
+org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
+                                                :exclusions [org.slf4j/slf4j-log4j12]}
 ```
 
-Read implementation initialially based off of:
-https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
+#### Logging
+
+  When writing parquet files you may notice a truly excessive amount of logging and/or
+  extremely slow write speeds.  The solution to this, if you are using
+  the default `tech.ml.dataset` implementation with logback-classic as the concrete
+  logger is to disable debug logging by placing  a file named `logback.xml`
+  in the classpath where the root node has a log-level above debug.  The logback.xml
+  file that 'tmd' uses by default during development is located in
+  [dev-resources](https://github.com/techascent/tech.ml.dataset/blob/45a032768f25b1493a83e6baaff34832a184f8ab/dev-resources/logback.xml) and is
+  enabled via a profile in [project.clj](https://github.com/techascent/tech.ml.dataset/blob/45a032768f25b1493a83e6baaff34832a184f8ab/project.clj#L69).
+
+#### Large-ish Datasets
+
+  The parquet writer will automatically split your dataset up into multiple parquet
+  records so it is possible that you can attempt to write one large dataset then when
+  you read it back you get a parquet file with multiple datasets.  This is perhaps
+  confusing but it is a side effect of the hadoop architecture.  The simplest solution
+  to this is to, when loading parquet files, use parquet->ds-seq and then a final
+  concat-copying operation to produce one final dataset.  `->dataset` will do
+  this operation for you but it will emit a warning when doing so as this may
+  lead to OOM situations with some parquet files.  To disable this warning use the
+  option `:disable-parquet-warn-on-multiple-datasets` set to truthy."
 
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
@@ -726,10 +744,14 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
            "Only on-disk files work with parquet.  %s does not resolve to a file"
            input)
         dataset-seq (parquet->ds-seq (.getCanonicalPath data-file) options)]
-    (errors/when-not-errorf
-     (== 1 (count dataset-seq))
-     "Zero or multiple datasets found in parquet file %s" input)
-    (first dataset-seq)))
+    (when-not (or (:disable-parquet-warn-on-multiple-datasets options)
+                  (== 1 (count dataset-seq)))
+      (log/warnf "Concatenating multiple datasets (%d) into one.
+To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
+                 (count dataset-seq)))
+    (if (== 1 (count dataset-seq))
+      (first dataset-seq)
+      (apply ds-base/concat-copying dataset-seq))))
 
 
 (def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32

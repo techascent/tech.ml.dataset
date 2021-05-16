@@ -866,7 +866,7 @@
    :columns
    (->>
     (columns ds)
-    (mapv
+    (pmap
      (fn [col]
        ;;Only store packed data.  This can sidestep serialization issues
        (let [metadata (meta col)
@@ -888,7 +888,8 @@
                   (vec col)
                   ;;Store the data as a jvm-native array
                   :else
-                  (dtype-cmc/->array dtype col))}))))})
+                  (dtype-cmc/->array dtype col))})))
+    (vec))})
 
 
 (defn data->dataset
