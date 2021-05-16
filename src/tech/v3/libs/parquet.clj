@@ -278,7 +278,7 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   [col-rdr col-def metadata]
   (let [org-type (col-def->col-orig-type col-def)]
     (if (= org-type OriginalType/DATE)
-      (make-column-iterable col-rdr col-def :epoch-days read-int)
+      (make-column-iterable col-rdr col-def :packed-local-date read-int)
       (let [[col-min col-max] (col-metadata->min-max metadata)
             dtype (cond
                     (and col-min col-max)
@@ -371,8 +371,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   [dtype]
   (let [container-dtype (packing/pack-datatype dtype)
         container (col-base/make-container container-dtype)
-        missing-value (long (col-base/datatype->missing-value
-                             (packing/unpack-datatype container-dtype)))
+        missing-value (long (col-base/datatype->packed-missing-value
+                             container-dtype))
         missing (bitmap/->bitmap)]
     (reify PParser
       (addValue [p idx value]
@@ -390,8 +390,8 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
   [dtype]
   (let [container-dtype (packing/pack-datatype dtype)
         container (col-base/make-container container-dtype)
-        missing-value (double (col-base/datatype->missing-value
-                               (packing/unpack-datatype container-dtype)))
+        missing-value (double (col-base/datatype->packed-missing-value
+                               container-dtype))
         missing (bitmap/->bitmap)]
     (reify PParser
       (addValue [p idx value]
@@ -415,8 +415,6 @@ https://gist.github.com/animeshtrivedi/76de64f9dab1453958e1d4f8eca1605f"
         col-parser (or (parse-context col-name)
                        (let [iter-dtype (dtype/elemwise-datatype iterable)]
                          (cond
-                           (packing/packed-datatype? iter-dtype)
-                           (fixed-datatype-parser iter-dtype)
                            (casting/integer-type? iter-dtype)
                            (fixed-datatype-parser-long iter-dtype)
                            (casting/float-type? iter-dtype)

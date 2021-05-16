@@ -21,7 +21,7 @@
       (is (dfn/equals (stocks "price")
                       (stocks-p "price")))
       (is (= (vec (stocks "date"))
-             (vec (dtype-dt/epoch->datetime :local-date (stocks-p "date"))))))
+             (vec (stocks-p "date")))))
     (finally
       (.delete (java.io.File. "stocks.parquet")))))
 
