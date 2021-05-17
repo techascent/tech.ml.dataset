@@ -82,7 +82,8 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
   ;; Behold my Kindom of Nouns...And Tremble!!!!
   (:import [smile.io HadoopInput]
            [tech.v3.datatype PrimitiveList Buffer]
-           [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder]
+           [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder
+            LocalInputFile]
            [tech.v3.dataset.io.column_parsers PParser]
            [org.apache.hadoop.conf Configuration]
            [java.time.temporal TemporalAccessor TemporalField ChronoField]
@@ -706,7 +707,16 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
     (instance? ParquetFileReader data)
     data
     (string? data)
-    (ParquetFileReader/open (HadoopInput/file data))
+    ;;unwrap url if exists
+    (-> (io/file data)
+        ;;get canonical path
+        (.getPath)
+        ;;make a path out of it
+        (Paths/get (into-array String []))
+        ;;from a path we get a local input file
+        (LocalInputFile.)
+        ;;from that we get a parquet reader
+        (ParquetFileReader/open))
     (instance? org.apache.hadoop.fs.Path data)
     (ParquetFileReader/open ^org.apache.hadoop.fs.Path data)
     (instance? InputFile data)
