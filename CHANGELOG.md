@@ -1,5 +1,17 @@
 # Changelog
 
+## 6.00-beta-13
+ * Fix for parquet failing to load local files in windows.  Thanks hadoop, that is 
+   3 hours of my life that will never come back ;-).
+
+
+## 6.00-beta-12
+
+ * Parquet documentation to address logging slowdown.  If writing parquet files is 
+   unreasonably slow then please read the documentation on logging.  The java
+   parquet implementations logs so much it slows things down 5x-10x.
+ * Fix to nippy to be backward compatible.
+
 ## 6.00-beta-11
  * [issue 244](https://github.com/techascent/tech.ml.dataset/issues/242) - NPE with packed column.
  * [issue 243](https://github.com/techascent/tech.ml.dataset/issues/243) - xls, xlsx parsing documentation.
