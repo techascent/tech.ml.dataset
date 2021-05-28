@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "8.00"]
+                 [cnuernber/dtype-next             "8.06"]
                  [techascent/tech.io               "4.07"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -87,6 +87,7 @@
                                    tech.v3.dataset.clipboard
                                    tech.v3.dataset.neanderthal
                                    tech.v3.dataset.categorical
+                                   tech.v3.dataset.rolling
                                    tech.v3.dataset.reductions
                                    tech.v3.dataset.reductions.apache-data-sketch
                                    tech.v3.dataset.column-filters
