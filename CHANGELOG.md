@@ -1,4 +1,8 @@
 # Changelog
+## 6.00-beta-14
+ * New rolling namespace for a high level pandas-style rolling api.
+ * Lots of datetime improvements.
+ * tech.v3.datatype improvements (new conv1d, diff, gradient functionality).
 
 ## 6.00-beta-13
  * Fix for parquet failing to load local files in windows.  Thanks hadoop, that is 
