@@ -20,6 +20,12 @@
    :reducer stats/mean})
 
 
+(defn sum
+  [column-name]
+  {:column-name column-name
+   :reducer stats/sum})
+
+
 (defn min
   [column-name]
   {:column-name column-name
@@ -62,6 +68,32 @@
   {:column-name column-name
    :reducer (fn [^Buffer rdr]
               (rdr (dec (.lsize rdr))))})
+
+
+(defn ^:no-doc apply-window-ranges
+  [ds windows reducer-map edge-mode]
+  (->> reducer-map
+       (map-indexed
+        (fn [idx [k red]]
+          (assoc red :dest-column-name k)))
+       (group-by :column-name)
+       (mapv (fn [[colname reducers]]
+               {:column (ds colname)
+                :reducers (vec reducers)}))
+       (mapv
+        (fn [{:keys [column reducers]}]
+          (let [win-data (dt-rolling/window-ranges->window-reader
+                          column windows edge-mode)]
+            (mapv (fn [reducer]
+                    {:tech.v3.dataset/name (:dest-column-name reducer)
+                     :tech.v3.dataset/data
+                     (-> (dtype/emap (:reducer reducer) (:datatype reducer :object)
+                                     win-data)
+                         (dtype/clone))})
+                  reducers))))
+       (apply concat)
+       (reduce #(ds-base/add-column %1 %2)
+               ds)))
 
 
 (defn rolling
@@ -204,15 +236,6 @@ test/data/stocks.csv [5 6]:
 ```"
   ([ds window reducer-map options]
    (let [n-rows (ds-base/row-count ds)
-         reducers
-         (->> reducer-map
-              (map-indexed
-               (fn [idx [k red]]
-                 (assoc red :dest-column-name k)))
-              (group-by :column-name)
-              (mapv (fn [[colname reducers]]
-                      {:column (ds colname)
-                       :reducers (vec reducers)})))
          window-data (if (integer? window)
                        {:window-size window
                         :relative-position :center
@@ -234,24 +257,19 @@ test/data/stocks.csv [5 6]:
                       (dtype-dt-ops/between-op
                        (dtype/elemwise-datatype src-col)
                        (:units window-data :milliseconds)))}))))]
-     (->> reducers
-          (mapv
-           (fn [{:keys [column reducers]}]
-             (let [win-data (dt-rolling/window-ranges->window-reader
-                             column windows (:edge-mode window-data :clamp))]
-               (mapv (fn [reducer]
-                       {:tech.v3.dataset/name (:dest-column-name reducer)
-                        :tech.v3.dataset/data
-                        (-> (dtype/emap (:reducer reducer) (:datatype reducer :object)
-                                        win-data)
-                            (dtype/clone))})
-                     reducers))))
-         (apply concat)
-         (reduce #(ds-base/add-column %1 %2)
-                 ds))))
+     (apply-window-ranges ds windows reducer-map (:edge-mode window-data :clamp))))
   ([ds window reducer-map]
    (rolling ds window reducer-map nil)))
 
+
+(defn expanding
+  "Run a set of reducers across a dataset with an expanding set of windows.  These
+  will produce a cumsum-type operation."
+  [ds reducer-map]
+  (apply-window-ranges ds (dt-rolling/expanding-window-ranges
+                           (ds-base/row-count ds))
+                       reducer-map
+                       :clamp))
 
 (comment
   (require '[tech.v3.dataset :as ds])
