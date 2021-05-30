@@ -3,11 +3,9 @@
   width windows."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.rolling :as dt-rolling]
-            [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v3.datatype.statistics :as stats]
-            [tech.v3.dataset.base :as ds-base]
-            [tech.v3.dataset.io.column-parsers :as col-parsers])
+            [tech.v3.dataset.base :as ds-base])
   (:import [java.util.function BiFunction]
            [clojure.lang IDeref]
            [tech.v3.datatype DoubleConsumers$Sum Buffer])
