@@ -1,17 +1,21 @@
 # Changelog
+
+## 6.00-beta-15
+ * Upgrade to dtype-next for fft-based convolutions.
+
 ## 6.00-beta-14
  * New rolling namespace for a high level pandas-style rolling api.
  * Lots of datetime improvements.
  * tech.v3.datatype improvements (new conv1d, diff, gradient functionality).
 
 ## 6.00-beta-13
- * Fix for parquet failing to load local files in windows.  Thanks hadoop, that is 
+ * Fix for parquet failing to load local files in windows.  Thanks hadoop, that is
    3 hours of my life that will never come back ;-).
 
 
 ## 6.00-beta-12
 
- * Parquet documentation to address logging slowdown.  If writing parquet files is 
+ * Parquet documentation to address logging slowdown.  If writing parquet files is
    unreasonably slow then please read the documentation on logging.  The java
    parquet implementations logs so much it slows things down 5x-10x.
  * Fix to nippy to be backward compatible.
