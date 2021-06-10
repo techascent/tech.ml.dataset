@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.00
+ * [issue 247](https://github.com/techascent/tech.ml.dataset/issues/247) - certain pathways would load gzipped as binary.
+ * [issue 248](https://github.com/techascent/tech.ml.dataset/issues/248) - Reflection in index code.
+ * [issue 249](https://github.com/techascent/tech.ml.dataset/issues/249) - Failure for dataset->data for string columns with missing data.
+ * update dtype-next for much more efficient cumulative summation type operations.
+
 ## 6.00-beta-15
  * Upgrade to dtype-next for fft-based convolutions.
 
