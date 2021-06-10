@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.001
+ * Moved to 3 digit change qualifier.  Hopefully we get a new major version before we hit
+   99 bugfixes but no guarantees.
+ * [issue 250] - Columns of persistent vectors failed to save/restore from nippy.
+
 ## 6.00
  * [issue 247](https://github.com/techascent/tech.ml.dataset/issues/247) - certain pathways would load gzipped as binary.
  * [issue 248](https://github.com/techascent/tech.ml.dataset/issues/248) - Reflection in index code.
