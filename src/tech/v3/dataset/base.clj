@@ -764,8 +764,9 @@
     (pfor/consume!
      #(do
         (.addLong offset-buf (.lsize str-data-buf))
-        (let [str-bytes (.getBytes ^String %)]
-          (.addAll str-data-buf (dtype/->buffer str-bytes))))
+        (when %
+          (let [str-bytes (.getBytes ^String %)]
+            (.addAll str-data-buf (dtype/->buffer str-bytes)))))
      (.int->str str-table))
     ;;One extra long makes deserializing a bit less error prone.
     (.addLong offset-buf (.lsize str-data-buf))

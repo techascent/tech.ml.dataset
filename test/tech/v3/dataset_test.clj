@@ -1160,6 +1160,19 @@
     (is (nil? ((y :b) 1)))))
 
 
+(deftest dataset->data-regression-249
+  (let [src-ds (ds/concat (ds/->dataset {:x ["1"]
+                                         :y ["2" "3"]})
+                          (ds/->dataset {:x ["4"]
+                                         :y ["5"]}))
+        ds-data (ds/dataset->data src-ds)
+        rehydrated (ds/data->dataset ds-data)]
+    (is (= (vec (src-ds :x))
+           (vec (rehydrated :x))))
+    (is (= (ds/missing src-ds)
+           (ds/missing rehydrated)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
