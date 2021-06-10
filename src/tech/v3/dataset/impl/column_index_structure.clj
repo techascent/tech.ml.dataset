@@ -9,6 +9,9 @@
             [clojure.set :refer [difference]]))
 
 
+(set! *warn-on-reflection* true)
+
+
 (defn- pick-from-index-structure [keys index-structure new-index-structure]
   (doseq [k keys]
     (.put ^Map new-index-structure k (.get ^Map index-structure k)))
@@ -26,7 +29,7 @@
                                               ^TreeMap (TreeMap.))]
        (if as-index-structure
          picked-map
-         (reduce into (ListPersistentVector. []) (.values picked-map))))
+         (reduce into (ListPersistentVector. []) (.values ^Map picked-map))))
      :slice
      (let [{from            :from
             from-inclusive? :from-inclusive?
@@ -53,7 +56,7 @@
                                                ^LinkedHashMap (LinkedHashMap.))]
         (if as-index-structure
           picked-map
-          (reduce into (ListPersistentVector. []) (.values picked-map)))))))
+          (reduce into (ListPersistentVector. []) (.values ^Map picked-map)))))))
 
 
 (defn build-value-to-index-position-map [column-data]
