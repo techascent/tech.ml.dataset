@@ -6,7 +6,8 @@
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.libs.arrow :as arrow]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [clojure.java.io :as io])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
             [java.nio.charset StandardCharsets]))
 
@@ -439,3 +440,12 @@
         cur (ds/->dataset "test/data/stocks.csv")]
     (is (= (vec (v5 "date"))
            (vec (cur "date"))))))
+
+
+
+(deftest gzipped-input-stream-issue-247
+  (let [ds (ds/->dataset (io/input-stream "test/data/ames-train.csv.gz")
+                         {:file-type :csv
+                          :gzipped? true})
+        correct-ds (ds/->dataset "test/data/ames-train.csv.gz")]
+    (is (= (ds/row-count correct-ds) (ds/row-count ds)))))

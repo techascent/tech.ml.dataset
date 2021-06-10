@@ -27,7 +27,9 @@
 (defn wrap-stream-fn
   [dataset gzipped? open-fn]
   (with-open [^InputStream istream (if (instance? InputStream dataset)
-                                     dataset
+                                     (if gzipped?
+                                       (io/gzip-input-stream dataset)
+                                       dataset)
                                      (if gzipped?
                                        (io/gzip-input-stream dataset)
                                        (io/input-stream dataset)))]
@@ -211,9 +213,7 @@
            ;;Not everything has a conversion to seq.
            (instance? Map (try (first (seq dataset))
                                (catch Throwable e nil)))
-           (try
-             "HERE!!!!"
-             (parse-mapseq-colmap/mapseq->dataset options dataset))
+           (parse-mapseq-colmap/mapseq->dataset options dataset)
            (nil? (seq dataset))
            (ds-impl/new-dataset options nil))]
      (if dataset-name
