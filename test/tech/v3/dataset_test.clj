@@ -1173,6 +1173,15 @@
            (ds/missing rehydrated)))))
 
 
+(deftest dataset->data-regression-250
+  (let [src-ds (ds/->dataset {:x [1]
+                              :y [[3 4]]})
+        new-ds (-> (nippy/freeze src-ds)
+                   (nippy/thaw))]
+    (is (= (vec (src-ds :y))
+           (vec (new-ds :y))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
