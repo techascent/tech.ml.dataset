@@ -3,6 +3,7 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.dataset :as ds]
+            [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.string-table :as str-table]
@@ -1180,6 +1181,20 @@
                    (nippy/thaw))]
     (is (= (vec (src-ds :y))
            (vec (new-ds :y))))))
+
+
+(deftest freeze-thaw-column
+  (let [{:keys [date price symbol]}
+        (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+        date-data (nippy/freeze date)
+        symbol-data (nippy/freeze symbol)
+        ndate (nippy/thaw date-data)
+        nsym (nippy/thaw symbol-data)
+        nds (ds/new-dataset [ndate nsym])]
+    (is (= (vec date)
+           (nds :date)))
+    (is (= (vec symbol)
+           (nds :symbol)))))
 
 
 (comment

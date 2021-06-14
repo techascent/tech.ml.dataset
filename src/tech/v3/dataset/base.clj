@@ -855,6 +855,36 @@
         (dtype/clone))))
 
 
+(def dataset-data-version 2)
+
+
+(defn column->data
+  "Given a column return a pure data representation of that column.
+  The reverse operation is data->column."
+  [col]
+  (let [metadata (meta col)
+        col (packing/pack col)
+        dtype (dtype/elemwise-datatype col)]
+    {:metadata metadata
+     :missing (dtype/->array
+               (bitmap/bitmap->efficient-random-access-reader
+                (ds-col/missing col)))
+     :name (:name metadata)
+     :version dataset-data-version
+     :data (cond
+             (= :string dtype)
+             (column->string-data col)
+             (= :text dtype)
+             (column->text-data col)
+             ;;Nippy doesn't handle object arrays or arraylists
+             ;;very well.
+             (= :object (casting/flatten-datatype dtype))
+             (vec col)
+             ;;Store the data as a jvm-native array
+             :else
+             (dtype-cmc/->array dtype col))}))
+
+
 (defn dataset->data
   "Convert a dataset to a pure clojure datastructure.  Returns a map with two keys:
   {:metadata :columns}.
@@ -863,34 +893,45 @@
   A column definition in this case is a map of {:name :missing :data :metadata}."
   [ds]
   {:metadata (meta ds)
-   :version 2
+   :version dataset-data-version
    :columns
    (->>
     (columns ds)
-    (pmap
-     (fn [col]
-       ;;Only store packed data.  This can sidestep serialization issues
-       (let [metadata (meta col)
-             col (packing/pack col)
-             dtype (dtype/elemwise-datatype col)]
-         {:metadata metadata
-          :missing (dtype/->array
-                    (bitmap/bitmap->efficient-random-access-reader
-                     (ds-col/missing col)))
-          :name (:name metadata)
-          :data (cond
-                  (= :string dtype)
-                  (column->string-data col)
-                  (= :text dtype)
-                  (column->text-data col)
-                  ;;Nippy doesn't handle object arrays or arraylists
-                  ;;very well.
-                  (= :object (casting/flatten-datatype dtype))
-                  (vec col)
-                  ;;Store the data as a jvm-native array
-                  :else
-                  (dtype-cmc/->array dtype col))})))
+    (pmap column->data)
     (vec))})
+
+
+(defn data->column
+  "Given the result of column->data, produce a new column data description.  This
+  description can be added via `add-column` - to produce a new column."
+  ([version {:keys [metadata missing data]}]
+   (let [datatype (:datatype metadata)
+         missing (bitmap/->bitmap missing)]
+     #:tech.v3.dataset
+     {:name (:name metadata)
+      :missing missing
+      :force-datatype? true
+      :data (case datatype
+              :string
+              (string-data->column-data data)
+              :text
+              (text-data->column-data data missing)
+              (if (identical? :object (casting/flatten-datatype datatype))
+                (dtype/elemwise-cast data datatype)
+                (if (= version 2)
+                  (array-buffer/array-buffer data datatype)
+                  ;; Convert from packed local dates of old version to new
+                  ;; version.
+                  (if (= datatype :packed-local-date)
+                    (-> (dtype/emap #(when-not (== 0 (long %))
+                                       (PackedLocalDate/asLocalDate
+                                        (unchecked-int %)))
+                                    :local-date data)
+                        (packing/pack)
+                        (dtype/clone))
+                    (dtype/elemwise-cast data datatype)))))}))
+  ([coldata]
+   (data->column (:version coldata) coldata)))
 
 
 (defn data->dataset
@@ -898,32 +939,6 @@
   full dataset"
   [{:keys [metadata version columns] :as input
     :or {version 1}}]
-  (->>
-   columns
-   (map (fn [{:keys [metadata missing data]}]
-          (let [datatype (:datatype metadata)
-                missing (bitmap/->bitmap missing)]
-            #:tech.v3.dataset
-            {:name (:name metadata)
-             :missing missing
-             :force-datatype? true
-             :data (case datatype
-                     :string
-                     (string-data->column-data data)
-                     :text
-                     (text-data->column-data data missing)
-                     (if (identical? :object (casting/flatten-datatype datatype))
-                       (dtype/elemwise-cast data datatype)
-                       (if (= version 2)
-                         (array-buffer/array-buffer data datatype)
-                         ;; Convert from packed local dates of old version to new
-                         ;; version.
-                         (if (= datatype :packed-local-date)
-                           (-> (dtype/emap #(when-not (== 0 (long %))
-                                              (PackedLocalDate/asLocalDate
-                                               (unchecked-int %)))
-                                           :local-date data)
-                               (packing/pack)
-                               (dtype/clone))
-                           (dtype/elemwise-cast data datatype)))))})))
-   (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))
+  (->> columns
+       (map (partial data->column version))
+       (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))

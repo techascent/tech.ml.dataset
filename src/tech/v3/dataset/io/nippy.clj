@@ -6,7 +6,8 @@
             [tech.v3.datatype.nippy]
             [tech.v3.io :as io]
             [taoensso.nippy :as nippy])
-  (:import [tech.v3.dataset.impl.dataset Dataset]))
+  (:import [tech.v3.dataset.impl.dataset Dataset]
+           [tech.v3.dataset.impl.column Column]))
 
 
 (nippy/extend-freeze
@@ -20,6 +21,19 @@
  [in]
  (-> (nippy/thaw-from-in! in)
      (ds-base/data->dataset)))
+
+
+(nippy/extend-freeze
+ Column :tech.ml.dataset/column
+ [col out]
+ (nippy/-freeze-without-meta! (ds-base/column->data col) out))
+
+
+(nippy/extend-thaw
+ :tech.ml.dataset/column
+ [in]
+ (-> (nippy/thaw-from-in! in)
+     (ds-base/data->column)))
 
 
 (defmethod ds-io/data->dataset :nippy
