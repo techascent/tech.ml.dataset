@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.002
+ * [issue 254] - Unexpected behaviour of rolling with LazySeq and ChunkedCons.
+ * [issue 252] - Nippy serialization of tech.v3.dataset.impl.column.Column.
+
 ## 6.001
  * Moved to 3 digit change qualifier.  Hopefully we get a new major version before we hit
    99 bugfixes but no guarantees.
