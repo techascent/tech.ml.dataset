@@ -321,11 +321,11 @@
                    nil
                    (delay (make-index-structure data metadata))))
         ;;Uggh.  Construct a new missing set
-        (let [idx-rdr (dtype/->reader idx-rdr)
-              n-idx-elems (.lsize idx-rdr)
+        (let [idx-rrdr (dtype/->reader idx-rdr)
+              n-idx-elems (.lsize idx-rrdr)
               ^RoaringBitmap result-set (->bitmap)]
           (dotimes [idx n-idx-elems]
-            (when (.contains missing (.readLong idx-rdr idx))
+            (when (.contains missing (.readLong idx-rrdr idx))
               (.add result-set idx)))
           (let [new-data (dtype/indexed-buffer idx-rdr data)]
             (Column. result-set

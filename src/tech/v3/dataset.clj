@@ -94,6 +94,20 @@
                 mapseq-reader)
 
 
+(defn rows
+  "Get the rows of the dataset as a list of flyweight maps.  This is a shorter form
+  of `mapseq-reader`."
+  [ds]
+  (mapseq-reader ds))
+
+
+(defn row-at
+  "Get the row at an individual index.  If indexes are negative then the dataset
+  is indexed from the end."
+  [ds idx]
+  ((rows ds) idx))
+
+
 (export-symbols tech.v3.dataset.io
                 ->dataset
                 ->>dataset

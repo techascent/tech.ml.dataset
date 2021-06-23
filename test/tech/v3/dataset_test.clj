@@ -1197,6 +1197,13 @@
            (nds :symbol)))))
 
 
+(deftest negative-index-on-columns-gets-last
+  (let [ds (ds/->dataset "test/data/stocks.csv")
+        last-idx (dec (ds/row-count ds))
+        symbol (ds "symbol")]
+    (is (= (symbol last-idx) (symbol -1)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

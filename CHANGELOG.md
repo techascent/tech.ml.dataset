@@ -1,5 +1,19 @@
 # Changelog
 
+## 6.003
+ * New accessors - rows, row-at - both work in sequence-of-maps space.  -1 indexes for
+   row-at return data indexed from the end so (row-at ds -1) returns the last dataset
+   row.
+ * When accessing columns via ifn interface - `(col idx)`, negative numbers index from
+   the end so for instance -1 retrieves the last value in the column.
+ * Large and potentially destabilizing optimization in some cases where argops/argfilter can
+   return a range if the filtered region is contiguous and 
+   then new columns are sitting on sub-buffers of other columns as opposed to indexed-buffers.
+   A sub-buffer doesn't pay the same indexing costs and is still capable of accessing the
+   underlying data (such as a double array) whereas an indexed buffer cannot faithfully return
+   the underlying data.  This can dramatically reduce indexing costs for certain operations
+   and allows System/arraycopy and friends to be used for further operations.
+
 ## 6.002
  * [issue 254] - Unexpected behaviour of rolling with LazySeq and ChunkedCons.
  * [issue 252] - Nippy serialization of tech.v3.dataset.impl.column.Column.
