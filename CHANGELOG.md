@@ -1,4 +1,8 @@
 # Changelog
+## 6.004 (unreleased)
+ * dtype-next tech.v3.datatype.functional namespace now has vectorized versions of
+   sum, dot-product, magnitude-squared, and distance that it will use if the input
+   is backed by a double array and if jdk.incubator.vector module is enabled.
 
 ## 6.003
  * New accessors - rows, row-at - both work in sequence-of-maps space.  -1 indexes for
