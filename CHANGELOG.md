@@ -1,5 +1,8 @@
 # Changelog
-## 6.004 (unreleased)
+
+## 6.004
+ * major fix for odd? event? etc. in tech.v3.datatype.functional.
+ * head,tail can accept numbers larger than row-count.
  * dtype-next tech.v3.datatype.functional namespace now has vectorized versions of
    sum, dot-product, magnitude-squared, and distance that it will use if the input
    is backed by a double array and if jdk.incubator.vector module is enabled.

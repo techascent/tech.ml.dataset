@@ -160,8 +160,9 @@
   `(select-rows ds (range n)).  Arguments are reversed, however, so this can
   be used in ->> operators."
   ([dataset n]
-   (-> (select-rows dataset (range n))
-       (vary-meta clojure.core/assoc :print-index-range (range n))))
+   (let [n (min (row-count dataset) (long n))]
+     (-> (select-rows dataset (range n))
+         (vary-meta clojure.core/assoc :print-index-range (range n)))))
   ([dataset]
    (head dataset 5)))
 
@@ -172,6 +173,7 @@
   be used in ->> operators."
   ([dataset n]
    (let [n-rows (row-count dataset)
+         n (min (long n) n-rows)
          start-idx (max 0 (- n-rows (long n)))]
      (-> (select-rows dataset (range start-idx n-rows))
          (vary-meta clojure.core/assoc :print-index-range (range n)))))
