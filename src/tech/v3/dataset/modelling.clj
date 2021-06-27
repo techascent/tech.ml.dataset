@@ -141,6 +141,8 @@
   Randomize dataset defaults to true which will realize the entire dataset
   so use with care if you have large datasets.
 
+  Returns a sequence of {:test-ds :train-ds}
+
   Options:
 
   * `:randomize-dataset?` - When true, shuffle the dataset.  In that case 'seed' may be
@@ -151,8 +153,19 @@
   ([dataset k options]
    (let [n-rows (ds-base/row-count dataset)
          indexes (dataset-indexes n-rows options)
-         fold-size (inc (quot (long n-rows) k))
-         folds (vec (partition-all fold-size indexes))]
+         indexes-per-fold (quot n-rows k)
+         leftover (rem n-rows k)
+         folds (mapv (fn [^long idx]
+                       (let [start-idx (-> (* idx indexes-per-fold)
+                                           (+ (if (< idx leftover)
+                                                idx
+                                                0)))
+                             glen (+ indexes-per-fold
+                                     (if (< idx leftover)
+                                       1
+                                       0))]
+                         (dtype/sub-buffer indexes start-idx glen)))
+                     (range k))]
      (for [i (range k)]
        {:test-ds (ds-base/select-rows dataset (nth folds i))
         :train-ds (ds-base/select-rows dataset

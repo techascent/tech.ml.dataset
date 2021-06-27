@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.005
+ * Fix in k-fold; it could fail for certain sizes of datasets.
+
 ## 6.004
  * major fix for odd? event? etc. in tech.v3.datatype.functional.
  * head,tail can accept numbers larger than row-count.
