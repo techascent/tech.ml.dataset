@@ -80,8 +80,9 @@
 (defn column-names
   "In-order sequence of column names"
   [dataset]
-  (->> (ds-proto/columns dataset)
-       (map ds-col/column-name)))
+  (when dataset
+    (->> (ds-proto/columns dataset)
+         (map ds-col/column-name))))
 
 
 (defn has-column?
