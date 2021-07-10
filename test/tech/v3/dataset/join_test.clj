@@ -255,6 +255,25 @@
                  :right.a))))))
 
 
+(deftest pd-merge
+  (let [ds-a (ds/->dataset {:a [:a :b :b :a :c]
+                            :b (range 5)
+                            :c (range 5)})
+        ds-b (ds/->dataset {:a [:a :b :a :b :d]
+                            :b (range 5)
+                            :c (range 6 11)})]
+    (is (= [0 1 2 3 4 nil nil nil]
+           (vec ((ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :outer}) :c))))
+    (is (= [6 7 nil nil nil]
+           (vec ((ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :left}) :right.c))))
+    (is (= [0 1 nil nil nil]
+           (vec ((ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :right}) :left.c))))
+    (is (= [6 7]
+           (vec ((ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :inner}) :right.c))))
+    (is (= [6 7 8 9 10 6 7 8 9 10 6 7 8 9 10 6 7 8 9 10 6 7 8 9 10]
+           (vec ((ds-join/pd-merge ds-a ds-b {:how :cross}) :right.c))))))
+
+
 (comment
 
   (def lhs-fields

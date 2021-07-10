@@ -943,3 +943,10 @@
   (->> columns
        (map (partial data->column version))
        (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))
+
+
+(defn extend-with-empty
+  [ds n-empty]
+  (->> (columns ds)
+       (map #(ds-col/extend-column-with-empty % n-empty))
+       (ds-impl/new-dataset (meta ds))))

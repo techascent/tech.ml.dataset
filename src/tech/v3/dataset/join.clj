@@ -4,13 +4,16 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
+            [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
-            [primitive-math :as pmath])
+            [primitive-math :as pmath]
+            [clojure.set :as set])
   (:import [tech.v3.datatype ObjectReader PrimitiveList Buffer
             BinaryPredicate BinaryOperator
             BinaryOperators$DoubleBinaryOperator]
@@ -179,51 +182,22 @@
                (update-join-metadata lhs-table-name rhs-table-name)))}))))
 
 
-
-(defn hash-join
-  "Join by column.  For efficiency, lhs should be smaller than rhs.
-  colname - may be a single item or a tuple in which is destructures as:
-     (let [[lhs-colname rhs-colname]] colname] ...)
-  An options map can be passed in with optional arguments:
-  :lhs-missing? Calculate the missing lhs indexes and left outer join table.
-  :rhs-missing? Calculate the missing rhs indexes and right outer join table.
-  :operation-space - either :int32 or :int64.  Defaults to :int32.
-  Returns
-  {:join-table - joined-table
-   :lhs-indexes - matched lhs indexes
-   :rhs-indexes - matched rhs indexes
-   ;; -- when rhs-missing? is true --
-   :rhs-missing - missing indexes of rhs.
-   :rhs-outer-join - rhs outer join table.
-   ;; -- when lhs-missing? is true --
-   :lhs-missing - missing indexes of lhs.
-   :lhs-outer-join - lhs outer join table.
-  }"
-  ([colname lhs rhs]
-   (hash-join colname lhs rhs {}))
-  ([colname lhs rhs {:keys [operation-space]
-                     :or {operation-space :int32}
-                     :as options}]
-   (let [[lhs-colname rhs-colname] (colname->lhs-rhs-colnames colname)
-
-         lhs-col (lhs lhs-colname)
-         rhs-col (rhs rhs-colname)
-         lhs-missing? (:lhs-missing? options)
-         rhs-missing? (:rhs-missing? options)
-         lhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype lhs-col))
-         rhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype rhs-col))
-         op-dtype (casting/simple-operation-space
+(defn- hash-join-algo
+  [lhs-col rhs-col lhs-missing? rhs-missing? operation-space]
+  (let [lhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype lhs-col))
+        rhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype rhs-col))
+        op-dtype (casting/simple-operation-space
                    (casting/widest-datatype lhs-dtype rhs-dtype))
-         ;;Ensure we group in same space if possible.
-         ^Map idx-groups (argops/arggroup
+        ;;Ensure we group in same space if possible.
+        ^Map idx-groups (argops/arggroup
                           (dtype/elemwise-cast lhs-col op-dtype))
-         rhs-col (dtype/->reader (dtype/elemwise-cast rhs-col op-dtype))
-         n-elems (dtype/ecount rhs-col)
-         {lhs-indexes :lhs-indexes
-          rhs-indexes :rhs-indexes
-          rhs-missing :rhs-missing
-          lhs-found :lhs-found}
-         (parallel-for/indexed-map-reduce
+        rhs-col (dtype/->reader (dtype/elemwise-cast rhs-col op-dtype))
+        n-elems (dtype/ecount rhs-col)
+        {lhs-indexes :lhs-indexes
+         rhs-indexes :rhs-indexes
+         rhs-missing :rhs-missing
+         lhs-found :lhs-found}
+        (parallel-for/indexed-map-reduce
           n-elems
           (fn [^long outer-idx ^long n-indexes]
             (let [lhs-indexes (dtype/make-list operation-space)
@@ -261,6 +235,45 @@
                                (dtype/make-list operation-space)
                                (->> (keys idx-groups)
                                     (remove #(.contains ^HashSet lhs-found %)))))]
+    {:lhs-indexes lhs-indexes
+     :rhs-indexes rhs-indexes
+     :lhs-missing lhs-missing
+     :rhs-missing rhs-missing}))
+
+
+
+(defn hash-join
+  "Join by column.  For efficiency, lhs should be smaller than rhs.
+  colname - may be a single item or a tuple in which is destructures as:
+     (let [[lhs-colname rhs-colname]] colname] ...)
+  An options map can be passed in with optional arguments:
+  :lhs-missing? Calculate the missing lhs indexes and left outer join table.
+  :rhs-missing? Calculate the missing rhs indexes and right outer join table.
+  :operation-space - either :int32 or :int64.  Defaults to :int32.
+  Returns
+  {:join-table - joined-table
+   :lhs-indexes - matched lhs indexes
+   :rhs-indexes - matched rhs indexes
+   ;; -- when rhs-missing? is true --
+   :rhs-missing - missing indexes of rhs.
+   :rhs-outer-join - rhs outer join table.
+   ;; -- when lhs-missing? is true --
+   :lhs-missing - missing indexes of lhs.
+   :lhs-outer-join - lhs outer join table.
+  }"
+  ([colname lhs rhs]
+   (hash-join colname lhs rhs {}))
+  ([colname lhs rhs {:keys [operation-space]
+                     :or {operation-space :int32}
+                     :as options}]
+   (let [[lhs-colname rhs-colname] (colname->lhs-rhs-colnames colname)
+
+         lhs-col (lhs lhs-colname)
+         rhs-col (rhs rhs-colname)
+         lhs-missing? (:lhs-missing? options)
+         rhs-missing? (:rhs-missing? options)
+         {:keys [lhs-indexes rhs-indexes lhs-missing rhs-missing]}
+         (hash-join-algo lhs-col rhs-col lhs-missing? rhs-missing? operation-space)]
      (finalize-join-result lhs-colname rhs-colname lhs rhs
                            lhs-indexes rhs-indexes
                            lhs-missing
@@ -307,6 +320,166 @@
   ([colname lhs rhs options]
    (-> (hash-join colname lhs rhs (assoc options :lhs-missing? options))
        :left-outer)))
+
+
+(defn pd-merge
+  "Pandas-style [merge](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html).
+  This is similar to join except it can merge on multiple columns for the left and right
+  sides.
+
+  Options:
+
+  * `:on` - column name or list of columns names.  Names must be found in both datasets.
+  * `:left-on` - Column name or list of column names
+  * `:right-on` - Column name or list of column names
+  * `:how` - left, right inner, outer, cross.  If cross, then no on, left-on, right-on can
+     be provided."
+  ([left-ds right-ds options]
+   (let [lhs-table-name (default-table-name left-ds "left")
+         rhs-table-name (default-table-name right-ds "right")
+         col-or-data->reader
+         (fn [tuple-data ds]
+           (if (and (sequential? tuple-data)
+                    (not= 1 (count tuple-data)))
+             (let [sub-ds (ds-base/select-columns ds tuple-data)
+                   rc (ds-base/row-count ds)
+                   col-readers (mapv dtype/->reader (ds-base/columns sub-ds))]
+               (reify ObjectReader
+                 (lsize [rdr] rc)
+                 (readObject [rdr idx]
+                   (mapv #(.readObject ^Buffer % idx)
+                         col-readers))))
+             (let [colname (if (sequential? tuple-data)
+                             (ds-base/column ds (first tuple-data))
+                             (ds-base/column ds tuple-data))]
+               (ds-base/column ds colname))))
+         how (get options :how :inner)]
+     (if (identical? how :cross)
+       (do
+         (errors/when-not-errorf
+          (nil? (or (options :on)
+                    (options :left-on)
+                    (options :right-on)))
+          "Columns must not be specified during a cross merge")
+         (let [left-rc (ds-base/row-count left-ds)
+               right-rc (ds-base/row-count right-ds)
+               n-result (* left-rc right-rc)
+               [lhs-indexes rhs-indexes]
+               (mapv (fn [rc]
+                       (let [rc (long rc)]
+                         (-> (if (< n-result Integer/MAX_VALUE)
+                               (dtype/make-reader :int32 n-result (rem idx rc))
+                               (dtype/make-reader :int64 n-result (rem idx rc)))
+                             ;;clone to reduce indexing costs later
+                             (dtype/clone))))
+                     [left-rc right-rc])
+               lhs-columns (map #(ds-col/select % lhs-indexes) (ds-base/columns left-ds))
+               rhs-columns (map #(ds-col/select % rhs-indexes) (ds-base/columns right-ds))]
+           (-> (ds-impl/new-dataset
+                "cross-join"
+                (nice-column-names
+                 [lhs-table-name lhs-columns]
+                 [rhs-table-name rhs-columns]))
+               (update-join-metadata lhs-table-name rhs-table-name))))
+       (let [left-on (get options :left-on (get options :on))
+             right-on (get options :right-on (get options :on))
+             left-on (when left-on (if-not (sequential? left-on) [left-on] left-on))
+             right-on (when right-on (if-not (sequential? right-on) [right-on] right-on))
+             on-int (->> (concat left-on right-on)
+                         (filter (set/intersection (set left-on) (set right-on)))
+                         (distinct)
+                         (vec))
+             _ (errors/when-not-errorf
+                (== (count left-on) (count right-on))
+                "Number of left join columns (%d) doesn't equal number of right join columns %d"
+                (count left-on) (count right-on))
+             left-join-data (col-or-data->reader left-on left-ds)
+             right-join-data (col-or-data->reader right-on right-ds)
+
+
+             {:keys [lhs-indexes rhs-indexes lhs-missing rhs-missing]}
+             (hash-join-algo left-join-data right-join-data true true
+                             (get options :operation-space :int32))
+             ;;Ensure a reasonable column order
+
+             left-cols (->> (concat left-on (ds-base/column-names left-ds)) distinct vec)
+             right-cols (->> (concat right-on (ds-base/column-names right-ds)) distinct vec)
+             left-ds (ds-base/select-columns left-ds left-cols)
+             right-ds (ds-base/select-columns right-ds right-cols)]
+         (case how
+           :left
+           (let [n-empty (count lhs-missing)
+                 lhs-indexes (add-all! (dtype/clone lhs-indexes) lhs-missing)
+                 lhs-cols (-> (ds-base/select-rows left-ds lhs-indexes)
+                              (ds-base/columns))
+                 rhs-cols (->> (ds-base/columns (ds-base/remove-columns right-ds on-int))
+                               (map (fn [col]
+                                      (ds-col/extend-column-with-empty
+                                       (ds-col/select col rhs-indexes)
+                                       n-empty))))]
+             (-> (ds-impl/new-dataset
+                  "left-outer-join"
+                  (nice-column-names
+                   [lhs-table-name lhs-cols]
+                   [rhs-table-name rhs-cols]))
+                 (update-join-metadata lhs-table-name rhs-table-name)))
+           :right
+           (let [n-empty (count rhs-missing)
+                 rhs-indexes (add-all! (dtype/clone rhs-indexes) rhs-missing)
+                 rhs-cols (-> (ds-base/select-rows right-ds rhs-indexes)
+                              (ds-base/columns))
+                 lhs-cols (->> (ds-base/columns (ds-base/remove-columns left-ds on-int))
+                               (map (fn [col]
+                                      (ds-col/extend-column-with-empty
+                                       (ds-col/select col lhs-indexes)
+                                       n-empty))))]
+             (-> (ds-impl/new-dataset
+                  "right-outer-join"
+                  (nice-column-names
+                   [rhs-table-name rhs-cols]
+                   [lhs-table-name lhs-cols]))
+                 (update-join-metadata lhs-table-name rhs-table-name)))
+           :inner
+           (let [lhs-cols (-> (ds-base/select-rows left-ds lhs-indexes)
+                              (ds-base/columns))
+                 rhs-cols (-> (ds-base/remove-columns right-ds on-int)
+                              (ds-base/select-rows rhs-indexes)
+                              (ds-base/columns))]
+             (-> (ds-impl/new-dataset
+                  "inner-join"
+                  (nice-column-names
+                   [lhs-table-name lhs-cols]
+                   [rhs-table-name rhs-cols]))
+                 (update-join-metadata lhs-table-name rhs-table-name)))
+           :outer
+           (let [n-left-empty (count rhs-missing)
+                 n-right-empty (count lhs-missing)
+                 ;;Order is intersection, left-missing, right-missing
+                 lhs-indexes (add-all! (dtype/clone lhs-indexes) lhs-missing)
+                 left-valid (ds-base/select-rows left-ds lhs-indexes)
+                 right-valid (ds-base/select-rows right-ds rhs-indexes)
+                 right-missing (ds-base/select-rows right-ds rhs-missing)
+                 ;;For the columns we perhaps joined on
+                 intersection-ds (-> (ds-base/select-columns left-valid on-int)
+                                     (ds-base/concat-copying (ds-base/select-columns
+                                                              right-missing on-int)))
+                 left-full (-> (ds-base/remove-columns left-valid on-int)
+                               (ds-base/extend-with-empty n-right-empty))
+                 right-full (-> (ds-base/remove-columns right-valid on-int)
+                                (ds-base/extend-with-empty n-left-empty)
+                                (ds-base/concat-copying (ds-base/remove-columns
+                                                         right-missing on-int)))]
+             (-> (ds-impl/new-dataset
+                  "outer-join"
+                  (nice-column-names
+                   [lhs-table-name (concat (ds-base/columns intersection-ds)
+                                           (ds-base/columns left-full))]
+                   [rhs-table-name (ds-base/columns right-full)]))
+                 (update-join-metadata lhs-table-name rhs-table-name))))))))
+  ([left-ds right-ds]
+   (pd-merge left-ds right-ds {:on (set/intersection
+                                    (set (ds-base/column-names left-ds))
+                                    (set (ds-base/column-names right-ds)))})))
 
 
 (defn- ensure-numeric-reader
