@@ -1,4 +1,12 @@
 # Changelog
+## 6.006
+ * latest dtype-next.  perf fixes for continuous wavelet transform, linear-regression, some
+   issue fixes.
+ * [issue 257](https://github.com/techascent/tech.ml.dataset/issues/257) - implement pandas
+   merge functionality.
+ * [issue 255](https://github.com/techascent/tech.ml.dataset/issues/255) - Surprising behavior
+   if dataset has no categorical columns (nil vs empty dataset).
+ * Upgrade Apache Poi to version 5.0.0.
 
 ## 6.005
  * Fix in k-fold; it could fail for certain sizes of datasets.
@@ -17,7 +25,7 @@
  * When accessing columns via ifn interface - `(col idx)`, negative numbers index from
    the end so for instance -1 retrieves the last value in the column.
  * Large and potentially destabilizing optimization in some cases where argops/argfilter can
-   return a range if the filtered region is contiguous and 
+   return a range if the filtered region is contiguous and
    then new columns are sitting on sub-buffers of other columns as opposed to indexed-buffers.
    A sub-buffer doesn't pay the same indexing costs and is still capable of accessing the
    underlying data (such as a double array) whereas an indexed buffer cannot faithfully return
