@@ -333,7 +333,64 @@
   * `:left-on` - Column name or list of column names
   * `:right-on` - Column name or list of column names
   * `:how` - left, right inner, outer, cross.  If cross, then no on, left-on, right-on can
-     be provided."
+     be provided.
+
+  Examples:
+
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (require '[tech.v3.dataset.join :as ds-join])
+nil
+user> (def ds-a (ds/->dataset {:a [:a :b :b :a :c]
+                            :b (range 5)
+                            :c (range 5)}))
+#'user/ds-a
+user> (def ds-b (ds/->dataset {:a [:a :b :a :b :d]
+                            :b (range 5)
+                            :c (range 6 11)}))
+#'user/ds-b
+user> ds-a
+_unnamed [5 3]:
+
+| :a | :b | :c |
+|----|---:|---:|
+| :a |  0 |  0 |
+| :b |  1 |  1 |
+| :b |  2 |  2 |
+| :a |  3 |  3 |
+| :c |  4 |  4 |
+user> ds-b
+_unnamed [5 3]:
+
+| :a | :b | :c |
+|----|---:|---:|
+| :a |  0 |  6 |
+| :b |  1 |  7 |
+| :a |  2 |  8 |
+| :b |  3 |  9 |
+| :d |  4 | 10 |
+user> (ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :inner})
+inner-join [2 4]:
+
+| :a | :b | :c | :right.c |
+|----|---:|---:|---------:|
+| :a |  0 |  0 |        6 |
+| :b |  1 |  1 |        7 |
+user> (ds-join/pd-merge ds-a ds-b {:on [:a :b] :how :outer})
+outer-join [8 4]:
+
+| :a | :b | :c | :right.c |
+|----|---:|---:|---------:|
+| :a |  0 |  0 |        6 |
+| :b |  1 |  1 |        7 |
+| :b |  2 |  2 |          |
+| :a |  3 |  3 |          |
+| :c |  4 |  4 |          |
+| :a |  2 |    |        8 |
+| :b |  3 |    |        9 |
+| :d |  4 |    |       10 |
+```"
   ([left-ds right-ds options]
    (let [lhs-table-name (default-table-name left-ds "left")
          rhs-table-name (default-table-name right-ds "right")
