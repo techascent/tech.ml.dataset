@@ -16,7 +16,7 @@
   that produces a column parser for a given column name or index.
   parse-type is either :string or :object."
   [options parse-type]
-  (let [default-parse-fn (case parse-type
+  (let [default-parse-fn (case (get options :parser-type parse-type)
                            :object column-parsers/promotional-object-parser
                            :string column-parsers/promotional-string-parser
                            nil (constantly nil))

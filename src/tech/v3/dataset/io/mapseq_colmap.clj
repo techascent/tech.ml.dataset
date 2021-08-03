@@ -32,12 +32,13 @@
          n-rows (loop [continue? (.hasNext iter)
                        row-idx 0]
                   (if continue?
-                    (let [row (.next iter)]
-                      (pfor/doiter
-                       cell row
-                       (let [[k v] cell
-                             parser (colname->parser k)]
-                         (column-parsers/add-value! parser row-idx v)))
+                    (do
+                      (when-let [row (.next iter)]
+                        (pfor/doiter
+                         cell row
+                         (let [[k v] cell
+                               parser (colname->parser k)]
+                           (column-parsers/add-value! parser row-idx v))))
                       (recur (.hasNext iter)
                              (unchecked-inc row-idx)))
                     row-idx))]

@@ -152,6 +152,11 @@
      be created in `(System/getProperty \"java.io.tmpdir\")` by default.
   - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the
      header row.  Works across both csv and spreadsheet datasets.
+  - `:parser-type` - Default parser to use if no parser-fn is specified for that column.
+     For csv files, the default parser type is `:string` which indicates a promotional
+     string parser.  For sequences of maps, the default parser type is :object.  It can
+     be useful in some contexts to use the `:string` parser with sequences of maps or
+     maps of columns.
   - `:parser-fn` -
       - `keyword?` - all columns parsed to this datatype. For example:
         `{:parser-fn :string}`

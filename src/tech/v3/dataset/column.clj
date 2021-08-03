@@ -229,11 +229,11 @@ Implementations should check their metadata before doing calculations."
 
 (defn union-missing-sets
   "Union the missing sets of the columns returning a roaring bitmap"
-  ^RoaringBitmap [col-seq]
-  (reduce dtype-proto/set-or (map col-proto/missing col-seq)))
+  [col-seq]
+  (reduce dtype/set-or (map col-proto/missing col-seq)))
 
 
 (defn intersect-missing-sets
   "Intersect the missing sets of the columns returning a roaring bitmap"
-  ^RoaringBitmap [col-seq]
-  (reduce dtype-proto/set-and (map col-proto/missing col-seq)))
+  [col-seq]
+  (reduce dtype/set-and (map col-proto/missing col-seq)))
