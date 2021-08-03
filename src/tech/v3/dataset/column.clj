@@ -5,7 +5,7 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.protocols :as dtype-proto])
+            [tech.v3.datatype.protocols :as dt-proto])
   (:import [java.util List]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
@@ -230,10 +230,10 @@ Implementations should check their metadata before doing calculations."
 (defn union-missing-sets
   "Union the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (reduce dtype/set-or (map col-proto/missing col-seq)))
+  (reduce dt-proto/set-or (map col-proto/missing col-seq)))
 
 
 (defn intersect-missing-sets
   "Intersect the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (reduce dtype/set-and (map col-proto/missing col-seq)))
+  (reduce dt-proto/set-and (map col-proto/missing col-seq)))
