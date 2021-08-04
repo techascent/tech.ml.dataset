@@ -1208,7 +1208,6 @@
 ;; should not require the same columns across all datasets.  That creates extremely
 ;; error prone code.
 (deftest concat-doesnt-require-same-columns
-
   (let [ds (ds/concat-copying
             (ds/->dataset {:a (range 10)
                            :c (repeat 10 (dtype-dt/local-date))})
@@ -1216,6 +1215,17 @@
     (is (= 20 (ds/row-count ds)))
     (is (= 10 (dtype/ecount (ds/missing (ds :a)))))
     (is (= 10 (dtype/ecount (ds/missing (ds :b)))))))
+
+
+;;It is way too confusing for users to have to navigate pack/unpack code in any
+;;normal situation.
+(deftest filter-sort-columns-uses-unpacked-datatypes
+  (let [stocks (ds/->dataset "test/data/stocks.csv")
+        test-val (second (stocks "date"))]
+    (is (not= 0 (ds/row-count (ds/filter-column stocks "date" #(= % test-val)))))
+    ;;make sure sorting still works
+    (is (= (ds/row-count stocks)
+           (ds/row-count (ds/sort-by-column stocks "date"))))))
 
 
 (comment

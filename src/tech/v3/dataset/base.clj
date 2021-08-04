@@ -448,6 +448,7 @@
                           :else
                           #(= predicate %))))]
       (->> (get dataset colname)
+           (packing/unpack)
            (argops/argfilter predicate)
            (select dataset :all)))))
 
@@ -506,7 +507,7 @@
   "Sort a dataset by a given column using the given compare fn."
   ([dataset colname compare-fn]
    (when dataset
-     (->> (argops/argsort compare-fn (dataset colname))
+     (->> (argops/argsort compare-fn (packing/unpack (dataset colname)))
           (select dataset :all))))
   ([dataset colname]
    (sort-by-column dataset colname nil)))
