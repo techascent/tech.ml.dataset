@@ -1,4 +1,15 @@
 # Changelog
+
+## 6.009
+ * latest dtype-next.
+ * filter-by-column, sort-by-column use unpacked datatypes.
+ * New parser argument, 'parse-type', that allows you to turn on string parsing when
+   working with a sequence of maps.
+ * `->dataset` is more robust to sequences of maps that may contain nil values.
+ * `concat` can take datasets with different subsets of columns, just like concat of
+   a sequence of maps does.
+   
+
 ## 6.006
  * latest dtype-next.  perf fixes for continuous wavelet transform, linear-regression, some
    issue fixes.
