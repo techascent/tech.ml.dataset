@@ -1204,6 +1204,20 @@
     (is (= (symbol last-idx) (symbol -1)))))
 
 
+;; This was a bad idea.  Concatenating, just the same as concatenating sequences of maps
+;; should not require the same columns across all datasets.  That creates extremely
+;; error prone code.
+(deftest concat-doesnt-require-same-columns
+
+  (let [ds (ds/concat-copying
+            (ds/->dataset {:a (range 10)
+                           :c (repeat 10 (dtype-dt/local-date))})
+            (ds/->dataset {:b (range 10)}))]
+    (is (= 20 (ds/row-count ds)))
+    (is (= 10 (dtype/ecount (ds/missing (ds :a)))))
+    (is (= 10 (dtype/ecount (ds/missing (ds :b)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

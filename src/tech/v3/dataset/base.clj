@@ -13,6 +13,8 @@
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.string-table :as str-table]
@@ -29,7 +31,7 @@
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.dataset Text]
            [java.util List HashSet LinkedHashMap Map Arrays HashMap
-            ArrayList]
+            ArrayList LinkedHashSet]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
@@ -513,7 +515,7 @@
 (defn- do-concat
   [reader-concat-fn dataset other-datasets]
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
-                      (remove nil?)
+                      (remove #(= 0 (row-count %)))
                       seq)]
 
     (cond
@@ -522,56 +524,61 @@
       (== 1 (count datasets))
       (first datasets)
       :else
-      (when-let [dataset (first datasets)]
-        (let [column-list
-              (->> datasets
-                   (mapcat (fn [dataset]
-                             (->> (columns dataset)
-                                  (mapv (fn [col]
-                                          (assoc (meta col)
-                                                 :column
-                                                 col
-                                                 :table-name (dataset-name dataset)))))))
-                   (clojure.core/group-by :name))
-              label-map (->> datasets
-                             (map (comp :label-map meta))
-                             (apply merge))]
-          (when-not (= 1 (count (->> (vals column-list)
-                                     (map count)
-                                     distinct)))
-            (throw (ex-info "Dataset is missing a column" {})))
-          (->> column-list
-               (map (fn [[colname columns]]
-                      (let [columns (map :column columns)
-                            final-dtype (if (== 1 (count columns))
-                                          (dtype/get-datatype (first columns))
-                                          (reduce (fn [lhs-dtype rhs-dtype]
-                                                    ;;Exact matches don't need to be widening/promotion
-                                                    (if-not (= lhs-dtype rhs-dtype)
-                                                      (casting/simple-operation-space
-                                                       (packing/unpack lhs-dtype)
-                                                       (packing/unpack rhs-dtype))
-                                                      lhs-dtype))
-                                                  (map dtype/get-datatype columns)))
-                            column-values (reader-concat-fn final-dtype columns)
+      (let [column-names (-> (doto (LinkedHashSet.)
+                               (.addAll (->> (map column-names datasets)
+                                             (apply clojure.core/concat))))
+                             (vec))
+            column-dtypes
+            (->> column-names
+                 (mapv (fn [cname]
+                         (->> datasets
+                              (map #(% cname))
+                              (remove nil?)
+                              (map dtype/elemwise-datatype)
+                              (reduce (fn [lhs-dtype rhs-dtype]
+                                        (if (identical? lhs-dtype rhs-dtype)
+                                          lhs-dtype
+                                          (casting/simple-operation-space
+                                           (packing/unpack-datatype lhs-dtype)
+                                           (packing/unpack-datatype rhs-dtype)))))))))]
+        (->>
+         (map vector column-names column-dtypes)
+         (map
+          (fn [[colname dtype]]
+            (let [columns
+                  (->> datasets
+                       (map (fn [ds]
+                              (if-let [retval (ds colname)]
+                                retval
+                                (let [rc (row-count ds)
+                                      missing (bitmap/->bitmap (range rc))
+                                      mv (col-base/dtype->missing-val-map dtype)
+                                      cd (dtype/make-reader dtype rc mv)]
+                                  (ds-col/new-column
+                                   #:tech.v3.dataset{:data cd
+                                                     :missing missing
+                                                     :name colname
+                                                     :metadata {:name colname}
+                                                     :datatype dtype
+                                                     :force-datatype? true}))))))
+                  column-values (reader-concat-fn dtype columns)
+                  missing
+                  (->> (reduce
+                        (fn [[missing offset] col]
+                          [(dtype-proto/set-or
                             missing
-                            (->> (reduce
-                                  (fn [[missing offset] col]
-                                    [(dtype-proto/set-or
-                                      missing
-                                      (dtype-proto/set-offset (ds-col/missing col)
-                                                              offset))
-                                     (+ offset (dtype/ecount col))])
-                                  [(->bitmap) 0]
-                                  columns)
-                                 (first))
-                            first-col (first columns)]
-                        (ds-col/new-column colname
-                                           column-values
-                                           (meta first-col)
-                                           missing))))
-               (ds-impl/new-dataset (dataset-name dataset))
-               (#(with-meta % {:label-map label-map}))))))))
+                            (dtype-proto/set-offset (ds-col/missing col)
+                                                    offset))
+                           (+ offset (dtype/ecount col))])
+                        [(->bitmap) 0]
+                        columns)
+                       (first))
+                  first-col (first columns)]
+              (ds-col/new-column colname
+                                 column-values
+                                 (meta first-col)
+                                 missing))))
+         (ds-impl/new-dataset (dataset-name dataset)))))))
 
 
 (defn check-empty
