@@ -424,6 +424,63 @@ user> (ds-reduce/group-by-column-agg
    (aggregate agg-map nil ds-seq)))
 
 
+(defn index-reducer
+  "Define an indexed reducer which is used as the values in the group-by-agg and aggregate
+  reduction maps.
+
+  * `per-idx-fn` - This gets passed three arguments - the batch-ctx which defaults to
+  the current dataset, the reduction context, and the row index.  It is expected to
+  return a new reduction context.  The first time this is called for a given reduction
+  bucket, the reduction context will be nil.
+
+  Options:
+
+  * `:per-batch-fn` - This is called once per dataset and the return value of this is passed
+    as the first argument to `per-idx-fn`.
+  * `:merge-fn` - For reductions are done with per-thread contexts, the final step is to merge
+    the per-thread contexts back into one final context.  This is **not** currently used for
+    `group-by-agg` but it is used for `aggregate`.
+  * `:finalize` - Optional argument to perform a final pass on the result of the reduction
+    before it is set as the row value for the column.
+
+  Example:
+
+```clojure
+user> (def stocks (ds/->dataset \"test/data/stocks.csv\"))
+#'user/stocks
+user> (ds-reduce/group-by-column-agg
+       \"symbol\"
+       {:symbol (ds-reduce/first-value \"symbol\")
+        :price-sum (ds-reduce/index-reducer
+                    (fn [ds obj-ctx ^long row-idx]
+                      (+ (or obj-ctx 0.0)
+                         ((ds \"price\") row-idx))))}
+       [stocks])
+symbol-aggregation [5 2]:
+
+| :symbol | :price-sum |
+|---------|-----------:|
+|    AAPL |    7961.85 |
+|     IBM |   11225.13 |
+|    AMZN |    5902.41 |
+|    MSFT |    3042.62 |
+|    GOOG |   28279.19 |
+```"
+  (^IndexReduction
+   [per-idx-fn {:keys [per-batch-fn merge-fn finalize-fn]
+                :or {per-batch-fn identity
+                     merge-fn #(throw (Exception. "Merge function not defined for reducer"))
+                     finalize-fn identity}}]
+   (reify IndexReduction
+     (prepareBatch [this dataset] (per-batch-fn dataset))
+     (reduceIndex [this batch-ctx obj-ctx row-idx] (per-idx-fn batch-ctx obj-ctx row-idx))
+     (reduceReductions [this lhs rhs] (merge-fn lhs rhs))
+     (finalize [this ctx] (finalize-fn ctx))))
+  (^IndexReduction
+   [per-idx-fn]
+   (index-reducer per-idx-fn nil)))
+
+
 (comment
   (require '[tech.v3.dataset :as ds])
   (require '[tech.v3.datatype.datetime :as dtype-dt])
