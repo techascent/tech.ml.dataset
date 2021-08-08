@@ -406,10 +406,9 @@ outer-join [8 4]:
                  (readObject [rdr idx]
                    (mapv #(.readObject ^Buffer % idx)
                          col-readers))))
-             (let [colname (if (sequential? tuple-data)
-                             (ds-base/column ds (first tuple-data))
-                             (ds-base/column ds tuple-data))]
-               (ds-base/column ds colname))))
+             (if (sequential? tuple-data)
+               (ds-base/column ds (first tuple-data))
+               (ds-base/column ds tuple-data))))
          how (get options :how :inner)]
      (if (identical? how :cross)
        (do
