@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.011
+ * Upgrade tech.io so ls, metadata works for files similarly to how it works for aws.
+
 ## 6.010
  * More dtype-next datetime functions - `local-date->epoch-months`, `epoch-months->epoch-days`
    `epoch-days->epoch-months`, `epoch-months->local-date`.

@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.011-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.011"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -99,7 +99,8 @@
                                    tech.v3.libs.poi
                                    tech.v3.libs.parquet
                                    tech.v3.libs.fastexcel
-                                   tech.v3.libs.arrow]}}
+                                   tech.v3.libs.arrow
+                                   tech.v3.libs.guava.cache]}}
              ;;No neanderthal on travis
              :uberjar {:aot [tech.v3.dataset.main]
                        :main tech.v3.dataset.main
