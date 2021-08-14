@@ -17,7 +17,7 @@
             [taoensso.nippy :as nippy]
             [clojure.test :refer [deftest is]])
   (:import [java.util List HashSet UUID]
-           [java.io File]))
+           [java.io File ByteArrayInputStream]))
 
 (deftest datatype-parser
   (let [ds (ds/->dataset "test/data/datatype_parser.csv")]
@@ -678,6 +678,22 @@
                (ds/column false)
                vec)))))
 
+(deftest positional-column-rename
+  (let [DS (ds/->dataset
+            (-> "id,a,a\n0,aa,bb\n1,cc,dd"
+                .getBytes
+                ByteArrayInputStream.)
+            {:file-type :csv})
+        new-cols-incorrect [:a1 :a2]
+        new-cols-correct [:id :a1 :a2]]
+    (is (= new-cols-correct
+           (-> DS
+               (ds/rename-columns new-cols-correct)
+               ds/column-names)))
+    (is (thrown? Throwable
+                 (ds/rename-columns DS new-cols-incorrect)))
+    (is (thrown? Throwable
+                 (ds/rename-columns DS (set new-cols-correct))))))
 
 (deftest column-sequences-use-nil-missing
   (let [ds (ds/->dataset [{:a 1} {:b 2}])]

@@ -342,16 +342,34 @@
   (select-by-index dataset col-index :all))
 
 (defn rename-columns
-  "Rename columns using a map.  Does not reorder columns."
-  [dataset colname-map]
-  (->> (ds-proto/columns dataset)
-       (map (fn [col]
-              (let [old-name (ds-col/column-name col)]
-                (if (contains? colname-map old-name)
-                  (ds-col/set-name col (get colname-map old-name))
-                  col))))
-       (ds-impl/new-dataset (dataset-name dataset)
-                            (meta dataset))))
+  "Rename columns using a map or vector of column names.
+
+  Does not reorder columns; rename is in-place for maps and
+  positional for vectors."
+  [dataset colnames]
+  (let [col-map? (map? colnames)
+        col-vector? (vector? colnames)
+        existing-cols (ds-proto/columns dataset)]
+    (cond (not (or col-map? col-vector?))
+          (throw (ex-info "column names must be a map or vector"
+                          {:column-names-type (type colnames)}))
+          (and col-vector? (not= (count existing-cols)
+                                 (count colnames)))
+          (throw (ex-info "rename column vector must be of equal size to current column count"
+                          {:current-column-count (count existing-cols)
+                           :target-column-count (count colnames)})))
+    (->> (map
+          (fn [col new-name]
+            (let [old-name (ds-col/column-name col)]
+              (if col-map?
+                (if (contains? colnames old-name)
+                  (ds-col/set-name col (get colnames old-name))
+                  col)
+                (ds-col/set-name col new-name))))
+          existing-cols
+          colnames)
+         (ds-impl/new-dataset (dataset-name dataset)
+                              (meta dataset)))))
 
 
 (defn select-rows
