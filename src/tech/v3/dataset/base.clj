@@ -351,10 +351,13 @@
         col-vector? (vector? colnames)
         existing-cols (ds-proto/columns dataset)]
     (cond (not (or col-map? col-vector?))
-          (throw "column names must be a map or vector")
+          (throw (ex-info "column names must be a map or vector"
+                          {:column-names-type (type colnames)}))
           (and col-vector? (not= (count existing-cols)
                                  (count colnames)))
-          (throw "rename column vector must be of equal size to current column count"))
+          (throw (ex-info "rename column vector must be of equal size to current column count"
+                          {:current-column-count (count existing-cols)
+                           :target-column-count (count colnames)})))
     (->> (map
           (fn [col new-name]
             (let [old-name (ds-col/column-name col)]

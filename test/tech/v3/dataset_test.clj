@@ -686,11 +686,14 @@
             {:file-type :csv})
         new-cols-incorrect [:a1 :a2]
         new-cols-correct [:id :a1 :a2]]
-
-   (is (= new-cols-correct
-             (-> DS
-                 (ds/rename-columns new-cols-correct)
-                 ds/column-names)))))
+    (is (= new-cols-correct
+           (-> DS
+               (ds/rename-columns new-cols-correct)
+               ds/column-names)))
+    (is (thrown? Throwable
+                 (ds/rename-columns DS new-cols-incorrect)))
+    (is (thrown? Throwable
+                 (ds/rename-columns DS (set new-cols-correct))))))
 
 (deftest column-sequences-use-nil-missing
   (let [ds (ds/->dataset [{:a 1} {:b 2}])]
