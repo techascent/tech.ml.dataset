@@ -350,6 +350,7 @@
   (let [col-map? (map? colnames)
         col-vector? (vector? colnames)
         existing-cols (ds-proto/columns dataset)]
+
     (cond (not (or col-map? col-vector?))
           (throw (ex-info "column names must be a map or vector"
                           {:column-names-type (type colnames)}))
@@ -358,18 +359,19 @@
           (throw (ex-info "rename column vector must be of equal size to current column count"
                           {:current-column-count (count existing-cols)
                            :target-column-count (count colnames)})))
-    (->> (map
-          (fn [col new-name]
-            (let [old-name (ds-col/column-name col)]
-              (if col-map?
+    (->> (if col-map?
+           (map
+            (fn [col]
+              (let [old-name (ds-col/column-name col)]
                 (if (contains? colnames old-name)
                   (ds-col/set-name col (get colnames old-name))
-                  col)
-                (ds-col/set-name col new-name))))
-          existing-cols
-          colnames)
-         (ds-impl/new-dataset (dataset-name dataset)
-                              (meta dataset)))))
+                  col)))
+            existing-cols)
+           (map
+            #(ds-col/set-name %1 %2)
+            existing-cols
+            colnames))
+         (ds-impl/new-dataset (dataset-name dataset) (meta dataset)))))
 
 
 (defn select-rows

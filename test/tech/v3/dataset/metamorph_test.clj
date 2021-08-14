@@ -7,8 +7,7 @@
   (ds/->dataset "test/data/ames-train.csv.gz" {:key-fn keyword}))
 
 
-
-(deftest call-with-df
+(deftest call-with-df-1
   (is (= [1 2 3 4 5]
          (->>
           ((ds-mm/set-inference-target :SalePrice) df)
@@ -17,7 +16,7 @@
           (take 5)
           ))))
 
-(deftest call-with-df
+(deftest call-with-df-2
   (is (= [1 2 3 4 5]
          (->>
           ((ds-mm/rename-columns {:SalePrice :sale-price :Id :id})
