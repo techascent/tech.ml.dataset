@@ -13,7 +13,7 @@
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]])
-  (:import [java.util ArrayList HashSet Collections Set List Map]
+  (:import [java.util ArrayList HashSet Collections Set List Map Arrays]
            [it.unimi.dsi.fastutil.longs LongArrayList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap IMeta Counted IFn IObj Indexed]
@@ -36,8 +36,13 @@
 (defn- ->efficient-reader
   [item]
   (cond
+    ;;Sets are ordered when converted as index buffers.
     (instance? RoaringBitmap item)
     (bitmap/bitmap->efficient-random-access-reader item)
+    (set? item)
+    (let [ary (long-array item)]
+      (Arrays/sort ary)
+      ary)
     (dtype-proto/convertible-to-reader? item)
     item
     :else
@@ -190,6 +195,13 @@
     (dtype-proto/->native-buffer data))
   dtype-proto/PElemwiseDatatype
   (elemwise-datatype [this] (dtype-proto/elemwise-datatype data))
+  dtype-proto/POperationalElemwiseDatatype
+  (operational-elemwise-datatype [this]
+    (if (.isEmpty missing)
+      (dtype-proto/elemwise-datatype this)
+      (casting/widest-datatype (packing/unpack-datatype
+                                (dtype-proto/elemwise-datatype data))
+                               :float64)))
   dtype-proto/PElemwiseCast
   (elemwise-cast [this new-dtype]
     (let [new-data (dtype-proto/elemwise-cast data new-dtype)]

@@ -1244,6 +1244,18 @@
            (ds/row-count (ds/sort-by-column stocks "date"))))))
 
 
+(deftest binary-ops-on-integer-missing-results-in-nan
+  (let [src-ds (ds/->dataset {:a [1 2 nil 4]})
+        dst-ds (assoc src-ds :b (dfn/+ (:a src-ds ) 1))]
+    (is (= 1 (dtype/ecount (ds/missing (dst-ds :b)))))
+    (is (= [2.0 3.0 nil 5.0]
+           (vec (dst-ds :b))))))
+
+
+#_(deftest concat-packed-date-with-date-results-in-local-date-or-packed-local-date
+    (throw (Exception. "This failed in practice")))
+
+
 (comment
 
   (def test-ds (ds/->dataset

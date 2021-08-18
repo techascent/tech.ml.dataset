@@ -582,7 +582,11 @@
                                                      :metadata {:name colname}
                                                      :datatype dtype
                                                      :force-datatype? true}))))))
-                  column-values (reader-concat-fn dtype columns)
+                  column-values (try (reader-concat-fn dtype columns)
+                                     (catch Throwable e
+                                       (throw (ex-info (format
+                                                        "Failed to concat column %s" colname)
+                                                       {:error e}))))
                   missing
                   (->> (reduce
                         (fn [[missing offset] col]
