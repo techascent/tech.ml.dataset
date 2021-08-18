@@ -295,6 +295,8 @@ user> (ds-reduce/group-by-column-agg
 (defn group-by-column-agg
   "Group a sequence of datasets by a column and aggregate down into a new dataset.
 
+  * colname - Either a single scalar column name or a vector of column names to group by.
+
   * agg-map - map of result column name to reducer.  All values in the agg map must be
     instances of `tech.v3.datatype.IndexReduction`.  Column values will be inferred from
     the finalized result of the first reduction with nil indicating an object column.
@@ -328,11 +330,48 @@ user> (ds-reduce/group-by-column-agg
 |    AAPL |  64.73048780 |   23885.55 |
 |    GOOG | 415.87044118 |   84837.57 |
 |    AMZN |  47.98707317 |   17707.23 |
+
+
+
+tech.v3.dataset.reductions-test> (def tstds
+                                   (ds/->dataset {:a [\"a\" \"a\" \"a\" \"b\" \"b\" \"b\" \"c\" \"d\" \"e\"]
+                                                  :b [22   21  22 44  42  44   77 88 99]}))
+#'tech.v3.dataset.reductions-test/tstds
+tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
+                                   [:a :b] {:a (ds-reduce/first-value :a)
+                                            :b (ds-reduce/first-value :b)
+                                            :c (ds-reduce/row-count)}
+                                   [tstds tstds tstds])
+:tech.v3.dataset.reductions/_temp_col-aggregation [7 3]:
+
+| :a | :b | :c |
+|----|---:|---:|
+|  a | 21 |  3 |
+|  a | 22 |  6 |
+|  b | 42 |  3 |
+|  b | 44 |  6 |
+|  c | 77 |  3 |
+|  d | 88 |  3 |
+|  e | 99 |  3 |
 ```"
   ([colname agg-map options ds-seq]
    (let [map-initial-capacity (long (get options :map-initial-capacity 100000))
          results (ArrayList. 100000)
          cnames (vec (keys agg-map))
+         ;;allow a single dataset to be passed in without wrapping in seq notation
+         ds-seq (if (ds-impl/dataset? ds-seq)
+                  [ds-seq]
+                  ds-seq)
+         src-colname colname
+         [colname ds-seq] (if (and (sequential? colname)
+                                   (nil? ((first ds-seq) colname)))
+                            (let [tmp-colname ::_temp_col]
+                              [tmp-colname
+                               (map #(assoc % tmp-colname
+                                            (apply dtype/emap vector :object
+                                                   (map (partial ds-base/column %) colname)))
+                                    ds-seq)])
+                            [colname ds-seq])
          ;;group by using this reducer followed by this consumer fn.
          _ (ds-reduce-impl/group-by-column-aggregate-impl
             colname
@@ -375,7 +414,7 @@ user> (ds-reduce/group-by-column-agg
                 nil
                 (bitmap/->bitmap)))
              (range (count cnames)) cnames (first results))
-            (ds-impl/new-dataset {:dataset-name (str colname "-aggregation")})))))
+            (ds-impl/new-dataset {:dataset-name (str src-colname "-aggregation")})))))
   ([colname agg-map ds-seq]
    (group-by-column-agg colname agg-map nil ds-seq)))
 

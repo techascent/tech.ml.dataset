@@ -124,3 +124,16 @@
     (is (every? #(or (nil? %)
                      (not= 0 (rem (long %) 3)))
                 (:missing sub-ds)))))
+
+
+(deftest group-by-multiple-columns
+  (let [tstds (ds/->dataset {:a ["a" "a" "a" "b" "b" "b" "c" "d" "e"]
+                             :b [22   21  22 44  42  44   77 88 99]})
+        res-ds
+        (ds-reduce/group-by-column-agg
+         [:a :b] {:a (ds-reduce/first-value :a)
+                  :b (ds-reduce/first-value :b)
+                  :c (ds-reduce/row-count)}
+         [tstds tstds tstds])]
+
+    ))

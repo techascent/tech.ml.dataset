@@ -1,5 +1,13 @@
 # Changelog
 
+## 6.014
+ * tech.v3.dataset.reductions/group-by-column-agg can take a tuple of column names in addition
+   to a single column name.  In the case of a tuple the grouping will be the vector of column
+   values evaluated in object space (so missing will be nil).
+ * [issue 260 - numeric, sorting of missing values](https://github.com/techascent/tech.ml.dataset/issues/260)
+ * [issue 262 - positional renaming of columns](https://github.com/techascent/tech.ml.dataset/issues/262)
+ * [issue 257 - implement pandas merge functionality](https://github.com/techascent/tech.ml.dataset/issues/257)
+
 ## 6.011
  * Upgrade tech.io so ls, metadata works for files similarly to how it works for aws.
 
