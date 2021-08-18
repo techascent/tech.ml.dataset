@@ -513,11 +513,11 @@
 
 (defn sort-by
   "Sort a dataset by a key-fn and compare-fn."
-  ([dataset key-fn compare-fn]
+  ([dataset key-fn compare-fn & [options]]
    (when dataset
      (->> (ds-readers/mapseq-reader dataset)
           (dtype/emap key-fn :object)
-          (argops/argsort compare-fn)
+          (argops/argsort compare-fn options)
           (select dataset :all))))
   ([dataset key-fn]
    (sort-by dataset key-fn nil)))
@@ -525,9 +525,9 @@
 
 (defn sort-by-column
   "Sort a dataset by a given column using the given compare fn."
-  ([dataset colname compare-fn]
+  ([dataset colname compare-fn & [options]]
    (when dataset
-     (->> (argops/argsort compare-fn (packing/unpack (dataset colname)))
+     (->> (argops/argsort compare-fn options (packing/unpack (dataset colname)))
           (select dataset :all))))
   ([dataset colname]
    (sort-by-column dataset colname nil)))

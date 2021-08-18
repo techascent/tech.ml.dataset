@@ -1252,8 +1252,24 @@
            (vec (dst-ds :b))))))
 
 
-#_(deftest concat-packed-date-with-date-results-in-local-date-or-packed-local-date
-    (throw (Exception. "This failed in practice")))
+(deftest sort-works-with-nan
+  (let [ds (ds/->dataset {:a [1 nil 2 nil nil 4]} )
+        ds-first (ds/sort-by-column ds :a nil {:nan-strategy :first})
+        ds-last (ds/sort-by-column ds :a nil {:nan-strategy :last})]
+    (is (= [nil nil nil 1 2 4] (vec (ds-first :a))))
+    (is (= [1 2 4 nil nil nil] (vec (ds-last :a))))
+    (is (thrown? Exception (ds/sort-by-column ds :a nil {:nan-strategy :exception})))))
+
+
+(deftest concat-packed-date-with-date-results-in-local-date-or-packed-local-date
+  (let [ds (ds/->dataset (repeat 10 {:a (dtype-dt/local-date)})
+                         {:parser-fn {:a :local-date}})
+        ds-packed (ds/->dataset {:a (repeat 10 (dtype-dt/local-date))}
+                                {:parser-fn {:a :packed-local-date}})
+        res-inp (ds/concat-inplace ds ds-packed)
+        res-cp (ds/concat-copying ds ds-packed)]
+    (is (#{:local-date :packed-local-date} (dtype/elemwise-datatype (res-inp :a))))
+    (is (#{:local-date :packed-local-date} (dtype/elemwise-datatype (res-cp :a))))))
 
 
 (comment
