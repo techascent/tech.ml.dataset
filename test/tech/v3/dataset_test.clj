@@ -1272,6 +1272,14 @@
     (is (#{:local-date :packed-local-date} (dtype/elemwise-datatype (res-cp :a))))))
 
 
+(deftest row-map-test
+  (let [ds (ds/->dataset "test/data/stocks.csv")]
+    (is (thrown? Exception (ds/row-map ds #(hash-map :price2 (* (% :price) (% :price))))))
+    (is (dfn/equals (dfn/sq (ds "price"))
+                    (-> (ds/row-map ds #(hash-map :price2 (* (% "price") (% "price"))))
+                        (ds/column :price2))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

@@ -215,12 +215,10 @@
              (data->dataset dataset options))
            (instance? Map dataset)
            (parse-mapseq-colmap/column-map->dataset options dataset)
-           ;;Not everything has a conversion to seq.
-           (instance? Map (try (first (seq dataset))
-                               (catch Throwable e nil)))
-           (parse-mapseq-colmap/mapseq->dataset options dataset)
-           (nil? (seq dataset))
-           (ds-impl/new-dataset options nil))]
+           :else
+           (if (nil? (seq dataset))
+             (ds-impl/new-dataset options nil)
+             (parse-mapseq-colmap/mapseq->dataset options dataset)))]
      (if dataset-name
        (ds-proto/set-dataset-name dataset dataset-name)
        dataset)))

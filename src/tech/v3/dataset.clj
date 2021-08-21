@@ -108,6 +108,17 @@
   ((rows ds) idx))
 
 
+(defn rowvecs
+  "Return a randomly addressable list of rows in persisent vector-like form"
+  [ds]
+  (value-reader ds))
+
+
+(defn rowvec-at
+  [ds idx]
+  ((rowvecs ds) idx))
+
+
 (export-symbols tech.v3.dataset.io
                 ->dataset
                 ->>dataset
@@ -537,6 +548,46 @@ _unnamed [3 3]:
     `(column-map ~ds ~result-colname
                  (fn ~src-col-symbols ~body)
                  ~src-colnames)))
+
+
+(defn row-map
+  "Map a function across the rows of the dataset producing a new dataset
+  that is merged back into the original potentially replacing existing columns.
+  Options are passed into the [[->dataset]] function so you can control the resulting
+  column types by the usual dataset parsing options described there.
+
+  Examples:
+
+```clojure
+user> (def stocks (ds/->dataset \"test/data/stocks.csv\"))
+#'user/stocks
+user> (ds/head stocks)
+test/data/stocks.csv [5 3]:
+
+| symbol |       date | price |
+|--------|------------|------:|
+|   MSFT | 2000-01-01 | 39.81 |
+|   MSFT | 2000-02-01 | 36.35 |
+|   MSFT | 2000-03-01 | 43.22 |
+|   MSFT | 2000-04-01 | 28.37 |
+|   MSFT | 2000-05-01 | 25.45 |
+user> (ds/head (ds/row-map stocks (fn [row]
+                                    {\"symbol\" (keyword (row \"symbol\"))
+                                     :price2 (* (row \"price\")(row \"price\"))})))
+test/data/stocks.csv [5 4]:
+
+| symbol |       date | price |   :price2 |
+|--------|------------|------:|----------:|
+|  :MSFT | 2000-01-01 | 39.81 | 1584.8361 |
+|  :MSFT | 2000-02-01 | 36.35 | 1321.3225 |
+|  :MSFT | 2000-03-01 | 43.22 | 1867.9684 |
+|  :MSFT | 2000-04-01 | 28.37 |  804.8569 |
+|  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
+```"
+  [ds map-fn & [options]]
+  (merge ds (->> (rows ds)
+                 (map map-fn)
+                 (->>dataset options))))
 
 
 (defn column-cast

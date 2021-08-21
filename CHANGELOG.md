@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.015
+ * row-map - map a function across the rows of the dataset (represented as maps).  The result
+ should itself be a map and the dataset created from these maps will be merged back into
+ the original ds.
+
 ## 6.014
  * tech.v3.dataset.reductions/group-by-column-agg can take a tuple of column names in addition
    to a single column name.  In the case of a tuple the grouping will be the vector of column
