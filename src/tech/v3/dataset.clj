@@ -96,25 +96,73 @@
 
 (defn rows
   "Get the rows of the dataset as a list of flyweight maps.  This is a shorter form
-  of `mapseq-reader`."
+  of `mapseq-reader`.
+
+```clojure
+user> (take 5 (ds/rows stocks))
+({\"date\" #object[java.time.LocalDate 0x6c433971 \"2000-01-01\"],
+  \"symbol\" \"MSFT\",
+  \"price\" 39.81}
+ {\"date\" #object[java.time.LocalDate 0x28f96b14 \"2000-02-01\"],
+  \"symbol\" \"MSFT\",
+  \"price\" 36.35}
+ {\"date\" #object[java.time.LocalDate 0x7bdbf0a \"2000-03-01\"],
+  \"symbol\" \"MSFT\",
+  \"price\" 43.22}
+ {\"date\" #object[java.time.LocalDate 0x16d3871e \"2000-04-01\"],
+  \"symbol\" \"MSFT\",
+  \"price\" 28.37}
+ {\"date\" #object[java.time.LocalDate 0x47094da0 \"2000-05-01\"],
+  \"symbol\" \"MSFT\",
+  \"price\" 25.45})
+```"
   [ds]
   (mapseq-reader ds))
 
 
 (defn row-at
   "Get the row at an individual index.  If indexes are negative then the dataset
-  is indexed from the end."
+  is indexed from the end.
+
+```clojure
+user> (ds/row-at stocks 1)
+{\"date\" #object[java.time.LocalDate 0x534cb03b \"2000-02-01\"],
+ \"symbol\" \"MSFT\",
+ \"price\" 36.35}
+user> (ds/row-at stocks -1)
+{\"date\" #object[java.time.LocalDate 0x6bf60ed5 \"2010-03-01\"],
+ \"symbol\" \"AAPL\",
+ \"price\" 223.02}
+```"
   [ds idx]
   ((rows ds) idx))
 
 
 (defn rowvecs
-  "Return a randomly addressable list of rows in persisent vector-like form"
+  "Return a randomly addressable list of rows in persisent vector-like form.
+
+```clojure
+user> (take 5 (ds/rowvecs stocks))
+([\"MSFT\" #object[java.time.LocalDate 0x5be9e4c8 \"2000-01-01\"] 39.81]
+ [\"MSFT\" #object[java.time.LocalDate 0xf758e5 \"2000-02-01\"] 36.35]
+ [\"MSFT\" #object[java.time.LocalDate 0x752cc84d \"2000-03-01\"] 43.22]
+ [\"MSFT\" #object[java.time.LocalDate 0x7bad4827 \"2000-04-01\"] 28.37]
+ [\"MSFT\" #object[java.time.LocalDate 0x3a62c34a \"2000-05-01\"] 25.45])
+```"
   [ds]
   (value-reader ds))
 
 
 (defn rowvec-at
+  "Return a persisent-vector-like row at a given index.  Negative indexes index
+  from the end.
+
+```clojure
+user> (ds/rowvec-at stocks 1)
+[\"MSFT\" #object[java.time.LocalDate 0x5848b8b3 \"2000-02-01\"] 36.35]
+user> (ds/rowvec-at stocks -1)
+[\"AAPL\" #object[java.time.LocalDate 0x4b70b0d5 \"2010-03-01\"] 223.02]
+```"
   [ds idx]
   ((rowvecs ds) idx))
 
@@ -586,7 +634,7 @@ test/data/stocks.csv [5 4]:
 ```"
   [ds map-fn & [options]]
   (merge ds (->> (rows ds)
-                 (map map-fn)
+                 (dtype/emap map-fn :object)
                  (->>dataset options))))
 
 
