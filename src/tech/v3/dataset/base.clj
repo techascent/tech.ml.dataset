@@ -650,10 +650,11 @@
 
 
 (defn concat
-  "Concatenate datasets in place.  See also concat-copying as it may be more
-  efficient for your use case."
+  "Concatenate datasets in place using a copying-concatenation.
+  See also concat-inplace as it may be more efficient for your use case if you have
+  a small number (like less than 3) of datasets."
   [dataset & datasets]
-  (apply concat-inplace dataset datasets))
+  (apply concat-copying dataset datasets))
 
 
 (defn- sorted-int32-sequence

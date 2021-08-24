@@ -199,9 +199,16 @@
   (operational-elemwise-datatype [this]
     (if (.isEmpty missing)
       (dtype-proto/elemwise-datatype this)
-      (casting/widest-datatype (packing/unpack-datatype
-                                (dtype-proto/elemwise-datatype data))
-                               :float64)))
+      (let [ewise-dt (dtype-proto/elemwise-datatype data)]
+        (cond
+          (packing/packed-datatype? ewise-dt)
+          (packing/unpack-datatype ewise-dt)
+          (casting/numeric-type? ewise-dt)
+          (casting/widest-datatype ewise-dt :float64)
+          (identical? :boolean ewise-dt)
+          :object
+          :else
+          ewise-dt))))
   dtype-proto/PElemwiseCast
   (elemwise-cast [this new-dtype]
     (let [new-data (dtype-proto/elemwise-cast data new-dtype)]
@@ -472,16 +479,15 @@
   (if (== 0 (long n-empty))
     column
     (let [^Column column column
-          col-dtype (dtype/get-datatype column)
-          n-elems (dtype/ecount column)]
+          col-dtype (dtype/elemwise-datatype column)
+          n-elems (dtype/ecount column)
+          container (dtype/make-container col-dtype (+ n-elems n-empty))]
+      (dtype/copy! (.data column) (dtype/sub-buffer container 0 n-elems))
+      (dtype/set-constant! container n-elems n-empty (get column-base/dtype->missing-val-map
+                                                          col-dtype))
       (new-column
        (col-proto/column-name column)
-       (dtype/concat-buffers
-        col-dtype
-        [(.data column)
-         (dtype/const-reader
-          (get column-base/dtype->missing-val-map col-dtype)
-          n-empty)])
+       container
        (.metadata column)
        (dtype-proto/set-add-range! (dtype/clone (.missing column))
              (unchecked-int n-elems)

@@ -1280,6 +1280,14 @@
                         (ds/column :price2))))))
 
 
+(deftest extend-packed-date-with-empty
+  (let [ds-a (ds/->dataset {:b (range 20)})
+        ds (ds/->dataset (repeat 10 {:a (dtype-dt/local-date)})
+                         {:parser-fn {:a :packed-local-date}})
+        fin-ds (merge ds-a ds)]
+    (is (not (nil? (.toString (fin-ds :a)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
