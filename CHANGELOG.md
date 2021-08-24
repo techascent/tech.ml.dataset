@@ -1,4 +1,6 @@
 # Changelog
+## 6.016
+ * Fixed dtype/writer? queries to accurately reflect actual situations.
 
 ## 6.015
  * row-map - map a function across the rows of the dataset (represented as maps).  The result
