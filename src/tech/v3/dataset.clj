@@ -23,7 +23,7 @@
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
             [clojure.set :as set])
-  (:import [java.util List Iterator Collection ArrayList Random]
+  (:import [java.util List Iterator Collection ArrayList Random Arrays]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype PrimitiveList]
            [clojure.lang IFn])
@@ -273,6 +273,57 @@ user> (ds/rowvec-at stocks -1)
    (sample dataset n nil))
   ([dataset]
    (sample dataset 5 nil)))
+
+
+(defn min-n-by-column
+  "Find the minimum N entries (unsorted) by column.  Resulting data will be indexed in
+  original order. If you want a sorted order then sort the result.
+
+  See options to [[sort-by-column]].
+
+  Example:
+
+```clojure
+user> (ds/min-n-by-column ds \"price\" 10 nil nil)
+test/data/stocks.csv [10 3]:
+
+| symbol |       date | price |
+|--------|------------|------:|
+|   AMZN | 2001-09-01 |  5.97 |
+|   AMZN | 2001-10-01 |  6.98 |
+|   AAPL | 2000-12-01 |  7.44 |
+|   AAPL | 2002-08-01 |  7.38 |
+|   AAPL | 2002-09-01 |  7.25 |
+|   AAPL | 2002-12-01 |  7.16 |
+|   AAPL | 2003-01-01 |  7.18 |
+|   AAPL | 2003-02-01 |  7.51 |
+|   AAPL | 2003-03-01 |  7.07 |
+|   AAPL | 2003-04-01 |  7.11 |
+user> (ds/min-n-by-column ds \"price\" 10 > nil)
+test/data/stocks.csv [10 3]:
+
+| symbol |       date |  price |
+|--------|------------|-------:|
+|   GOOG | 2007-09-01 | 567.27 |
+|   GOOG | 2007-10-01 | 707.00 |
+|   GOOG | 2007-11-01 | 693.00 |
+|   GOOG | 2007-12-01 | 691.48 |
+|   GOOG | 2008-01-01 | 564.30 |
+|   GOOG | 2008-04-01 | 574.29 |
+|   GOOG | 2008-05-01 | 585.80 |
+|   GOOG | 2009-11-01 | 583.00 |
+|   GOOG | 2009-12-01 | 619.98 |
+|   GOOG | 2010-03-01 | 560.19 |
+```"
+  ([dataset cname N comparator options]
+   (let [^ints indexes (argops/arg-min-n N comparator options (column dataset cname))]
+     (Arrays/sort indexes)
+     (-> (select-rows dataset indexes)
+         (vary-meta assoc :print-index-range (range N)))))
+  ([dataset cname N comparator]
+   (min-n-by-column dataset cname N comparator nil))
+  ([dataset cname N]
+   (min-n-by-column dataset cname N nil nil)))
 
 
 (defn rand-nth
