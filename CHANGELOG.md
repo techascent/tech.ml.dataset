@@ -2,6 +2,13 @@
 ## 6.019
  * [min-n-by-column](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-min-n-by-column) - Find the mininum N rows by column - uses guava minmaxheap under the covers.
    Sorting the result of this is an efficient way to find have a sorted top-N-type operation.
+ * Changed the default concatenation pathway to be copying by default.  This often times just
+   works better and results in much faster processing pipelines.
+ * Fixed a few issues with packed datatypes.
+ * Changed extend-column-with-empty so that it copies data.  I am less sure about this
+   change but it fixed an issue with packed datatypes at the cost that joins are often
+   no longer in place.  So if you get OOM errors now doing certain joins this change
+   is the culprit and we should back off and set it back to what it was.
 
 ## 6.016
  * Fixed dtype/writer? queries to accurately reflect actual situations.
