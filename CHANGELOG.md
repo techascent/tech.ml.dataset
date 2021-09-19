@@ -1,4 +1,7 @@
 # Changelog
+## 6.020
+ * Fix for missing datetime values causing descriptive stats to fail.
+ 
 ## 6.019
  * [min-n-by-column](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-min-n-by-column) - Find the mininum N rows by column - uses guava minmaxheap under the covers.
    Sorting the result of this is an efficient way to find have a sorted top-N-type operation.

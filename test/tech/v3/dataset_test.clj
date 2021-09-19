@@ -1288,6 +1288,15 @@
     (is (not (nil? (.toString (fin-ds :a)))))))
 
 
+(deftest desc-stats-date-col
+  (let [src-ds  (tech.v3.dataset/->dataset
+                 {:date-time-with-nil ["Jul 1, 2011" nil]}
+                 {:parser-fn :local-date})
+        {:keys [min mean max]} (tech.v3.dataset/descriptive-stats src-ds)
+        val ((src-ds :date-time-with-nil) 0)]
+    (is (every? #(= % val) [(min 0) (mean 0) (max 0)]))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
