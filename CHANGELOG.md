@@ -1,4 +1,7 @@
 # Changelog
+## 6.021
+ * tech.v3.dataset.neanderthal/dense->dataset - creates a dataset with integer column names.
+
 ## 6.020
  * Fix for missing datetime values causing descriptive stats to fail.
  

@@ -407,8 +407,9 @@
                              (map-indexed (fn [idx column]
                                             (let [cname (ds-col-proto/column-name
                                                          column)]
-                                              (if (and (string? cname)
-                                                       (empty? cname))
+                                              (if (or (nil? cname)
+                                                      (and (string? cname)
+                                                           (empty? cname)))
                                                 (ds-col-proto/set-name column idx)
                                                 column)))))
              sizes (->> (map dtype/ecount column-seq)

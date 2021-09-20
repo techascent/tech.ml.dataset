@@ -11,7 +11,7 @@
 
 (defn dataset->dense
   "Convert a dataset into a dense neanderthal CPU matrix.  If the matrix
-  is column-major, then potentially you can get accerated copies from the dataset
+  is column-major, then potentially you can get accelerated copies from the dataset
   into neanderthal."
   ([dataset neanderthal-layout datatype]
    (let [[n-cols n-rows] (dtype/shape dataset)
