@@ -14,7 +14,7 @@ import clojure.lang.IMapEntry;
 import clojure.lang.ASeq;
 import clojure.lang.Util;
 import clojure.lang.RT;
-import primitive_math.Primitives;
+import com.github.ztellman.primitive_math.Primitives;
 import java.io.Serializable;
 import java.util.NoSuchElementException;
 import java.util.List;
