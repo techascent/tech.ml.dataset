@@ -57,7 +57,7 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.parallel.for :as parallel-for]
-            [primitive-math :as pmath])
+            [com.github.ztellman.primitive-math :as pmath])
   (:import [tech.v3.datatype IndexReduction Buffer PrimitiveList]
            [java.util Map Map$Entry HashMap List Set HashSet ArrayList]
            [java.util.concurrent ConcurrentHashMap ArrayBlockingQueue]

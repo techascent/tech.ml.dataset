@@ -5,7 +5,7 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.native-buffer :as native-buffer]
             [tech.v3.datatype.errors :as errors]
-            [primitive-math :as pmath])
+            [com.github.ztellman.primitive-math :as pmath])
   (:import [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype Buffer ObjectReader BooleanBuffer]
            [tech.v3.dataset Text]

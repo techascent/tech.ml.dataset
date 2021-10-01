@@ -1,4 +1,8 @@
 # Changelog
+## 6.022
+ * Moved ztellman's primitive-math library into datatype under specific namespace
+   prefix due to dtype-next [issue 41](https://github.com/cnuernber/dtype-next/issues/41).
+
 ## 6.021
  * tech.v3.dataset.neanderthal/dense->dataset - creates a dataset with integer column names.
 

@@ -12,7 +12,7 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
-            [primitive-math :as pmath]
+            [com.github.ztellman.primitive-math :as pmath]
             [clojure.set :as set])
   (:import [tech.v3.datatype ObjectReader PrimitiveList Buffer
             BinaryPredicate BinaryOperator

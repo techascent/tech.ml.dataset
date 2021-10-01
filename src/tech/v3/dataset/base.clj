@@ -20,7 +20,7 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
-            [primitive-math :as pmath]
+            [com.github.ztellman.primitive-math :as pmath]
             [clojure.set :as set])
   (:import [java.io InputStream File]
            [tech.v3.datatype Buffer ObjectReader PrimitiveList

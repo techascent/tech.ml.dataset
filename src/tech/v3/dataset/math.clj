@@ -25,7 +25,7 @@
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
             [tech.v3.parallel.for :as parallel-for]
-            [primitive-math :as pmath]
+            [com.github.ztellman.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
   (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]

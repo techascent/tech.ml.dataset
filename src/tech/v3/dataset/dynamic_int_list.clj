@@ -8,7 +8,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.parallel.for :as parallel-for]
-            [primitive-math :as pmath])
+            [com.github.ztellman.primitive-math :as pmath])
   (:import [java.util List Iterator]
            [tech.v3.datatype PrimitiveList LongBuffer BooleanConversions]
            [tech.v3.datatype.list ListImpl]))
