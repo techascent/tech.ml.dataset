@@ -3,8 +3,8 @@
             [tech.v3.dataset.modelling :as ds-mod]
             [tech.v3.protocols.dataset :as prot])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
-                            rand-nth update])
-  )
+                            rand-nth update]))
+  
 
 (defn dataset?
   "Is `ds` a `dataset` type?"
@@ -15,7 +15,7 @@
   [f m]
   (let [args (map (comp vec rest) (:arglists m))
         doc-string (:doc m)]
-    `(defn ~(symbol (name f)) {:doc ~doc-string}
+    `(defn ~(symbol (name f)) {:doc ~doc-string :orig (symbol (var ~f))}
        ~@(for [arg args
                :let [narg (mapv #(if (map? %) 'options %) arg)
                      [a & r] (split-with (partial not= '&) narg)]]
@@ -59,9 +59,18 @@
 (process-all-api-symbols-dataset-modelling)
 
 (comment
-  (ns-publics 'tech.v3.dataset.metamorph)
+  (->
+   (ns-publics 'tech.v3.dataset.metamorph)
+   first
+   second
+   meta
+    :orig
+    clojure.repl/source-fn)
 
 
+
+
+  (symbol "tech.v3.dataset/missing")
   (def data
     (ds/->dataset {:a [1]}))
 
@@ -69,7 +78,7 @@
 
    (feature-ecount)
    {
-    :metamorph/data  data}
-   )
+    :metamorph/data  data}))
+   
 
-  )
+  
