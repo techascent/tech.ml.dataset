@@ -329,7 +329,9 @@
       :spearman (dfn/spearmans-correlation col other-column)
       :kendall (dfn/kendalls-correlation col other-column)))
   (select [col idx-rdr]
-    (let [idx-rdr (->efficient-reader idx-rdr)]
+    (let [idx-rdr (if (= (dtype/elemwise-datatype idx-rdr) :boolean)
+                    (->efficient-reader (keep-indexed #(when (true? %2) %1) idx-rdr))
+                    (->efficient-reader idx-rdr))]
       (if (== 0 (dtype/ecount missing))
         ;;common case
         (let [bitmap (->bitmap)
