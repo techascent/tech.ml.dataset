@@ -274,6 +274,15 @@
            (vec ((ds-join/pd-merge ds-a ds-b {:how :cross}) :right.c))))))
 
 
+(deftest double-join
+  (let [a (ds/->dataset [{:name "a" :a 1.0 :b 2.0}
+                         {:name "b" :a 1.0 :b 2.0}
+                         {:name "c" :a 1.0 :b 2.0}])
+        b (ds/->dataset [{:name "a" :c 1.0}
+                         {:name "b" :c 1.0}])]
+    (ds-join/left-join :name a b)))
+
+
 (comment
 
   (def lhs-fields

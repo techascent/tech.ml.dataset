@@ -1,4 +1,8 @@
 # Changelog
+## 6.023
+ * [issue 270](https://github.com/techascent/tech.ml.dataset/issues/270) - join with double columns was failing 
+   due to set-constant issue in dtype-next.
+
 ## 6.022
  * Moved ztellman's primitive-math library into datatype under specific namespace
    prefix due to dtype-next [issue 41](https://github.com/cnuernber/dtype-next/issues/41).
