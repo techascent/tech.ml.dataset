@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.column-tests
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.dataset :as ds]
+            [tech.v3.dataset.column :as col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.dataset.column-filters :as cf]
             [clojure.test :refer [deftest is]]))
@@ -39,3 +40,10 @@
     (is (= (ds/drop-columns DS cf/numeric)
            (ds/remove-columns DS cf/numeric)
            (ds/select-columns DS [:C])))))
+
+(deftest select-columns-test
+  (let [c (col/new-column :test [0 1 2 3 4 5])]
+    (is (= [0 1 2]
+           (col/select c [0 1 2])))
+    (is (= [0 1 2]
+           (col/select c (dfn/< c 3))))))
