@@ -2,6 +2,7 @@
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.statistics :as stats]
@@ -330,7 +331,8 @@
       :kendall (dfn/kendalls-correlation col other-column)))
   (select [col idx-rdr]
     (let [idx-rdr (if (= (dtype/elemwise-datatype idx-rdr) :boolean)
-                    (->efficient-reader (keep-indexed #(when (true? %2) %1) idx-rdr))
+                    (->efficient-reader (un-pred/bool-reader->indexes
+                                         (dtype/ensure-reader idx-rdr)))
                     (->efficient-reader idx-rdr))]
       (if (== 0 (dtype/ecount missing))
         ;;common case
