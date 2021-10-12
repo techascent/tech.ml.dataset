@@ -10,6 +10,7 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.list :as dtype-list]
+            [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
@@ -263,7 +264,9 @@
        lmin lmax (dec (row-count dataset)))))
   (let [index-seq (if (number? index-seq)
                     [index-seq]
-                    index-seq)]
+                    (if (= :buffer (dtype/elemwise-datatype index-seq))
+                      (un-pred/bool-reader->indexes (dtype/ensure-reader index-seq))
+                      index-seq))]
     (if-not (or (nil? colname-seq)
                 (and (sequential? colname-seq)
                      (nil? (seq colname-seq))))
