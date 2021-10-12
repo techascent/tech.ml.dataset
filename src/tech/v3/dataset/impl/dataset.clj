@@ -6,6 +6,7 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.argtypes :as argtypes]
+            [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
@@ -296,7 +297,9 @@
                                (max -1 rend)
                                rinc)))
                     (dtype/reader? index-seq)
-                    (dtype/->reader index-seq)
+                    (if (= :boolean (dtype/elemwise-datatype index-seq))
+                      (un-pred/bool-reader->indexes (dtype/ensure-reader index-seq))
+                      (dtype/->reader index-seq))
                     :else
                     (dtype/->reader (dtype/make-container
                                      :jvm-heap :int32
