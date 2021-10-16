@@ -377,9 +377,24 @@
   (count [this] (int (dtype/ecount data)))
   Indexed
   (nth [this idx]
-    (.get (.data (cached-vector!)) (long idx)))
+    (let [idx (long idx)
+          orig-idx idx
+          n-elems (dtype/ecount data)
+          idx (if (< idx 0) (+ n-elems idx) idx)]
+      (if (and (>= idx 0)
+               (< idx n-elems))
+        ((cached-vector!) idx)
+        (throw (Exception. (format "Index %d is out of range [%d, %d]"
+                                   orig-idx (- n-elems) (dec n-elems))))))
+    ((cached-vector!) idx))
   (nth [this idx def-val]
-    (.nth (cached-vector!) idx def-val))
+    (let [idx (long idx)
+          n-elems (dtype/ecount data)
+          idx (if (< idx 0) (+ n-elems idx) idx)]
+      (if (and (>= idx 0)
+               (< idx n-elems))
+        ((cached-vector!) idx)
+        def-val)))
   IFn
   (invoke [this idx]
     ((cached-vector!) idx))

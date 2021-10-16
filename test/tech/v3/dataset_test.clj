@@ -1297,6 +1297,15 @@
     (is (every? #(= % val) [(min 0) (mean 0) (max 0)]))))
 
 
+(deftest nth-col-neg-indexes
+  (let [data ((ds/->dataset {:a (range 10)}) :a)]
+    (is (thrown? Throwable (nth data 10)))
+    (is (= :a (nth data 10 :a)))
+    (is (thrown? Throwable (nth data -11)))
+    (is (= :a (nth data -11 :a)))
+    (is (= 0 (nth data -10 :a)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

@@ -1,6 +1,13 @@
 # Changelog
+
+## 6.024
+ * nth is now correct on columns with negative indexes - see unit test.
+ * nth is now correct on many more dtype types with negative indexes - see dtype-next unit tests.
+ * [shift](https://cnuernber.github.io/dtype-next/tech.v3.datatype.functional.html#var-shift) functionality is included in dtype-next.
+
+
 ## 6.023
- * [issue 270](https://github.com/techascent/tech.ml.dataset/issues/270) - join with double columns was failing 
+ * [issue 270](https://github.com/techascent/tech.ml.dataset/issues/270) - join with double columns was failing
    due to set-constant issue in dtype-next.
 
 ## 6.022
@@ -12,7 +19,7 @@
 
 ## 6.020
  * Fix for missing datetime values causing descriptive stats to fail.
- 
+
 ## 6.019
  * [min-n-by-column](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-min-n-by-column) - Find the mininum N rows by column - uses guava minmaxheap under the covers.
    Sorting the result of this is an efficient way to find have a sorted top-N-type operation.
