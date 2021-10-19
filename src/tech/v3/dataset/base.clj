@@ -266,7 +266,7 @@
        lmin lmax (dec (row-count dataset)))))
   (let [selection (if (number? selection)
                     [selection]
-                    (if (= :buffer (dtype/elemwise-datatype selection))
+                    (if (= :boolean (dtype/elemwise-datatype selection))
                       (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
                       selection))]
     (if-not (or (nil? colname-seq)
