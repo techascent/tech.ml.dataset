@@ -8,6 +8,7 @@
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.join :as ds-join]
+            [tech.v3.datatype.rolling :as rolling]
             [tech.v3.dataset.test-utils :as test-utils]
             [tech.v3.dataset.column-filters :as cf]
             ;;Loading multimethods required to load the files
@@ -1304,6 +1305,24 @@
     (is (thrown? Throwable (nth data -11)))
     (is (= :a (nth data -11 :a)))
     (is (= 0 (nth data -10 :a)))))
+
+
+(deftest column-rolling-regression
+  (is (every? identity (dfn/eq
+                        [##NaN 2.0 2.5 3.5]
+                        (rolling/fixed-rolling-window
+                         ((ds/->dataset {:a [##NaN 2 3 4]}) :a)
+                         2 dfn/mean))))
+  (is (every? identity (dfn/eq
+                        [##NaN 2.0 2.5 3.5]
+                        (rolling/fixed-rolling-window
+                         (ds-col/new-column [nil 2 3 4])
+                         2 dfn/mean))))
+  (is (every? identity (dfn/eq
+                        [##NaN 2.0 2.5 3.5]
+                        (rolling/fixed-rolling-window
+                         (ds-col/new-column (double-array [##NaN 2 3 4]))
+                         2 dfn/mean)))))
 
 
 (comment

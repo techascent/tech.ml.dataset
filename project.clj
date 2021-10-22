@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "8.033"]
+                 [cnuernber/dtype-next             "8.036"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -33,10 +33,10 @@
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-unsafe "2.0.0" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-core "2.0.0" :scope "provided"
+                 [org.apache.arrow/arrow-memory-netty "5.0.0" :scope "provided"]
+                 [org.apache.arrow/arrow-memory-core "5.0.0" :scope "provided"
                   :exclusions [org.slf4j/slf4j-api]]
-                 [org.apache.arrow/arrow-vector "2.0.0"
+                 [org.apache.arrow/arrow-vector "5.0.0"
                   :exclusions [commons-codec
                                com.fasterxml.jackson.core/jackson-core
                                com.fasterxml.jackson.core/jackson-annotations
@@ -66,6 +66,8 @@
               :source-paths ["src"]
               :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}
+             :jdk-17 {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
+                                 "--enable-native-access=ALL-UNNAMED"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]
                              [codox "0.10.7" :exclusions [org.ow2.asm/asm-all]]]
