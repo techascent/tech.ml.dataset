@@ -32,7 +32,7 @@ RAM and purely for performance on top of the
 namespace.
 
 
-Large aggregations of potentially out-of-memory datasets are represented by a sequence of datatsets.
+Large aggregations of potentially out-of-memory datasets are represented by a sequence of datasets.
 This is consistent with the design of the parquet and arrow data storage systems and aggregation
 operations involving large-scale datasets are efficiently implemented in the
 [tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) namespace.  We have

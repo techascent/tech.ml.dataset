@@ -38,9 +38,9 @@ user> (ds-reduce/group-by-column-agg
 |    MSFT |  24.73674797 |    9127.86 |  24.07277778 |
 |    AMZN |  47.98707317 |   17707.23 |  41.35142361 |
 |    GOOG | 415.87044118 |   84837.57 | 422.69722222 |
-  ```
+```
 
-    * [zero-one benchmark winner](https://github.com/zero-one-group/geni-performance-benchmark/blob/da4d02e54de25a72214f72c4864ebd3d307520f8/dataset/src/dataset/optimised_by_chris.clj)"
+  * [zero-one benchmark winner](https://github.com/zero-one-group/geni-performance-benchmark/blob/da4d02e54de25a72214f72c4864ebd3d307520f8/dataset/src/dataset/optimised_by_chris.clj)"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.errors :as errors]
