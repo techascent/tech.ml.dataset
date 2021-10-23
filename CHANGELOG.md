@@ -337,7 +337,7 @@ Itemized Changes:
 #### Arrow Support
  * Proper arrow support.  In-place or accelerated copy pathway into the jvm.
  * 'tech.libs.arrow` exposes a few functions to dive through arrow files and
-   product datatsets.  Right now only stream file format is supported.
+   product datasets.  Right now only stream file format is supported.
    Copying is supported via their blessed API.  In-place is supported by
    a more or less clean room implementation using memory mapped files.  There
    will be a blog post on this soon.
@@ -372,7 +372,7 @@ Itemized Changes:
 ## 3.02
  * Issue 98 - Reading csv/xlsx files sometimes produce numbers which breaks setting
    colnames to keywords.
- * Issue 113 - NPE when doing hasheq on empty datatset
+ * Issue 113 - NPE when doing hasheq on empty dataset
  * Issue 114 - Columns now have full hasheq implementation - They are
    `IPersisentCollections`.
 
