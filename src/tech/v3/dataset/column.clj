@@ -110,10 +110,13 @@ Implementations should check their metadata before doing calculations."
 
 
 (defn select
-  "Return a new column with the subset of indexes"
-  [col idx-seq]
-  (col-proto/select col idx-seq))
-
+  "Return a new column with the subset of indexes based on the provided `selection`.
+  `selection` can be a list of indexes to select or boolean values where the index
+  position of each true element indicates a index to select. When supplying a list
+  of indices, duplicates are possible and will select the specified position more
+  than once."  
+  [col selection]
+  (col-proto/select col selection))
 
 (defn clone
   "Clone this column not changing anything."
