@@ -2,6 +2,7 @@
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.statistics :as stats]
@@ -328,25 +329,28 @@
       :pearson (dfn/pearsons-correlation col other-column)
       :spearman (dfn/spearmans-correlation col other-column)
       :kendall (dfn/kendalls-correlation col other-column)))
-  (select [col idx-rdr]
-    (let [idx-rdr (->efficient-reader idx-rdr)]
+  (select [col selection]
+    (let [selection (if (= (dtype/elemwise-datatype selection) :boolean)
+                    (->efficient-reader (un-pred/bool-reader->indexes
+                                         (dtype/ensure-reader selection)))
+                    (->efficient-reader selection))]
       (if (== 0 (dtype/ecount missing))
         ;;common case
         (let [bitmap (->bitmap)
-              new-data (dtype/indexed-buffer idx-rdr data)]
+              new-data (dtype/indexed-buffer selection data)]
           (Column. bitmap
                    new-data
                    metadata
                    nil
                    (delay (make-index-structure data metadata))))
         ;;Uggh.  Construct a new missing set
-        (let [idx-rrdr (dtype/->reader idx-rdr)
+        (let [idx-rrdr (dtype/->reader selection)
               n-idx-elems (.lsize idx-rrdr)
               ^RoaringBitmap result-set (->bitmap)]
           (dotimes [idx n-idx-elems]
             (when (.contains missing (.readLong idx-rrdr idx))
               (.add result-set idx)))
-          (let [new-data (dtype/indexed-buffer idx-rdr data)]
+          (let [new-data (dtype/indexed-buffer selection data)]
             (Column. result-set
                      new-data
                      metadata

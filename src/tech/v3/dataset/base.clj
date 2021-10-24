@@ -10,6 +10,7 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.list :as dtype-list]
+            [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
@@ -250,24 +251,28 @@
        selected columns are subsequently named after the corresponding value in the map.
        similar to `rename-columns` except this trims the result to be only the columns
        in the map.
-  index-seq - either keyword :all or list of indexes.  May contain duplicates.
+  selection - either keyword :all, a list of indexes to select, or a list of booleans where
+    the index position of each true value indicates an index to select. When providing indices,
+    duplicates will select the specified index position more than once.
   "
-  [dataset colname-seq index-seq]
-  (when (and index-seq (dtype-proto/has-constant-time-min-max? index-seq))
-    (let [lmin (long (dtype-proto/constant-time-min index-seq))
-          lmax (long (dtype-proto/constant-time-max index-seq))]
+  [dataset colname-seq selection]
+  (when (and selection (dtype-proto/has-constant-time-min-max? selection))
+    (let [lmin (long (dtype-proto/constant-time-min selection))
+          lmax (long (dtype-proto/constant-time-max selection))]
       (errors/when-not-errorf
        (and (< lmax (row-count dataset))
             (>= lmin 0))
        "Index sequence range [%d-%d] out of dataset row range [0-%d]"
        lmin lmax (dec (row-count dataset)))))
-  (let [index-seq (if (number? index-seq)
-                    [index-seq]
-                    index-seq)]
+  (let [selection (if (number? selection)
+                    [selection]
+                    (if (= :boolean (dtype/elemwise-datatype selection))
+                      (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
+                      selection))]
     (if-not (or (nil? colname-seq)
                 (and (sequential? colname-seq)
                      (nil? (seq colname-seq))))
-      (ds-proto/select dataset colname-seq index-seq)
+      (ds-proto/select dataset colname-seq selection)
       (ds-impl/empty-dataset))))
 
 (defn select-by-index
