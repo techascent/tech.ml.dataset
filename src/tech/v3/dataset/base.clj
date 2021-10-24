@@ -251,9 +251,9 @@
        selected columns are subsequently named after the corresponding value in the map.
        similar to `rename-columns` except this trims the result to be only the columns
        in the map.
-  selection - either keyword :all, a list of indexes, or a logical buffer where true
-    indicates a position to select. When providing indices, duplicates will select their
-    position more than once.
+  selection - either keyword :all, a list of indexes to select, or a list of booleans where
+    the index position of each true value indicates an index to select. When providing indices,
+    duplicates will select the specified index position more than once.
   "
   [dataset colname-seq selection]
   (when (and selection (dtype-proto/has-constant-time-min-max? selection))
