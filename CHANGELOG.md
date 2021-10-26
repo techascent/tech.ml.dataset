@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.025
+ * [locker](https://cnuernber.github.io/dtype-next/tech.v3.datatype.locker.html) - an efficient
+   and threadsafe way to manipulate global variables.
+ * [dtype-next issue 42] - elemwise cast on column failed with specific example.
+
 ## 6.024
  * nth is now correct on columns with negative indexes - see unit test.
  * nth is now correct on many more dtype types with negative indexes - see dtype-next unit tests.
