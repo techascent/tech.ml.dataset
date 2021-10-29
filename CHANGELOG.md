@@ -1,4 +1,7 @@
 # Changelog
+## 6.026
+ * Minor upgrade - ds/concat returns nil of all arguments are nil or nothing is passed in.
+ This matches the behavior of concat.
 
 ## 6.025
  * [locker](https://cnuernber.github.io/dtype-next/tech.v3.datatype.locker.html) - an efficient
