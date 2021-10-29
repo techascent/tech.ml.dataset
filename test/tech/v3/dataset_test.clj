@@ -1325,6 +1325,12 @@
                          2 dfn/mean)))))
 
 
+(deftest concat-nil-is-nil
+  (is (= nil (apply ds/concat nil)))
+  (is (= nil (apply ds/concat-copying nil)))
+  (is (= nil (apply ds/concat-inplace nil))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

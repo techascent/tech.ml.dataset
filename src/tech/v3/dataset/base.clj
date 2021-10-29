@@ -532,7 +532,7 @@
   "Sort a dataset by a given column using the given compare fn."
   ([dataset colname compare-fn & [options]]
    (when dataset
-     (->> (argops/argsort compare-fn options (packing/unpack (dataset colname)))
+     (->> (argops/argsort compare-fn options (packing/unpack (column dataset colname)))
           (select dataset :all))))
   ([dataset colname]
    (sort-by-column dataset colname nil)))
@@ -622,9 +622,10 @@
 (defn concat-inplace
   "Concatenate datasets in place.  Respects missing values.  Datasets must all have the
   same columns.  Result column datatypes will be a widening cast of the datatypes."
-  [dataset & datasets]
-  (do-concat #(dtype/concat-buffers %1 %2)
-             dataset datasets))
+  ([dataset & datasets]
+   (do-concat #(dtype/concat-buffers %1 %2)
+              dataset datasets))
+  ([] nil))
 
 
 (defn- coalesce-blocks!
@@ -644,22 +645,24 @@
   "Concatenate datasets into a new dataset copying data.  Respects missing values.
   Datasets must all have the same columns.  Result column datatypes will be a widening
   cast of the datatypes."
-  [dataset & datasets]
-  (let [datasets (->> (clojure.core/concat [dataset] (remove nil? datasets))
-                      (remove nil?)
-                      seq)
-        n-rows (long (reduce + (map row-count datasets)))]
-    (do-concat #(coalesce-blocks! (dtype/make-container :jvm-heap %1 n-rows)
-                                  %2)
-               (first datasets) (rest datasets))))
+  ([dataset & datasets]
+   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? datasets))
+                       (remove nil?)
+                       seq)
+         n-rows (long (reduce + (map row-count datasets)))]
+     (do-concat #(coalesce-blocks! (dtype/make-container :jvm-heap %1 n-rows)
+                                   %2)
+                (first datasets) (rest datasets))))
+  ([] nil))
 
 
 (defn concat
   "Concatenate datasets in place using a copying-concatenation.
   See also concat-inplace as it may be more efficient for your use case if you have
   a small number (like less than 3) of datasets."
-  [dataset & datasets]
-  (apply concat-copying dataset datasets))
+  ([dataset & datasets]
+   (apply concat-copying dataset datasets))
+  ([] nil))
 
 
 (defn- sorted-int32-sequence
