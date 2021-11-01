@@ -1331,6 +1331,17 @@
   (is (= nil (apply ds/concat-inplace nil))))
 
 
+(deftest replace-missing-whacks-metadata-274
+  (let [ds (-> (ds/->dataset {:a [0 nil 1 nil 2]})
+               (ds/update-column :a (fn [a-col]
+                                      (with-meta a-col {:a :b}))))
+        dsm (ds/replace-missing-value ds [:a] 10)
+        dsmm (ds/replace-missing ds [:a] :down)]
+    (is (= {:a :b} (select-keys (meta (ds :a)) [:a])))
+    (is (= {:a :b} (select-keys (meta (dsm :a)) [:a])))
+    (is (= {:a :b} (select-keys (meta (dsmm :a)) [:a])))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

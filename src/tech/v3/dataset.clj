@@ -429,9 +429,13 @@ test/data/stocks.csv [10 3]:
                         (let [missing (ds-col/missing col)]
                           (if (.isEmpty missing)
                             col
-                            (update-reader/update-reader
-                             col (bitmap/bitmap-value->bitmap-map
-                                  missing scalar-value)))))))
+                            (ds-col/new-column
+                             (:name (meta col))
+                             (update-reader/update-reader
+                              col (bitmap/bitmap-value->bitmap-map
+                                   missing scalar-value))
+                             (meta col)
+                             (bitmap/->bitmap)))))))
   ([dataset scalar-value]
    (replace-missing-value dataset identity scalar-value)))
 

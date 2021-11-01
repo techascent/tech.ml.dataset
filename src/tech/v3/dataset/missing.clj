@@ -47,9 +47,10 @@
                                 missing
                                 (casting/cast value
                                               (dtype/elemwise-datatype col)))))
-                  {} (if (map? value)
-                       (remove-from-rbitmap missing (keys value))
-                       (RoaringBitmap.))))
+                  (meta col)
+                  (if (map? value)
+                    (remove-from-rbitmap missing (keys value))
+                    (RoaringBitmap.))))
 
 (defn- missing-direction-prev
   ^long [^RoaringBitmap rb ^long idx]
