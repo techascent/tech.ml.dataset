@@ -1,4 +1,9 @@
 # Changelog
+
+## 6.027
+ * [issue 274](https://github.com/techascent/tech.ml.dataset/issues/274) - replace-missing drops metadata.
+ * Latest dtype-next - specifically new functions in jvm-map namespace.
+
 ## 6.026
  * Minor upgrade - ds/concat returns nil of all arguments are nil or nothing is passed in.
  This matches the behavior of concat.
