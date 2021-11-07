@@ -228,7 +228,18 @@
   value in each row and assign column that row value."
   [prob-ds dst-colname]
   (let [^List cnames (vec (ds-base/column-names prob-ds))
-        row-rdr (ds-readers/value-reader prob-ds)
+        idx-col (->> (ds-readers/value-reader prob-ds)
+                     (dtype/emap
+                      (fn [valvec]
+                        (let [rdr (dtype/->reader valvec :float64)]
+                          ;;scan for missing and throw
+                          (dotimes [idx (.lsize rdr)]
+                            (errors/when-not-errorf
+                             (Double/isFinite (.readDouble rdr idx))
+                             "Nan/infinite values not allowed in probability distributions"))
+                          (argops/argmax rdr)))
+                      :float64)
+                     (dtype/clone))
         cat-map (categorical/create-categorical-map
                  (->> (map-indexed vector cnames)
                       (into {})
@@ -239,9 +250,7 @@
         (assoc prob-ds dst-colname
                (ds-col/new-column
                 dst-colname
-                (dtype/emap argops/argmax
-                            :float64
-                            row-rdr)
+                idx-col
                 {:categorical? true
                  :categorical-map cat-map}
                 (ds-base/missing prob-ds)))]
