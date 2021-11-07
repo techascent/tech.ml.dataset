@@ -16,6 +16,8 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
+            [tech.v3.dataset.io.column-parsers :as column-parsers]
+            [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.categorical :as ds-cat]
             [tech.v3.dataset.utils :as ds-utils]
@@ -23,7 +25,9 @@
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
             [clojure.set :as set])
-  (:import [java.util List Iterator Collection ArrayList Random Arrays]
+  (:import [java.util List Iterator Collection ArrayList Random Arrays HashMap
+            LinkedHashMap]
+           [java.util.function Function]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype PrimitiveList]
            [clojure.lang IFn])
@@ -1059,3 +1063,63 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   ([ds]
    (brief ds {:stat-names (all-descriptive-stats-names)
               :n-categorical-values nil})))
+
+
+(defn induction
+  "Given a dataset and a function from dataset->row produce a new dataset.
+  induct-fn must have 2 arities - a no argument arity which produces a map of values
+  for the base case and a single argument arity which given a dataset produces a new
+  row.  The produced row will be merged with the current row and then added to the
+  dataset.
+
+  Options are same as the options used for [[->dataset]].
+
+Example:
+
+```clojure
+user> (ds/induction ds (fn
+                         ([] {:sum-of-previous-row 0 :sum-a 0 :sum-b 0})
+                         ([ds] {:sum-of-previous-row (dfn/sum (ds/rowvec-at ds -1))
+                                :sum-a (dfn/sum (ds :a))
+                                :sum-b (dfn/sum (ds :b))})))
+_unnamed [4 5]:
+
+| :a | :b | :sum-b | :sum-a | :sum-of-previous-row |
+|---:|---:|-------:|-------:|---------------------:|
+|  0 |  1 |    0.0 |    0.0 |                  0.0 |
+|  1 |  2 |    1.0 |    0.0 |                  1.0 |
+|  2 |  3 |    3.0 |    1.0 |                  5.0 |
+|  3 |  4 |    6.0 |    3.0 |                 14.0 |
+```"
+  [ds induct-fn & [options]]
+  (if (== 0 (row-count ds))
+    nil
+    (let [parse-context (parse-context/options->parser-fn options :object)
+          parsers (LinkedHashMap.)
+          key-fn (:key-fn options identity)
+          colparser-compute-fn (reify Function
+                                 (apply [this colname]
+                                   (let [col-idx (.size parsers)]
+                                     {:column-idx col-idx
+                                      :column-name (key-fn colname)
+                                      :column-parser (parse-context colname)})))
+          colname->parser (fn [colname]
+                            (:column-parser
+                             (.computeIfAbsent parsers colname
+                                               colparser-compute-fn)))
+          rows (rows ds)
+          n-rows (row-count ds)
+          cnames (column-names ds)
+          base-case (induct-fn)]
+      (loop [idx 0
+             last-result base-case]
+        (if (< idx n-rows)
+          (let [next-row (merge (rows idx) last-result)
+                rc (inc idx)]
+            (doseq [[k v] next-row]
+              (column-parsers/add-value! (colname->parser k) idx v))
+            (recur rc (induct-fn (parse-context/parsers->dataset options parsers rc))))
+          (let [final-ds (parse-context/parsers->dataset options parsers n-rows)]
+            (select-columns final-ds (distinct (clojure.core/concat
+                                                cnames
+                                                (column-names final-ds))))))))))
