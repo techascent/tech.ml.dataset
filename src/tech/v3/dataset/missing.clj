@@ -79,6 +79,18 @@
                                     (missing-map-fn secondary-f missing2))
         (replace-missing-with-value step1 missing2 value)))))
 
+(defn- replace-missing-with-abb
+  [col ^RoaringBitmap missing]
+  (let [^RoaringBitmap non-missing (doto (RoaringBitmap.)
+                                     (.add 0 (dtype/ecount col))
+                                     (.andNot missing)) ;; prepare non-missing indices
+        non-missing-cnt (.getCardinality non-missing) ;; how many non-missing we have
+        ;; bootstrap `non-missing-count` values from a column
+        samples1 (col/select col (repeatedly non-missing-cnt #(.select non-missing (rand-int non-missing-cnt))))
+        ;; bootstrap `missing-count` values for imputation from first bootstrap round
+        samples2 (col/select samples1 (repeatedly (.getCardinality missing) #(rand-int (dtype/ecount samples1))))]
+    (replace-missing-with-value col missing samples2)))
+
 ;; mid and range
 
 (defn- find-missing-ranges
@@ -198,6 +210,7 @@
              [missing-direction-prev missing-direction-next] col missing value)
       :up (replace-missing-with-direction
            [missing-direction-next missing-direction-prev] col missing value)
+      :abb (replace-missing-with-abb col missing)
       :lerp (replace-missing-with-lerp :lerp col missing)
       :nearest (replace-missing-with-nearest col missing)
       :midpoint (replace-missing-with-lerp :midpoint col missing)
@@ -221,6 +234,7 @@
   - `:nearest` - Use nearest of next or previous values.  `:mid` is an alias for `:nearest`.
   - `:midpoint` - Use midpoint of averaged values between previous and next nonmissing
      rows.
+  - `:abb` - Impute missing with approximate bayesian bootstrap.  See [r's ABB](https://search.r-project.org/CRAN/refmans/LaplacesDemon/html/ABB.html).
   - `:lerp` - Linearly interpolate values between previous and next nonmissing rows.
   - `:value` - Value will be provided - see below.
 

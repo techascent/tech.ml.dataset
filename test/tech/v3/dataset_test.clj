@@ -864,6 +864,15 @@
             (java.time.LocalDateTime/of 2020 10 1 1 1 1)]))))
 
 
+(deftest replace-missing-abb
+  (let [dtds (ds/->dataset {:a [nil nil nil 1.0 2  nil nil nil
+                                nil  nil 4   nil  11 nil nil]
+                            :b [2   2   2 nil nil nil nil nil
+                                nil 13   nil   3  4  5 5]})
+        fds (ds/replace-missing dtds :abb)]
+    (is (= 0 (dtype/ecount (ds/missing fds))))))
+
+
 (deftest dataset-column-nippy
   (let [ds (ds/->dataset {:a [1 2]
                           :datasets [(ds/->dataset [{:a 1}])
