@@ -1067,21 +1067,31 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 
 (defn induction
   "Given a dataset and a function from dataset->row produce a new dataset.
-  induct-fn must have 2 arities - a no argument arity which produces a map of values
-  for the base case and a single argument arity which given a dataset produces a new
-  row.  The produced row will be merged with the current row and then added to the
+  The produced row will be merged with the current row and then added to the
   dataset.
 
-  Options are same as the options used for [[->dataset]].
+  Options are same as the options used for [[->dataset]] in order for the
+  user to control the parsing of the return values of `induct-fn`.
+  A new dataset is returned.
 
 Example:
 
 ```clojure
-user> (ds/induction ds (fn
-                         ([] {:sum-of-previous-row 0 :sum-a 0 :sum-b 0})
-                         ([ds] {:sum-of-previous-row (dfn/sum (ds/rowvec-at ds -1))
-                                :sum-a (dfn/sum (ds :a))
-                                :sum-b (dfn/sum (ds :b))})))
+user> (def ds (ds/->dataset {:a [0 1 2 3] :b [1 2 3 4]}))
+#'user/ds
+user> ds
+_unnamed [4 2]:
+
+| :a | :b |
+|---:|---:|
+|  0 |  1 |
+|  1 |  2 |
+|  2 |  3 |
+|  3 |  4 |
+user> (ds/induction ds (fn [ds]
+                         {:sum-of-previous-row (dfn/sum (ds/rowvec-at ds -1))
+                          :sum-a (dfn/sum (ds :a))
+                          :sum-b (dfn/sum (ds :b))}))
 _unnamed [4 5]:
 
 | :a | :b | :sum-b | :sum-a | :sum-of-previous-row |
@@ -1110,7 +1120,7 @@ _unnamed [4 5]:
           rows (rows ds)
           n-rows (row-count ds)
           cnames (column-names ds)
-          base-case (induct-fn)]
+          base-case (induct-fn (->dataset []))]
       (loop [idx 0
              last-result base-case]
         (if (< idx n-rows)

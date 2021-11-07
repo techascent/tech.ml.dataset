@@ -1351,6 +1351,22 @@
     (is (= {:a :b} (select-keys (meta (dsmm :a)) [:a])))))
 
 
+(deftest induction-test
+  (let [induct-ds (-> (ds/->dataset {:a [0 1 2 3] :b [1 2 3 4]})
+                      (ds/induction (fn [ds]
+                                      {:sum-of-previous-row (dfn/sum (ds/rowvec-at ds -1))
+                                       :sum-a (dfn/sum (ds :a))
+                                       :sum-b (dfn/sum (ds :b))})))]
+    (is (= [0.0 1.0 3.0 6.0]
+           (induct-ds :sum-b)))
+
+    (is (= [0.0 0.0 1.0 3.0]
+           (induct-ds :sum-a)))
+
+    (is (= [0.0 1.0 5.0 14.0]
+           (induct-ds :sum-of-previous-row)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

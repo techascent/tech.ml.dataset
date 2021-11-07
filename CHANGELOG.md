@@ -1,5 +1,13 @@
 # Changelog
 
+## 6.029
+ * [issue 267](https://github.com/techascent/tech.ml.dataset/issues/267) - converting between
+   probability distributions back to labels quietly ignored NAN values leading to errors.
+ * [issue 273](https://github.com/techascent/tech.ml.dataset/issues/273) - Approximate Bayesian Bootstrap
+   implemented for replace-missing.
+ * [induction](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-induction) - create a new
+   dataset via induction over each row of a previous dataset.
+
 ## 6.027
  * [issue 274](https://github.com/techascent/tech.ml.dataset/issues/274) - replace-missing drops metadata.
  * Latest dtype-next - specifically new functions in jvm-map namespace.
