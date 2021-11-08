@@ -449,3 +449,8 @@
                           :gzipped? true})
         correct-ds (ds/->dataset "test/data/ames-train.csv.gz")]
     (is (= (ds/row-count correct-ds) (ds/row-count ds)))))
+
+
+(deftest pokemon-csv
+  (let [ds (ds/->dataset "test/data/pokemon.csv")]
+    (is (= "['Overgrow', 'Chlorophyll']" (first (ds "abilities"))))))

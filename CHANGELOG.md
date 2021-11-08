@@ -1,4 +1,7 @@
 # Changelog
+## 6.030
+ * [issue 275](https://github.com/techascent/tech.ml.dataset/issues/275) - pokemon.csv failed
+ to parse correctly due to quote issues.
 
 ## 6.029
  * [issue 267](https://github.com/techascent/tech.ml.dataset/issues/267) - converting between

@@ -93,12 +93,11 @@
   (if-let [csv-parser (:csv-parser options)]
     csv-parser
     (let [settings (CsvParserSettings.)
-          num-rows (or num-rows (:n-records options))
-          separator-seq (concat [\, \tab]
-                                (when separator
-                                  [(->character separator)]))]
-
-      (.detectFormatAutomatically settings (into-array Character/TYPE separator-seq))
+          num-rows (or num-rows (:n-records options))]
+      (when separator
+        (.detectFormatAutomatically settings
+                                    (into-array Character/TYPE
+                                                [(->character separator)])))
       (when num-rows
         (.setNumberOfRecordsToRead settings (if header-row?
                                               (inc (int num-rows))
@@ -236,7 +235,7 @@
 
 (defmethod ds-io/data->dataset :tsv
   [data options]
-  (load-csv data options))
+  (load-csv data (merge {:separator \tab} options)))
 
 
 (defmethod ds-io/data->dataset :txt
