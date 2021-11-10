@@ -375,7 +375,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
          ;;group by using this reducer followed by this consumer fn.
          _ (ds-reduce-impl/group-by-column-aggregate-impl
             colname
-            (ds-reduce-impl/aggregate-reducer (vals agg-map))
+            (ds-reduce-impl/aggregate-reducer (vals agg-map) options)
             (assoc options
                    :finalize-type
                    (fn [_column-value reduce-data]
@@ -437,7 +437,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 ```"
   ([agg-map options ds-seq]
    (let [cnames (vec (keys agg-map))
-         reducer (ds-reduce-impl/aggregate-reducer (vals agg-map))
+         reducer (ds-reduce-impl/aggregate-reducer (vals agg-map) options)
          ctx-map (ConcurrentHashMap.)]
      (doseq [ds ds-seq]
        (let [batch-data (.prepareBatch reducer ds)]

@@ -4,6 +4,7 @@
             [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.sampling :as dt-sample]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -15,7 +16,7 @@
            [java.util.function LongSupplier]
            [java.util.concurrent ConcurrentHashMap]
            [tech.v3.datatype IndexReduction Buffer Consumers$StagedConsumer
-            ObjectReader PrimitiveList ECount]
+            ObjectReader PrimitiveList ECount UnaryPredicate]
            [clojure.lang IFn]))
 
 
@@ -146,6 +147,10 @@
     (.finalize ^IndexReduction this ctx)))
 
 
+(defrecord AggReducerContext [^objects red-ctx
+                              ^UnaryPredicate filter-ctx])
+
+
 (defn aggregate-reducer
   "Create a reducer that aggregates to several other reducers.  Reducers are provided
   in a map of reducer-name->reducer and the result is a map of `reducer-name` ->
@@ -153,7 +158,7 @@
 
   This algorithm allows multiple input reducers to be combined into a single
   functional reducer for the reduction transparently from the outside caller."
-  ^IndexReduction [reducer-seq]
+  ^IndexReduction [reducer-seq options]
   ;;We group reducers that can share a context.  In that case they mutably change
   ;;themselves such that they all share reduction state via the above
   ;;combine-reducers! API.
@@ -187,9 +192,18 @@
         n-reducers (alength reducer-ary)]
     (reify IndexReduction
       (prepareBatch [this dataset]
-        (object-array (map #(.prepareBatch ^IndexReduction % dataset) reducer-ary)))
-      (reduceIndex [this ds-ctx obj-ctx idx]
-        (let [^objects ds-ctx ds-ctx
+        (AggReducerContext.
+         (object-array (map #(.prepareBatch ^IndexReduction % dataset) reducer-ary))
+         (when-let [reduce-filter (get options :index-filter)]
+           (argops/->unary-predicate (reduce-filter dataset)))))
+      (filterIndex [this agg-ctx idx]
+        (let [^AggReducerContext agg-ctx agg-ctx]
+          (if-let [^UnaryPredicate ffn (.filter-ctx agg-ctx)]
+            (.unaryLong ffn idx)
+            true)))
+      (reduceIndex [this agg-ctx obj-ctx idx]
+        (let [^AggReducerContext agg-ctx agg-ctx
+              ^objects ds-ctx (.red-ctx agg-ctx)
               ^objects obj-ctx (if obj-ctx
                                  obj-ctx
                                  (object-array n-reducers))]

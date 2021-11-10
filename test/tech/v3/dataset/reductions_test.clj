@@ -3,8 +3,10 @@
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype :as dtype]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is]])
+  (:import [tech.v3.datatype UnaryPredicate]))
 
 
 (deftest simple-reduction
@@ -27,6 +29,41 @@
                               (ds/->>dataset))
                          (ds/sort-by-column :symbol))]
     (is (= 5 (ds/row-count agg-ds)))
+    (is (dfn/equals (agg-ds :n-elems)
+                    (dfn/* 3 (single-price :n-elems))))
+    (is (dfn/equals (agg-ds :price-sum)
+                    (dfn/* 3 (single-price :price-sum))))
+    (is (dfn/equals (agg-ds :price-avg)
+                    (single-price :price-avg)))))
+
+
+(deftest simple-reduction-filtered
+  (let [stocks (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+        agg-ds (-> (ds-reduce/group-by-column-agg
+                    :symbol
+                    {:n-elems (ds-reduce/row-count)
+                     :price-avg (ds-reduce/mean :price)
+                     :price-sum (ds-reduce/sum :price)
+                     :symbol (ds-reduce/first-value :symbol)
+                     :n-dates (ds-reduce/count-distinct :date :int32)}
+                    {:index-filter (fn [dataset]
+                                      (let [rdr (dtype/->reader (dataset :price))]
+                                        (reify UnaryPredicate
+                                          (unaryLong [p idx]
+                                            (> (.readDouble rdr idx) 100.0)))))}
+                    [stocks stocks stocks])
+                   (ds/sort-by-column :symbol))
+        fstocks (ds/filter-column stocks :price #(> % 100.0))
+        single-price (->
+                         (->> (ds/group-by-column fstocks  :symbol)
+                              (map (fn [[k ds]]
+                                     {:symbol k
+                                      :n-elems (ds/row-count ds)
+                                      :price-sum (dfn/sum (ds :price))
+                                      :price-avg (dfn/mean (ds :price))}))
+                              (ds/->>dataset))
+                         (ds/sort-by-column :symbol))]
+    (is (= 4 (ds/row-count agg-ds)))
     (is (dfn/equals (agg-ds :n-elems)
                     (dfn/* 3 (single-price :n-elems))))
     (is (dfn/equals (agg-ds :price-sum)
