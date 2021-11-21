@@ -72,6 +72,8 @@
                 remove-rows
                 missing
                 drop-missing
+                select-missing
+                reverse-rows
                 add-or-update-column
                 assoc-ds
                 group-by->indexes

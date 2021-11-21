@@ -305,6 +305,10 @@ user> (ds-reduce/group-by-column-agg
 
   * `:map-initial-capacity` - initial hashmap capacity.  Resizing hash-maps is expensive so we
      would like to set this to something reasonable.  Defaults to 100000.
+  * `:index-filter` - A function that given a dataset produces a function from long index
+    to boolean.  Only indexes for which the index-filter returns true will be added to the
+    aggregation.  For very large datasets, this is a bit faster than using filter before
+    the aggregation.
 
   Example:
 

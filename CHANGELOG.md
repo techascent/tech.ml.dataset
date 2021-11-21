@@ -1,4 +1,12 @@
 # Changelog
+## 6.031
+ * Upgrade to latest dtype-next - fix for ternary <,<=,>,>= in dfn namespace.
+ * dtype-next's main api now includes efficient in-place reverse.
+ * reverse-rows - reverse the order of the rows of the dataset.
+ * select-missing - select only rows where one of the columns has a missing value.
+ * The high performance aggregations in the reduce namespace  now support a specialized 
+   filter argument to filter out a row index very late in the process.
+
 ## 6.030
  * [issue 275](https://github.com/techascent/tech.ml.dataset/issues/275) - pokemon.csv failed
  to parse correctly due to quote issues.

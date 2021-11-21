@@ -35,7 +35,7 @@
             ArrayList LinkedHashSet]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
-  (:refer-clojure :exclude [filter group-by sort-by concat take-nth]))
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth reverse]))
 
 
 (set! *warn-on-reflection* true)
@@ -434,6 +434,22 @@
   "Remove missing entries by simply selecting out the missing indexes"
   [dataset-or-col]
   (drop-rows dataset-or-col (missing dataset-or-col)))
+
+
+(defn select-missing
+  "Remove missing entries by simply selecting out the missing indexes"
+  [dataset-or-col]
+  (select-rows dataset-or-col (missing dataset-or-col)))
+
+
+(defn reverse-rows
+  "Reverse the rows in the dataset or column."
+  [dataset-or-col]
+  (if (empty? dataset-or-col)
+    dataset-or-col
+    (let [rc (row-count dataset-or-col)
+          rev-range (dtype/reverse (range rc))]
+      (select-rows dataset-or-col rev-range))))
 
 
 (defn supported-column-stats
