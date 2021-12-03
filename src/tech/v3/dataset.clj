@@ -183,7 +183,7 @@
            (first))
 ```"
   ([expr name & args]
-  `(apply tech.v3.dataset-api/bind-> ~expr ~name ~@args)))
+  `(tech.v3.dataset-api/bind-> ~expr ~name ~@args)))
 
 
 (defn brief
