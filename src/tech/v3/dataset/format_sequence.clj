@@ -31,7 +31,7 @@
   (loop [a alpha
          d digits]
     (let [a- (/ a 10.0)]
-      (if (and (= a- (Math/floor a-)))
+      (if (= a- (Math/floor a-))
         (recur a- (dec d))
         (max 1 d)))))
 
@@ -105,11 +105,6 @@
          w (max non-finite-len (if e?
                                  (+ lft rght exp 3) ;; 3 = "." + sign of E + "E"
                                  (+ lft rght 1))) ;; 1 for "."
-         ;;cl-format string definitions, keeping because we may want them.
-         fmt (if e?
-               (str "~" w "," rght "," exp "E")
-               (str "~" w "," rght "F"))
-         non-finite-fmt (str "~" w "@A")
 
          deci-format-str (apply str (concat ["0."]
                                             (repeat rght "0")
@@ -121,19 +116,19 @@
          non-finite-format (str "%" w "s")]
      (fn [x]
        (let [^double x (or x ##NaN)
-             finite? (Double/isFinite x)]
-         (let [^String unspaced (if (Double/isFinite x)
-                                  (.format deci-format x)
-                                  (cond
-                                    (== ##Inf x) "Inf"
-                                    (== ##-Inf x) "-Inf"
-                                    :else "NaN"))]
-           (String/format non-finite-format
-                          (object-array [(if (and e? finite?
-                                                  (== -1 (.lastIndexOf unspaced "E-")))
+             finite? (Double/isFinite x)
+             ^String unspaced (if (Double/isFinite x)
+                                (.format deci-format x)
+                                (cond
+                                  (== ##Inf x) "Inf"
+                                  (== ##-Inf x) "-Inf"
+                                  :else "NaN"))]
+         (String/format non-finite-format
+                        (object-array [(if (and e? finite?
+                                                (== -1 (.lastIndexOf unspaced "E-")))
                                            ;;Insert the + sign
-                                           (.replace unspaced "E" "E+")
-                                           unspaced)]))))))))
+                                         (.replace unspaced "E" "E+")
+                                         unspaced)])))))))
 
 (defn format-sequence
   "Format sequence of double for given:

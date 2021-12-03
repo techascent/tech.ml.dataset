@@ -6,7 +6,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype :as dtype]
             [clojure.tools.logging :as log])
-  (:import [java.util Map List]
+  (:import [java.util Map]
            [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]))
 

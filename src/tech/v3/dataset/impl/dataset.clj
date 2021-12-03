@@ -11,11 +11,9 @@
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native])
-  (:import [java.io Writer]
-           [clojure.lang IPersistentMap IObj IFn Counted Indexed MapEntry]
+  (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry]
            [java.util Map List LinkedHashSet]
-           [tech.v3.datatype ObjectReader]
-           [org.roaringbitmap RoaringBitmap]))
+           [tech.v3.datatype ObjectReader]))
 
 
 (set! *warn-on-reflection* true)
@@ -130,25 +128,25 @@
   java.util.Map
   (size [this]    (.count this))
   (isEmpty [this] (not (pos? (.count this))))
-  (containsValue [this v] (some #(= % v) columns))
+  (containsValue [_this v] (some #(= % v) columns))
   (get [this k] (.valAt this k))
-  (put [this k v]  (throw (UnsupportedOperationException.)))
-  (remove [this k] (throw (UnsupportedOperationException.)))
-  (putAll [this m] (throw (UnsupportedOperationException.)))
-  (clear [this]    (throw (UnsupportedOperationException.)))
-  (keySet [this]
+  (put [_this _k _v]  (throw (UnsupportedOperationException.)))
+  (remove [_this _k] (throw (UnsupportedOperationException.)))
+  (putAll [_this _m] (throw (UnsupportedOperationException.)))
+  (clear [_this]    (throw (UnsupportedOperationException.)))
+  (keySet [_this]
     (let [retval (LinkedHashSet.)]
       (.addAll retval (map-entries columns))
       retval))
-  (values [this] columns)
-  (entrySet [this]
+  (values [_this] columns)
+  (entrySet [_this]
     (let [retval (LinkedHashSet.)]
       (.addAll retval (map #(clojure.lang.MapEntry. (:name (meta %)) %)
                            columns))
       retval))
 
   clojure.lang.ILookup
-  (valAt [this k]
+  (valAt [_this k]
     (when-let [idx (colmap k)]
       (.get columns idx)))
   (valAt [this k not-found]
@@ -170,7 +168,7 @@
     (when-let [v (.valAt this k)]
       (clojure.lang.MapEntry. k v)))
   ;;No idea if this is correct behavior....
-  (empty [this] (empty-dataset))
+  (empty [_this] (empty-dataset))
   ;;ported from clojure java impl.
   (cons [this e]
     (cond (instance? java.util.Map$Entry e)
@@ -184,13 +182,13 @@
             (reduce (fn [^clojure.lang.Associative acc entry]
                       (.assoc acc (key entry) (val entry))) this e)))
 
-  (containsKey [this k] (.containsKey ^Map colmap k))
+  (containsKey [_this k] (.containsKey ^Map colmap k))
 
   ;;MAJOR DEVIATION
   ;;This conforms to clojure's idiom and projects the dataset onto a
   ;;seq of [column-name column] entries.  Legacy implementation defaulted
   ;;to using iterable, which was a seq of column.
-  (seq [this]
+  (seq [_this]
     ;;Do not reorder column data if possible.
     (when (pos? (count columns))
       (map #(clojure.lang.MapEntry. (:name (meta %)) %)  columns)))
@@ -218,12 +216,12 @@
                       (map-equiv this o)))
 
   ds-proto/PColumnarDataset
-  (dataset-name [dataset] (:name metadata))
-  (set-dataset-name [dataset new-name]
+  (dataset-name [_dataset] (:name metadata))
+  (set-dataset-name [_dataset new-name]
     (Dataset. columns colmap
      (assoc metadata :name new-name) _hash _hasheq))
 
-  (columns [dataset] columns)
+  (columns [_dataset] columns)
 
   (add-column [dataset col]
     (let [existing-names (set (map ds-col-proto/column-name columns))
@@ -329,19 +327,19 @@
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
 
-  (supported-column-stats [dataset]
+  (supported-column-stats [_dataset]
     (ds-col-proto/supported-stats (first columns)))
 
 
   dtype-proto/PShape
-  (shape [m]
+  (shape [_m]
     [(count columns)
      (if-let [first-col (first columns)]
        (dtype/ecount first-col)
        0)])
 
   dtype-proto/PCopyRawData
-  (copy-raw->item! [raw-data ary-target target-offset options]
+  (copy-raw->item! [_raw-data ary-target target-offset options]
     (dtype-proto/copy-raw->item! columns ary-target target-offset options))
   dtype-proto/PClone
   (clone [item]
@@ -350,7 +348,7 @@
                  (mapv dtype/clone columns)))
 
   Counted
-  (count [this] (count columns))
+  (count [_this] (count columns))
 
   IFn
   ;;NON-OBVIOUS SEMANTICS
@@ -370,11 +368,11 @@
       2 (.invoke this (first arg-seq) (second arg-seq))))
 
   IObj
-  (meta [this] metadata)
-  (withMeta [this metadata] (Dataset. columns colmap metadata _hash _hasheq))
+  (meta [_this] metadata)
+  (withMeta [_this metadata] (Dataset. columns colmap metadata _hash _hasheq))
 
   Iterable
-  (iterator [item]
+  (iterator [_item]
     (.iterator (map-entries columns)))
 
   Object

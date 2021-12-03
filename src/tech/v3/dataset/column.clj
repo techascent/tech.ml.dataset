@@ -1,13 +1,11 @@
 (ns tech.v3.dataset.column
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column :as col-impl]
-            [tech.v3.dataset.impl.column-index-structure :as col-index-structure]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dt-proto])
-  (:import [java.util List]
-           [tech.v3.dataset.impl.column Column]
+  (:import [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]))
 
 
@@ -114,7 +112,7 @@ Implementations should check their metadata before doing calculations."
   `selection` can be a list of indexes to select or boolean values where the index
   position of each true element indicates a index to select. When supplying a list
   of indices, duplicates are possible and will select the specified position more
-  than once."  
+  than once."
   [col selection]
   (col-proto/select col selection))
 
@@ -137,7 +135,7 @@ Implementations should check their metadata before doing calculations."
            :str->int
            (keys)
            (set))
-      (catch Throwable e
+      (catch Throwable _e
         nil))))
 
 ;; TODO - match inference expectations

@@ -10,8 +10,7 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
-            [clojure.set :as set])
-  (:import [java.util HashMap Map]))
+            [clojure.set :as set]))
 
 
 ;;This file uses categorical-map loosely.  Really they are lookup tables
@@ -55,10 +54,10 @@
 (defn fit-categorical-map
   "Given a column, map it into an numeric space via a discrete map of values
   to integers.  This fits the categorical transformation onto the column and returns
-  the transformation. 
-  
+  the transformation.
+
   If `table-args` is not given, the distinct column values will be mapped into 0..x without any specific order.
-  
+
   'table-args` allows to specify the precise mapping as a sequence of pairs of [val idx] or as a sorted seq of values.
 "
   ^CategoricalMap [dataset colname & [table-args res-dtype]]
@@ -170,7 +169,7 @@
                     #(keyword (str src-name "-" (safe-str %))))
                   #(str src-name "-" (safe-str %)))
         one-hot-map (->> lookup-table
-                         (map (fn [[k v]]
+                         (map (fn [[k _v]]
                                 [k (name-fn k)]))
                          (into {}))]
     (map->OneHotMap

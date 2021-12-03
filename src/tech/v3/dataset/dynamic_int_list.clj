@@ -9,8 +9,7 @@
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath])
-  (:import [java.util List Iterator]
-           [tech.v3.datatype PrimitiveList LongBuffer BooleanConversions]
+  (:import [tech.v3.datatype PrimitiveList LongBuffer]
            [tech.v3.datatype.list ListImpl]))
 
 (set! *warn-on-reflection* true)
@@ -32,24 +31,24 @@
 (deftype DynamicIntList [^:unsynchronized-mutable ^ListImpl backing-store
                          ^:unsynchronized-mutable ^long int-width]
   dtype-proto/PClone
-  (clone [item] (DynamicIntList. (dtype-proto/clone backing-store)
+  (clone [_item] (DynamicIntList. (dtype-proto/clone backing-store)
                                  int-width))
   dtype-proto/PToArrayBuffer
-  (convertible-to-array-buffer? [item]
+  (convertible-to-array-buffer? [_item]
     (and (= :int32 (dtype/elemwise-datatype backing-store))
          (dtype-proto/convertible-to-array-buffer? backing-store)))
-  (->array-buffer [item]
+  (->array-buffer [_item]
     (dtype-proto/->array-buffer backing-store))
   dtype-proto/PToNativeBuffer
-  (convertible-to-native-buffer? [item]
+  (convertible-to-native-buffer? [_item]
     (and (= :int32 (dtype/elemwise-datatype backing-store))
          (dtype-proto/convertible-to-native-buffer? backing-store)))
-  (->native-buffer [item]
+  (->native-buffer [_item]
     (dtype-proto/->native-buffer backing-store))
   PrimitiveList
-  (elemwiseDatatype [this] :int32)
-  (lsize [this] (.lsize backing-store))
-  (ensureCapacity [item new-size]
+  (elemwiseDatatype [_this] :int32)
+  (lsize [_this] (.lsize backing-store))
+  (ensureCapacity [_item new-size]
     (.ensureCapacity backing-store new-size))
   (addBoolean [this value]
     (.addLong this (if value 1 0)))
@@ -57,7 +56,7 @@
     (.addLong this (long value)))
   (addObject [this value]
     (.addLong this (long value)))
-  (addLong [this value]
+  (addLong [_this value]
     ;;perform container conversion
     (cond
       (byte-range? value)
@@ -73,7 +72,7 @@
         (set! int-width 32)))
     (.addLong backing-store value))
   LongBuffer
-  (readLong [this idx]
+  (readLong [_this idx]
     (.readLong backing-store idx))
   ;;Writing is serialized.
   (writeLong [this idx value]

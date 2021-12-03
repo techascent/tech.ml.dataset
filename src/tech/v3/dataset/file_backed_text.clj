@@ -1,6 +1,5 @@
 (ns tech.v3.dataset.file-backed-text
-  (:require [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.datatype :as dtype]
+  (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.mmap-writer :as mmap-writer])
   (:import [java.nio.charset Charset]
@@ -13,13 +12,13 @@
                                 ^PrimitiveList offsets
                                 cached-io]
   PrimitiveList
-  (lsize [this] (.lsize offsets))
-  (elemwiseDatatype [this] :text)
-  (ensureCapacity [this amt])
-  (addBoolean [this data] (errors/throw-unimplemented))
-  (addLong [this data] (errors/throw-unimplemented))
-  (addDouble [this data] (errors/throw-unimplemented))
-  (addObject [this data]
+  (lsize [_this] (.lsize offsets))
+  (elemwiseDatatype [_this] :text)
+  (ensureCapacity [_this _amt])
+  (addBoolean [_this _data] (errors/throw-unimplemented))
+  (addLong [_this _data] (errors/throw-unimplemented))
+  (addDouble [_this _data] (errors/throw-unimplemented))
+  (addObject [_this data]
     (reset! cached-io nil)
     (let [data (str data)]
       (if (empty? data)
@@ -28,7 +27,7 @@
           (.addLong offsets (.lsize writer))
           (.writeBytes writer bytes)))))
   ObjectReader
-  (readObject [this idx]
+  (readObject [_this idx]
     (let [start-offset (.readLong  offsets idx)
           end-offset (if (== idx (dec (.lsize offsets)))
                        (.lsize writer)
