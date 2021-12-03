@@ -1,1 +1,2 @@
-{:linters {:unresolved-symbol {:level :off}}}
+{:linters {:unresolved-symbol {:level :off}}
+ :config-path ["cnuernber/dtype-next"]}

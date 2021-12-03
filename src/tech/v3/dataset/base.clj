@@ -750,10 +750,12 @@
   The postcondition is that dtype/->array will return a java array in the appropriate
   datatype for each column.
 
-  options -
-  :unpack? - unpack packed datetime types.  Defaults to true"
+  Options:
+
+  * `:unpack?` - unpack packed datetime types.  Defaults to true"
   ([ds {:keys [unpack?]
-        :or {unpack? true}}]
+        :or {unpack? true}
+        :as _options}]
    (reduce (fn [ds col]
              (let [colname (ds-col/column-name col)
                    col (if unpack?
