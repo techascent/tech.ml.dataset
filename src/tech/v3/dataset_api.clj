@@ -25,7 +25,7 @@
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
             [clojure.set :as set])
-  (:import [java.util List Iterator Collection ArrayList Random Arrays HashMap
+  (:import [java.util List Iterator Collection ArrayList Random Arrays
             LinkedHashMap]
            [java.util.function Function]
            [org.roaringbitmap RoaringBitmap]
@@ -249,7 +249,7 @@ user> (ds/rowvec-at stocks -1)
 (defn shuffle
   "Shuffle the rows of the dataset optionally providing a seed.
   See https://cnuernber.github.io/dtype-next/tech.v3.datatype.argops.html#var-argshuffle."
-  ([dataset {:keys [seed] :as options}]
+  ([dataset options]
    (select-rows dataset (argops/argshuffle (row-count dataset) options)))
   ([dataset]
    (shuffle dataset nil)))
@@ -753,7 +753,7 @@ test/data/stocks.csv [5 4]:
                            #(casting/cast % dst-dtype)
                            :else
                            (throw (Exception.
-                                   (format "Cast fn must be provided for datatype %"
+                                   (format "Cast fn must be provided for datatype %s"
                                            dst-dtype)))))
              ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap
                                      (ds-col/missing src-col))

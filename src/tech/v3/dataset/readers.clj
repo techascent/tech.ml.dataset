@@ -3,8 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto])
   (:import [tech.v3.datatype ObjectReader Buffer]
            [tech.v3.dataset FastStruct]
-           [org.roaringbitmap RoaringBitmap]
-           [java.util List HashMap Collections ArrayList]))
+           [java.util List HashMap Collections]))
 
 
 (defn dataset->column-readers

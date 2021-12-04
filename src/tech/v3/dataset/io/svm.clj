@@ -34,8 +34,7 @@
                 (let [{label :label
                        line-feature :features
                        line-max-idx :max-idx
-                       line-min-idx :min-idx
-                       :as item} next-line]
+                       line-min-idx :min-idx} next-line]
                   [(conj labels (if label-map
                                   (if-let [label-value (get label-map label)]
                                     label-value
@@ -57,7 +56,7 @@
               [[] [] nil nil]))
         min-idx (long min-idx)
         max-idx (long max-idx)
-        num-items (+ 1 (- max-idx min-idx))]
+        _num-items (+ 1 (- max-idx min-idx))]
     {:min-idx min-idx
      :max-idx max-idx
      :feature-ecount (+ 1 (- max-idx min-idx))

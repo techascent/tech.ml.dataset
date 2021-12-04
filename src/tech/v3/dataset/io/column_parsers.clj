@@ -10,8 +10,7 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.protocols :as dtype-proto])
-  (:import [java.util UUID List HashMap]
-           [java.util.function Function]
+  (:import [java.util UUID List]
            [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]
            [org.roaringbitmap RoaringBitmap]
@@ -44,7 +43,7 @@
   (fn [str-val]
     (try
       (parser-fn str-val)
-      (catch Throwable e
+      (catch Throwable _e
         parse-failure))))
 
 
@@ -107,9 +106,9 @@
     :symbol #(if-let [retval (symbol %)]
                retval
                parse-failure)
-    :string #(let [str-val (or (if (string? %)
-                                 %
-                                 (str %)))]
+    :string #(let [str-val (if (string? %)
+                             %
+                             (str %))]
                (if (< (count str-val) 1024)
                  str-val
                  parse-failure))
@@ -191,9 +190,9 @@
                           column-name
                           ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
-  (ecount [this] (inc max-idx))
+  (ecount [_this] (inc max-idx))
   PParser
-  (addValue [this idx value]
+  (addValue [_this idx value]
     (let [idx (unchecked-long idx)]
       (set! max-idx (max idx max-idx))
       ;;First pass is to potentially parse the value.  It could already
@@ -223,7 +222,7 @@
           (do
             (add-missing-values! container missing missing-value idx)
             (.addObject container parsed-value))))))
-  (finalize [p rowcount]
+  (finalize [_p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
                            missing-value rowcount)))
 
@@ -366,9 +365,9 @@
                                   ^:unsynchronized-mutable ^long max-idx
                                   options]
   dtype-proto/PECount
-  (ecount [this] (inc max-idx))
+  (ecount [_this] (inc max-idx))
   PParser
-  (addValue [p idx value]
+  (addValue [_p idx value]
     (set! max-idx (max idx max-idx))
     (let [parsed-value
           (cond
@@ -416,7 +415,7 @@
         (do
           (add-missing-values! container missing missing-value idx)
           (.addObject container parsed-value)))))
-  (finalize [p rowcount]
+  (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil missing-value rowcount)))
 
 
@@ -450,9 +449,9 @@
                                   ^:unsynchronized-mutable ^long max-idx
                                   options]
   dtype-proto/PECount
-  (ecount [this] (inc max-idx))
+  (ecount [_this] (inc max-idx))
   PParser
-  (addValue [p idx value]
+  (addValue [_p idx value]
     (set! max-idx (max idx max-idx))
     (when-not (missing-value? value)
       (let [org-datatype (dtype/datatype value)
@@ -482,7 +481,7 @@
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
             (.addObject container value))))))
-  (finalize [p rowcount]
+  (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil
                            missing-value rowcount)))
 

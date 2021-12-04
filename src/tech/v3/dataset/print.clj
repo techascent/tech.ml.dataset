@@ -9,11 +9,8 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.graal-native :as graal-native]
             [clojure.string :as str])
-  (:import [tech.v3.datatype Buffer ObjectReader]
-           [java.util List HashMap Collections ArrayList]
-           [tech.v3.dataset FastStruct]
-           [clojure.lang PersistentStructMap$Def
-            PersistentVector]
+  (:import [tech.v3.datatype ObjectReader]
+           [java.util List ArrayList]
            [org.roaringbitmap RoaringBitmap]))
 
 
@@ -87,7 +84,7 @@
         n-pad (- (long col-width) n-data)
         builder (StringBuilder.)]
     (.append builder line)
-    (dotimes [idx n-pad]
+    (dotimes [_idx n-pad]
       (.append builder " "))
     (.toString builder)))
 

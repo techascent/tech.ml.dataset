@@ -47,8 +47,7 @@ user> (ds-reduce/group-by-column-agg
   (:import [org.apache.datasketches.hll HllSketch TgtHllType]
            [org.apache.datasketches.quantiles DoublesSketch UpdateDoublesSketch
             DoublesUnion]
-           [java.util.function DoubleConsumer Consumer LongConsumer]
-           [java.util List]
+           [java.util.function DoubleConsumer]
            [tech.v3.datatype Consumers$StagedConsumer Consumers$CombinedConsumer]))
 
 
@@ -76,9 +75,9 @@ user> (ds-reduce/group-by-column-agg
                                    colname
                                    finalize-fn]
   ds-reduce-impl/PReducerCombiner
-  (reducer-combiner-key [this]
+  (reducer-combiner-key [_this]
     [colname :data-sketch (dissoc combiner-options :datatype)])
-  (combine-reducers [this combiner-key]
+  (combine-reducers [_this combiner-key]
     (let [build-fn (sketch-build-fn (last combiner-key))]
       (case (:datatype combiner-options)
         :float64 (ds-reduce-impl/staged-consumer-reducer
@@ -90,7 +89,7 @@ user> (ds-reduce/group-by-column-agg
         :string (ds-reduce-impl/staged-consumer-reducer
                  :string colname build-fn
                  identity))))
-  (finalize-combined-reducer [this ctx]
+  (finalize-combined-reducer [_this ctx]
     (finalize-fn (.value ^Consumers$StagedConsumer ctx))))
 
 
@@ -101,14 +100,14 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype ^:private HllConsumer [^HllSketch sketch]
   Consumers$CombinedConsumer
-  (acceptObject [this data]
+  (acceptObject [_this data]
     (.update sketch (str data)))
-  (acceptLong [this data]
+  (acceptLong [_this data]
     (.update sketch data))
-  (acceptDouble [this data]
+  (acceptDouble [_this data]
     (.update sketch data))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this _other]
     (throw (Exception. "Unimplemented - use combineList")))
   (combineList [this other-list]
     (let [union (org.apache.datasketches.hll.Union.)]
@@ -117,7 +116,7 @@ user> (ds-reduce/group-by-column-agg
         (.update union ^HllSketch (.value ^Consumers$StagedConsumer
                                           (.get other-list idx))))
       (HllConsumer. (.getResult union))))
-  (value [this] sketch))
+  (value [_this] sketch))
 
 
 (defmethod sketch-build-fn :hyper-log-log
@@ -138,14 +137,14 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype ^:private ThetaConsumer [^org.apache.datasketches.theta.Sketch sketch]
   Consumers$CombinedConsumer
-  (acceptDouble [this data]
+  (acceptDouble [_this data]
     (.update ^org.apache.datasketches.theta.UpdateSketch sketch data))
-  (acceptLong [this data]
+  (acceptLong [_this data]
     (.update ^org.apache.datasketches.theta.UpdateSketch sketch data))
-  (acceptObject [this data]
+  (acceptObject [_this data]
     (.update ^org.apache.datasketches.theta.UpdateSketch sketch (str data)))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this _other]
     (throw (Exception. "Unimplemented - use combineList")))
   (combineList [this other-sketches]
     (let [union (.. (org.apache.datasketches.theta.SetOperation/builder)
@@ -157,7 +156,7 @@ user> (ds-reduce/group-by-column-agg
                  (.value ^Consumers$StagedConsumer
                          (.get other-sketches idx))))
       (ThetaConsumer. (.getResult union))))
-  (value [this] sketch))
+  (value [_this] sketch))
 
 
 (defmethod sketch-build-fn :theta
@@ -174,14 +173,14 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype ^:private CpcConsumer [^org.apache.datasketches.cpc.CpcSketch sketch]
   Consumers$CombinedConsumer
-  (acceptDouble [this data]
+  (acceptDouble [_this data]
     (.update sketch data))
-  (acceptLong [this data]
+  (acceptLong [_this data]
     (.update sketch data))
-  (acceptObject [this data]
+  (acceptObject [_this data]
     (.update sketch (str data)))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this _other]
     (throw (Exception. "Unimplemented - use combineList")))
   (combineList [this other-sketches]
     (let [union (org.apache.datasketches.cpc.CpcUnion.)]
@@ -192,7 +191,7 @@ user> (ds-reduce/group-by-column-agg
                  (.value ^Consumers$StagedConsumer
                          (.get other-sketches idx))))
       (CpcConsumer. (.getResult union))))
-  (value [this] sketch))
+  (value [_this] sketch))
 
 
 (defmethod sketch-build-fn :cpc
@@ -238,12 +237,12 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype ^:private DoublesUpdateConsumer [^DoublesSketch sketch]
   DoubleConsumer
-  (accept [this data]
+  (accept [_this data]
     (.update ^UpdateDoublesSketch sketch data))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this _other]
     (throw (Exception. "Unimplemented - use combineList")))
-  (combineList [this other-sketches]
+  (combineList [_this other-sketches]
     (let [union (.. (DoublesUnion/builder) build)]
       (.update union sketch)
       (dotimes [idx (.size other-sketches)]
@@ -251,7 +250,7 @@ user> (ds-reduce/group-by-column-agg
                  (.value ^Consumers$StagedConsumer
                          (.get other-sketches idx))))
       (DoublesUpdateConsumer. (.getResult union))))
-  (value [this] sketch))
+  (value [_this] sketch))
 
 
 (defn- doubles-updater-fn
@@ -264,14 +263,14 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype ^:private DoublesSketchCombiner [colname k finalize-fn]
   ds-reduce-impl/PReducerCombiner
-  (reducer-combiner-key [this]
+  (reducer-combiner-key [_this]
     [colname :doubles-sketch k])
-  (combine-reducers [this combiner-key]
+  (combine-reducers [_this combiner-key]
     (let [build-fn (doubles-updater-fn (last combiner-key))]
       (ds-reduce-impl/staged-consumer-reducer
        :float64 colname build-fn
        identity)))
-  (finalize-combined-reducer [this ctx]
+  (finalize-combined-reducer [_this ctx]
     (finalize-fn (.value ^Consumers$StagedConsumer ctx))))
 
 (def ^:private default-doubles-k 128)

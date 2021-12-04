@@ -56,8 +56,8 @@
   to name columns."
   ^String [item-name]
   (cond
-    (and (or (keyword? item-name)
-             (symbol? item-name)))
+    (or (keyword? item-name)
+        (symbol? item-name))
     (if (namespace item-name)
       (str (namespace item-name) "/" (name item-name))
       (str (name item-name)))

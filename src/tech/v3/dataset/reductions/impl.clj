@@ -12,7 +12,7 @@
   (:import [java.util.function BiConsumer Function DoubleConsumer LongConsumer
             Consumer]
            [org.roaringbitmap RoaringBitmap]
-           [java.util Map$Entry List ArrayList]
+           [java.util Map$Entry ArrayList]
            [java.util.function LongSupplier]
            [java.util.concurrent ConcurrentHashMap]
            [tech.v3.datatype IndexReduction Buffer Consumers$StagedConsumer
@@ -260,7 +260,7 @@
 (defrecord ^:private ResDsColData [col-data
                                    ^RoaringBitmap missing]
   ECount
-  (lsize [this] (.lsize ^ECount col-data)))
+  (lsize [_this] (.lsize ^ECount col-data)))
 
 
 (defn- add-or-missing

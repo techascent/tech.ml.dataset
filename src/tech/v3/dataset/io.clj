@@ -37,12 +37,12 @@
 
 
 (defmulti data->dataset
-  (fn [data options]
+  (fn [_data options]
     (:file-type options)))
 
 
 (defmethod data->dataset :default
-  [data options]
+  [_data options]
   (errors/throwf "Unrecognized read file type: %s"
                  (:file-type options)))
 
@@ -60,7 +60,7 @@
 
 
 (defmulti dataset->data!
-  (fn [ds output options]
+  (fn [_ds _output options]
     (:file-type options)))
 
 
@@ -79,7 +79,7 @@
 
 
 (defmethod dataset->data! :default
-  [ds output options]
+  [_ds _output options]
   (errors/throwf "Unrecognized write file type: %s"
                  (:file-type options)))
 

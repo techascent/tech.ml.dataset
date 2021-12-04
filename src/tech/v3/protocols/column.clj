@@ -16,7 +16,7 @@
     "Return a new column.")
   (supported-stats [col]
     "List of available stats for the column")
-  (^org.roaringbitmap.RoaringBitmap missing [col]
+  (^RoaringBitmap missing [col]
     "Indexes of missing values")
   (is-missing? [col idx]
     "Return true if this index is missing.")
@@ -64,4 +64,3 @@ provided `custom-make-index-strucutre-fn`."))
   (select-from-index
     [index-structure mode selection-spec options]
     "Select a subset of the index. Supports a variety of modes."))
-

@@ -5,7 +5,7 @@
             [clojure.datafy :refer [datafy]]
             [clojure.tools.logging :as log])
   (:import  [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
-            [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
+            [org.apache.arrow.vector.types.pojo FieldType Field
              ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
              ArrowType$Utf8 ArrowType$LargeUtf8 ArrowType$Date ArrowType$Time
              ArrowType$Timestamp ArrowType$Duration DictionaryEncoding

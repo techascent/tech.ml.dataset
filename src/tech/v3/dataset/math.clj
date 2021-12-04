@@ -18,18 +18,15 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
-            [tech.v3.tensor :as dtt]
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
-            [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
-  (:import [smile.clustering KMeans GMeans XMeans PartitionClustering]
-           [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
+  (:import [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
            [tech.v3.datatype DoubleReader]
            [org.roaringbitmap RoaringBitmap]))
 

@@ -4,15 +4,13 @@
   categorical -> number and one-hot transformation pathways"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.categorical :as categorical]
             [tech.v3.dataset.column :as ds-col]
             [clojure.set :as set])
-  (:import [tech.v3.datatype ObjectReader]
-           [java.util List]))
+  (:import [java.util List]))
 
 
 (set! *warn-on-reflection* true)
@@ -169,7 +167,7 @@
      (for [i (range k)]
        {:test-ds (ds-base/select-rows dataset (nth folds i))
         :train-ds (ds-base/select-rows dataset
-                                       (->> (keep-indexed #(if (not= %1 i) %2) folds)
+                                       (->> (keep-indexed #(when (not= %1 i) %2) folds)
                                             (apply concat)))})))
   ([dataset k]
    (k-fold-datasets dataset k {})))

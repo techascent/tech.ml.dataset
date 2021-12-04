@@ -1,6 +1,6 @@
 (ns tech.v3.libs.arrow.allocator
   "Defines a publicly available Arrow allocator."
-  (:import [org.apache.arrow.memory RootAllocator BaseAllocator BufferAllocator]))
+  (:import [org.apache.arrow.memory RootAllocator BufferAllocator]))
 
 
 (defonce ^{:doc "Allocator binding.  Must be either an instance of BaseAllocator
@@ -29,5 +29,5 @@ or a delay which resolves to one."
   org.apache.arrow.memory.BaseAllocator or an instance of IDeref that resolves to an
   instance of BaseAllocator."
   [alloc* & body]
-  `(with-bindings {#'*allocator* alloc*}
+  `(with-bindings {#'*allocator* ~alloc*}
      ~@body))
