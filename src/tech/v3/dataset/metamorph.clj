@@ -1,5 +1,6 @@
 (ns tech.v3.dataset.metamorph
-  (:require [tech.v3.dataset :as ds]
+  (:require [tech.v3.dataset]
+            [tech.v3.dataset.modelling]
             [tech.v3.protocols.dataset :as prot])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))

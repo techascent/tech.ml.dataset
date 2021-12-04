@@ -39,7 +39,9 @@
         (with-out-str
           (graal-native/if-defined-graal-native
            (println item)
-           (pp/pprint item)))
+           (do
+             (require '[clojure.pprint :as pp])
+             (pp/pprint item))))
         (dtype-pp/format-object item))
       (str/replace "|" "\\|")))
 

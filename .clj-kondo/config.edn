@@ -1,2 +1,5 @@
 {:linters {:unresolved-symbol {:level :off}}
+ :lint-as {tech.v3.datatype.graal-native/when-not-defined-graal-native clojure.core/comment
+           tech.v3.datatype.graal-native/if-defined-graal-native clojure.core/comment}
+ :skip-comments true
  :config-path ["cnuernber/dtype-next"]}
