@@ -24,7 +24,7 @@
             [com.github.ztellman.primitive-math :as pmath])
   (:import [smile.math.matrix Matrix]
            [smile.math.blas BLAS]
-           [tech.v3.datatype DoubleReader Buffer NDBuffer]
+           [tech.v3.datatype DoubleReader Buffer]
            [java.util List]
            [java.nio DoubleBuffer]))
 
@@ -204,18 +204,18 @@
           (lsize [rdr] n-elems)
           (readDouble [rdr idx]
             (let [row-idx (quot idx n-cols)
-                  col-idx (rem idx n-cols)]
+                  col-idx (rem idx n-cols)
+                  ^Buffer lhs (.get lhs-rows row-idx)
+                  ^Buffer rhs (.get rhs-columns col-idx)]
               ;;Hardcode operation to avoid dispatch costs.  In this case we know
               ;;we are dealing with readers and we know the result is a double summation.
-              (let [^Buffer lhs (.get lhs-rows row-idx)
-                    ^Buffer rhs (.get rhs-columns col-idx)]
-                (loop [idx 0
-                       sum 0.0]
-                  (if (< idx n-inner)
-                    (recur (unchecked-inc idx)
-                           (pmath/+ sum (pmath/* (.readDouble lhs idx)
-                                                 (.readDouble rhs idx))))
-                    sum))))))
+              (loop [idx 0
+                     sum 0.0]
+                (if (< idx n-inner)
+                  (recur (unchecked-inc idx)
+                         (pmath/+ sum (pmath/* (.readDouble lhs idx)
+                                               (.readDouble rhs idx))))
+                  sum)))))
         ;;Make buffer concrete
         (dtype/clone)
         ;;Reshape into result shape
@@ -224,7 +224,7 @@
 
 (defonce ^{:doc "Delay that loads the smile blas implementation when dereferenced."}
   blas* (delay (try (BLAS/getInstance)
-                    (catch Throwable e))))
+                    (catch Throwable _e))))
 
 (defn- smile-transpose
   ^smile.math.blas.Transpose [trans?]
@@ -237,61 +237,61 @@
   [lhs rhs]
   (let [^BLAS blas @blas*
         lhs-dtype (dtype/elemwise-datatype lhs)
-        rhs (dtt/ensure-tensor rhs)]
-    (let [[lhs-shape rhs-shape] (mmul-check lhs rhs)
+        rhs (dtt/ensure-tensor rhs)
+        [lhs-shape rhs-shape] (mmul-check lhs rhs)
           ;;It is worth it to copy because copy is a O(N) while matrix*matrix is
           ;;O(N^3).
-          lhs (externally-safe lhs)
-          rhs (externally-safe rhs)
-          op-space (if (and (= lhs-dtype :float32)
-                            (= (dtype/elemwise-datatype rhs) :float32))
-                     :float32
-                     :float64)
-          C (dtt/new-tensor [(first lhs-shape) (second rhs-shape)]
-                            :datatype op-space
-                            :container-type :jvm-heap)
-          lhs-dims (dtt/tensor->dimensions lhs)
-          rhs-dims (dtt/tensor->dimensions rhs)
-          C-dims (dtt/tensor->dimensions C)
-          lhs-strides (get lhs-dims :strides)
-          rhs-strides (get rhs-dims :strides)
-          lhs-min-stride (int (apply min lhs-strides))
-          rhs-min-stride (int (apply min rhs-strides))
-          lhs-max-stride (int (apply max lhs-strides))
-          rhs-max-stride (int (apply max rhs-strides))
-          c-max-stride (int (apply max (get C-dims :strides)))
-          lhs-trans? (= lhs-min-stride (first lhs-strides))
-          rhs-trans? (= rhs-min-stride (first rhs-strides))]
-      (if (= op-space :float64)
-        (.gemm blas smile.math.blas.Layout/ROW_MAJOR
-               (smile-transpose lhs-trans?)
-               (smile-transpose rhs-trans?)
+        lhs (externally-safe lhs)
+        rhs (externally-safe rhs)
+        op-space (if (and (= lhs-dtype :float32)
+                          (= (dtype/elemwise-datatype rhs) :float32))
+                   :float32
+                   :float64)
+        C (dtt/new-tensor [(first lhs-shape) (second rhs-shape)]
+                          :datatype op-space
+                          :container-type :jvm-heap)
+        lhs-dims (dtt/tensor->dimensions lhs)
+        rhs-dims (dtt/tensor->dimensions rhs)
+        C-dims (dtt/tensor->dimensions C)
+        lhs-strides (get lhs-dims :strides)
+        rhs-strides (get rhs-dims :strides)
+        lhs-min-stride (int (apply min lhs-strides))
+        rhs-min-stride (int (apply min rhs-strides))
+        lhs-max-stride (int (apply max lhs-strides))
+        rhs-max-stride (int (apply max rhs-strides))
+        c-max-stride (int (apply max (get C-dims :strides)))
+        lhs-trans? (= lhs-min-stride (first lhs-strides))
+        rhs-trans? (= rhs-min-stride (first rhs-strides))]
+    (if (= op-space :float64)
+      (.gemm blas smile.math.blas.Layout/ROW_MAJOR
+             (smile-transpose lhs-trans?)
+             (smile-transpose rhs-trans?)
                ;;nmk
-               (int (first lhs-shape)) (int (second rhs-shape)) (int (first rhs-shape))
-               1.0 ;;alpha
-               (dtype/->double-array (dtt/tensor->buffer lhs))
-               lhs-max-stride
-               (dtype/->double-array (dtt/tensor->buffer rhs))
-               rhs-max-stride
-               0.0 ;;beta
+             (int (first lhs-shape)) (int (second rhs-shape)) (int (first rhs-shape))
+             1.0 ;;alpha
+             (dtype/->double-array (dtt/tensor->buffer lhs))
+             lhs-max-stride
+             (dtype/->double-array (dtt/tensor->buffer rhs))
+             rhs-max-stride
+             0.0 ;;beta
                ;;C was just created so it has to be dense.
-               (dtype/->double-array C)
-               c-max-stride)
-        (.gemm blas smile.math.blas.Layout/ROW_MAJOR
-               (smile-transpose lhs-trans?)
-               (smile-transpose rhs-trans?)
+             (dtype/->double-array C)
+             c-max-stride)
+      (.gemm blas smile.math.blas.Layout/ROW_MAJOR
+             (smile-transpose lhs-trans?)
+             (smile-transpose rhs-trans?)
                ;;nmk
-               (int (first lhs-shape)) (int (second rhs-shape)) (int (first rhs-shape))
-               (float 1.0) ;;alpha
-               (dtype/->float-array (dtt/tensor->buffer lhs))
-               lhs-max-stride
-               (dtype/->float-array (dtt/tensor->buffer rhs))
-               rhs-max-stride
-               (float 0.0) ;;beta
+             (int (first lhs-shape)) (int (second rhs-shape)) (int (first rhs-shape))
+             (float 1.0) ;;alpha
+             (dtype/->float-array (dtt/tensor->buffer lhs))
+             lhs-max-stride
+             (dtype/->float-array (dtt/tensor->buffer rhs))
+             rhs-max-stride
+             (float 0.0) ;;beta
                ;;C was just created so it has to be dense.
-               (dtype/->float-array C)
-               c-max-stride))
-      C)))
+             (dtype/->float-array C)
+             c-max-stride))
+    C))
 
 
 (defn matrix-multiply
@@ -384,15 +384,14 @@
                    covariance-bias?]
             :or {method :cov
                  covariance-bias? false}
-            :as options}]
+            :as _options}]
    (errors/when-not-errorf
     (= 2 (count (dtype/shape tensor)))
     "PCA only applies to tensors with rank 2; rank %d passed in"
     (count (dtype/shape tensor)))
    (let [{:keys [means tensor]} (mean-center-columns! tensor {:nan-strategy :keep})
-         [n-rows n-cols] (dtype/shape tensor)
+         [n-rows _n-cols] (dtype/shape tensor)
          n-rows (long n-rows)
-         n-cols (long n-cols)
          smile-matrix (tensor->smile-matrix tensor)]
      (case method
        :svd

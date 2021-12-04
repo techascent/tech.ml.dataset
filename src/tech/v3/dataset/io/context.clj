@@ -3,7 +3,7 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [java.util.function Function]
-           [java.util HashMap ArrayList Arrays Map]
+           [java.util Map]
            [tech.v3.datatype ObjectBuffer ArrayHelpers]))
 
 
@@ -48,8 +48,8 @@
 (deftype ObjectArrayList [^{:unsynchronized-mutable true
                             :tag 'objects} data]
   ObjectBuffer
-  (lsize [this] (alength ^objects data))
-  (writeObject [this idx value]
+  (lsize [_this] (alength ^objects data))
+  (writeObject [_this idx value]
     (when (>= idx (alength ^objects data))
       (let [old-len (alength ^objects data)
             new-len (* 2 idx)
@@ -57,7 +57,7 @@
         (System/arraycopy data 0 new-data 0 old-len)
         (set! data new-data)))
     (ArrayHelpers/aset ^objects data idx value))
-  (readObject [this idx]
+  (readObject [_this idx]
     (when (< idx (alength ^objects data))
       (aget ^objects data idx))))
 

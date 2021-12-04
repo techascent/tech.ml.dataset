@@ -8,7 +8,7 @@
             [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.dataset.impl.dataset :as ds-impl])
-  (:import [java.util HashMap Map Map$Entry]
+  (:import [java.util HashMap Map$Entry]
            [java.util.function Function]))
 
 

@@ -6,8 +6,7 @@
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.datatype.errors :as errors])
-  (:import [java.util List HashMap Map RandomAccess Iterator ArrayList
-            Collections]
+  (:import [java.util List HashMap Map ArrayList]
            [java.util.function Function]
            [tech.v3.datatype PrimitiveList ObjectBuffer]))
 
@@ -29,18 +28,18 @@
     ;;storage mechanism
     (dtype/make-container :jvm-heap :string this))
   PStrTable
-  (get-str-table [this] {:int->str int->str
+  (get-str-table [_this] {:int->str int->str
                          :str->int str->int})
   PrimitiveList
-  (elemwiseDatatype [this] :string)
-  (lsize [this] (.lsize data))
-  (ensureCapacity [this new-size]
+  (elemwiseDatatype [_this] :string)
+  (lsize [_this] (.lsize data))
+  (ensureCapacity [_this new-size]
     (.ensureCapacity data new-size))
-  (addBoolean [this value]
+  (addBoolean [_this value]
     (errors/throwf "Invalid value in string table: %s" value))
-  (addLong [this value]
+  (addLong [_this value]
     (errors/throwf "Invalid value in string table: %s" value))
-  (addDouble [this value]
+  (addDouble [_this value]
     (errors/throwf "Invalid value in string table: %s" value))
   (addObject [this value]
     (errors/when-not-errorf
@@ -56,7 +55,7 @@
                                retval)))))]
       (.addLong data item-idx)))
   ObjectBuffer
-  (readObject [this idx]
+  (readObject [_this idx]
     (.get int->str (.readLong data idx)))
   (writeObject [this idx value]
     (locking this

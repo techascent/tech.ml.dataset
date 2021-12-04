@@ -6,8 +6,7 @@
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.impl.column-base :as column-base])
-  (:import [tech.v3.datatype PrimitiveList]
-           [org.roaringbitmap RoaringBitmap]
+  (:import [org.roaringbitmap RoaringBitmap]
            [java.util Map Objects]))
 
 

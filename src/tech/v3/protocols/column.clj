@@ -1,5 +1,4 @@
-(ns ^:no-doc tech.v3.protocols.column
-  (:import [org.roaringbitmap RoaringBitmap]))
+(ns ^:no-doc tech.v3.protocols.column)
 
 (defprotocol PIsColumn
   (is-column? [item]))
@@ -64,4 +63,3 @@ provided `custom-make-index-strucutre-fn`."))
   (select-from-index
     [index-structure mode selection-spec options]
     "Select a subset of the index. Supports a variety of modes."))
-

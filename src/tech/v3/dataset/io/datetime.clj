@@ -108,7 +108,7 @@ parse a wide variety of local date formats."
   ^Duration [^String str-data]
   (try
     (Duration/parse str-data)
-    (catch Throwable e
+    (catch Throwable _e
       (let [duration-str (.trim str-data)
             [duration-str mult] (if (.startsWith duration-str "-")
                                   [(.substring duration-str 1) -1]

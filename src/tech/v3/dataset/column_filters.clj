@@ -11,7 +11,6 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col])
-  (:import [clojure.lang IFn])
   (:refer-clojure :exclude [boolean update]))
 
 

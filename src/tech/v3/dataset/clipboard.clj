@@ -6,7 +6,7 @@
   (:require [tech.v3.dataset :as ds]
             [tech.v3.datatype.errors :as errors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
-           [java.awt.datatransfer Clipboard DataFlavor StringSelection Transferable]
+           [java.awt.datatransfer Clipboard DataFlavor StringSelection]
            [java.nio.charset StandardCharsets]
            [java.awt Toolkit]))
 

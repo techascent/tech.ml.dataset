@@ -6,9 +6,7 @@
             [tech.v3.datatype.datetime.operations :as dtype-dt-ops]
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.dataset.base :as ds-base])
-  (:import [java.util.function BiFunction]
-           [clojure.lang IDeref]
-           [tech.v3.datatype DoubleConsumers$Sum Buffer])
+  (:import [tech.v3.datatype Buffer])
   (:refer-clojure :exclude [min max nth first last]))
 
 
@@ -72,7 +70,7 @@
   [ds windows reducer-map edge-mode]
   (->> reducer-map
        (map-indexed
-        (fn [idx [k red]]
+        (fn [_idx [k red]]
           (assoc red :dest-column-name k)))
        (group-by :column-name)
        (mapv (fn [[colname reducers]]
@@ -232,7 +230,7 @@ test/data/stocks.csv [5 6]:
 |    AMZN | 2000-01-01 |  64.56 |    60.09222222 |        106.11 |         28.66 |
 |    AAPL | 2000-02-01 |  28.66 |    57.56583333 |        106.11 |         28.37 |
 ```"
-  ([ds window reducer-map options]
+  ([ds window reducer-map _options]
    (let [n-rows (ds-base/row-count ds)
          window-data (if (integer? window)
                        {:window-size window

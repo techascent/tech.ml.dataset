@@ -3,7 +3,6 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.copy-make-container :as dtype-cmc]
             [tech.v3.datatype.protocols :as dtype-proto]
-            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.typecast :as typecast]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.array-buffer :as array-buffer]
@@ -13,21 +12,13 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.string-table :as str-table]
             [clojure.set :as set])
-  (:import [tech.v3.dataset.impl.dataset Dataset]
-           [smile.data DataFrame DataFrameImpl DataFrameFactory]
-           [java.time.format DateTimeFormatter]
-           [java.time LocalDate LocalTime LocalDateTime]
-           [smile.math.matrix Matrix]
-           [smile.data.type StructType StructField DataType DataType$ID DataTypes]
-           [smile.data.vector BaseVector Vector BooleanVector ByteVector ShortVector
-            IntVector LongVector FloatVector DoubleVector StringVector
+  (:import [smile.data DataFrame DataFrameImpl DataFrameFactory]
+           [smile.data.type StructField DataType DataTypes]
+           [smile.data.vector BaseVector
             BooleanVectorImpl ByteVectorImpl ShortVectorImpl
             IntVectorImpl LongVectorImpl FloatVectorImpl DoubleVectorImpl
             StringVectorImpl VectorImpl
             VectorFactory]
-           [smile.data.measure NominalScale]
-           [org.roaringbitmap RoaringBitmap]
-           [java.util Collection List ArrayList]
            [java.io Writer]))
 
 

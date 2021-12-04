@@ -16,30 +16,16 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
             [tech.v3.dataset.io :as ds-io])
-  (:import [java.lang AutoCloseable]
-           [org.apache.poi.ss.usermodel Workbook Sheet Cell
+  (:import [org.apache.poi.ss.usermodel Workbook Sheet Cell
             CellType Row]
            [tech.v3.dataset Spreadsheet$Workbook Spreadsheet$Sheet
             Spreadsheet$Row Spreadsheet$Cell]
            [org.apache.poi.xssf.usermodel XSSFWorkbook]
            [org.apache.poi.hssf.usermodel HSSFWorkbook]
-           [org.apache.poi.ss.usermodel DateUtil]
-           [org.roaringbitmap RoaringBitmap]
-           [java.util ArrayList List HashMap]
-           [java.util.function Function]
-           [it.unimi.dsi.fastutil.booleans BooleanArrayList]
-           [it.unimi.dsi.fastutil.shorts ShortArrayList]
-           [it.unimi.dsi.fastutil.ints IntArrayList IntList IntIterator]
-           [it.unimi.dsi.fastutil.longs LongArrayList LongList]
-           [it.unimi.dsi.fastutil.floats FloatArrayList]
-           [it.unimi.dsi.fastutil.doubles DoubleArrayList]))
+           [org.apache.poi.ss.usermodel DateUtil]))
 
 
 (set! *warn-on-reflection* true)
-
-
-(def ^:private xls-file "test/data/file_example_XLS_1000.xls")
-(def ^:private xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 
 
 (defn- cell-type->keyword

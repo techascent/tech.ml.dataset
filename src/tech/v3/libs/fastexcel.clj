@@ -25,9 +25,6 @@
 (set! *warn-on-reflection* true)
 
 
-(def ^:private xlsx-file "test/data/file_example_XLSX_1000.xlsx")
-
-
 (defn- cell-type->keyword
   [^CellType cell-type]
   (condp = cell-type
@@ -47,7 +44,7 @@
   [^Cell cell]
   (try
     (Double/parseDouble (.getRawValue cell))
-    (catch Exception e
+    (catch Exception _e
       (.getRawValue cell))))
 
 
@@ -94,7 +91,7 @@
         (reify java.util.Iterator
           ;;In some cases hasNext throws.
           (hasNext [this] (try (.hasNext iter)
-                               (catch Exception e false)))
+                               (catch Exception _e false)))
           (next [this] (wrap-cell (.next iter))))))))
 
 (defn- wrap-sheet
@@ -117,7 +114,7 @@
   to get a dataset."
   (^Spreadsheet$Workbook [input]
    (input->workbook input {}))
-  (^Spreadsheet$Workbook [input options]
+  (^Spreadsheet$Workbook [input _options]
    (let [workbook (ReadableWorkbook. (io/input-stream input))]
      (reify
        Spreadsheet$Workbook

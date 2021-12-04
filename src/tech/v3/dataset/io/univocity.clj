@@ -9,15 +9,12 @@
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.utils :as ds-utils])
-  (:import  [tech.v3.datatype Buffer ObjectReader]
+  (:import  [tech.v3.datatype ObjectReader]
             [com.univocity.parsers.common AbstractParser AbstractWriter CommonSettings]
-            [com.univocity.parsers.csv
-             CsvFormat CsvParserSettings CsvParser
-             CsvWriterSettings CsvWriter]
+            [com.univocity.parsers.csv CsvParserSettings CsvParser CsvWriterSettings CsvWriter]
             [com.univocity.parsers.tsv
              TsvWriterSettings TsvWriter]
-            [com.univocity.parsers.common.processor.core Processor]
-            [java.io Reader InputStream Closeable Writer]
+            [java.io Reader Closeable Writer]
             [java.util List]
             [java.lang AutoCloseable]))
 
@@ -143,8 +140,8 @@
                           ^AbstractParser parser
                           ^:unsynchronized-mutable next-val]
   java.util.Iterator
-  (hasNext [this] (boolean next-val))
-  (next [this]
+  (hasNext [_this] (boolean next-val))
+  (next [_this]
     (let [retval next-val]
       (set! next-val (.parseNext parser))
       (when-not next-val
@@ -306,7 +303,7 @@
 
 (defn- data->string
   ^String [data-item]
-  (if-not (nil? data-item)
+  (when-not (nil? data-item)
     (cond
       (string? data-item) data-item
       (keyword? data-item) (name data-item)

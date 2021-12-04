@@ -13,19 +13,13 @@
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
             [clojure.datafy :refer [datafy]])
-  (:import [org.apache.arrow.vector.ipc.message MessageSerializer
-            MessageMetadataResult]
-           [org.apache.arrow.vector TypeLayout Float8Vector]
-           [org.apache.arrow.flatbuf Message MessageHeader DictionaryBatch RecordBatch]
-           [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
-           [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
-            ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
-            ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
-            ArrowType$Duration DictionaryEncoding]
+  (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
+           [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch]
+           [org.apache.arrow.vector.types.pojo Field]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype ObjectReader]
-           [java.util ArrayList HashMap List]))
+           [java.util List]))
 
 
 (set! *warn-on-reflection* true)
@@ -83,7 +77,7 @@
 
 (defn read-schema
   "returns a pair of offset-data and schema"
-  [{:keys [message body message-type]}]
+  [{:keys [message _body _message-type]}]
   (let [schema (MessageSerializer/deserializeSchema ^Message message)
         fields
         (->> (.getFields schema)
@@ -119,7 +113,7 @@
                   (mapv #(let [buffer (.buffers record-batch (int %))]
                            (dtype/sub-buffer data (.offset buffer)
                                              (.length buffer)))))})
-  ([{:keys [message body message-type] :as msg}]
+  ([{:keys [message body _message-type]}]
    (read-record-batch (.header ^Message message (RecordBatch.)) body)))
 
 
@@ -201,13 +195,13 @@
 
 (defn dictionary->strings
   "Returns a map of {:id :strings}"
-  [{:keys [id delta? records] :as dict}]
+  [{:keys [id _delta? records]}]
   (let [nodes (:nodes records)
         buffers (:buffers records)
         _ (assert (== 1 (count nodes)))
         _ (assert (== 3 (count buffers)))
         node (first nodes)
-        [bitwise offsets databuf] buffers
+        [_bitwise offsets databuf] buffers
         n-elems (long (:n-elems node))
         offsets (-> (native-buffer/set-native-datatype offsets :int32)
                     (dtype/sub-buffer 0 (inc n-elems)))

@@ -1,10 +1,10 @@
 (ns tech.v3.dataset.metamorph
-  (:require [tech.v3.dataset :as ds]
-            [tech.v3.dataset.modelling :as ds-mod]
+  (:require [tech.v3.dataset]
+            [tech.v3.dataset.modelling]
             [tech.v3.protocols.dataset :as prot])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
-  
+
 
 (defn dataset?
   "Is `ds` a `dataset` type?"
@@ -57,28 +57,3 @@
 
 (process-all-api-symbols-dataset)
 (process-all-api-symbols-dataset-modelling)
-
-(comment
-  (->
-   (ns-publics 'tech.v3.dataset.metamorph)
-   first
-   second
-   meta
-    :orig
-    clojure.repl/source-fn)
-
-
-
-
-  (symbol "tech.v3.dataset/missing")
-  (def data
-    (ds/->dataset {:a [1]}))
-
-  (
-
-   (feature-ecount)
-   {
-    :metamorph/data  data}))
-   
-
-  

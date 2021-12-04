@@ -42,9 +42,6 @@ user> (ds-reduce/group-by-column-agg
 
   * [zero-one benchmark winner](https://github.com/zero-one-group/geni-performance-benchmark/blob/da4d02e54de25a72214f72c4864ebd3d307520f8/dataset/src/dataset/optimised_by_chris.clj)"
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.typecast :as typecast]
-            [tech.v3.datatype.errors :as errors]
-            [tech.v3.datatype.reductions :as dtype-reductions]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.sampling :as dt-sample]
@@ -52,25 +49,19 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.io :as ds-io]
-            [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath])
-  (:import [tech.v3.datatype IndexReduction Buffer PrimitiveList]
-           [java.util Map Map$Entry HashMap List Set HashSet ArrayList]
-           [java.util.concurrent ConcurrentHashMap ArrayBlockingQueue]
-           [java.util.function BiFunction BiConsumer Function DoubleConsumer
-            LongConsumer Consumer LongSupplier]
-           [java.util.stream Stream]
+  (:import [tech.v3.datatype IndexReduction Buffer]
+           [java.util List HashSet ArrayList]
+           [java.util.concurrent ConcurrentHashMap]
+           [java.util.function LongConsumer Consumer]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype LongReader BooleanReader ObjectReader DoubleReader
             Consumers$StagedConsumer]
-           [tech.v3.datatype DoubleConsumers$Sum DoubleConsumers$MinMaxSum]
-           [it.unimi.dsi.fastutil.ints Int2ObjectMap
-            Int2ObjectOpenHashMap]
-           [clojure.lang IFn]
+           [tech.v3.datatype DoubleConsumers$Sum]
            [com.tdunning.math.stats TDigest])
   (:refer-clojure :exclude [distinct]))
 
@@ -117,14 +108,14 @@ user> (ds-reduce/group-by-column-agg
 
 (deftype BitmapConsumer [^RoaringBitmap bitmap]
   LongConsumer
-  (accept [this lval]
+  (accept [_this lval]
     (.add bitmap (unchecked-int lval)))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this other]
     (let [^BitmapConsumer other other]
       (-> (RoaringBitmap/or bitmap (.bitmap other))
           (BitmapConsumer.))))
-  (value [this]
+  (value [_this]
     bitmap))
 
 
@@ -142,13 +133,13 @@ user> (ds-reduce/group-by-column-agg
 (deftype SetConsumer [^{:unsynchronized-mutable true
                         :tag HashSet} data]
   Consumer
-  (accept [this objdata]
+  (accept [_this objdata]
     (.add data objdata))
   Consumers$StagedConsumer
-  (combine [this other]
+  (combine [_this other]
     (let [^SetConsumer other other]
       (.addAll ^HashSet (.clone data) (.data other))))
-  (value [this] data))
+  (value [_this] data))
 
 
 (defn distinct
@@ -199,11 +190,11 @@ user> (ds-reduce/group-by-column-agg
      compression
      final-reduce-fn]
   ds-reduce-impl/PReducerCombiner
-  (reducer-combiner-key [this]
+  (reducer-combiner-key [_this]
     [colname :tdigest compression])
-  (combine-reducers [reducer _combiner-key]
+  (combine-reducers [_reducer _combiner-key]
     (base-tdigest-reducer colname compression))
-  (finalize-combined-reducer [this ctx]
+  (finalize-combined-reducer [_this ctx]
     (let [ctx ^TDigest ctx]
       (final-reduce-fn (mapv (fn [path]
                                (case (first path)
@@ -359,8 +350,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 |  e | 99 |  3 |
 ```"
   ([colname agg-map options ds-seq]
-   (let [map-initial-capacity (long (get options :map-initial-capacity 100000))
-         results (ArrayList. 100000)
+   (let [results (ArrayList. 100000)
          cnames (vec (keys agg-map))
          ;;allow a single dataset to be passed in without wrapping in seq notation
          ds-seq (if (ds-impl/dataset? ds-seq)

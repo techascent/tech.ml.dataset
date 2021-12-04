@@ -21,17 +21,15 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
-            [com.github.ztellman.primitive-math :as pmath]
-            [clojure.set :as set])
-  (:import [java.io InputStream File]
-           [tech.v3.datatype Buffer ObjectReader PrimitiveList
+            [com.github.ztellman.primitive-math :as pmath])
+  (:import [tech.v3.datatype ObjectReader PrimitiveList
             ;;Dataset-specific to account for version changes
             PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.dataset Text]
-           [java.util List HashSet LinkedHashMap Map Arrays HashMap
+           [java.util List LinkedHashMap Map Arrays HashMap
             ArrayList LinkedHashSet]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
@@ -750,10 +748,12 @@
   The postcondition is that dtype/->array will return a java array in the appropriate
   datatype for each column.
 
-  options -
-  :unpack? - unpack packed datetime types.  Defaults to true"
+  Options:
+
+  * `:unpack?` - unpack packed datetime types.  Defaults to true"
   ([ds {:keys [unpack?]
-        :or {unpack? true}}]
+        :or {unpack? true}
+        :as _options}]
    (reduce (fn [ds col]
              (let [colname (ds-col/column-name col)
                    col (if unpack?
@@ -873,7 +873,7 @@
             _ (doseq [[k v] str->int]
                 (let [v (unchecked-int v)
                       list-size (.size int->str-ary-list)]
-                  (dotimes [idx (max 0 (- (inc v) list-size))]
+                  (dotimes [_idx (max 0 (- (inc v) list-size))]
                     (.add int->str-ary-list 0))
                   (.set int->str-ary-list v k)))]
         (StringTable. int->str-ary-list str->int int-data)))))
@@ -995,8 +995,9 @@
 (defn data->dataset
   "Convert a data-ized dataset created via dataset->data back into a
   full dataset"
-  [{:keys [metadata version columns] :as input
-    :or {version 1}}]
+  [{:keys [metadata version columns]
+    :or {version 1}
+    :as _input}]
   (->> columns
        (map (partial data->column version))
        (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))

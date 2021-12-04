@@ -64,10 +64,8 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.io :as io]
-            [tech.v3.io.url :as io-url]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.base :as dtype-base]
-            [tech.v3.datatype.emap :as emap]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
@@ -80,55 +78,35 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
             [clojure.tools.logging :as log])
 
   ;; Behold my Kindom of Nouns...And Tremble!!!!
-  (:import [smile.io HadoopInput]
-           [tech.v3.datatype PrimitiveList Buffer]
+  (:import [tech.v3.datatype Buffer]
            [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder
             LocalInputFile]
            [tech.v3.dataset.io.column_parsers PParser]
            [org.apache.hadoop.conf Configuration]
-           [java.time.temporal TemporalAccessor TemporalField ChronoField]
-           [org.apache.parquet.hadoop ParquetFileReader ParquetWriter
-            ParquetFileWriter$Mode CodecFactory]
-           [org.apache.parquet.hadoop.util HadoopOutputFile]
+           [java.time.temporal TemporalAccessor ChronoField]
+           [org.apache.parquet.hadoop ParquetFileReader]
            [org.apache.parquet.hadoop.metadata BlockMetaData ColumnChunkMetaData
             CompressionCodecName]
-           [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding
-            ParquetProperties ParquetProperties$WriterVersion ColumnWriter]
+           [org.apache.parquet.column ColumnDescriptor ColumnReader Encoding]
            [org.apache.parquet.column.page PageReadStore]
            [org.apache.parquet.column.impl ColumnReadStoreImpl]
-           [org.apache.parquet.io OutputFile PositionOutputStream InputFile
-            ColumnIOFactory PrimitiveColumnIO]
+           [org.apache.parquet.io OutputFile PositionOutputStream InputFile]
            [org.apache.parquet.io.api GroupConverter PrimitiveConverter Binary
             RecordConsumer]
            [org.apache.parquet.schema OriginalType MessageType
             PrimitiveType$PrimitiveTypeName Type$Repetition Type PrimitiveType]
-           [org.apache.hadoop.fs Path]
            [org.roaringbitmap RoaringBitmap]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel]
            [java.nio.file Paths StandardOpenOption OpenOption]
-           [java.io OutputStream]
            [java.time Instant LocalDate]
-           [java.util Iterator List HashMap]))
+           [java.util Iterator List]))
 
-
-(comment
-  (do
-    ;;silence the obnoxious loggin
-    (require '[tech.v3.dataset.utils :as ds-utils])
-    (ds-utils/set-slf4j-log-level :info))
-
-
-  )
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
-
-(def ^:private test-file "test/data/parquet/userdata1.parquet")
-(def ^:private test-file-2 "test/data/part-00000-74d3eb51-bc9c-4ba5-9d13-9e0d71eea31f.c000.snappy.parquet")
-(def ^:private perf-benchmark "/home/chrisn/dev/geni-performance-benchmark/geni/data/performance-benchmark-data/part-00000-021194b8-aa1b-4cd8-b641-e9902dea79a6-c000.snappy.parquet")
 
 (declare primitive-converter)
 
@@ -153,8 +131,8 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
                                    ^{:unsynchronized-mutable true
                                      :tag long} n-rows]
   Iterator
-  (hasNext [it] (> n-rows 0))
-  (next [it]
+  (hasNext [_it] (> n-rows 0))
+  (next [_it]
     (if (> n-rows 0)
       (let [retval (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
                      (read-fn col-rdr)
@@ -266,22 +244,22 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
 
 
 (defmulti ^:private typed-col->iterable
-  (fn [col-rdr col-def metadata]
+  (fn [_col-rdr col-def _metadata]
     (col-def->col-type col-def)))
 
 
 (defmethod typed-col->iterable :default
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (make-column-iterable col-rdr col-def :object read-byte-array))
 
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BOOLEAN
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (make-column-iterable col-rdr col-def :boolean read-boolean))
 
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BINARY
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (let [org-type (col-def->col-orig-type col-def)]
     (if (= org-type OriginalType/UTF8)
       (make-column-iterable col-rdr col-def :string read-str)
@@ -289,7 +267,7 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
 
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT96
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (make-column-iterable col-rdr col-def :instant read-instant))
 
 
@@ -353,12 +331,12 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
 
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/DOUBLE
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (make-column-iterable col-rdr col-def :float64 read-double))
 
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/FLOAT
-  [col-rdr col-def metadata]
+  [col-rdr col-def _metadata]
   (make-column-iterable col-rdr col-def :float32 read-float))
 
 
@@ -521,7 +499,7 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
          missing (RoaringBitmap.)]
      (loop [row-idx 0
             col-original-idx 0]
-       (if (< row-idx n-rows)
+       (when (< row-idx n-rows)
          (let [col-n-repeat (.readLong col-rep-counts row-idx)
                end-col-idx (unchecked-dec (+ col-n-repeat col-original-idx))]
            (dotimes [col-idx col-n-repeat]
@@ -529,7 +507,7 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
                (when (.contains original-missing rel-missing)
                  (.add missing (.size index-data)))
                (.addLong index-data rel-missing)))
-           (dotimes [extra-idx (- (aget max-rep-counts row-idx)
+           (dotimes [_extra-idx (- (aget max-rep-counts row-idx)
                                   col-n-repeat)]
              (.add missing (.size index-data))
              (.addLong index-data end-col-idx))
@@ -907,21 +885,6 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
   (.endMessage consumer))
 
 
-(defn- ->hadoop-path
-  ^Path [fpath]
-  (if (instance? Path fpath)
-    fpath
-    (let [path-url (if (io-url/url? fpath)
-                     fpath
-                     ;;Allow local files to load.
-                     (let [nio-path (Paths/get fpath (into-array String []))
-                           nio-path (if (.isAbsolute nio-path)
-                                      nio-path
-                                      (Paths/get (System/getProperty "user.dir")
-                                                 (into-array String [fpath])))]
-                       (.toUri ^java.nio.file.Path nio-path)))]
-      (Path. (str path-url)))))
-
 (defn- pos-out-stream
   [str-path]
   (let [fchannel (FileChannel/open
@@ -990,10 +953,7 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
   * `:page-write-checksum?` - Defaults to true.  Output a crc check file in addition to
      parquet file.
   * `:writer-version` - Defaults to `ParquetWriter/DEFAULT_WRITER_VERSION`."
-  ([path {:keys [block-size page-size dictionary-page-size
-                 dictionary-enabled? validating?
-                 writer-version] :as options}
-    ds-seq]
+  ([path options ds-seq]
    (let [ds-seq (map prepare-for-parquet ds-seq)
          first-ds (first ds-seq)
          ;;message type

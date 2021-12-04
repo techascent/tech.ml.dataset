@@ -1,6 +1,5 @@
 (ns tech.v3.libs.spark
-  (:require [tech.v3.dataset.base :as ds-base]
-            [tech.v3.dataset.impl.dataset :as ds-impl]
+  (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.dataset.column :as ds-col]
@@ -18,8 +17,6 @@
            [tech.v3.datatype ObjectReader]
            [tech.v3.dataset SimpleRDD]
            [java.time LocalDate Instant]
-           [java.util.function Function]
-           [java.sql Date]
            [java.util List]))
 
 
@@ -160,7 +157,7 @@
 
 
 (defn ds->spark-dataset
-  (^Dataset [ds ^SparkSession spark-session options]
+  (^Dataset [ds ^SparkSession spark-session _options]
    ;;Prepare the dataset datatypes
    (let [ds (prepare-ds-for-spark ds)]
      (.createDataFrame spark-session (dataset->row-list ds)

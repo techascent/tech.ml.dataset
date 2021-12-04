@@ -11,15 +11,12 @@
            [tech.v3.dataset Text]
            [org.apache.arrow.vector VarCharVector BitVector TinyIntVector UInt1Vector
             SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
-            Float4Vector Float8Vector DateDayVector DateMilliVector TimeMilliVector
-            DurationVector TimeStampMicroTZVector TimeStampMicroVector TimeStampVector
-            TimeStampMilliVector TimeStampMilliTZVector FieldVector VectorSchemaRoot
-            BaseVariableWidthVector BaseLargeVariableWidthVector BaseFixedWidthVector
-            TimeStampNanoVector TimeStampNanoTZVector TimeStampSecVector TimeStampSecTZVector
-            LargeVarCharVector]
-           [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
-            DictionaryProvider$MapDictionaryProvider]
+            Float4Vector Float8Vector DateDayVector TimeStampMicroTZVector
+            TimeStampMilliTZVector
+            TimeStampMicroVector TimeStampVector TimeStampMilliVector FieldVector
+            BaseVariableWidthVector BaseLargeVariableWidthVector LargeVarCharVector]
            [org.apache.arrow.memory ArrowBuf]
+           [org.apache.arrow.vector.dictionary Dictionary]
            [org.roaringbitmap RoaringBitmap]
            [java.util List]))
 
@@ -118,7 +115,7 @@
 
 (defn varchar->string-reader
   "copies the data into a list of strings."
-  (^List [^FieldVector fv offset-buf-dtype]
+  (^List [^FieldVector fv _offset-buf-dtype]
    (let [n-elems (dtype/ecount fv)
          value-buf (arrow-buffer->native-buffer :int8 (.getDataBuffer fv))
          offset-buf (get-offset-buffer fv)
@@ -311,7 +308,7 @@
    [:text 'LargeVarCharVector]])
 
 (defn- primitive-datatype?
-  [datatype]
+  [_datatype]
   (boolean #{:int8 :uint8
              :int16 :uin16
              :int32 :uint32

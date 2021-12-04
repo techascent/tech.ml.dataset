@@ -5,7 +5,6 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.errors :as errors]
-            [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.dataset.column :as ds-col]
@@ -210,7 +209,7 @@
                   (if-let [^PrimitiveList item (.get idx-groups rhs-val)]
                     (do
                       (when lhs-missing? (.add lhs-found rhs-val))
-                      (dotimes [n-iters (.size item)] (.add rhs-indexes idx))
+                      (dotimes [_n-iters (.size item)] (.add rhs-indexes idx))
                       (.addAll lhs-indexes item))
                     (when rhs-missing? (.add rhs-missing idx)))))
               {:lhs-indexes lhs-indexes
@@ -698,7 +697,7 @@ outer-join [8 4]:
            (when found?
              (.add retval (unchecked-int rhs-idx)))
            (recur new-lhs-idx new-rhs-idx))))
-     (dotimes [iter (- n-elems (.size retval))]
+     (dotimes [_iter (- n-elems (.size retval))]
        (.add retval n-right-dec))
      [0 retval]))
 
@@ -714,7 +713,7 @@ outer-join [8 4]:
   - `asof-op`- may be [:< :<= :nearest :>= :>] - type of join operation.  Defaults to
      <=."
   ([colname lhs rhs {:keys [asof-op]
-                      :or {asof-op :<=}}]
+                     :or {asof-op :<=}}]
    (when-not (#{:< :<= :nearest :>= :>} asof-op)
      (throw (Exception. (format "Unrecognized asof op: %s" asof-op))))
    (let [[lhs-colname rhs-colname] (colname->lhs-rhs-colnames colname)
@@ -736,23 +735,23 @@ outer-join [8 4]:
            (throw (Exception. "Unsupported")))
          rhs-offset (long rhs-offset)
          n-indexes (dtype/ecount rhs-indexes)
-         n-empty (- (ds-base/row-count lhs) (+ rhs-offset n-indexes))]
-     (let [lhs-columns (ds-base/columns lhs)
-           rhs-columns
-           (->> (ds-base/columns rhs)
-                (map (fn [old-col]
-                       (if (== 0 rhs-offset)
-                         (ds-col/extend-column-with-empty
-                          (ds-col/select old-col rhs-indexes)
-                          n-empty)
-                         (ds-col/prepend-column-with-empty
-                          (ds-col/select old-col rhs-indexes)
-                          rhs-offset)))))]
-       (-> (ds-impl/new-dataset
-            (format "asof-%s" (name asof-op))
-            (nice-column-names
-             [lhs-table-name lhs-columns]
-             [rhs-table-name rhs-columns]))
-           (update-join-metadata lhs-table-name rhs-table-name)))))
+         n-empty (- (ds-base/row-count lhs) (+ rhs-offset n-indexes))
+         lhs-columns (ds-base/columns lhs)
+         rhs-columns
+         (->> (ds-base/columns rhs)
+              (map (fn [old-col]
+                     (if (== 0 rhs-offset)
+                       (ds-col/extend-column-with-empty
+                        (ds-col/select old-col rhs-indexes)
+                        n-empty)
+                       (ds-col/prepend-column-with-empty
+                        (ds-col/select old-col rhs-indexes)
+                        rhs-offset)))))]
+     (-> (ds-impl/new-dataset
+          (format "asof-%s" (name asof-op))
+          (nice-column-names
+           [lhs-table-name lhs-columns]
+           [rhs-table-name rhs-columns]))
+         (update-join-metadata lhs-table-name rhs-table-name))))
   ([colname lhs rhs]
    (left-join-asof colname lhs rhs {})))

@@ -25,3 +25,5 @@ graal-test
 tc
 __pycache__
 *.crc
+.clj-kondo
+.lsp

@@ -19,17 +19,14 @@
    ;;Behold -- My Kindom Of Nouns!!!
    [org.apache.arrow.vector.dictionary DictionaryProvider Dictionary
     DictionaryProvider$MapDictionaryProvider]
-   [org.apache.arrow.vector.types.pojo FieldType ArrowType Field Schema
-    ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
-    ArrowType$Utf8 ArrowType$Date ArrowType$Time ArrowType$Timestamp
-    ArrowType$Duration DictionaryEncoding]
+   [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
+    ArrowType$Utf8 ArrowType$Timestamp DictionaryEncoding]
    [org.apache.arrow.vector VarCharVector BaseFixedWidthVector
     BaseVariableWidthVector BaseLargeVariableWidthVector FieldVector
     DateDayVector VectorSchemaRoot  TimeStampMicroTZVector TimeStampMicroVector
     TimeStampMilliVector TimeStampMilliTZVector TimeStampSecVector
     TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector]
-   [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter
-    ArrowFileWriter ArrowFileReader]
+   [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter]
    [tech.v3.dataset.string_table StringTable]
    [java.util HashMap]
    [java.time ZoneId]
@@ -52,7 +49,6 @@
         dict-id (.hashCode ^Object colname)
         arrow-indices-type (ArrowType$Int. bit-width true)
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
-        ftype (arrow-schema/datatype->field-type :text true)
         varchar-vec (arrow-dtype/strings->varchar!
                      (dtype/->reader int->str)
                      nil
@@ -63,14 +59,14 @@
 (defn string-col->encoding
   "Given a string column return a map of :dict-id :table-width.  The dictionary
   id is the hashcode of the column mame."
-  [^DictionaryProvider$MapDictionaryProvider dict-provider colname col]
+  [^DictionaryProvider$MapDictionaryProvider dict-provider _colname col]
   (let [dict (string-column->dict col)]
     (.put dict-provider ^Dictionary dict)
     {:encoding (.getEncoding dict)}))
 
 
 (defn idx-col->field
-  ^Field [dict-provider {:keys [strings-as-text?]} ^long idx col]
+  ^Field [dict-provider {:keys [strings-as-text?]} ^long _idx col]
   (let [colmeta (meta col)
         nullable? (boolean
                    (or (:nullable? colmeta)
@@ -331,7 +327,7 @@
                                   (try
                                     [(edn/read-string k)
                                      (edn/read-string v)]
-                                    (catch Exception e
+                                    (catch Exception _e
                                       [k v]))))
                            (into {}))
                       (catch Throwable e

@@ -4,9 +4,7 @@
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column-base :refer [column-datatype-categorical?]]
             [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
-            [tech.v3.datatype.argops :refer [arggroup]]
-            [tech.v3.datatype.casting :refer [datatype->object-class]]
-            [clojure.set :refer [difference]]))
+            [tech.v3.datatype.argops :refer [arggroup]]))
 
 
 (set! *warn-on-reflection* true)
