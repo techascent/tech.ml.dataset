@@ -68,9 +68,11 @@
               :test-paths ["test" "neanderthal"]}
              :jdk-17 {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
                                  "--enable-native-access=ALL-UNNAMED"]}
+             :codegen
+             {:source-paths ["src" "dev"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]
-                             [codox "0.10.7" :exclusions [org.ow2.asm/asm-all]]]
+                             [com.cnuernber/codox "1.000"]]
               :codox {:project {:name "tech.ml.dataset"}
                       :metadata {:doc/format :markdown}
                       :themes [:rdash]
@@ -86,6 +88,7 @@
                                    tech.v3.dataset.column
                                    tech.v3.dataset.clipboard
                                    tech.v3.dataset.neanderthal
+                                   tech.v3.dataset.metamorph
                                    tech.v3.dataset.categorical
                                    tech.v3.dataset.rolling
                                    tech.v3.dataset.reductions
@@ -111,5 +114,6 @@
              :larray {:source-paths ["graal-native"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"]
-  :aliases {"codox" ["with-profile" "codox,dev" "run" "-m" "tech.v3.libs.lein-codox"]
+  :aliases {"codox" ["with-profile" "codox,dev" "run" "-m" "codox.main/-main"]
+            "codegen" ["with-profile" "codegen,dev" "run" "-m" "tech.v3.dataset.codegen/-main"]
             "larray" ["with-profile" "larray" "run" "-m" "tech.v3.dataset.unpack-larray"]})

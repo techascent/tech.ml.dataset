@@ -209,15 +209,11 @@ user> (ds/rowvec-at stocks -1)
   (dtype/shape dataset))
 
 
-(export-symbols tech.v3.dataset.column
-                new-column)
-
-
 (export-symbols tech.v3.dataset.impl.dataset
                 new-dataset)
 
 (export-symbols tech.v3.dataset.missing
-                select-missing replace-missing)
+                replace-missing)
 
 
 (defn head

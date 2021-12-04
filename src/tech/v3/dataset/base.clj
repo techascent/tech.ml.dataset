@@ -593,7 +593,7 @@
                                 (let [rc (row-count ds)
                                       missing (bitmap/->bitmap (range rc))
                                       mv (col-base/dtype->missing-val-map dtype)
-                                      cd (dtype/make-reader dtype rc mv)]
+                                      cd (dtype/const-reader mv rc)]
                                   (ds-col/new-column
                                    #:tech.v3.dataset{:data cd
                                                      :missing missing
@@ -966,28 +966,28 @@
    (let [datatype (:datatype metadata)
          missing (bitmap/->bitmap missing)]
      #:tech.v3.dataset
-     {:name (:name metadata)
-      :missing missing
-      :force-datatype? true
-      :data (case datatype
-              :string
-              (string-data->column-data data)
-              :text
-              (text-data->column-data data missing)
-              (if (identical? :object (casting/flatten-datatype datatype))
-                (dtype/elemwise-cast data datatype)
-                (if (= version 2)
-                  (array-buffer/array-buffer data datatype)
+      {:name (:name metadata)
+       :missing missing
+       :force-datatype? true
+       :data (case datatype
+               :string
+               (string-data->column-data data)
+               :text
+               (text-data->column-data data missing)
+               (if (identical? :object (casting/flatten-datatype datatype))
+                 (dtype/elemwise-cast data datatype)
+                 (if (= version 2)
+                   (array-buffer/array-buffer data datatype)
                   ;; Convert from packed local dates of old version to new
                   ;; version.
-                  (if (= datatype :packed-local-date)
-                    (-> (dtype/emap #(when-not (== 0 (long %))
-                                       (PackedLocalDate/asLocalDate
-                                        (unchecked-int %)))
-                                    :local-date data)
-                        (packing/pack)
-                        (dtype/clone))
-                    (dtype/elemwise-cast data datatype)))))}))
+                   (if (= datatype :packed-local-date)
+                     (-> (dtype/emap #(when-not (== 0 (long %))
+                                        (PackedLocalDate/asLocalDate
+                                         (unchecked-int %)))
+                                     :local-date data)
+                         (packing/pack)
+                         (dtype/clone))
+                     (dtype/elemwise-cast data datatype)))))}))
   ([coldata]
    (data->column (:version coldata) coldata)))
 

@@ -688,16 +688,9 @@ test/data/stocks.csv [10 3]:
 
 
 (defn new-column
-  "Create a new column.  Data will scanned for missing values
-  unless the full 4-argument pathway is used."
-  ([data]
-  (tech.v3.dataset.metamorph-api/new-column data))
-  ([data metadata]
-  (tech.v3.dataset.metamorph-api/new-column data metadata))
-  ([data metadata missing]
-  (tech.v3.dataset.metamorph-api/new-column data metadata missing))
-  ([]
-  (tech.v3.dataset.metamorph-api/new-column )))
+  "Create a new column from some values"
+  ([column-name values]
+  (tech.v3.dataset.metamorph-api/new-column column-name values)))
 
 
 (defn new-dataset
@@ -1022,7 +1015,7 @@ user> (take 5 (ds/rowvecs stocks))
 
 
 (defn select-missing
-  "Select only rows with missing values"
+  "Remove missing entries by simply selecting out the missing indexes"
   ([]
   (tech.v3.dataset.metamorph-api/select-missing )))
 
