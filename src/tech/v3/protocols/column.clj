@@ -1,5 +1,4 @@
-(ns ^:no-doc tech.v3.protocols.column
-  (:import [org.roaringbitmap RoaringBitmap]))
+(ns ^:no-doc tech.v3.protocols.column)
 
 (defprotocol PIsColumn
   (is-column? [item]))
@@ -16,7 +15,7 @@
     "Return a new column.")
   (supported-stats [col]
     "List of available stats for the column")
-  (^RoaringBitmap missing [col]
+  (^org.roaringbitmap.RoaringBitmap missing [col]
     "Indexes of missing values")
   (is-missing? [col idx]
     "Return true if this index is missing.")
