@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -e
+
+lein clean
+lein codegen
+lein test

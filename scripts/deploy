@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -e
+
+scripts/run-tests
+lein codox
+deploy-and-tag $@
