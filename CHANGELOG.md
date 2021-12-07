@@ -3,6 +3,8 @@
  * Main api namespaces are code-generated to ensure discoverability.  Namespaces affected are
    tech.v3.datatype, tech.v3.datatype.functional, tech.v3.datatype.datetime, tech.v3.dataset,
    tech.v3.dataset.metamorph.
+ * clj-kondo bindings and mostly clean linting pass failing only on 2 places on my dev machine.
+   Working with borkdude to deal with small number of current failings.
 
 ## 6.031
  * Upgrade to latest dtype-next - fix for ternary <,<=,>,>= in dfn namespace.
