@@ -40,7 +40,7 @@
                     (if (nil? to-inclusive?) true to-inclusive?))]
        (if as-index-structure
          submap
-         (ListPersistentVector. (first (.values submap))))))))
+         (ListPersistentVector. (reduce concat [] (.values submap))))))))
 
 
 (extend-type LinkedHashMap
@@ -54,7 +54,7 @@
                                                ^LinkedHashMap (LinkedHashMap.))]
         (if as-index-structure
           picked-map
-          (ListPersistentVector. (first (.values ^Map picked-map))))))))
+          (ListPersistentVector. (reduce concat [] (.values picked-map))))))))
 
 
 (defn build-value-to-index-position-map [column-data]
