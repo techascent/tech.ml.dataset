@@ -28,3 +28,62 @@
    (select-from-index index-structure mode selection-spec {:as-index-structure false}))
   ([index-structure mode selection-spec options]
    (col-proto/select-from-index index-structure mode selection-spec options)))
+
+
+(comment 
+  (require '[tech.v3.dataset :as ds])
+  (require '[tech.v3.dataset.column :as col])
+  (require '[criterium.core :as c])
+
+  (def x (col/new-column :x (range 200000)))
+
+  (def xidx (col/index-structure x))
+
+  (c/quick-bench
+  (def x-indices (select-from-index xidx :slice {:from 100000 :to 200000})))
+
+  (def x-indices (select-from-index xidx :slice {:from 100000 :to 200000}))
+
+
+
+  (c/quick-bench
+  (-> xidx
+      (.subMap 100000 true 200000 true)
+      (.values)
+      (->> (reduce into (tech.v3.datatype.ListPersistentVector. [])))))
+  ;; Execution time mean : 23.044314 sec
+
+  (c/quick-bench
+  (-> xidx
+      (.subMap 100000 true 200000 true)
+
+      (.values)
+      (->> (reduce concat []))
+      (tech.v3.datatype.ListPersistentVector.)
+      ))
+  ;; Execution time mean : 2.879188 ms
+
+  (c/quick-bench
+  (let [lst (java.util.ArrayList.)
+        values (-> xidx
+                    (.subMap 100000 true 200000 true)
+                    (.values))]
+    (doall (map #(.addAll lst %) values))
+    lst))
+  ;; Execution time mean : 11.996928 ms
+
+  (c/quick-bench
+  (let [lst (tech.v3.datatype/make-list :int64)
+        values (-> xidx
+                    (.subMap 100000 true 200000 true)
+                    (.values))]
+    (doall (map #(.addAll lst %) values))))
+  ;; Execution time mean : 76.205408 ms
+
+  (c/quick-bench
+  (let [lst (tech.v3.datatype/make-list :int64)
+        values (-> xidx
+                    (.subMap 100000 true 200000 true)
+                    (.values))]
+    (doall (map #(.addAll lst %) values))))
+)
