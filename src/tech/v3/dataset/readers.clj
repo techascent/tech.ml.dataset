@@ -1,7 +1,7 @@
 (ns ^:no-doc tech.v3.dataset.readers
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.protocols.dataset :as ds-proto])
-  (:import [tech.v3.datatype ObjectReader Buffer]
+  (:import [tech.v3.datatype ObjectReader Buffer ListPersistentVector]
            [tech.v3.dataset FastStruct]
            [java.util List HashMap Collections]))
 
@@ -29,10 +29,11 @@
      (reify ObjectReader
        (lsize [rdr] n-rows)
        (readObject [rdr idx]
-         (reify ObjectReader
-           (lsize [rdr] n-cols)
-           (readObject [rdr inner-idx]
-             (.get ^List (.get readers inner-idx) idx))))))))
+         (ListPersistentVector.
+          (reify ObjectReader
+            (lsize [rdr] n-cols)
+            (readObject [rdr inner-idx]
+              (.get ^List (.get readers inner-idx) idx)))))))))
 
 
 (defn mapseq-reader

@@ -48,6 +48,7 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.datatype.statistics :as dt-stats]
             [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -376,14 +377,14 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                             (let [tmp-colname ::_temp_col]
                               [tmp-colname
                                (map #(assoc % tmp-colname
-                                            (apply
-                                             ds-col/column-map
-                                             vector
-                                             ;;assign datatype and missing to avoid
-                                             ;;scanning the data
-                                             {:datatype :persistent-vector
-                                              :missing-fn (constantly (bitmap/->bitmap))}
-                                             (map (partial ds-base/column %) colname)))
+                                            (ds-col/new-column
+                                             #:tech.v3.dataset{:name tmp-colname
+                                                               :data
+                                                               (-> (ds-base/select-columns % colname)
+                                                                   (ds-readers/value-reader))
+                                                               :metadata {}
+                                                               :missing (bitmap/->bitmap)
+                                                               :force-datatype? true}))
                                     ds-seq)])
                             [colname ds-seq])
          ;;ensure the unique columns are in the result
