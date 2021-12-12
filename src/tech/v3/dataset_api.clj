@@ -660,11 +660,47 @@ _unnamed [3 3]:
                  ~src-colnames)))
 
 
+(defn pmap-ds
+  "Parallelize mapping a function from dataset->dataset across a single dataset.  Results are
+  coalesced back into a single dataset.  The original dataset is simple sliced into n-core
+  results and map-fn is called n-core times.  ds-map-fn must be a function from
+  dataset->dataset although it may return nil.
+
+  Options:
+
+  * `:max-batch-size` - this is a default for tech.v3.parallel.for/indexed-map-reduce.  You
+  can control how many rows are processed in a given batch - the default is 64000.  If your
+  mapping pathway produces a large expansion in the size of the dataset then it may be
+  good to reduce the max batch size and use :as-seq to produce a sequence of datasets.
+  * `:result-type`
+     - `:as-seq` - Return a sequence of datasets, one for each batch.
+     - `:as-ds` - Return a single datasets with all results in memory (default option)."
+  ([ds ds-map-fn options]
+   (if (nil? ds)
+     ds
+     (pfor/indexed-map-reduce
+      (row-count ds)
+      (fn [^long start-idx ^long group-len]
+        (-> (select-rows ds (range start-idx (+ start-idx group-len)))
+            (ds-map-fn)))
+      (case (get options :result-type :as-ds)
+        :as-ds #(apply concat-copying %)
+        :as-seq identity)
+      options)))
+  ([ds ds-map-fn]
+   (pmap-ds ds ds-map-fn nil)))
+
+
 (defn row-map
   "Map a function across the rows of the dataset producing a new dataset
   that is merged back into the original potentially replacing existing columns.
   Options are passed into the [[->dataset]] function so you can control the resulting
   column types by the usual dataset parsing options described there.
+
+  Options:
+
+  See options for [[pmap-ds]].  In particular, note that you can
+  produce a sequence of datasets as opposed to a single large dataset.
 
   Examples:
 
@@ -694,10 +730,87 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-04-01 | 28.37 |  804.8569 |
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
-  [ds map-fn & [options]]
-  (merge ds (->> (rows ds)
-                 (dtype/emap map-fn :object)
-                 (->>dataset options))))
+  ([ds map-fn options]
+   (pmap-ds ds
+            #(merge % (->> (rows %)
+                           (sequence (map map-fn))
+                           (->>dataset options)))
+            options))
+  ([ds map-fn]
+   (row-map ds map-fn nil)))
+
+
+(defn row-mapcat
+  "Map a function across the rows of the dataset.  The function must produce a sequence of
+  maps and the original dataset rows will be duplicated and then merged into the result
+  of calling (->> (apply concat) (->>dataset options) on the result of `mapcat-fn`.  Options
+  are the same as [[->dataset]].
+
+  The smaller the maps returned from mapcat-fn the better, perhaps consider using records.
+  In the case that a mapcat-fn result map has a key that overlaps a column name the
+  column will be replaced with the output of mapcat-fn.
+
+  Options:
+
+  * See options for [[pmap-ds]].  Especially note `:max-batch-size` and `result-type:`.
+  In order to conserve memory it may be more efficient to
+
+  Example:
+
+```clojure
+user> (def ds (ds/->dataset {:rid (range 10)
+                             :data (repeatedly 10 #(rand-int 3))}))
+#'user/ds
+user> (ds/head ds)
+_unnamed [5 2]:
+
+| :rid | :data |
+|-----:|------:|
+|    0 |     0 |
+|    1 |     2 |
+|    2 |     0 |
+|    3 |     1 |
+|    4 |     2 |
+user> (def mapcat-fn (fn [row]
+                       (for [idx (range (row :data))]
+                         {:idx idx})))
+#'user/mapcat-fn
+user> (mapcat mapcat-fn (ds/rows ds))
+({:idx 0} {:idx 1} {:idx 0} {:idx 0} {:idx 1} {:idx 0} {:idx 1} {:idx 0} {:idx 1})
+user> (ds/row-mapcat ds mapcat-fn)
+_unnamed [9 3]:
+
+| :rid | :data | :idx |
+|-----:|------:|-----:|
+|    1 |     2 |    0 |
+|    1 |     2 |    1 |
+|    3 |     1 |    0 |
+|    4 |     2 |    0 |
+|    4 |     2 |    1 |
+|    6 |     2 |    0 |
+|    6 |     2 |    1 |
+|    8 |     2 |    0 |
+|    8 |     2 |    1 |
+user>
+```"
+  ([ds mapcat-fn options]
+   (pmap-ds
+    ds
+    (fn [ds]
+      (let [ds (assoc ds ::row-id (range (row-count ds)))
+            nds (->> (rows ds)
+                     (sequence (comp
+                                (map #(let [maps (mapcat-fn %)
+                                            rid (% ::row-id)]
+                                        (map (fn [row] (assoc row ::row-id rid)) maps)))
+                                cat))
+                     (->>dataset options))]
+        (-> (dissoc ds ::row-id)
+            (select-rows (nds ::row-id))
+            (merge (dissoc nds ::row-id)))))
+    options))
+  ([ds mapcat-fn]
+   (row-mapcat ds mapcat-fn nil)))
 
 
 (defn column-cast

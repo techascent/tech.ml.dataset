@@ -789,6 +789,27 @@ test/data/stocks.csv [10 3]:
   (tech.v3.dataset.base/order-column-names dataset colname-seq)))
 
 
+(defn pmap-ds
+  "Parallelize mapping a function from dataset->dataset across a single dataset.  Results are
+  coalesced back into a single dataset.  The original dataset is simple sliced into n-core
+  results and map-fn is called n-core times.  ds-map-fn must be a function from
+  dataset->dataset although it may return nil.
+
+  Options:
+
+  * `:max-batch-size` - this is a default for tech.v3.parallel.for/indexed-map-reduce.  You
+  can control how many rows are processed in a given batch - the default is 64000.  If your
+  mapping pathway produces a large expansion in the size of the dataset then it may be
+  good to reduce the max batch size and use :as-seq to produce a sequence of datasets.
+  * `:result-type`
+     - `:as-seq` - Return a sequence of datasets, one for each batch.
+     - `:as-ds` - Return a single datasets with all results in memory (default option)."
+  ([ds ds-map-fn options]
+  (tech.v3.dataset-api/pmap-ds ds ds-map-fn options))
+  ([ds ds-map-fn]
+  (tech.v3.dataset-api/pmap-ds ds ds-map-fn)))
+
+
 (defn rand-nth
   "Return a random row from the dataset in map format"
   ([dataset]
@@ -908,6 +929,11 @@ user> (ds/row-at stocks -1)
   Options are passed into the [[->dataset]] function so you can control the resulting
   column types by the usual dataset parsing options described there.
 
+  Options:
+
+  See options for [[pmap-ds]].  In particular, note that you can
+  produce a sequence of datasets as opposed to a single large dataset.
+
   Examples:
 
 ```clojure
@@ -936,8 +962,69 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-04-01 | 28.37 |  804.8569 |
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
-  ([ds map-fn & args]
-  (apply tech.v3.dataset-api/row-map ds map-fn args)))
+  ([ds map-fn options]
+  (tech.v3.dataset-api/row-map ds map-fn options))
+  ([ds map-fn]
+  (tech.v3.dataset-api/row-map ds map-fn)))
+
+
+(defn row-mapcat
+  "Map a function across the rows of the dataset.  The function must produce a sequence of
+  maps and the original dataset rows will be duplicated and then merged into the result
+  of calling (->> (apply concat) (->>dataset options) on the result of `mapcat-fn`.  Options
+  are the same as [[->dataset]].
+
+  The smaller the maps returned from mapcat-fn the better, perhaps consider using records.
+  In the case that a mapcat-fn result map has a key that overlaps a column name the
+  column will be replaced with the output of mapcat-fn.
+
+  Options:
+
+  * See options for [[pmap-ds]].  Especially note `:max-batch-size` and `result-type:`.
+  In order to conserve memory it may be more efficient to
+
+  Example:
+
+```clojure
+user> (def ds (ds/->dataset {:rid (range 10)
+                             :data (repeatedly 10 #(rand-int 3))}))
+#'user/ds
+user> (ds/head ds)
+_unnamed [5 2]:
+
+| :rid | :data |
+|-----:|------:|
+|    0 |     0 |
+|    1 |     2 |
+|    2 |     0 |
+|    3 |     1 |
+|    4 |     2 |
+user> (def mapcat-fn (fn [row]
+                       (for [idx (range (row :data))]
+                         {:idx idx})))
+#'user/mapcat-fn
+user> (mapcat mapcat-fn (ds/rows ds))
+({:idx 0} {:idx 1} {:idx 0} {:idx 0} {:idx 1} {:idx 0} {:idx 1} {:idx 0} {:idx 1})
+user> (ds/row-mapcat ds mapcat-fn)
+_unnamed [9 3]:
+
+| :rid | :data | :idx |
+|-----:|------:|-----:|
+|    1 |     2 |    0 |
+|    1 |     2 |    1 |
+|    3 |     1 |    0 |
+|    4 |     2 |    0 |
+|    4 |     2 |    1 |
+|    6 |     2 |    0 |
+|    6 |     2 |    1 |
+|    8 |     2 |    0 |
+|    8 |     2 |    1 |
+user>
+```"
+  ([ds mapcat-fn options]
+  (tech.v3.dataset-api/row-mapcat ds mapcat-fn options))
+  ([ds mapcat-fn]
+  (tech.v3.dataset-api/row-mapcat ds mapcat-fn)))
 
 
 (defn rows

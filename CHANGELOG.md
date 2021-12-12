@@ -1,4 +1,5 @@
 # Changelog
+
 ## 6.035
  * Main api namespaces are code-generated to ensure discoverability.  Namespaces affected are
    tech.v3.datatype, tech.v3.datatype.functional, tech.v3.datatype.datetime, tech.v3.dataset,

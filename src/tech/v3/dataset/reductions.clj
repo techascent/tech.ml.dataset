@@ -51,6 +51,7 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath])
@@ -351,7 +352,20 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 ```"
   ([colname agg-map options ds-seq]
    (let [results (ArrayList. 100000)
+         ;;By default, we include the key-columns in the result.
+         ;;Users can override this by passing in the column in agg-map
+         agg-map (merge
+                  (->> (if (sequential? colname)
+                         colname
+                         [colname])
+                       (reduce (fn [agg-map cname]
+                                 (assoc agg-map
+                                        cname
+                                        (first-value cname)))
+                               {}))
+                  agg-map)
          cnames (vec (keys agg-map))
+
          ;;allow a single dataset to be passed in without wrapping in seq notation
          ds-seq (if (ds-impl/dataset? ds-seq)
                   [ds-seq]
@@ -362,10 +376,18 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                             (let [tmp-colname ::_temp_col]
                               [tmp-colname
                                (map #(assoc % tmp-colname
-                                            (apply dtype/emap vector :object
-                                                   (map (partial ds-base/column %) colname)))
+                                            (apply
+                                             ds-col/column-map
+                                             vector
+                                             ;;assign datatype and missing to avoid
+                                             ;;scanning the data
+                                             {:datatype :persistent-vector
+                                              :missing-fn (constantly (bitmap/->bitmap))}
+                                             (map (partial ds-base/column %) colname)))
                                     ds-seq)])
                             [colname ds-seq])
+         ;;ensure the unique columns are in the result
+
          ;;group by using this reducer followed by this consumer fn.
          _ (ds-reduce-impl/group-by-column-aggregate-impl
             colname

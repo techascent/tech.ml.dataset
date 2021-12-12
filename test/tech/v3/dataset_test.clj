@@ -1367,6 +1367,16 @@
            (induct-ds :sum-of-previous-row)))))
 
 
+(deftest row-mapcat
+  (let [ds (ds/->dataset {:rid (range 10)
+                          :data (repeatedly 10 #(rand-int 3))})
+        mds (ds/row-mapcat ds (fn [row]
+                                (for [idx (range (row :data))]
+                                  {:idx idx})))
+        n-rows (long (dfn/sum (ds :data)))]
+    (is (= n-rows (ds/row-count mds)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

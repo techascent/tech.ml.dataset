@@ -4,9 +4,13 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.jvm-map :as jvm-map]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [clojure.test :refer [deftest is]])
-  (:import [tech.v3.datatype UnaryPredicate]))
+  (:import [tech.v3.datatype UnaryPredicate]
+           [java.time LocalDate YearMonth]
+           [java.util ArrayList]))
 
 
 (deftest simple-reduction
@@ -142,8 +146,10 @@
         grouped-small (ds-reduce/group-by-column-agg :symbol agg-map ds-seq)]
 
     ;;Mainly ensuring that nothing throws.
-    (is (every? #(= 3 (ds/column-count %)) [straight straight-small
-                                            grouped grouped-small])))
+    (is (every? #(or (= 3 (ds/column-count %))
+                     (= 4 (ds/column-count %)))
+                [straight straight-small
+                 grouped grouped-small])))
   (let [missing-ds (ds/new-dataset [(ds-col/new-column
                                      :missing (range 1000)
                                      nil
@@ -163,14 +169,74 @@
                 (:missing sub-ds)))))
 
 
-(deftest group-by-multiple-columns
-  (let [tstds (ds/->dataset {:a ["a" "a" "a" "b" "b" "b" "c" "d" "e"]
-                             :b [22   21  22 44  42  44   77 88 99]})
-        res-ds
-        (ds-reduce/group-by-column-agg
-         [:a :b] {:a (ds-reduce/first-value :a)
-                  :b (ds-reduce/first-value :b)
-                  :c (ds-reduce/row-count)}
-         [tstds tstds tstds])]
+(defn- create-otfrom-init-dataset
+  [& [{:keys [n-simulations n-placements n-expansion n-rows]
+       :or {n-simulations 100
+            n-placements 50
+            n-expansion 20
+            n-rows 1000000}}]]
+  (->> (for [idx (range n-rows)]
+         (let [sd (.minusDays (dtype-dt/local-date) (+ 200 (rand-int 365)))
+               ed (.plusDays sd (rand-int n-expansion))]
+           {:simulation (rand-int n-simulations)
+            :placement (rand-int n-placements)
+            :start sd
+            :end ed}))
+       (ds/->>dataset)))
 
-    ))
+
+(defn- tally-days-as-year-months
+  [{:keys [^LocalDate start ^LocalDate end]}]
+  (let [nd (.until start end java.time.temporal.ChronoUnit/DAYS)
+        tally (jvm-map/hash-map)
+        incrementor (jvm-map/bi-function k v
+                                         (if v
+                                           (unchecked-inc (long v))
+                                           1))
+        _ (dotimes [idx nd]
+            (let [ym (YearMonth/from (.plusDays start idx))]
+              (jvm-map/compute! tally ym incrementor)))
+        retval (ArrayList. (.size tally))]
+    (jvm-map/foreach! tally
+                      (jvm-map/bi-consumer k v (.add retval {:year-month k
+                                                             :count v})))
+    retval))
+
+
+(defn- otfrom-pathway
+  [ds]
+  (->> (ds/row-mapcat ds tally-days-as-year-months
+                      ;;generate a sequence of datasets
+                      {:result-type :as-seq})
+       ;;sequence of datasets
+       (ds-reduce/group-by-column-agg
+        [:simulation :placement :year-month]
+        {:count (ds-reduce/sum :count)})
+       ;;single dataset - do joins and such here
+       (#(let [ds %
+               count (ds :count)]
+           ;;return a sequence of datasets for next step
+           [(assoc ds :count2 (dfn/sq count))]))
+       (ds-reduce/group-by-column-agg
+        [:placement :year-month]
+        {:min-count        (ds-reduce/prob-quantile :count 0.0)
+         :low-95-count     (ds-reduce/prob-quantile :count 0.05)
+         :q1-count         (ds-reduce/prob-quantile :count 0.25)
+         :median-count     (ds-reduce/prob-quantile :count 0.50)
+         :q3-count         (ds-reduce/prob-quantile :count 0.75)
+         :high-95-count    (ds-reduce/prob-quantile :count 0.95)
+         :max-count        (ds-reduce/prob-quantile :count 1.0)
+         :count            (ds-reduce/sum :count)})))
+
+
+
+(deftest otfrom-pathway-test
+  (let [ds (create-otfrom-init-dataset)
+        start (ds :start)
+        end (ds :end)
+        total-count (->> (dtype/emap #(dtype-dt/between %1 %2 :days) :int64 start end)
+                         (dfn/sum))
+        _ (println "otfrom pathway timing")
+        ofds (time (otfrom-pathway ds))
+        ofsum (dfn/sum (ofds :count))]
+    (is (= ofsum total-count))))
