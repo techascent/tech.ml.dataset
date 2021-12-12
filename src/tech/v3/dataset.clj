@@ -980,8 +980,10 @@ test/data/stocks.csv [5 4]:
 
   Options:
 
-  * See options for [[pmap-ds]].  Especially note `:max-batch-size` and `result-type:`.
-  In order to conserve memory it may be more efficient to
+  * See options for [[pmap-ds]].  Especially note `:max-batch-size` and `:result-type`.
+  In order to conserve memory it may be much more efficient to return a sequence of datasets
+  rather than one large dataset.  If returning sequences of datasets perhaps consider
+  a transducing pathway across them or the [[tech.v3.dataset.reductions]] namespace.
 
   Example:
 
