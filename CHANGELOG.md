@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.036
+ * [pmap-ds](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-pmap-ds)
+ * [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat)
+
 ## 6.035
  * Main api namespaces are code-generated to ensure discoverability.  Namespaces affected are
    tech.v3.datatype, tech.v3.datatype.functional, tech.v3.datatype.datetime, tech.v3.dataset,
