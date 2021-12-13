@@ -21,7 +21,8 @@
         lst (make-list :int64)]
     (doiter lst-data values
             (doiter idx lst-data
-                    (.addLong lst (unchecked-long idx))))))
+                    (.addLong lst (unchecked-long idx))))
+    lst))
 
 
 (extend-type TreeMap
