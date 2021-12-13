@@ -696,11 +696,7 @@ _unnamed [4 5]:
 
 (def ^{:tag 'long} major-version tech.v3.dataset-api/major-version)
 (defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value
-
-  Options:
-  :missing-nil? - Default to true - Substitute nil in for missing values to make
-    missing value detection downstream to be column datatype independent."
+  "Return a reader that produces a map of column-name->column-value"
   (^{:tag tech.v3.datatype.Buffer} [dataset]
   (tech.v3.dataset.readers/mapseq-reader dataset)))
 
@@ -1051,7 +1047,7 @@ user> (take 5 (ds/rows stocks))
   \"symbol\" \"MSFT\",
   \"price\" 25.45})
 ```"
-  ([ds]
+  (^{:tag tech.v3.datatype.Buffer} [ds]
   (tech.v3.dataset-api/rows ds)))
 
 
@@ -1080,7 +1076,9 @@ user> (take 5 (ds/rowvecs stocks))
  [\"MSFT\" #object[java.time.LocalDate 0x7bad4827 \"2000-04-01\"] 28.37]
  [\"MSFT\" #object[java.time.LocalDate 0x3a62c34a \"2000-05-01\"] 25.45])
 ```"
-  ([ds]
+  (^{:tag tech.v3.datatype.Buffer} [ds options]
+  (tech.v3.dataset-api/rowvecs ds options))
+  (^{:tag tech.v3.datatype.Buffer} [ds]
   (tech.v3.dataset-api/rowvecs ds)))
 
 
@@ -1365,6 +1363,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   Options:
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
+  (^{:tag tech.v3.datatype.Buffer} [dataset options]
+  (tech.v3.dataset.readers/value-reader dataset options))
   (^{:tag tech.v3.datatype.Buffer} [dataset]
   (tech.v3.dataset.readers/value-reader dataset)))
 

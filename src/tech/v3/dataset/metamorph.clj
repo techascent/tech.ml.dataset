@@ -615,11 +615,7 @@ _unnamed [4 5]:
 
 
 (defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value
-
-  Options:
-  :missing-nil? - Default to true - Substitute nil in for missing values to make
-    missing value detection downstream to be column datatype independent."
+  "Return a reader that produces a map of column-name->column-value"
   ([]
   (tech.v3.dataset.metamorph-api/mapseq-reader )))
 
@@ -1024,6 +1020,8 @@ user> (take 5 (ds/rowvecs stocks))
  [\"MSFT\" #object[java.time.LocalDate 0x7bad4827 \"2000-04-01\"] 28.37]
  [\"MSFT\" #object[java.time.LocalDate 0x3a62c34a \"2000-05-01\"] 25.45])
 ```"
+  ([options]
+  (tech.v3.dataset.metamorph-api/rowvecs options))
   ([]
   (tech.v3.dataset.metamorph-api/rowvecs )))
 
@@ -1334,6 +1332,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
   Options:
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
+  ([options]
+  (tech.v3.dataset.metamorph-api/value-reader options))
   ([]
   (tech.v3.dataset.metamorph-api/value-reader )))
 
