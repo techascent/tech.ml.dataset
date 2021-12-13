@@ -3,8 +3,9 @@
            [tech.v3.datatype ListPersistentVector])
   (:require [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.column-base :refer [column-datatype-categorical?]]
-            [tech.v3.datatype :refer [elemwise-datatype clone ->buffer]]
-            [tech.v3.datatype.argops :refer [arggroup]]))
+            [tech.v3.datatype :refer [elemwise-datatype clone ->buffer make-list]]
+            [tech.v3.datatype.argops :refer [arggroup]]
+            [tech.v3.parallel.for :refer [doiter]]))
 
 
 (set! *warn-on-reflection* true)
@@ -14,6 +15,13 @@
   (doseq [k keys]
     (.put ^Map new-index-structure k (.get ^Map index-structure k)))
   new-index-structure)
+
+(defn- flatten-selected-indices [^java.util.AbstractMap submap]
+  (let [values (.values submap)
+        lst (make-list :int64)]
+    (doiter lst-data values
+            (doiter idx lst-data
+                    (.addLong lst (unchecked-long idx))))))
 
 
 (extend-type TreeMap
@@ -40,7 +48,7 @@
                     (if (nil? to-inclusive?) true to-inclusive?))]
        (if as-index-structure
          submap
-         (ListPersistentVector. (reduce concat [] (.values submap))))))))
+         (flatten-selected-indices submap))))))
 
 
 (extend-type LinkedHashMap
@@ -54,7 +62,7 @@
                                                ^LinkedHashMap (LinkedHashMap.))]
         (if as-index-structure
           picked-map
-          (ListPersistentVector. (reduce concat [] (.values picked-map))))))))
+          (flatten-selected-indices picked-map))))))
 
 
 (defn build-value-to-index-position-map [column-data]
