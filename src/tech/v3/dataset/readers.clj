@@ -3,7 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto])
   (:import [tech.v3.datatype ObjectReader Buffer ListPersistentVector]
            [tech.v3.dataset FastStruct]
-           [java.util List HashMap Collections]))
+           [java.util List HashMap Collections ArrayList]))
 
 
 (defn dataset->column-readers
@@ -22,26 +22,29 @@
   Options:
   :missing-nil? - Default to true - Substitute nil in for missing values to make
     missing value detection downstream to be column datatype independent."
-  (^Buffer [dataset]
+  (^Buffer [dataset options]
    (let [readers (dataset->column-readers dataset)
          n-rows (long (second (dtype/shape dataset)))
          n-cols (long (first (dtype/shape dataset)))]
      (reify ObjectReader
        (lsize [rdr] n-rows)
-       (readObject [rdr idx]
+       (readObject [rdr row-idx]
          (ListPersistentVector.
-          (reify ObjectReader
-            (lsize [rdr] n-cols)
-            (readObject [rdr inner-idx]
-              (.get ^List (.get readers inner-idx) idx)))))))))
+          (if (get options :copying?)
+            (let [data (ArrayList. n-cols)]
+              (dotimes [col-idx n-cols]
+                (.add data (.get ^List (.get readers col-idx) row-idx)))
+              data)
+            (reify ObjectReader
+              (lsize [this] n-cols)
+              (readObject [this col-idx]
+                (.get ^List (.get readers col-idx) row-idx)))))))))
+  (^Buffer [dataset]
+   (value-reader dataset nil)))
 
 
 (defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value
-
-  Options:
-  :missing-nil? - Default to true - Substitute nil in for missing values to make
-    missing value detection downstream to be column datatype independent."
+  "Return a reader that produces a map of column-name->column-value"
   (^Buffer [dataset]
    (let [colnamemap (HashMap.)
          _ (doseq [[c-name c-idx] (->> (ds-proto/columns dataset)
@@ -53,4 +56,4 @@
      (reify ObjectReader
        (lsize [rdr] (.lsize readers))
        (readObject [rdr idx]
-         (FastStruct. colnamemap (readers idx)))))))
+         (FastStruct. colnamemap (.data ^ListPersistentVector (readers idx))))))))

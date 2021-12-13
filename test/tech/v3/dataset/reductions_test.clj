@@ -185,6 +185,9 @@
        (ds/->>dataset)))
 
 
+(defrecord YMC [year-month ^long count ^long _row-id])
+
+
 (defn- tally-days-as-year-months
   [{:keys [^LocalDate start ^LocalDate end]}]
   (let [nd (.until start end java.time.temporal.ChronoUnit/DAYS)
@@ -198,8 +201,7 @@
               (jvm-map/compute! tally ym incrementor)))
         retval (ArrayList. (.size tally))]
     (jvm-map/foreach! tally
-                      (jvm-map/bi-consumer k v (.add retval {:year-month k
-                                                             :count v})))
+                      (jvm-map/bi-consumer k v (.add retval (YMC. k v 0))))
     retval))
 
 

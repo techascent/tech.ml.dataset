@@ -29,7 +29,7 @@
             LinkedHashMap]
            [java.util.function Function]
            [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype PrimitiveList]
+           [tech.v3.datatype PrimitiveList Buffer]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
@@ -122,7 +122,7 @@ user> (take 5 (ds/rows stocks))
   \"symbol\" \"MSFT\",
   \"price\" 25.45})
 ```"
-  [ds]
+  ^Buffer [ds]
   (mapseq-reader ds))
 
 
@@ -155,8 +155,10 @@ user> (take 5 (ds/rowvecs stocks))
  [\"MSFT\" #object[java.time.LocalDate 0x7bad4827 \"2000-04-01\"] 28.37]
  [\"MSFT\" #object[java.time.LocalDate 0x3a62c34a \"2000-05-01\"] 25.45])
 ```"
-  [ds]
-  (value-reader ds))
+  (^Buffer [ds options]
+   (value-reader ds options))
+  (^Buffer [ds]
+   (value-reader ds nil)))
 
 
 (defn rowvec-at
@@ -799,17 +801,17 @@ user>
    (pmap-ds
     ds
     (fn [ds]
-      (let [ds (assoc ds ::row-id (range (row-count ds)))
+      (let [ds (assoc ds :_row-id (range (row-count ds)))
             nds (->> (rows ds)
                      (sequence (comp
                                 (map #(let [maps (mapcat-fn %)
-                                            rid (% ::row-id)]
-                                        (map (fn [row] (assoc row ::row-id rid)) maps)))
+                                            rid (% :_row-id)]
+                                        (map (fn [row] (assoc row :_row-id rid)) maps)))
                                 cat))
                      (->>dataset options))]
-        (-> (dissoc ds ::row-id)
-            (select-rows (nds ::row-id))
-            (merge (dissoc nds ::row-id)))))
+        (-> (dissoc ds :_row-id)
+            (select-rows (nds :_row-id))
+            (merge (dissoc nds :_row-id)))))
     options))
   ([ds mapcat-fn]
    (row-mapcat ds mapcat-fn nil)))

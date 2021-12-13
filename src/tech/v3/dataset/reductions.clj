@@ -381,7 +381,9 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                                              #:tech.v3.dataset{:name tmp-colname
                                                                :data
                                                                (-> (ds-base/select-columns % colname)
-                                                                   (ds-readers/value-reader))
+                                                                   (ds-readers/value-reader
+                                                                    {:copying? true})
+                                                                   (dtype/clone))
                                                                :metadata {}
                                                                :missing (bitmap/->bitmap)
                                                                :force-datatype? true}))
