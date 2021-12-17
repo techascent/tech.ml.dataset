@@ -1,8 +1,18 @@
 # Changelog
 
+## 6.042 (UNRELEASED)
+ * Intermediate versions before this - Lots of micro optimizations to row-mapcat and 
+   some to micro-opts to group-by-column-agg.
+ * Support for LocalTime datatype.
+   
+   
 ## 6.036
+
  * [pmap-ds](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-pmap-ds)
  * [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat)
+ Row mapcat has an option to produce a sequence of datasets.  This flows naturally into 
+ group-by-column-agg.  Keep this in mind as it keeps the size of the working set in memory
+ fairly low.
 
 ## 6.035
  * Main api namespaces are code-generated to ensure discoverability.  Namespaces affected are
