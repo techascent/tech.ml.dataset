@@ -69,6 +69,7 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.datetime.constants :as datetime-constants]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
@@ -83,6 +84,7 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
             LocalInputFile]
            [tech.v3.dataset.io.column_parsers PParser]
            [org.apache.hadoop.conf Configuration]
+           [java.time LocalTime]
            [java.time.temporal TemporalAccessor ChronoField]
            [org.apache.parquet.hadoop ParquetFileReader]
            [org.apache.parquet.hadoop.metadata BlockMetaData ColumnChunkMetaData
@@ -313,6 +315,16 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
       (make-column-iterable col-rdr col-def :instant
                             #(-> (read-long %)
                                  (dtype-dt/microseconds-since-epoch->instant)))
+      OriginalType/TIME_MILLIS
+      (make-column-iterable col-rdr col-def :local-time
+                            #(-> (read-long %)
+                                 (* datetime-constants/nanoseconds-in-millisecond)
+                                 (LocalTime/ofNanoOfDay)))
+      OriginalType/TIME_MICROS
+      (make-column-iterable col-rdr col-def :local-time
+                            #(-> (read-long %)
+                                 (* datetime-constants/nanoseconds-in-microsecond)
+                                 (LocalTime/ofNanoOfDay)))
       (let [dtype (cond
                     (and col-min col-max)
                     (let [col-min (long col-min)
@@ -744,7 +756,7 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
 
 (def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32
                            :local-date :epoch-days})
-(def ^:private int64-set #{:uint32 :int64 :uint64 :instant})
+(def ^:private int64-set #{:uint32 :int64 :uint64 :instant :local-time})
 (def ^:private str-set #{:string :text})
 
 
@@ -796,6 +808,7 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
        :text OriginalType/UTF8
        :local-date OriginalType/DATE
        :epoch-days OriginalType/DATE
+       :local-time OriginalType/TIME_MICROS
        :instant OriginalType/TIMESTAMP_MICROS
        nil)
      nil nil)))
@@ -850,8 +863,12 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
     (int64-set datatype)
     (fn [^RecordConsumer consumer col-val]
       (.addLong consumer
-                (if (= :instant datatype)
+                (case datatype
+                  :instant
                   (dtype-dt/instant->microseconds-since-epoch col-val)
+                  :local-time
+                  (-> (.toNanoOfDay ^LocalTime col-val)
+                      (quot datetime-constants/nanoseconds-in-microsecond))
                   (unchecked-long col-val))))
     (str-set datatype)
     (fn [^RecordConsumer consumer col-val]

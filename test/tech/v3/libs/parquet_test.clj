@@ -101,3 +101,15 @@
     (is (= [1 nil 2 nil 3 nil nil] (vec (ds "id"))))
     (is (= ["a" "b" "a" "b" "a" "b" "c"] (vec (ds "val.key_value.key"))))
     (is (= ["va" "vb" nil nil "vb" nil nil] (vec (ds "val2.key_value.key"))))))
+
+
+(deftest local-time
+  (try
+    (let [ds (ds/->dataset {:a (range 10)
+                            :b (repeat 10 (java.time.LocalTime/now))})
+          _ (parquet/ds->parquet ds "test.parquet")
+          pds (ds/->dataset "test.parquet"  {:key-fn keyword})]
+      (is (= (vec (ds :b))
+             (vec (pds :b)))))
+    (finally
+      (.delete (java.io.File. "test.parquet")))))
