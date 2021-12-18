@@ -3,7 +3,8 @@
 ## 6.042 (UNRELEASED)
  * Intermediate versions before this - Lots of micro optimizations to row-mapcat and 
    some to micro-opts to group-by-column-agg.
- * Support for LocalTime datatype.
+ * Support for LocalTime datatype.  Parquet and Arrow support this conversion.  Arrow files
+   will read localtime back in as the datatype `:time-microseconds`.
    
    
 ## 6.036
