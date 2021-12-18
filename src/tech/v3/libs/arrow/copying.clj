@@ -350,7 +350,6 @@
         ;;types generate their own bit of metadata
         metadata (merge metadata (field-vec-metadata fv))
         fv-dtype (dtype/elemwise-datatype fv)
-        _ (println "fv-dtype" fv-dtype (type fv))
         coldata
         (cond
           dict

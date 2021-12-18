@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.042-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.042"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -115,5 +115,4 @@
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
   :java-source-paths ["java"]
   :aliases {"codox" ["with-profile" "codox,dev" "run" "-m" "codox.main/-main"]
-            "codegen" ["with-profile" "codegen,dev" "run" "-m" "tech.v3.dataset.codegen/-main"]
-            "larray" ["with-profile" "larray" "run" "-m" "tech.v3.dataset.unpack-larray"]})
+            "codegen" ["with-profile" "codegen,dev" "run" "-m" "tech.v3.dataset.codegen/-main"]})
