@@ -9,7 +9,7 @@
              ArrowType$Int ArrowType$FloatingPoint ArrowType$Bool
              ArrowType$Utf8 ArrowType$LargeUtf8 ArrowType$Date ArrowType$Time
              ArrowType$Timestamp ArrowType$Duration DictionaryEncoding
-             ArrowType$Date]
+             ArrowType$Date ArrowType$Time]
             [java.util Map]))
 
 
@@ -66,7 +66,7 @@
        :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                                         (str (:timezone extra-data))))
        :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
-       :local-time (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 8)))
+       :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                              (str (:timezone extra-data))))
@@ -124,6 +124,13 @@
      (when (and (.getTimezone this)
                 (not= 0 (count (.getTimezone this))))
        {:timezone (.getTimezone this)})))
+  ArrowType$Time
+  (datafy [this]
+    (condp = (.getUnit this)
+      TimeUnit/MILLISECOND {:datatype :time-milliseconds}
+      TimeUnit/MICROSECOND {:datatype :time-microseconds}
+      TimeUnit/SECOND {:datatype :time-second}
+      TimeUnit/NANOSECOND {:datatype :time-nanosecond}))
   ArrowType$Date
   (datafy [this]
     (condp = (.getUnit this)

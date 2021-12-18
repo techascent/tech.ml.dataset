@@ -12,7 +12,7 @@
            [org.apache.arrow.vector VarCharVector BitVector TinyIntVector UInt1Vector
             SmallIntVector UInt2Vector IntVector UInt4Vector BigIntVector UInt8Vector
             Float4Vector Float8Vector DateDayVector TimeStampMicroTZVector
-            TimeStampMilliTZVector
+            TimeStampMilliTZVector TimeMilliVector TimeSecVector TimeMicroVector
             TimeStampMicroVector TimeStampVector TimeStampMilliVector FieldVector
             BaseVariableWidthVector BaseLargeVariableWidthVector LargeVarCharVector]
            [org.apache.arrow.memory ArrowBuf]
@@ -305,6 +305,9 @@
   [[:epoch-milliseconds 'TimeStampMilliTZVector]
    [:int64 'TimeStampMilliVector]
    [:int64 'TimeStampVector]
+   [:int64 'TimeMicroVector]
+   [:int32 'TimeMilliVector]
+   [:int32 'TimeSecVector]
    [:text 'LargeVarCharVector]])
 
 (defn- primitive-datatype?
