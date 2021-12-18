@@ -25,7 +25,8 @@
     BaseVariableWidthVector BaseLargeVariableWidthVector FieldVector
     DateDayVector VectorSchemaRoot  TimeStampMicroTZVector TimeStampMicroVector
     TimeStampMilliVector TimeStampMilliTZVector TimeStampSecVector
-    TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector]
+    TimeStampSecTZVector TimeStampNanoVector TimeStampNanoTZVector
+    TimeSecVector TimeMilliVector TimeMicroVector TimeNanoVector]
    [org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter]
    [tech.v3.dataset.string_table StringTable]
    [java.util HashMap]
@@ -142,8 +143,9 @@
   (let [timezone (when timezone (->timezone timezone))]
     (reduce
      (fn [ds col]
-       (let [col-dt (dtype/elemwise-datatype col)]
-         (if (dtype-dt/datetime-datatype? col-dt)
+       (let [col-dt (packing/unpack-datatype (dtype/elemwise-datatype col))]
+         (if (and (not= col-dt :local-time)
+                  (dtype-dt/datetime-datatype? col-dt))
            (assoc ds
                   (col-proto/column-name col)
                   (col-impl/new-column
@@ -171,7 +173,9 @@
         (fn [^long idx col]
           (let [field-vec (.getVector vec-root idx)
                 vec-type (.getType (.getField field-vec))
-                coldata (packing/unpack col)
+                ;;Ensure packed as this allows localtime to convert to
+                ;;packed local time and datetime types have already been dealt with
+                coldata (packing/pack col)
                 col-type (dtype/elemwise-datatype coldata)
                 missing (col-proto/missing col)]
             (cond
@@ -285,6 +289,10 @@
   (field-vec-metadata [fv] {})
   DateDayVector
   (field-vec-metadata [fv] {:time-unit :epoch-days})
+  TimeSecVector (field-vec-metadata [fv] {:time-unit :time-seconds})
+  TimeMilliVector (field-vec-metadata [fv] {:time-unit :time-milliseconds})
+  TimeMicroVector (field-vec-metadata [fv] {:time-unit :time-microseconds})
+  TimeNanoVector (field-vec-metadata [fv] {:time-unit :time-nanoseconds})
   TimeStampNanoVector
   (field-vec-metadata [fv] {:time-unit :epoch-nanosecond})
   TimeStampNanoTZVector
@@ -342,6 +350,7 @@
         ;;types generate their own bit of metadata
         metadata (merge metadata (field-vec-metadata fv))
         fv-dtype (dtype/elemwise-datatype fv)
+        _ (println "fv-dtype" fv-dtype (type fv))
         coldata
         (cond
           dict

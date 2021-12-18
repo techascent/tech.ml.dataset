@@ -125,7 +125,8 @@
                                 {:parser-fn {"uuids" :uuid}})
           _ (arrow/write-dataset-to-stream! uuid-ds "test-uuid.arrow")
           copying-ds (arrow/read-stream-dataset-copying "test-uuid.arrow")
-          inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")]
+          inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")
+          ]
       (is (= :text ((comp :datatype meta) (copying-ds "uuids"))))
       (is (= :text ((comp :datatype meta) (inplace-ds "uuids"))))
       (is (= (vec (copying-ds "uuids"))
@@ -136,25 +137,19 @@
       (.delete (java.io.File. "test-uuid.arrow")))))
 
 
-
-(comment
-
-  (deftest big-arrow-text
-    (let [big-data (arrow/read-stream-dataset-inplace "10m.arrow")]
-      (is (= "A character vector containing abbreviations for the character strings in its first argument. Duplicates in the original names.arg will be given identical abbreviations. If any non-duplicated elements have the same minlength abbreviations then, if method = both.sides the basic internal abbreviate() algorithm is applied to the characterwise reversed strings; if there are still duplicated abbreviations and if strict = FALSE as by default, minlength is incremented by one and new abbreviations are found for those elements only. This process is repeated until all unique elements of names.arg have unique abbreviations."
-             (first (big-data "texts"))))))
-
-  (def lots-of-infos
-    (vec (repeatedly 200 #(mapv meta (vals (arrow/read-stream-dataset-inplace "10m.arrow"))))))
-
-  (dotimes [iter 10]
-    (arrow/read-stream-dataset-copying "/home/chrisn/Downloads/screenings.arrow")
-    )
-
-  (defn count-rows-arrow
-    []
-    (apply +
-     (->>
-      (repeat 2000 "/home/chrisn/Downloads/screenings.arrow")
-      (mapv #(ds/row-count (arrow/read-stream-dataset-inplace %))))))
-  )
+(deftest local-time
+  (try
+    (let [ds (ds/->dataset {"a" (range 10)
+                            "b" (repeat 10 (java.time.LocalTime/now))})
+          _ (arrow/write-dataset-to-stream! ds "test-local-time.arrow")
+          copying-ds (arrow/read-stream-dataset-copying "test-local-time.arrow")
+          inplace-ds (arrow/read-stream-dataset-inplace "test-local-time.arrow")]
+      (is (= :time-microseconds (dtype/elemwise-datatype (copying-ds "b"))))
+      (is (= :time-microseconds (dtype/elemwise-datatype (inplace-ds "b"))))
+      (is (= (vec (copying-ds "b"))
+             (vec (inplace-ds "b"))))
+      ;;Making a primitive container will use the packed data.
+      (is (= (vec (dtype/make-container :int64 (ds "b")))
+             (vec (copying-ds "b")))))
+    (finally
+      (.delete (java.io.File. "test-local-time.arrow")))))

@@ -66,7 +66,12 @@
        :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                                         (str (:timezone extra-data))))
        :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
+       ;;packed local time is 64bit microseconds since midnight
        :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
+       :time-nanosecond (ft-fn (ArrowType$Time. TimeUnit/NANOSECOND (int 8)))
+       :time-microsecond (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
+       :time-millisecond (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 4)))
+       :time-second (ft-fn (ArrowType$Time. TimeUnit/SECOND (int 4)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                              (str (:timezone extra-data))))
