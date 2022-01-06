@@ -100,6 +100,11 @@
                 mapseq-reader)
 
 
+(export-symbols tech.v3.dataset.impl.dataset
+                dataset?
+                empty-dataset)
+
+
 (defn rows
   "Get the rows of the dataset as a list of flyweight maps.  This is a shorter form
   of `mapseq-reader`.
@@ -750,7 +755,9 @@ test/data/stocks.csv [5 4]:
 
   The smaller the maps returned from mapcat-fn the better, perhaps consider using records.
   In the case that a mapcat-fn result map has a key that overlaps a column name the
-  column will be replaced with the output of mapcat-fn.
+  column will be replaced with the output of mapcat-fn.  The returned map will have the
+  key `:_row-id` assoc'd onto it so for absolutely minimal gc usage include this
+  as a member variable in your map.
 
   Options:
 

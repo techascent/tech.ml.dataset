@@ -272,7 +272,7 @@
 
 
 (defn make-fixed-parser
-  [cname parser-kwd options]
+  ^PParser [cname parser-kwd options]
   (let [[dtype [parse-fn relaxed?]] (parser-entry->parser-tuple parser-kwd)
         [failed-values failed-indexes] (when relaxed?
                                          [(dtype/make-container :list :object 0)
@@ -420,7 +420,7 @@
 
 
 (defn promotional-string-parser
-  ([column-name parser-datatype-sequence options]
+  (^PParser [column-name parser-datatype-sequence options]
    (let [first-dtype (first parser-datatype-sequence)]
      (PromotionalStringParser. (column-base/make-container
                                 (if (= :bool first-dtype)
@@ -436,7 +436,7 @@
                                column-name
                                -1
                                options)))
-  ([column-name options]
+  (^PParser [column-name options]
    (promotional-string-parser column-name default-parser-datatype-sequence options)))
 
 
@@ -487,7 +487,7 @@
 
 
 (defn promotional-object-parser
-  [column-name options]
+  ^PParser [column-name options]
   (PromotionalObjectParser. (dtype/make-container :list :boolean 0)
                             :boolean
                             false

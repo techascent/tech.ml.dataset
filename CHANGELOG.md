@@ -1,19 +1,21 @@
 # Changelog
+## 6.043
+ * Text works correctly when mmap pathways are disabled - larray fails on m-1 mac.
 
 ## 6.042
- * Intermediate versions before this - Lots of micro optimizations to row-mapcat and 
+ * Intermediate versions before this - Lots of micro optimizations to row-mapcat and
    some to micro-opts to group-by-column-agg.
  * Support for LocalTime datatype.  Parquet and Arrow support this conversion.  Arrow files
    will read localtime back in as the datatype `:time-microseconds`.  Users can use
    `:local-time` as a parser datatype and there is support for parsing some simple
    variations of local-time data.
-   
-   
+
+
 ## 6.036
 
  * [pmap-ds](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-pmap-ds)
  * [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat)
- Row mapcat has an option to produce a sequence of datasets.  This flows naturally into 
+ Row mapcat has an option to produce a sequence of datasets.  This flows naturally into
  group-by-column-agg.  Keep this in mind as it keeps the size of the working set in memory
  fairly low.
 
