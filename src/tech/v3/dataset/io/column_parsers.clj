@@ -233,7 +233,7 @@
     str
     (if-let [retval (get default-coercers kwd)]
       retval
-      (errors/throwf "Failed to find parser for keyword %s" kwd))))
+      identity)))
 
 
 (defn- datetime-formatter-parser-fn

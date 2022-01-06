@@ -1,4 +1,10 @@
 # Changelog
+
+## 6.044
+ * col-parsers/make-fixed-parser allows you to make fixed type parsers for custom
+   datatypes.
+
+
 ## 6.043
  * Text works correctly when mmap pathways are disabled - larray fails on m-1 mac.
 
