@@ -62,5 +62,7 @@
                     (Charset/forName "UTF-8"))
          offsets (dtype/make-list :int64)
          cached-io (atom nil)]
+     ;;Force failure here before we get going if we have to.
+     (dtype/->buffer mmap-writer)
      (FileBackedTextBuilder. encoding mmap-writer offsets cached-io)))
   (^PrimitiveList [] (file-backed-text nil)))

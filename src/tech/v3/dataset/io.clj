@@ -145,11 +145,10 @@
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301
   - `:text-temp-dir` - The temporary directory to use for file-backed text.  Setting
-     this value to boolean 'false' turns off file backed text.  If a tech.v3.resource
-     stack context is opened the file will be deleted when the context closes else it
-     will be deleted when the gc cleans up the dataset.  A shutdown hook is added as
-     a last resort to ensure the file is cleaned up. Each column's data filefile will
-     be created in `(System/getProperty \"java.io.tmpdir\")` by default.
+    this value to boolean 'false' turns off file backed text which is the default.  If a
+    tech.v3.resource stack context is opened the file will be deleted when the context
+    closes else it will be deleted when the gc cleans up the dataset.  A shutdown hook is
+    added as a last resort to ensure the file is cleaned up.
   - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the
      header row.  Works across both csv and spreadsheet datasets.
   - `:parser-type` - Default parser to use if no parser-fn is specified for that column.

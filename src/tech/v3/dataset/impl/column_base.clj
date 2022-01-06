@@ -78,7 +78,7 @@
      :text
      (let [^PrimitiveList list-data
            (try
-             (if (and (not= false (:text-temp-dir options))
+             (if (and (not= false (get options :text-temp-dir false))
                       @file-backed-text-enabled*)
                (let [tmp-dir (:text-temp-dir options)]
                  (file-backed-text/file-backed-text (merge
