@@ -18,20 +18,51 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.utils :as ml-utils]
+            [tech.v3.parallel.for :as pfor]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
-           [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch]
+           [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
+            FieldNode Buffer]
+           [com.google.flatbuffers FlatBufferBuilder]
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp DictionaryEncoding]
+           [org.apache.arrow.vector.types MetadataVersion]
+           [org.apache.arrow.vector.ipc WriteChannel]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype ObjectReader]
            [java.util List ArrayList]
-           [java.time ZoneId]))
+           [java.time ZoneId]
+           [java.nio.channels WritableByteChannel]))
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
+
+
+
+(defn create-in-memory-byte-channel
+  ^WritableByteChannel []
+  (let [storage (dtype/make-list :int8)]
+    (reify
+      WritableByteChannel
+      (isOpen [this] true)
+      (close [this])
+      (write [this bb]
+        (let [retval (.remaining bb)]
+          (.addAll storage (dtype/->buffer bb))
+          (.position bb (+ (.position bb) (.remaining bb)))
+          retval))
+      dtype-proto/PToBuffer
+      (convertible-to-buffer? [this] true)
+      (->buffer [this] (dtype-proto/->buffer storage)))))
+
+
+(defn arrow-in-memory-writer
+  ^WriteChannel []
+  (let [storage (create-in-memory-byte-channel)]
+    {:channel (WriteChannel. storage)
+     :storage storage}))
 
 
 (defn align-offset
@@ -238,10 +269,27 @@
      :metadata (.getCustomMetadata schema)}))
 
 
+(defn write-message-header
+  [^WriteChannel writer msg-header-data]
+  ;;continuation so we have 8 byte lengths
+  (let [start (.getCurrentPosition writer)
+        meta-len (dtype/ecount msg-header-data)
+        padding (rem (+ start meta-len 8) 8)
+        ;;pad so that start + meta-len ends on an 8 byte boundary
+        meta-len (long (if-not (== 0 padding)
+                         (+ meta-len (- 8 padding))
+                         meta-len))]
+    (.writeIntLittleEndian writer -1)
+    (.writeIntLittleEndian writer meta-len)
+    (.write writer (dtype/->byte-array msg-header-data))
+    (.align writer)))
+
+
 (defn write-schema
-  [schema]
-  (-> (MessageSerializer/serializeMetadata ^Schema schema)
-      (dtype/as-buffer)))
+  "Writes a schema to a message header."
+  [writer schema]
+  (write-message-header writer
+                        (MessageSerializer/serializeMetadata ^Schema schema)))
 
 
 (defn read-record-batch
@@ -256,6 +304,119 @@
                                              (.length buffer)))))})
   ([{:keys [message body _message-type]}]
    (read-record-batch (.header ^Message message (RecordBatch.)) body)))
+
+
+(defn write-record-batch-header
+  ^long [^FlatBufferBuilder builder n-rows nodes buffers]
+  (let [_ (RecordBatch/startNodesVector builder (count nodes))
+        ;;Apparently you have to reverse structs when writing to a vector...
+        _ (doseq [node (reverse nodes)]
+            (FieldNode/createFieldNode builder
+                                       (long (node :n-elems))
+                                       (long (node :n-null-entries))))
+        node-offset (.endVector builder)
+        _ (RecordBatch/startBuffersVector builder (count buffers))
+        _ (doseq [buffer (reverse buffers)]
+            (Buffer/createBuffer builder
+                                 (long (buffer :offset))
+                                 (long (buffer :length))))
+        buffers-offset (.endVector builder)]
+    (RecordBatch/startRecordBatch builder)
+    (RecordBatch/addLength builder (long n-rows))
+    (RecordBatch/addNodes builder node-offset)
+    (RecordBatch/addBuffers builder buffers-offset)
+    (RecordBatch/endRecordBatch builder)))
+
+
+(defn no-missing
+  [^long n-elems]
+  (let [n-bytes (/ (+ n-elems 7) 8)
+        c (dtype/make-container :int8 n-bytes)]
+    (dtype/set-constant! c -1)
+    c))
+
+(defn byte-length
+  ^long [container]
+  (* (dtype/ecount container) (casting/numeric-byte-width
+                               (dtype/elemwise-datatype container))))
+
+(defn pad
+  ^long [^long data]
+  (let [padding (rem data 8)]
+    (if-not (== 0 padding)
+      (+ data (- 8 padding))
+      data)))
+
+
+(defn serialize-to-bytes
+  [^WriteChannel writer num-data]
+  (let [data-dt (casting/un-alias-datatype (dtype/elemwise-datatype num-data))
+        n-bytes (byte-length num-data)
+        backing-buf (byte-array n-bytes)
+        bbuf (java.nio.ByteBuffer/wrap backing-buf)
+        ary-data (dtype/->array (if (= data-dt :boolean)
+                                  :int8
+                                  data-dt)
+                                num-data)]
+    (case (dtype/elemwise-datatype ary-data)
+      :int8 (.put bbuf ^bytes ary-data)
+      :int16 (-> (.asShortBuffer bbuf)
+                 (.put ^shorts ary-data))
+      :int32 (-> (.asIntBuffer bbuf)
+                 (.put ^ints ary-data))
+      :int64 (-> (.asLongBuffer bbuf)
+                 (.put ^longs ary-data))
+      :float32 (-> (.asFloatBuffer bbuf)
+                   (.put ^floats ary-data))
+      :float64 (-> (.asDoubleBuffer bbuf)
+                   (.put ^doubles ary-data)))
+    (.write writer backing-buf)))
+
+
+(defn write-dictionary-batch
+  [^WriteChannel writer {:keys [byte-data offsets encoding]}]
+  (let [builder (FlatBufferBuilder.)
+        n-elems (dec (count offsets))
+        missing (no-missing n-elems)
+        missing-len (pad (count missing))
+        enc-id (.getId ^DictionaryEncoding encoding)
+        offset-len (pad (byte-length offsets))
+        data-len (pad (count byte-data))
+        rbatch-off (write-record-batch-header
+                    builder
+                    n-elems
+                    [{:n-elems n-elems
+                      :n-null-entries 0}]
+                    [{:offset 0
+                      :length missing-len}
+                     {:offset missing-len
+                      :length offset-len}
+                     {:offset (+ missing-len offset-len)
+                      :length (count byte-data)}])
+        dict-off (do
+                   (DictionaryBatch/startDictionaryBatch builder)
+                   (DictionaryBatch/addId builder enc-id)
+                   (DictionaryBatch/addData builder rbatch-off)
+                   (DictionaryBatch/addIsDelta builder false)
+                   (DictionaryBatch/endDictionaryBatch builder))
+        body-len (+ missing-len offset-len data-len)
+        version (.toFlatbufID (MetadataVersion/DEFAULT))
+        builder-data (do
+                       (Message/startMessage builder)
+                       (Message/addHeaderType builder 2)
+                       (Message/addHeader builder dict-off)
+                       (Message/addVersion builder version)
+                       (Message/addBodyLength builder body-len)
+                       (.finish builder (Message/endMessage builder))
+                       (.dataBuffer builder))]
+
+    (write-message-header writer builder-data)
+    (serialize-to-bytes writer missing)
+    (.align writer)
+    (serialize-to-bytes writer offsets)
+    (.align writer)
+    (serialize-to-bytes writer byte-data)
+    (.align writer)))
 
 
 (defn- check-message-type
@@ -489,3 +650,23 @@
 Please use stream->dataset-seq-inplace.")))
     (-> (records->ds schema dict-map data-record options)
         (ds-base/set-dataset-name fname))))
+
+
+(comment
+  (require '[tech.v3.dataset :as ds])
+  (def test-ds (ds/->dataset {:a ["one" "two" "three"]}))
+  (def schema-data (ds->schema test-ds))
+  (defn write-to-bytes
+    ^bytes [write-fn]
+    (let [{:keys [channel storage]} (arrow-in-memory-writer)]
+      (write-fn channel)
+      (-> (dtype/->buffer storage)
+          (dtype/->byte-array))))
+  (def data-bytes (write-to-bytes
+                   (fn [writer]
+                     (write-schema writer (:schema schema-data)))))
+  (def dict (first (:dictionaries schema-data)))
+  (def dict-bytes (write-to-bytes
+                   (fn [writer]
+                     (write-dictionary-batch writer dict))))
+  )
