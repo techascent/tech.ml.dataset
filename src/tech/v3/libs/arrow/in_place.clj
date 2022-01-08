@@ -3,23 +3,31 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.libs.arrow.datatype :as arrow-dtype]
             ;;Protocol definitions that make datafy work
-            [tech.v3.libs.arrow.schema]
+            [tech.v3.libs.arrow.schema :as arrow-schema]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.native-buffer :as native-buffer]
             [tech.v3.datatype.nio-buffer :as nio-buffer]
             [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.string-table :as str-table]
+            [tech.v3.dataset.utils :as ml-utils]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch]
-           [org.apache.arrow.vector.types.pojo Field]
+           [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
+            ArrowType$Utf8 ArrowType$Timestamp DictionaryEncoding]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype ObjectReader]
-           [java.util List]))
+           [java.util List ArrayList]
+           [java.time ZoneId]))
 
 
 (set! *warn-on-reflection* true)
@@ -75,6 +83,133 @@
     (cons msg (lazy-seq (message-seq (:next-data msg))))))
 
 
+(defn string-column->dict
+  [col]
+  (let [str-t (ds-base/ensure-column-string-table col)
+        int->str (str-table/int->string str-t)
+        indices (dtype-proto/->array-buffer (str-table/indices str-t))
+        n-elems (.size int->str)
+        bit-width (casting/int-width (dtype/elemwise-datatype indices))
+        metadata (meta col)
+        colname (:name metadata)
+        dict-id (.hashCode ^Object colname)
+        arrow-indices-type (ArrowType$Int. bit-width true)
+        encoding (DictionaryEncoding. dict-id false arrow-indices-type)
+        byte-data (dtype/make-list :int8)
+        offsets (dyn-int-list/dynamic-int-list 0)]
+    (dotimes [str-idx (count int->str)]
+      (let [strdata (int->str str-idx)
+            _ (when (= strdata :failure)
+                (throw (Exception. "Invalid string table - missing entries.")))
+            str-bytes (.getBytes (str strdata))
+            soff (dtype/ecount byte-data)]
+        (.addAll byte-data (dtype/->reader str-bytes))
+        (.add offsets soff)))
+    ;;Make everyone's life easier by adding an extra offset.
+    (.add offsets (dtype/ecount byte-data))
+    {:encoding encoding
+     :byte-data byte-data
+     :offsets (dtype-proto/->array-buffer offsets)}))
+
+
+(defn string-col->encoding
+  "Given a string column return a map of :dict-id :table-width.  The dictionary
+  id is the hashcode of the column mame."
+  [^List dictionaries col]
+  (let [dict (string-column->dict col)]
+    (.add dictionaries dict)
+    {:encoding (:encoding dict)}))
+
+
+(defn col->field
+  ^Field [dictionaries {:keys [strings-as-text?]} col]
+  (let [colmeta (meta col)
+        nullable? (boolean
+                   (or (:nullable? colmeta)
+                       (not (.isEmpty
+                             (col-proto/missing col)))))
+        col-dtype (:datatype colmeta)
+        colname (:name colmeta)
+        extra-data (merge (select-keys (meta col) [:timezone])
+                          (when (and (not strings-as-text?)
+                                     (= :string col-dtype))
+                            (string-col->encoding dictionaries col)))]
+    (try
+      (arrow-schema/make-field
+       (ml-utils/column-safe-name colname)
+       (arrow-schema/datatype->field-type col-dtype nullable? colmeta extra-data))
+      (catch Throwable e
+        (throw (Exception. (format "Column %s metadata conversion failure:\n%s"
+                                   colname e)
+                           e))))))
+
+(defn ->timezone
+  (^ZoneId [& [item]]
+   (cond
+     (instance? ZoneId item)
+     item
+     (string? item)
+     (ZoneId/of ^String item)
+     :else
+     (dtype-dt/utc-zone-id))))
+
+(defn datetime-cols->epoch
+  [ds {:keys [timezone]}]
+  (let [timezone (when timezone (->timezone timezone))]
+    (reduce
+     (fn [ds col]
+       (let [col-dt (packing/unpack-datatype (dtype/elemwise-datatype col))]
+         (if (and (not= col-dt :local-time)
+                  (dtype-dt/datetime-datatype? col-dt))
+           (assoc ds
+                  (col-proto/column-name col)
+                  (col-impl/new-column
+                   (col-proto/column-name col)
+                   (dtype-dt/datetime->epoch
+                    timezone
+                    (if (= :local-date (packing/unpack-datatype col-dt))
+                      :epoch-days
+                      :epoch-milliseconds)
+                    col)
+                   (assoc (meta col)
+                          :timezone (str timezone)
+                          :source-datatype (dtype/elemwise-datatype col))
+                   (col-proto/missing col)))
+           ds)))
+     ds
+     (ds-base/columns ds))))
+
+(defn prepare-dataset-for-write
+  "Convert dataset column datatypes to datatypes appropriate for arrow
+  serialization.
+
+  Options:
+
+  * `:strings-as-text` - Serialize strings as text.  This leads to the most efficient
+  format for mmap operations."
+  ([ds options]
+   (cond-> (datetime-cols->epoch ds options)
+     (not (:strings-as-text? options))
+     (ds-base/ensure-dataset-string-tables)))
+  ([ds]
+   (prepare-dataset-for-write ds nil)))
+
+
+(defn ds->schema
+  "Return a map of :schema, :dictionaries where :schema is an Arrow schema
+  and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
+  - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
+  ([ds options]
+   (let [dictionaries (ArrayList.)]
+     {:schema
+      (Schema. ^Iterable
+               (->> (ds-base/columns ds)
+                    (map (partial col->field dictionaries options))))
+      :dictionaries dictionaries}))
+  ([ds]
+   (ds->schema ds {})))
+
+
 (defn read-schema
   "returns a pair of offset-data and schema"
   [{:keys [message _body _message-type]}]
@@ -101,6 +236,12 @@
                      (map (juxt :id identity))
                      (into {}))
      :metadata (.getCustomMetadata schema)}))
+
+
+(defn write-schema
+  [schema]
+  (-> (MessageSerializer/serializeMetadata ^Schema schema)
+      (dtype/as-buffer)))
 
 
 (defn read-record-batch
@@ -224,7 +365,8 @@
                                              index-data))]
       retval)
     (let [[offsets varchar-data] buffers]
-      (-> (offsets-data->string-reader (native-buffer/set-native-datatype offsets offset-buf-dtype)
+      (-> (offsets-data->string-reader (native-buffer/set-native-datatype
+                                        offsets offset-buf-dtype)
                                        varchar-data n-elems)
           (arrow-dtype/string-reader->text-reader)))))
 
