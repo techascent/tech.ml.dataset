@@ -23,6 +23,7 @@
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer]
+           [org.roaringbitmap RoaringBitmap]
            [com.google.flatbuffers FlatBufferBuilder]
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp DictionaryEncoding]
@@ -127,7 +128,8 @@
         arrow-indices-type (ArrowType$Int. bit-width true)
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
         byte-data (dtype/make-list :int8)
-        offsets (dyn-int-list/dynamic-int-list 0)]
+        ;;offsets are int32 apparently
+        offsets (dtype/make-list :int32)]
     (dotimes [str-idx (count int->str)]
       (let [strdata (int->str str-idx)
             _ (when (= strdata :failure)
@@ -353,35 +355,62 @@
   (let [data-dt (casting/un-alias-datatype (dtype/elemwise-datatype num-data))
         n-bytes (byte-length num-data)
         backing-buf (byte-array n-bytes)
-        bbuf (java.nio.ByteBuffer/wrap backing-buf)
+        bbuf (-> (java.nio.ByteBuffer/wrap backing-buf)
+                 (.order java.nio.ByteOrder/LITTLE_ENDIAN))
         ary-data (dtype/->array (if (= data-dt :boolean)
                                   :int8
                                   data-dt)
                                 num-data)]
-    (case (dtype/elemwise-datatype ary-data)
-      :int8 (.put bbuf ^bytes ary-data)
-      :int16 (-> (.asShortBuffer bbuf)
-                 (.put ^shorts ary-data))
-      :int32 (-> (.asIntBuffer bbuf)
-                 (.put ^ints ary-data))
-      :int64 (-> (.asLongBuffer bbuf)
-                 (.put ^longs ary-data))
-      :float32 (-> (.asFloatBuffer bbuf)
-                   (.put ^floats ary-data))
-      :float64 (-> (.asDoubleBuffer bbuf)
-                   (.put ^doubles ary-data)))
+    (if (instance? java.nio.Buffer num-data)
+      (case (dtype/elemwise-datatype ary-data)
+        :int8 (.put bbuf ^java.nio.ByteBuffer num-data)
+        :int16 (-> (.asShortBuffer bbuf)
+                   (.put ^java.nio.ShortBuffer num-data))
+        :int32 (-> (.asIntBuffer bbuf)
+                   (.put ^java.nio.IntBuffer num-data))
+        :int64 (-> (.asLongBuffer bbuf)
+                   (.put ^java.nio.LongBuffer num-data))
+        :float32 (-> (.asFloatBuffer bbuf)
+                     (.put ^java.nio.FloatBuffer num-data))
+        :float64 (-> (.asDoubleBuffer bbuf)
+                     (.put ^java.nio.DoubleBuffer num-data)))
+      (case (dtype/elemwise-datatype ary-data)
+        :int8 (.put bbuf ^bytes ary-data)
+        :int16 (-> (.asShortBuffer bbuf)
+                   (.put ^shorts ary-data))
+        :int32 (-> (.asIntBuffer bbuf)
+                   (.put ^ints ary-data))
+        :int64 (-> (.asLongBuffer bbuf)
+                   (.put ^longs ary-data))
+        :float32 (-> (.asFloatBuffer bbuf)
+                     (.put ^floats ary-data))
+        :float64 (-> (.asDoubleBuffer bbuf)
+                     (.put ^doubles ary-data))))
     (.write writer backing-buf)))
+
+
+(defn finish-builder
+  ^java.nio.ByteBuffer [^FlatBufferBuilder builder message-type header-off body-len]
+  (.finish builder
+           (Message/createMessage builder
+                                  (.toFlatbufID (MetadataVersion/DEFAULT))
+                                  message-type ;;dict message type
+                                  header-off
+                                  body-len
+                                  0 ;;custom metadata offset
+                                  ))
+  (.dataBuffer builder))
 
 
 (defn write-dictionary-batch
   [^WriteChannel writer {:keys [byte-data offsets encoding]}]
-  (let [builder (FlatBufferBuilder.)
-        n-elems (dec (count offsets))
+  (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
         missing-len (pad (count missing))
         enc-id (.getId ^DictionaryEncoding encoding)
         offset-len (pad (byte-length offsets))
         data-len (pad (count byte-data))
+        builder (FlatBufferBuilder.)
         rbatch-off (write-record-batch-header
                     builder
                     n-elems
@@ -392,25 +421,12 @@
                      {:offset missing-len
                       :length offset-len}
                      {:offset (+ missing-len offset-len)
-                      :length (count byte-data)}])
-        dict-off (do
-                   (DictionaryBatch/startDictionaryBatch builder)
-                   (DictionaryBatch/addId builder enc-id)
-                   (DictionaryBatch/addData builder rbatch-off)
-                   (DictionaryBatch/addIsDelta builder false)
-                   (DictionaryBatch/endDictionaryBatch builder))
-        body-len (+ missing-len offset-len data-len)
-        version (.toFlatbufID (MetadataVersion/DEFAULT))
-        builder-data (do
-                       (Message/startMessage builder)
-                       (Message/addHeaderType builder 2)
-                       (Message/addHeader builder dict-off)
-                       (Message/addVersion builder version)
-                       (Message/addBodyLength builder body-len)
-                       (.finish builder (Message/endMessage builder))
-                       (.dataBuffer builder))]
-
-    (write-message-header writer builder-data)
+                      :length (count byte-data)}])]
+    (write-message-header writer
+                          (finish-builder builder 2 ;;dict message type
+                                          (DictionaryBatch/createDictionaryBatch
+                                           builder enc-id rbatch-off false)
+                                          (+ missing-len offset-len data-len)))
     (serialize-to-bytes writer missing)
     (.align writer)
     (serialize-to-bytes writer offsets)
@@ -419,12 +435,115 @@
     (.align writer)))
 
 
+(defn missing-bytes
+  ^bytes [^RoaringBitmap bmp ^bytes all-valid-buf]
+  (let [nbuf (-> (dtype/clone all-valid-buf)
+                 (dtype/->byte-array))]
+    (.forEach bmp (reify org.roaringbitmap.IntConsumer
+                    (accept [this data]
+                      (let [lval (Integer/toUnsignedLong data)
+                            idx (quot lval 8)
+                            bit (rem lval 8)
+                            existing (unchecked-int (aget nbuf idx))]
+                        (aset nbuf idx (unchecked-byte
+                                        (bit-xor existing (bit-shift-left 1 bit))))))))
+    nbuf))
+
+
+(defn col->buffers
+  [col]
+  (let [col-dt (casting/un-alias-datatype (dtype/elemwise-datatype col))
+        cbuf (dtype/->buffer col)]
+    ;;Get the data as a datatype save for conversion into a byte array or a
+    ;;nio buffer.
+
+    (if (casting/numeric-type? col-dt)
+      ;;Ideally without copying more than necessary get a nio buffer back that
+      ;;wraps the data in the host datatype.
+      (let [cbuf (if (dtype/as-concrete-buffer cbuf)
+                   cbuf
+                   ;;make buffer concrete
+                   (dtype/clone cbuf))]
+        [(if-let [ary-buf (dtype/as-array-buffer cbuf)]
+           (-> (dtype/sub-buffer (.ary-data ary-buf)
+                                 (.offset ary-buf)
+                                 (.n-elems ary-buf))
+               (dtype/->array)
+               (nio-buffer/as-nio-buffer))
+           (if-let [nbuf (dtype/as-native-buffer cbuf)]
+             (->
+              (native-buffer/set-native-datatype nbuf (casting/datatype->host-datatype col-dt))
+              (nio-buffer/as-nio-buffer))
+             ;;else data is not represented
+             (throw (Exception. "Numeric buffer missing concrete representation"))))])
+      (case col-dt
+        :boolean [(nio-buffer/as-nio-buffer (dtype/->array :int8 cbuf))]
+        :string (let [str-t (ds-base/ensure-column-string-table col)
+                      indices (dtype-proto/->array-buffer (str-table/indices str-t))]
+                  [(nio-buffer/as-nio-buffer indices)])
+        :text
+        (let [byte-data (dtype/make-list :int8)
+              offsets (dtype/make-list :int32)]
+          (pfor/doiter
+           strdata cbuf
+           (let [strdata (str (or strdata ""))]
+             (.add offsets (.lsize byte-data))
+             (.addAll byte-data (dtype/->buffer (.getBytes strdata)))))
+          [(nio-buffer/as-nio-buffer offsets)
+           (nio-buffer/as-nio-buffer byte-data)])))))
+
+
+(defn write-dataset-record-batch
+  [^WriteChannel writer dataset]
+  (let [n-rows (ds/row-count dataset)
+        ;;Length of the byte valid buffer
+        valid-len (/ (+ n-rows 7) 8)
+        all-valid-buf (-> (doto (dtype/make-container :int8 valid-len)
+                            (dtype/set-constant! -1))
+                          (dtype/->byte-array))
+        nodes-buffs-lens
+        (->> (ds/columns dataset)
+             (map (fn [col]
+                    (let [col-missing (ds/missing col)
+                          n-missing (dtype/ecount (ds/missing col))
+                          valid-buf (if (== 0 n-missing)
+                                      all-valid-buf
+                                      (missing-bytes col-missing all-valid-buf))
+                          buffers (vec (concat [valid-buf]
+                                               (col->buffers col)))
+                          lengths (map (comp pad byte-length buffers))
+                          col-len (long (apply + lengths))]
+                      {:node {:n-elems n-rows
+                              :n-null-entries n-missing}
+                       :buffers buffers
+                       :length col-len}))))
+        nodes (map :node nodes-buffs-lens)
+        data-bufs (mapcat :buffers nodes-buffs-lens)
+        buffers (->> data-bufs
+                     (reduce (fn [[cur-off buffers] buffer]
+                               (let [nlen (pad (byte-length buffer))]
+                                 [(+ (long cur-off) nlen)
+                                  [conj buffers {:offset cur-off
+                                                 :length nlen}]]))
+                             [0 []])
+                     (second))
+        builder (FlatBufferBuilder.)]
+    (write-message-header writer
+                          (finish-builder
+                           builder 3 ;;record-batch message type
+                           (write-record-batch-header builder n-rows nodes buffers)
+                           (apply + (map :length nodes-buffs-lens))))
+    (doseq [buffer buffers]
+      (serialize-to-bytes writer buffer)
+      (.align writer))))
+
+
 (defn- check-message-type
   [expected-type actual-type]
   (when-not (= actual-type expected-type)
     (throw (Exception.
             (format "Expected message type %s, got %s"
-                    expected-type actual-type) ))))
+                    expected-type actual-type)))))
 
 
 (defn read-dictionary-batch
@@ -508,8 +627,9 @@
         offsets (-> (native-buffer/set-native-datatype offsets :int32)
                     (dtype/sub-buffer 0 (inc n-elems)))
         data (native-buffer/set-native-datatype databuf :int8)
-        str-data (dtype/make-container :list :string
-                   (offsets-data->string-reader offsets data n-elems))]
+        str-data (dtype/make-list :string
+                                  (-> (offsets-data->string-reader offsets data n-elems)
+                                      (dtype/clone)))]
     {:id id
      :strings str-data}))
 
@@ -669,4 +789,9 @@ Please use stream->dataset-seq-inplace.")))
   (def dict-bytes (write-to-bytes
                    (fn [writer]
                      (write-dictionary-batch writer dict))))
+  (def dict-msg (-> (dtype/make-container :native-heap :int8 dict-bytes)
+                    (read-message)
+                    (read-dictionary-batch)))
+  (def rehydrated-dict (dictionary->strings dict-msg))
+
   )
