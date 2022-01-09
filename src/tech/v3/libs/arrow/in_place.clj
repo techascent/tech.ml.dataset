@@ -19,6 +19,7 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.utils :as ml-utils]
             [tech.v3.parallel.for :as pfor]
+            [tech.v3.resource :as resource]
             [tech.v3.io :as io]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
@@ -32,8 +33,8 @@
            [org.apache.arrow.vector.ipc WriteChannel]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.datatype.native_buffer NativeBuffer]
-           [tech.v3.datatype ObjectReader ArrayHelpers]
-           [java.io OutputStream]
+           [tech.v3.datatype ObjectReader ArrayHelpers ByteConversions]
+           [java.io OutputStream InputStream]
            [java.util List ArrayList]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]))
@@ -84,12 +85,13 @@
         (WriteChannel.))))
 
 
-(defn align-offset
-  ^long [^long off]
-  (let [alignment (rem off 8)]
-    (if (== 0 alignment)
-      off
-      (+ off (- 8 alignment)))))
+(defn pad
+  ^long [^long data]
+  (let [padding (rem data 8)]
+    (if-not (== 0 padding)
+      (+ data (- 8 padding))
+      data)))
+
 
 
 (defn message-id->message-type
@@ -117,7 +119,7 @@
                            (nio-buffer/native-buf->nio-buf)))
               next-buf (dtype/sub-buffer data (+ offset msg-size))
               body-length (.bodyLength new-msg)
-              aligned-offset (align-offset (+ offset msg-size body-length))]
+              aligned-offset (pad (+ offset msg-size body-length))]
           (merge
            {:next-data (dtype/sub-buffer data aligned-offset)
             :message new-msg
@@ -131,6 +133,64 @@
   [^NativeBuffer data]
   (when-let [msg (read-message data)]
     (cons msg (lazy-seq (message-seq (:next-data msg))))))
+
+
+(defn read-int-LE
+  (^long [^InputStream is byte-buf]
+   (let [^bytes byte-buf (or byte-buf (byte-array 4))]
+     (.read is byte-buf)
+     (ByteConversions/intFromBytesLE (aget byte-buf 0) (aget byte-buf 1)
+                                     (aget byte-buf 2) (aget byte-buf 3))))
+  (^long [^InputStream is]
+   (read-int-LE is nil)))
+
+
+(defn read-stream-message
+  [^InputStream is]
+  (let [msg-size (read-int-LE is)
+        [msg-size offset] (if (== -1 msg-size)
+                            [(read-int-LE is) 8]
+                            [msg-size 4])
+        msg-size (long msg-size)]
+    (when (> msg-size 0)
+      (let [pad-msg-size (pad msg-size)
+            bytes (byte-array pad-msg-size)
+            _ (.read is bytes)
+            new-msg (Message/getRootAsMessage (nio-buffer/as-nio-buffer
+                                               (dtype/sub-buffer bytes 0 msg-size)))
+            body-len (.bodyLength new-msg)
+            pad-body-len (pad body-len)
+            nbuf (when-not (== 0 body-len)
+                   (dtype/make-container :native-heap :int8 pad-body-len))
+            read-chunk-size (* 1024 1024 100)
+            read-buffer (byte-array (min body-len read-chunk-size))
+            bytes-read (when nbuf
+                         (loop [offset 0]
+                           (let [amount-to-read (min (- pad-body-len offset) read-chunk-size)
+                                 n-read (long (if-not (== 0 amount-to-read)
+                                                (.read is read-buffer 0 amount-to-read)
+                                                0))]
+                             (if-not (== 0 n-read)
+                               (do (dtype/copy! (dtype/sub-buffer read-buffer 0 n-read)
+                                                (dtype/sub-buffer nbuf offset n-read))
+                                   (recur (+ offset n-read)))
+                               offset))))]
+        (when (and nbuf (not= bytes-read pad-body-len))
+          (throw (Exception. (format "Unable to read entire buffer - Expected %d got %d"
+                                     pad-body-len bytes-read))))
+        (merge {:message new-msg
+                :message-type (message-id->message-type (.headerType new-msg))}
+               (when nbuf
+                 {:body (dtype/sub-buffer nbuf 0 body-len)}))))))
+
+(defn stream-message-seq
+  [is]
+  (if-let [msg (try (read-stream-message is)
+                    (catch Throwable e
+                      (.close ^InputStream is)
+                      (throw e)))]
+    (cons msg (lazy-seq (stream-message-seq is)))
+    (do (.close ^InputStream is) nil)))
 
 
 (defn string-column->dict
@@ -360,13 +420,6 @@
   (* (dtype/ecount container) (casting/numeric-byte-width
                                (dtype/elemwise-datatype container))))
 
-(defn pad
-  ^long [^long data]
-  (let [padding (rem data 8)]
-    (if-not (== 0 padding)
-      (+ data (- 8 padding))
-      data)))
-
 
 (defn serialize-to-bytes
   [^WriteChannel writer num-data]
@@ -488,11 +541,9 @@
                  :text
                  col-dt)
         cbuf (dtype/->buffer col)]
-    ;;Get the data as a datatype save for conversion into a byte array or a
+    ;;Get the data as a datatype safe for conversion into a
     ;;nio buffer.
     (if (casting/numeric-type? col-dt)
-      ;;Ideally without copying more than necessary get a nio buffer back that
-      ;;wraps the data in the host datatype.
       (let [cbuf (if (dtype/as-concrete-buffer cbuf)
                    cbuf
                    ;;make buffer concrete
@@ -501,11 +552,11 @@
            (-> (dtype/sub-buffer (.ary-data ary-buf)
                                  (.offset ary-buf)
                                  (.n-elems ary-buf))
-               (dtype/->array)
                (nio-buffer/as-nio-buffer))
            (if-let [nbuf (dtype/as-native-buffer cbuf)]
              (->
-              (native-buffer/set-native-datatype nbuf (casting/datatype->host-datatype col-dt))
+              (native-buffer/set-native-datatype
+               nbuf (casting/datatype->host-datatype col-dt))
               (nio-buffer/as-nio-buffer))
              ;;else data is not represented
              (throw (Exception. "Numeric buffer missing concrete representation"))))])
@@ -695,6 +746,13 @@
          (reduce
           (fn [[retval ^long buf-idx] [field node]]
             (let [field-dtype (get-in field [:field-type :datatype])
+                  field-dtype (if-not (:integer-datetime-types? options)
+                                (case field-dtype
+                                  :time-microseconds :packed-local-time
+                                  :epoch-milliseconds :packed-instant
+                                  :epoch-days :packed-local-date
+                                  field-dtype)
+                                field-dtype)
                   col-metadata (dissoc (:field-type field) :datatype)
                   encoding (get field :dictionary-encoding)
                   n-buffers (long (if (and (= :string field-dtype)
@@ -739,11 +797,11 @@
                (+ buf-idx n-buffers)]))
           [[] 0])
          (first)
-         (ds-impl/new-dataset))))
+         (ds-impl/new-dataset options))))
 
 
 (defn- parse-next-dataset
-  [fdata schema messages fname idx options]
+  [schema messages fname idx options]
   (when (seq messages)
     (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
                                     messages)
@@ -756,7 +814,7 @@
       (cons
        (-> (records->ds schema dict-map data-record options)
            (ds-base/set-dataset-name (format "%s-%03d" fname idx)))
-       (lazy-seq (parse-next-dataset fdata schema (rest rest-messages)
+       (lazy-seq (parse-next-dataset schema (rest rest-messages)
                                      fname (inc (long idx)) options))))))
 
 
@@ -775,16 +833,12 @@
         _ (when-not (= :schema (:message-type schema))
             (throw (Exception. "Initial message is not a schema message.")))
         messages (rest messages)]
-    (parse-next-dataset fdata schema messages fname 0 options)))
+    (parse-next-dataset schema messages fname 0 options)))
 
 
-(defn read-stream-dataset-inplace
-  "Loads data up to and including the first data record.  Returns the dataset
-  and the memory-mapped file.
-  This method is expected to be called from within a stack resource context."
-  [fname & [options]]
-  (let [fdata (mmap/mmap-file fname options)
-        messages (mapv parse-message (message-seq fdata))
+(defn message-seq->dataset
+  [fname message-seq options]
+  (let [messages (mapv parse-message message-seq)
         schema (first messages)
         _ (when-not (= :schema (:message-type schema))
             (throw (Exception. "Initial message is not a schema message.")))
@@ -806,7 +860,39 @@ Please use stream->dataset-seq-inplace.")))
         (ds-base/set-dataset-name fname))))
 
 
-(defn write-dataset-to-stream!
+(defn read-stream-dataset-inplace
+  "Loads data up to and including the first data record.  Returns the dataset
+  and the memory-mapped file.
+  This method is expected to be called from within a stack resource context."
+  [fname & [options]]
+  (let [fdata (mmap/mmap-file fname options)
+        messages (message-seq fdata)]
+    (message-seq->dataset fname messages options)))
+
+
+(defn stream->dataset-seq-copying
+  [fname & [options]]
+  (let [is (io/input-stream fname)
+        messages (map #(try (parse-message %)
+                            (catch Throwable e
+                              (.close ^InputStream is)
+                              (throw e)))
+                      (stream-message-seq is))
+        schema (first messages)
+        _ (when-not (= :schema (:message-type schema))
+            (throw (Exception. "Initial message is not a schema message.")))
+        messages (rest messages)]
+    (parse-next-dataset schema messages fname 0 options)))
+
+
+(defn read-stream-dataset-copying
+  [fname & [options]]
+  (with-open [is (io/input-stream fname)]
+    (let [messages (stream-message-seq is)]
+      (message-seq->dataset fname messages options))))
+
+
+(defn write-dataset!
   "Write a dataset as an arrow stream file.  File will contain one record set.
 
   Options:
@@ -818,11 +904,13 @@ Please use stream->dataset-seq-inplace.")))
   ([ds path options]
    (let [ds (prepare-dataset-for-write ds options)
          {:keys [schema dictionaries]} (ds->schema ds options)]
-     (with-open [ostream (io/output-stream! path)]
-       (let [writer (arrow-output-stream-writer ostream)]
-         (write-schema writer schema)
-         (doseq [dict dictionaries] (write-dictionary writer dict))
-         (write-dataset writer ds options)))))
+     ;;Any native mem allocated in this context will be released
+     (resource/stack-resource-context
+      (with-open [ostream (io/output-stream! path)]
+        (let [writer (arrow-output-stream-writer ostream)]
+          (write-schema writer schema)
+          (doseq [dict dictionaries] (write-dictionary writer dict))
+          (write-dataset writer ds options))))))
   ([ds path]
    (write-dataset-to-stream! ds path {})))
 

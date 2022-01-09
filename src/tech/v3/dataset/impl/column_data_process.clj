@@ -1,5 +1,6 @@
 (ns tech.v3.dataset.impl.column-data-process
   (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.parallel.for :as parallel-for]
@@ -56,7 +57,15 @@
       ;;wasn't provided.
       #:tech.v3.dataset{:data obj-data
                         :force-datatype? true
-                        :missing (or missing (scan-missing obj-data))}
+                        :missing (or missing
+                                     ;;integer types really have no meaningful missing value
+                                     ;;indicator so we don't scan for that.
+                                     (if-not (or
+                                              (casting/unsigned-integer-type?
+                                               obj-data-datatype)
+                                              (casting/integer-type? obj-data-datatype))
+                                       (scan-missing obj-data)
+                                       (bitmap/->bitmap)))}
       (let [obj-meta (meta obj-data)
             parser (column-parsers/promotional-object-parser
                     (:name obj-meta) obj-meta)

@@ -1,15 +1,52 @@
 (ns tech.v3.libs.arrow-test
   (:require [tech.v3.libs.arrow :as arrow]
+            [tech.v3.libs.arrow.in-place :as arrow-in-place]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
             [tech.v3.libs.parquet]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is]])
+  (:import [java.time LocalTime]
+           [tech.v3.dataset Text]))
 
 
 (tech.v3.dataset.utils/set-slf4j-log-level :info)
+
+(defn supported-datatype-ds
+  []
+  (-> (ds/->dataset {:boolean [true false true true false false true false false true]
+                     :bytes (byte-array (range 10))
+                     :ubytes (dtype/make-container :uint8 (range 10))
+                     :shorts (short-array (range 10))
+                     :ushorts (dtype/make-container :uint16 (range 10))
+                     :ints (int-array (range 10))
+                     :uints (dtype/make-container :uint32 (range 10))
+                     :longs (long-array (range 10))
+                     :floats (float-array (range 10))
+                     :doubles (double-array (range 10))
+                     :strings (map str (range 10))
+                     :text (map (comp #(Text. %) str) (range 10))
+                     :instants (repeatedly 10 dtype-dt/instant)
+                     ;;sql doesn't support dash-case
+                     :local_dates (repeatedly 10 dtype-dt/local-date)
+                     ;;some sql engines (or the jdbc api) don't support more than second
+                     ;;resolution for sql time objects
+                     :local_times (repeatedly 10 dtype-dt/local-time)})
+      (vary-meta assoc
+                 :primary-key :longs
+                 :name :testtable)))
+
+
+(deftest base-datatype-test
+  (try
+    (let [ds (supported-datatype-ds)
+          _ (arrow-in-place/write-dataset! ds "alldtypes.arrow")])
+    (finally
+      (.delete (java.io.File. "alldtypes.arrow")))))
+
+
 
 (deftest simple-stocks
   (try
