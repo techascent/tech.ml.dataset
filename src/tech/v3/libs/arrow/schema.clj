@@ -86,6 +86,52 @@
        :text (ft-fn (ArrowType$Utf8.))
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
+
+(defn datatype->field-type2
+  (^FieldType [datatype & [nullable? metadata extra-data]]
+   (let [nullable? (or nullable? (= :object (casting/flatten-datatype datatype)))
+         metadata (->str-str-meta metadata)
+         ft-fn (fn [arrow-type & [dict-encoding]]
+                 (field-type nullable? arrow-type dict-encoding metadata))
+         datatype (packing/unpack-datatype datatype)]
+     (case (if (or (= :epoch-milliseconds datatype)
+                   (= :epoch-days datatype))
+             datatype
+             (casting/un-alias-datatype datatype))
+       :boolean (ft-fn (ArrowType$Bool.))
+       :uint8 (ft-fn (ArrowType$Int. 8 false))
+       :int8 (ft-fn (ArrowType$Int. 8 true))
+       :uint16 (ft-fn (ArrowType$Int. 16 false))
+       :int16 (ft-fn (ArrowType$Int. 16 true))
+       :uint32 (ft-fn (ArrowType$Int. 32 false))
+       :int32 (ft-fn (ArrowType$Int. 32 true))
+       :uint64 (ft-fn (ArrowType$Int. 64 false))
+       :int64 (ft-fn (ArrowType$Int. 64 true))
+       :float32 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/SINGLE))
+       :float64 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/DOUBLE))
+       :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
+                                                        (str (:timezone extra-data))))
+       :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
+       ;;packed local time is 64bit microseconds since midnight
+       :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
+       :time-nanosecond (ft-fn (ArrowType$Time. TimeUnit/NANOSECOND (int 8)))
+       :time-microsecond (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
+       :time-millisecond (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 4)))
+       :time-second (ft-fn (ArrowType$Time. TimeUnit/SECOND (int 4)))
+       :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
+       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
+                                             (str (:timezone extra-data))))
+       :string (if-let [^DictionaryEncoding encoding (:encoding extra-data)]
+                 (ft-fn (ArrowType$Utf8.) encoding)
+                 ;;If no encoding is provided then just save the string as text
+                 (ft-fn (ArrowType$Utf8.)))
+       :uuid (do
+               (when (== 1 (long (swap! uuid-warn-counter inc)))
+                 (log/warn "Columns of type UUID are converted to type text when serializing to Arrow"))
+               (ft-fn (ArrowType$Utf8.)))
+       :text (ft-fn (ArrowType$Utf8.))
+       :encoded-text (ft-fn (ArrowType$Utf8.))))))
+
 (extend-protocol clj-proto/Datafiable
   ArrowType$Int
   (datafy [this]

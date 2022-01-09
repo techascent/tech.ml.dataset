@@ -19,6 +19,7 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.utils :as ml-utils]
             [tech.v3.parallel.for :as pfor]
+            [tech.v3.io :as io]
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
@@ -31,7 +32,8 @@
            [org.apache.arrow.vector.ipc WriteChannel]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.datatype.native_buffer NativeBuffer]
-           [tech.v3.datatype ObjectReader]
+           [tech.v3.datatype ObjectReader ArrayHelpers]
+           [java.io OutputStream]
            [java.util List ArrayList]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]))
@@ -64,6 +66,22 @@
   (let [storage (create-in-memory-byte-channel)]
     {:channel (WriteChannel. storage)
      :storage storage}))
+
+
+(defn arrow-output-stream-writer
+  ^WriteChannel [^OutputStream ostream]
+  (let [closed?* (atom false)]
+    (-> (reify WritableByteChannel
+          (isOpen [this] @closed?*)
+          (close [this]
+            (when (compare-and-set! closed?* false true)
+              (.close ostream)))
+          (write [this bb]
+            (let [written (.remaining bb)]
+              (.write ostream (dtype/->byte-array bb))
+              (.position bb (+ (.position bb) written))
+              written)))
+        (WriteChannel.))))
 
 
 (defn align-offset
@@ -170,7 +188,7 @@
     (try
       (arrow-schema/make-field
        (ml-utils/column-safe-name colname)
-       (arrow-schema/datatype->field-type col-dtype nullable? colmeta extra-data))
+       (arrow-schema/datatype->field-type2 col-dtype nullable? colmeta extra-data))
       (catch Throwable e
         (throw (Exception. (format "Column %s metadata conversion failure:\n%s"
                                    colname e)
@@ -402,7 +420,7 @@
   (.dataBuffer builder))
 
 
-(defn write-dictionary-batch
+(defn write-dictionary
   [^WriteChannel writer {:keys [byte-data offsets encoding]}]
   (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
@@ -434,6 +452,14 @@
     (serialize-to-bytes writer byte-data)
     (.align writer)))
 
+(defn- toggle-bit
+  ^bytes [^bytes data ^long bit]
+  (let [idx (quot bit 8)
+        bit (rem bit 8)
+        existing (unchecked-int (aget data idx))]
+    (ArrayHelpers/aset data idx (unchecked-byte (bit-xor existing (bit-shift-left 1 bit)))))
+  data)
+
 
 (defn missing-bytes
   ^bytes [^RoaringBitmap bmp ^bytes all-valid-buf]
@@ -441,22 +467,29 @@
                  (dtype/->byte-array))]
     (.forEach bmp (reify org.roaringbitmap.IntConsumer
                     (accept [this data]
-                      (let [lval (Integer/toUnsignedLong data)
-                            idx (quot lval 8)
-                            bit (rem lval 8)
-                            existing (unchecked-int (aget nbuf idx))]
-                        (aset nbuf idx (unchecked-byte
-                                        (bit-xor existing (bit-shift-left 1 bit))))))))
+                      (toggle-bit nbuf (Integer/toUnsignedLong data)))))
     nbuf))
+
+(defn boolean-bytes
+  ^bytes [data]
+  (let [rdr (dtype/->reader data)
+        len (.lsize rdr)
+        retval (byte-array (quot (+ len 7) 8))]
+    (dotimes [idx len]
+      (when (.readBoolean rdr idx)
+        (toggle-bit retval idx)))
+    retval))
 
 
 (defn col->buffers
-  [col]
+  [col options]
   (let [col-dt (casting/un-alias-datatype (dtype/elemwise-datatype col))
+        col-dt (if (and (:strings-as-text? options) (= col-dt :string))
+                 :text
+                 col-dt)
         cbuf (dtype/->buffer col)]
     ;;Get the data as a datatype save for conversion into a byte array or a
     ;;nio buffer.
-
     (if (casting/numeric-type? col-dt)
       ;;Ideally without copying more than necessary get a nio buffer back that
       ;;wraps the data in the host datatype.
@@ -477,7 +510,7 @@
              ;;else data is not represented
              (throw (Exception. "Numeric buffer missing concrete representation"))))])
       (case col-dt
-        :boolean [(nio-buffer/as-nio-buffer (dtype/->array :int8 cbuf))]
+        :boolean [(nio-buffer/as-nio-buffer (boolean-bytes cbuf))]
         :string (let [str-t (ds-base/ensure-column-string-table col)
                       indices (dtype-proto/->array-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
@@ -489,29 +522,30 @@
            (let [strdata (str (or strdata ""))]
              (.add offsets (.lsize byte-data))
              (.addAll byte-data (dtype/->buffer (.getBytes strdata)))))
+          (.add offsets (.lsize byte-data))
           [(nio-buffer/as-nio-buffer offsets)
            (nio-buffer/as-nio-buffer byte-data)])))))
 
 
-(defn write-dataset-record-batch
-  [^WriteChannel writer dataset]
-  (let [n-rows (ds/row-count dataset)
+(defn write-dataset
+  [^WriteChannel writer dataset options]
+  (let [n-rows (ds-base/row-count dataset)
         ;;Length of the byte valid buffer
         valid-len (/ (+ n-rows 7) 8)
         all-valid-buf (-> (doto (dtype/make-container :int8 valid-len)
                             (dtype/set-constant! -1))
                           (dtype/->byte-array))
         nodes-buffs-lens
-        (->> (ds/columns dataset)
+        (->> (ds-base/columns dataset)
              (map (fn [col]
-                    (let [col-missing (ds/missing col)
-                          n-missing (dtype/ecount (ds/missing col))
+                    (let [col-missing (col-proto/missing col)
+                          n-missing (dtype/ecount col-missing)
                           valid-buf (if (== 0 n-missing)
                                       all-valid-buf
                                       (missing-bytes col-missing all-valid-buf))
                           buffers (vec (concat [valid-buf]
-                                               (col->buffers col)))
-                          lengths (map (comp pad byte-length buffers))
+                                               (col->buffers col options)))
+                          lengths (map (comp pad byte-length) buffers)
                           col-len (long (apply + lengths))]
                       {:node {:n-elems n-rows
                               :n-null-entries n-missing}
@@ -523,8 +557,8 @@
                      (reduce (fn [[cur-off buffers] buffer]
                                (let [nlen (pad (byte-length buffer))]
                                  [(+ (long cur-off) nlen)
-                                  [conj buffers {:offset cur-off
-                                                 :length nlen}]]))
+                                  (conj buffers {:offset cur-off
+                                                 :length nlen})]))
                              [0 []])
                      (second))
         builder (FlatBufferBuilder.)]
@@ -533,7 +567,7 @@
                            builder 3 ;;record-batch message type
                            (write-record-batch-header builder n-rows nodes buffers)
                            (apply + (map :length nodes-buffs-lens))))
-    (doseq [buffer buffers]
+    (doseq [buffer data-bufs]
       (serialize-to-bytes writer buffer)
       (.align writer))))
 
@@ -667,8 +701,7 @@
                                            (not encoding))
                                     3
                                     2))
-                  specific-bufs (subvec buffers buf-idx
-                                        (+ buf-idx n-buffers))
+                  specific-bufs (subvec buffers buf-idx (+ buf-idx n-buffers))
                   n-elems (long (:n-elems node))
                   missing (if (== 0 (long (:n-null-entries node)))
                             (bitmap/->bitmap)
@@ -691,11 +724,12 @@
                          (second specific-bufs) n-elems)
                         (and (:epoch->datetime? options)
                              (arrow-dtype/epoch-datatypes field-dtype))
-                        (dtype-dt/epoch->datetime (:timezone metadata)
-                                                  (arrow-dtype/default-datetime-datatype field-dtype)
-                                                  (-> (native-buffer/set-native-datatype
-                                                       (second specific-bufs) field-dtype)
-                                                      (dtype/sub-buffer 0 n-elems)))
+                        (dtype-dt/epoch->datetime
+                         (:timezone metadata)
+                         (arrow-dtype/default-datetime-datatype field-dtype)
+                         (-> (native-buffer/set-native-datatype
+                              (second specific-bufs) field-dtype)
+                             (dtype/sub-buffer 0 n-elems)))
                         :else
                         (-> (native-buffer/set-native-datatype
                              (second specific-bufs) field-dtype)
@@ -772,6 +806,27 @@ Please use stream->dataset-seq-inplace.")))
         (ds-base/set-dataset-name fname))))
 
 
+(defn write-dataset-to-stream!
+  "Write a dataset as an arrow stream file.  File will contain one record set.
+
+  Options:
+
+  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
+     dictionaries.  This works well if you want to load an arrow file in-place or if
+     you know the strings in your dataset are either really large or should not be in
+     string tables."
+  ([ds path options]
+   (let [ds (prepare-dataset-for-write ds options)
+         {:keys [schema dictionaries]} (ds->schema ds options)]
+     (with-open [ostream (io/output-stream! path)]
+       (let [writer (arrow-output-stream-writer ostream)]
+         (write-schema writer schema)
+         (doseq [dict dictionaries] (write-dictionary writer dict))
+         (write-dataset writer ds options)))))
+  ([ds path]
+   (write-dataset-to-stream! ds path {})))
+
+
 (comment
   (require '[tech.v3.dataset :as ds])
   (def test-ds (ds/->dataset {:a ["one" "two" "three"]}))
@@ -793,5 +848,12 @@ Please use stream->dataset-seq-inplace.")))
                     (read-message)
                     (read-dictionary-batch)))
   (def rehydrated-dict (dictionary->strings dict-msg))
+
+  (def ds-bytes (write-to-bytes
+                 (fn [writer]
+                   (write-dataset-record-batch writer test-ds))))
+
+  (write-dataset-to-stream! test-ds "testa.arrow" {:strings-as-text? true})
+  (def read-data (read-stream-dataset-inplace "testa.arrow"))
 
   )

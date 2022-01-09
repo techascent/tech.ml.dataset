@@ -84,7 +84,7 @@
   (let [nio-buf (arrow-buffer->native-buffer :int8 buffer)
         n-bytes (quot (+ n-elems 7) 8)
         writer (dtype/->buffer nio-buf)]
-    (dtype/set-constant! nio-buf 0 n-bytes (byte -1))
+    (dtype/set-constant! nio-buf n-bytes (byte -1))
     (when-not (.isEmpty bitmap)
       (dotimes [idx n-bytes]
         (let [offset (pmath/* 8 idx)
