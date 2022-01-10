@@ -42,7 +42,8 @@
 (deftest base-datatype-test
   (try
     (let [ds (supported-datatype-ds)
-          _ (arrow-in-place/write-dataset! ds "alldtypes.arrow")])
+          _ (arrow-in-place/write-dataset! ds "alldtypes.arrow")
+          copy-ds (arrow-)])
     (finally
       (.delete (java.io.File. "alldtypes.arrow")))))
 
