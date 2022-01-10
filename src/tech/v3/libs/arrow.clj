@@ -51,7 +51,7 @@
 ;; Arrow stream adapters
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn create-in-memory-byte-channel
+(defn- create-in-memory-byte-channel
   ^WritableByteChannel []
   (let [storage (dtype/make-list :int8)]
     (reify
@@ -68,14 +68,14 @@
       (->buffer [this] (dtype-proto/->buffer storage)))))
 
 
-(defn arrow-in-memory-writer
+(defn- arrow-in-memory-writer
   ^WriteChannel []
   (let [storage (create-in-memory-byte-channel)]
     {:channel (WriteChannel. storage)
      :storage storage}))
 
 
-(defn arrow-output-stream-writer
+(defn- arrow-output-stream-writer
   ^WriteChannel [^OutputStream ostream]
   (let [closed?* (atom false)]
     (-> (reify WritableByteChannel
@@ -402,7 +402,7 @@
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
 
-(defn col->field
+(defn- col->field
   ^Field [dictionaries {:keys [strings-as-text?
                                ::hash-salt]}
           col]
@@ -1049,7 +1049,7 @@
                                      fname (inc (long idx)) options))))))
 
 
-(defn stream->dataset-seq-inplace
+(defn stream->dataset-seq
   "Loads data up to and including the first data record.  Returns the a lazy
   sequence of datasets.  Datasets use mmapped data, however, so realizing the
   entire sequence is usually safe, even for datasets that are larger than
@@ -1076,7 +1076,7 @@
 
 
 (defn- message-seq->dataset
-  [fname message-seq options]
+  [fname options message-seq]
   (let [messages (mapv parse-message message-seq)
         schema (first messages)
         _ (when-not (= :schema (:message-type schema))
@@ -1099,20 +1099,39 @@ Please use stream->dataset-seq-inplace.")))
         (ds-base/set-dataset-name fname))))
 
 
-(defn- read-stream-dataset-inplace
-  "Loads data up to and including the first data record.  Returns the dataset
-  and the memory-mapped file.
-  This method is expected to be called from within a stack resource context.
-  See options for [[stream->dataset-seq-inplace]]."
+(defn stream->dataset
+  "Reads data non-lazily in arrow streaming format expecting to find a single dataset.
+
+  Options:
+
+  * `:open-type` - Either `:mmap` or `:input-stream` defaulting to the slower but more robust
+  `:input-stream` pathway.  When using `:mmap` resources will be released when the resource
+  system dictates - see documentation for tech.v3.resource.  When using `:input-stream`
+  the stream will be closed when the lazy sequence is either fully realized or an
+  exception is thrown.
+
+  * `close-input-stream?` - When using `:input-stream` `:open-type`, close the input stream upon
+  exception or when stream is fully realized.  Defaults to true.
+
+  * `:integer-datatime-types? - when true arrow columns in the appropriate packed
+  datatypes will be represented as their integer types as opposed to their respective
+  packed types.  For example columns of type `:epoch-days` will be returned to the user
+  as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
+  will return integers as opposed to `java.time.LocalDate`s."
   [fname & [options]]
-  (let [fdata (mmap/mmap-file fname options)
-        messages (message-seq fdata)]
-    (message-seq->dataset fname messages options)))
+  (->> (case (get options :open-type :input-stream)
+         :mmap
+         (->> (mmap/mmap-file fname options)
+              (message-seq fdata))
+         :input-stream
+         (->> (io/input-stream fname)
+              (stream-message-seq)))
+       (message-seq->dataset fname options)))
 
 
-(defn stream->dataset-seq-copying
-  "Read a stream lazily returning a sequence of datasets.  See options for
-  [[stream->dataset-seq-inplace]]."
+(defn stream->dataset-input-stream
+  "Read an arrow streaming format file via mmap lazily returning a sequence of datasets.
+  See options for [[stream->dataset-seq-inplace]]."
   [fname & [options]]
   (let [is (io/input-stream fname)
         messages (map #(try (parse-message %)
@@ -1124,19 +1143,11 @@ Please use stream->dataset-seq-inplace.")))
         _ (when-not (= :schema (:message-type schema))
             (throw (Exception. "Initial message is not a schema message.")))
         messages (rest messages)]
-    (parse-next-dataset schema messages fname 0 options)))
+    (parse-next-dataset schema messages fname 0 options))
+)
 
 
-(defn read-stream-dataset-copying
-  "Read a single dataset from a stream in arrow stream format.  See options for
-  [[stream->dataset-seq-inplace]]."
-  [fname & [options]]
-  (with-open [is (io/input-stream fname)]
-    (let [messages (stream-message-seq is)]
-      (message-seq->dataset fname messages options))))
-
-
-(defn write-dataset!
+(defn dataset->stream!
   "Write a dataset as an arrow stream file.  File will contain one record set.
 
   Options:
@@ -1167,7 +1178,7 @@ Please use stream->dataset-seq-inplace.")))
       datatype)))
 
 
-(defn write-dataset-seq!
+(defn dataset-seq->stream!
   "Write a sequence of datasets as an arrow stream file.  File will contain one record set.
 
   Options:
