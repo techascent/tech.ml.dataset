@@ -1,4 +1,38 @@
 (ns tech.v3.libs.arrow
+  "Support for reading/writing apache arrow datasets.  Datasets may be memory mapped
+  but default to being read via an input stream.
+
+  Supported datatypes:
+
+  * All numeric types - `:uint8`, `:int8`, `:uint16`, `:int16`, `:uint32`, `:int32`,
+  `:uint64`, `:int64`, `:float32`, `:float64`, `:boolean`.
+  * String types - `:string`, `:text`.  During write you have the option to always write
+  data as text which can be more efficient in the memory-mapped read case as it doesnt'
+  require the creation of string tables at load time.
+  * Datetime Types - `:local-date`, `:local-time`, `:instant`.  During read you have the
+  option to keep these types in their source numeric format e.g. 32 bit `:epoch-days`
+  for `:local-date` datatypes.  This format can make some types of processing, such as
+  set creation, more efficient.
+
+
+  When writing a dataset an arrow file with a single record set is created.  When
+  writing a sequence of datasets downstream schemas must be compatible with the schema
+  of the initial dataset so for instance a conversion of int32 to double is fine but
+  double to int32 is not.
+
+  mmap support on systems running JDK-17 requires the foreign or memory module to be
+  loaded.  Appropriate JVM arguments can be found
+  [here](https://github.com/techascent/tech.ml.dataset/blob/0524ddd5bbcb9421a0f11290ec8a01b7795dcff9/project.clj#L69).
+
+
+  ## Required Dependencies
+
+  In order to support both memory mapping and JDK-17, only rely on the Arrow SDK's
+  flatbuffer and schema definitions:
+
+```clojure
+  [org.apache.arrow/arrow-vector \"6.0.0\"]
+```"
   (:require [tech.v3.datatype.mmap :as mmap]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype :as dtype]
@@ -1032,21 +1066,23 @@
 
 
 (defn- parse-next-dataset
-  [schema messages fname idx options]
+  [schema messages fname idx dict-map options]
   (when (seq messages)
     (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
                                     messages)
           rest-messages (drop (count dict-messages) messages)
-          dict-map (->> dict-messages
-                        (map dictionary->strings)
-                        (map (juxt :id identity))
-                        (into {}))
+
+          dict-map (merge dict-map
+                          (->> dict-messages
+                               (map dictionary->strings)
+                               (map (juxt :id identity))
+                               (into {})))
           data-record (first rest-messages)]
       (cons
        (-> (records->ds schema dict-map data-record options)
            (ds-base/set-dataset-name (format "%s-%03d" fname idx)))
        (lazy-seq (parse-next-dataset schema (rest rest-messages)
-                                     fname (inc (long idx)) options))))))
+                                     fname (inc (long idx)) dict-map options))))))
 
 
 (defn stream->dataset-seq
@@ -1060,19 +1096,30 @@
 
   Options:
 
+  * `:open-type` - Either `:mmap` or `:input-stream` defaulting to the slower but more robust
+  `:input-stream` pathway.  When using `:mmap` resources will be released when the resource
+  system dictates - see documentation for [tech.v3.resource](https://techascent.github.io/tech.resource/tech.v3.resource.html).
+  When using `:input-stream` the stream will be closed when the lazy sequence is either
+  fully realized or an exception is thrown.
+
+  * `close-input-stream?` - When using `:input-stream` `:open-type`, close the input stream upon
+  exception or when stream is fully realized.  Defaults to true.
+
   * `:integer-datetime-types?` - when true arrow columns in the appropriate packed
   datatypes will be represented as their integer types as opposed to their respective
   packed types.  For example columns of type `:epoch-days` will be returned to the user
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
   [fname & [options]]
-  (let [fdata (mmap/mmap-file fname options)
-        messages (mapv parse-message (message-seq fdata))
-        schema (first messages)
-        _ (when-not (= :schema (:message-type schema))
-            (throw (Exception. "Initial message is not a schema message.")))
-        messages (rest messages)]
-    (parse-next-dataset schema messages fname 0 options)))
+  (->> (let [messages (case (get options :open-type :input-stream)
+                        :mmap (->> (mmap/mmap-file fname options)
+                                   (message-seq))
+                        :input-stream (->> (io/input-stream fname options)
+                                           (stream-message-seq)))
+             schema (first messages)
+             _ (when-not (= :schema (:message-type schema))
+                 (throw (Exception. "Initial message is not a schema message.")))]
+         (parse-next-dataset schema (rest messages) fname 0 nil options))))
 
 
 (defn- message-seq->dataset
@@ -1106,8 +1153,8 @@ Please use stream->dataset-seq-inplace.")))
 
   * `:open-type` - Either `:mmap` or `:input-stream` defaulting to the slower but more robust
   `:input-stream` pathway.  When using `:mmap` resources will be released when the resource
-  system dictates - see documentation for tech.v3.resource.  When using `:input-stream`
-  the stream will be closed when the lazy sequence is either fully realized or an
+  system dictates - see documentation for [tech.v3.resource](https://techascent.github.io/tech.resource/tech.v3.resource.html).
+  When using `:input-stream` the stream will be closed when the lazy sequence is either fully realized or an
   exception is thrown.
 
   * `close-input-stream?` - When using `:input-stream` `:open-type`, close the input stream upon
@@ -1122,29 +1169,11 @@ Please use stream->dataset-seq-inplace.")))
   (->> (case (get options :open-type :input-stream)
          :mmap
          (->> (mmap/mmap-file fname options)
-              (message-seq fdata))
+              (message-seq))
          :input-stream
          (->> (io/input-stream fname)
               (stream-message-seq)))
        (message-seq->dataset fname options)))
-
-
-(defn stream->dataset-input-stream
-  "Read an arrow streaming format file via mmap lazily returning a sequence of datasets.
-  See options for [[stream->dataset-seq-inplace]]."
-  [fname & [options]]
-  (let [is (io/input-stream fname)
-        messages (map #(try (parse-message %)
-                            (catch Throwable e
-                              (.close ^InputStream is)
-                              (throw e)))
-                      (stream-message-seq is))
-        schema (first messages)
-        _ (when-not (= :schema (:message-type schema))
-            (throw (Exception. "Initial message is not a schema message.")))
-        messages (rest messages)]
-    (parse-next-dataset schema messages fname 0 options))
-)
 
 
 (defn dataset->stream!
@@ -1167,7 +1196,7 @@ Please use stream->dataset-seq-inplace.")))
           (doseq [dict dictionaries] (write-dictionary writer dict))
           (write-dataset writer ds options))))))
   ([ds path]
-   (write-dataset! ds path {})))
+   (dataset->stream! ds path {})))
 
 
 (defn- simplify-datatype
@@ -1179,7 +1208,9 @@ Please use stream->dataset-seq-inplace.")))
 
 
 (defn dataset-seq->stream!
-  "Write a sequence of datasets as an arrow stream file.  File will contain one record set.
+  "Write a sequence of datasets as an arrow stream file.  File will contain one record set
+  per dataset.  Datasets in the sequence must have matching schemas or downstream schema
+  must be able to be safely widened to the first schema.
 
   Options:
 
@@ -1240,7 +1271,7 @@ Please use stream->dataset-seq-inplace.")))
              (resource/stack-resource-context
               (write-dataset writer ds))))))))
   ([ds path]
-   (write-dataset-seq! ds path {})))
+   (dataset-seq->stream! ds path {})))
 
 
 (comment
