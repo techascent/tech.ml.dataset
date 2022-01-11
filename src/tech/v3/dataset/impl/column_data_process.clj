@@ -2,6 +2,7 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
@@ -56,7 +57,11 @@
       ;;wasn't provided.
       #:tech.v3.dataset{:data obj-data
                         :force-datatype? true
-                        :missing (or missing (scan-missing obj-data))}
+                        ;;integer types don't have meaningful data indicators of missing.
+                        :missing (or missing
+                                     (if (casting/integer-type? obj-data-datatype)
+                                       (bitmap/->bitmap)
+                                       (scan-missing obj-data)))}
       (let [obj-meta (meta obj-data)
             parser (column-parsers/promotional-object-parser
                     (:name obj-meta) obj-meta)

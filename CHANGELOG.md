@@ -1,6 +1,9 @@
 # Changelog
+## 6.047
+ * Support for making datasets out of arrays of structs.
+
 ## 6.046
- * Disable automatic file-backed-text because mmap is broken on m-1 macs.  The fix for 
+ * Disable automatic file-backed-text because mmap is broken on m-1 macs.  The fix for
    this is moving to JDK-17, btw, where it is a normal API call that works fine.  Don't
    expect this to come back.
 
