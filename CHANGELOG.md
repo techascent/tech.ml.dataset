@@ -1,4 +1,11 @@
 # Changelog
+
+## 6.048
+ * Small upgrade to dtype-next with a more flexible new-array-of-structs definition
+ and [documentation](https://cnuernber.github.io/dtype-next/tech.v3.datatype.struct.html#var-new-array-of-structs).
+ See [unit tests](https://github.com/techascent/tech.ml.dataset/blob/a7ad63c6082f6731b143ae47d2b8f71456888acb/test/tech/v3/dataset_test.clj#L1381) 
+ for how to convert an array of structs into a dataset.
+ 
 ## 6.047
  * Support for making datasets out of arrays of structs.
 
