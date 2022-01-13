@@ -2,6 +2,7 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.struct :as dt-struct]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col]
@@ -1375,6 +1376,33 @@
                                   {:idx idx})))
         n-rows (long (dfn/sum (ds :data)))]
     (is (= n-rows (ds/row-count mds)))))
+
+
+(deftest array-of-structs-all-dtypes
+  (let [sdef (dt-struct/define-datatype! :alldtypes
+               [{:name :i8 :datatype :int8}
+                {:name :u8 :datatype :uint8}
+                {:name :i16 :datatype :int16}
+                {:name :u16 :datatype :uint16}
+                {:name :i32 :datatype :int32}
+                {:name :u32 :datatype :uint32}
+                {:name :i64 :datatype :int64}
+                {:name :u64 :datatype :uint64}
+                {:name :f32 :datatype :float32}
+                {:name :f64 :datatype :float64}])
+        ary (dt-struct/new-array-of-structs :alldtypes 10)
+        cmap (dt-struct/column-map ary)
+        _ (doseq [col (vals cmap)]
+            (dtype/copy! (range 10) col))
+        ds (ds/->dataset cmap)
+        props (sdef :data-layout)]
+    (doseq [prop props]
+      (let [col (ds/column ds (:name prop))
+            cmeta (meta col)]
+        (is (= (:datatype cmeta) (:datatype prop)) (str prop))
+        (is (= (vec (cmap (:name prop)))
+               (vec col))
+            (str prop))))))
 
 
 (comment
