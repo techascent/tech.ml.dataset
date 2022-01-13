@@ -69,6 +69,7 @@
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
            [tech.v3.dataset.string_table StringTable]
+           [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset Text]
            [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype ObjectReader ArrayHelpers ByteConversions BooleanBuffer]
@@ -483,9 +484,32 @@
   * `:strings-as-text` - Serialize strings as text.  This leads to the most efficient
   format for mmap operations."
   ([ds options]
-   (if (not (:strings-as-text? options))
-     (ds-base/ensure-dataset-string-tables ds)
-     ds))
+   (reduce
+    (fn [ds col]
+      (cond
+        (= :uuid (dtype/elemwise-datatype col))
+        (let [missing (col-proto/missing col)
+              metadata (meta col)]
+          (assoc ds (metadata :name)
+                 #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
+                                   :missing missing
+                                   :metadata metadata
+                                   :name (metadata :name)}))
+        (and (= :string (dtype/elemwise-datatype col))
+             (not (:strings-as-text? options)))
+        (if (instance? StringTable (.data ^Column col))
+          ds
+          (let [missing (col-proto/missing col)
+                metadata (meta col)]
+            (assoc ds (metadata :name)
+                   #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
+                                     :missing missing
+                                     :metadata metadata
+                                     :name (metadata :name)})))
+        :else
+        ds))
+    ds
+    (ds-base/columns ds)))
   ([ds]
    (prepare-dataset-for-write ds nil)))
 
@@ -496,7 +520,7 @@
   - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
   ([ds options]
    (let [dictionaries (ArrayList.)
-         hash-salt (options ::hash-salt)
+         hash-salt (get options ::hash-salt)
          hash-salt (when hash-salt (.hashCode ^Object hash-salt))
          options (assoc options ::hash-salt hash-salt)]
      {:schema
@@ -1247,6 +1271,24 @@ Please use stream->dataset-seq-inplace.")))
               (write-dataset writer ds))))))))
   ([ds path]
    (dataset-seq->stream! ds path {})))
+
+
+(defn ^:no-doc read-stream-dataset-copying
+  "This method has been deprecated.  Please use stream->dataset"
+  [path & [options]]
+  (stream->dataset path (assoc options :open-type :input-stream)))
+
+
+(defn ^:no-doc read-stream-dataset-inplace
+  "This method has been deprecated.  Please use stream->dataset"
+  [path & [options]]
+  (stream->dataset path (assoc options :open-type :mmap)))
+
+
+(defn ^:no-doc write-dataset-to-stream!
+  "This method has been deprecated.  Please use dataset->stream!"
+  [ds path & [options]]
+  (dataset->stream! ds path options))
 
 
 (comment

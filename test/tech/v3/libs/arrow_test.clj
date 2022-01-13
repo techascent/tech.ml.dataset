@@ -6,6 +6,7 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.libs.parquet]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.resource :as resource]
             [clojure.test :refer [deftest is]])
   (:import [java.time LocalTime]
            [tech.v3.dataset Text]))
@@ -27,10 +28,7 @@
                      :doubles (double-array (range 10))
                      :strings (map str (range 10))
                      :text (map (comp #(Text. %) str) (range 10))
-                     :instants (->> (repeatedly 10 dtype-dt/instant)
-                                    (map (fn [inst]
-                                           (-> (dtype-dt/instant->milliseconds-since-epoch inst)
-                                               (dtype-dt/milliseconds-since-epoch->instant)))))
+                     :instants (repeatedly 10 dtype-dt/instant)
                      ;;external formats often don't support dash-case
                      :local_dates (repeatedly 10 dtype-dt/local-date)
                      :local_times (repeatedly 10 dtype-dt/local-time)})
@@ -41,21 +39,22 @@
 
 (deftest base-datatype-test
   (try
-    (let [ds (supported-datatype-ds)
-          _ (arrow/dataset->stream! ds "alldtypes.arrow")
-          mmap-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :mmap
-                                                            :key-fn keyword})
-          copy-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :input-stream
-                                                            :key-fn keyword})]
-      (doseq [col (vals ds)]
-        (let [cname ((meta col) :name)
-              dt (dtype/elemwise-datatype col)
-              inp-col (mmap-ds cname)
-              cp-col (copy-ds cname)]
-          (is (= dt (dtype/elemwise-datatype inp-col)) (str "inplace failure " cname))
-          (is (= dt (dtype/elemwise-datatype cp-col)) (str "copy failure " cname))
-          (is (= (vec col) (vec inp-col)) (str "inplace failure " cname))
-          (is (= (vec col) (vec cp-col)) (str "copy failure " cname)))))
+    (resource/stack-resource-context
+     (let [ds (supported-datatype-ds)
+           _ (arrow/dataset->stream! ds "alldtypes.arrow")
+           mmap-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :mmap
+                                                             :key-fn keyword})
+           copy-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :input-stream
+                                                             :key-fn keyword})]
+       (doseq [col (vals ds)]
+         (let [cname ((meta col) :name)
+               dt (dtype/elemwise-datatype col)
+               inp-col (mmap-ds cname)
+               cp-col (copy-ds cname)]
+           (is (= dt (dtype/elemwise-datatype inp-col)) (str "inplace failure " cname))
+           (is (= dt (dtype/elemwise-datatype cp-col)) (str "copy failure " cname))
+           (is (= (vec col) (vec inp-col)) (str "inplace failure " cname))
+           (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
     (finally
       (.delete (java.io.File. "alldtypes.arrow")))))
 
@@ -113,63 +112,37 @@
         (.delete (java.io.File. "temp.ames.arrow")))))
 
 
-(comment
+(deftest date-arrow-test
+  (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow"
+                                                     {:integer-datetime-types? true})]
+    (is (= [18070 18072 18063]
+           (date-data "date")))
+    (is (= :epoch-days (dtype/elemwise-datatype (date-data "date")))))
+  (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow")]
+    (is (= (mapv #(java.time.LocalDate/parse %)
+                 ["2019-06-23" "2019-06-25" "2019-06-16"])
+           (date-data "date")))
+    (is (= :packed-local-date (dtype/elemwise-datatype (date-data "date"))))))
+
+(deftest odd-parquet-crash
+  (let [test-data (ds/->dataset "test/data/part-00000-74d3eb51-bc9c-4ba5-9d13-9e0d71eea31f.c000.snappy.parquet")]
+    (try
+      (arrow/write-dataset-to-stream! test-data "test.arrow")
+      (let [arrow-ds (arrow/read-stream-dataset-copying "test.arrow")]
+        (is (= (ds/missing test-data)
+               (ds/missing arrow-ds))))
+      (finally
+        (.delete (java.io.File. "test.arrow"))))))
 
 
+(deftest failed-R-file
+  (let [cp-data (arrow/read-stream-dataset-copying "test/data/part-8981.ipc_stream")
+        inp-data (arrow/read-stream-dataset-inplace "test/data/part-8981.ipc_stream")]
+    (is (= (vec (ds/column-names cp-data))
+           (vec (ds/column-names inp-data))))))
 
 
-
-
-
-
-  ;; > read_ipc_stream ("with_date.arrow")
-  ;; member-id day                         trx-id brand-id month year quantity
-  ;; 1     86422  23 564132249-257605208-1718971337      202     6 2019        1
-  ;; 2     12597  25   897161990-1972492812-1691041      134     6 2019        2
-  ;; 3    126980  16  31433047-823825990-2105753041       11     6 2019        2
-  ;; price style-id       date
-  ;; 1  65536      171 2019-06-23
-  ;; 2 131072       38 2019-06-25
-  ;; 3 131072       33 2019-06-16
-
-  (deftest date-arrow-test
-    (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow")]
-      (is (= [18070 18072 18063]
-             (date-data "date")))
-      (is (= :epoch-days (dtype/elemwise-datatype (date-data "date")))))
-    (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow"
-                                                       {:epoch->datetime? true})]
-      (is (= (mapv #(java.time.LocalDate/parse %)
-                   ["2019-06-23" "2019-06-25" "2019-06-16"])
-             (date-data "date")))
-      (is (= :local-date (dtype/elemwise-datatype (date-data "date")))))
-    (let [date-data (arrow/read-stream-dataset-inplace "test/data/with_date.arrow"
-                                                       {:epoch->datetime? true})]
-      (is (= (mapv #(java.time.LocalDate/parse %)
-                   ["2019-06-23" "2019-06-25" "2019-06-16"])
-             (date-data "date")))
-      (is (= :local-date (dtype/elemwise-datatype (date-data "date"))))))
-
-
-  (deftest odd-parquet-crash
-    (let [test-data (ds/->dataset "test/data/part-00000-74d3eb51-bc9c-4ba5-9d13-9e0d71eea31f.c000.snappy.parquet")]
-      (try
-        (arrow/write-dataset-to-stream! test-data "test.arrow")
-        (let [arrow-ds (arrow/read-stream-dataset-copying "test.arrow")]
-          (is (= (ds/missing test-data)
-                 (ds/missing arrow-ds))))
-        (finally
-          (.delete (java.io.File. "test.arrow"))))))
-
-
-  (deftest failed-R-file
-    (let [cp-data (arrow/read-stream-dataset-copying "test/data/part-8981.ipc_stream")
-          inp-data (arrow/read-stream-dataset-inplace "test/data/part-8981.ipc_stream")]
-      (is (= (vec (ds/column-names cp-data))
-             (vec (ds/column-names inp-data))))))
-
-
-  (deftest large-var-char-file
+(deftest large-var-char-file
     (let [cp-data (arrow/read-stream-dataset-copying "test/data/largeVarChar.ipc")
           inp-data (arrow/read-stream-dataset-inplace "test/data/largeVarChar.ipc")]
       (is (= (vec (ds/column-names cp-data))
@@ -178,37 +151,36 @@
              (vec (first (ds/columns inp-data)))))))
 
 
-  (deftest uuid-test
-    (try
-      (let [uuid-ds (ds/->dataset "test/data/uuid.parquet"
-                                  {:parser-fn {"uuids" :uuid}})
-            _ (arrow/write-dataset-to-stream! uuid-ds "test-uuid.arrow")
-            copying-ds (arrow/read-stream-dataset-copying "test-uuid.arrow")
-            inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")
-            ]
-        (is (= :text ((comp :datatype meta) (copying-ds "uuids"))))
-        (is (= :text ((comp :datatype meta) (inplace-ds "uuids"))))
-        (is (= (vec (copying-ds "uuids"))
-               (vec (inplace-ds "uuids"))))
-        (is (= (mapv str (uuid-ds "uuids"))
-               (mapv str (copying-ds "uuids")))))
-      (finally
-        (.delete (java.io.File. "test-uuid.arrow")))))
+(deftest uuid-test
+  (try
+    (let [uuid-ds (ds/->dataset "test/data/uuid.parquet"
+                                {:parser-fn {"uuids" :uuid}})
+          _ (arrow/write-dataset-to-stream! uuid-ds "test-uuid.arrow")
+          copying-ds (arrow/read-stream-dataset-copying "test-uuid.arrow")
+          inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")]
+      (is (= :text ((comp :datatype meta) (copying-ds "uuids"))))
+      (is (= :text ((comp :datatype meta) (inplace-ds "uuids"))))
+      (is (= (vec (copying-ds "uuids"))
+             (vec (inplace-ds "uuids"))))
+      (is (= (mapv str (uuid-ds "uuids"))
+             (mapv str (copying-ds "uuids")))))
+    (finally
+      (.delete (java.io.File. "test-uuid.arrow")))))
 
 
-  (deftest local-time
+(deftest local-time
     (try
       (let [ds (ds/->dataset {"a" (range 10)
                               "b" (repeat 10 (java.time.LocalTime/now))})
             _ (arrow/write-dataset-to-stream! ds "test-local-time.arrow")
             copying-ds (arrow/read-stream-dataset-copying "test-local-time.arrow")
             inplace-ds (arrow/read-stream-dataset-inplace "test-local-time.arrow")]
-        (is (= :time-microseconds (dtype/elemwise-datatype (copying-ds "b"))))
-        (is (= :time-microseconds (dtype/elemwise-datatype (inplace-ds "b"))))
+        (is (= :packed-local-time (dtype/elemwise-datatype (copying-ds "b"))))
+        (is (= :packed-local-time (dtype/elemwise-datatype (inplace-ds "b"))))
         (is (= (vec (copying-ds "b"))
                (vec (inplace-ds "b"))))
         ;;Making a primitive container will use the packed data.
-        (is (= (vec (dtype/make-container :int64 (ds "b")))
+        (is (= (vec (ds "b"))
                (vec (copying-ds "b")))))
       (finally
-        (.delete (java.io.File. "test-local-time.arrow"))))))
+        (.delete (java.io.File. "test-local-time.arrow")))))
