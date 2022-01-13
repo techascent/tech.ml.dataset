@@ -33,10 +33,7 @@
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-netty "5.0.0" :scope "provided"]
-                 [org.apache.arrow/arrow-memory-core "5.0.0" :scope "provided"
-                  :exclusions [org.slf4j/slf4j-api]]
-                 [org.apache.arrow/arrow-vector "5.0.0"
+                 [org.apache.arrow/arrow-vector "6.0.0"
                   :exclusions [commons-codec
                                com.fasterxml.jackson.core/jackson-core
                                com.fasterxml.jackson.core/jackson-annotations

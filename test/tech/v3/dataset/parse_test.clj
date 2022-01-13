@@ -397,7 +397,7 @@
           _ (is (= :text (-> (nippy-ds :a) meta :datatype)))
           _ (is (= 3 (ds/row-count nippy-ds)))
           _ (arrow/write-dataset-to-stream! ds "text.arrow")
-          ds-copy (arrow/read-stream-dataset-copying "text.arrow")
+          ds-copy (arrow/read-stream-dataset-copying "text.arrow" {:key-fn keyword})
           _ (is (= :text (-> (ds-copy :a) meta :datatype)))
           _ (is (= 3 (ds/row-count nippy-ds)))
           ds-inplace (arrow/read-stream-dataset-inplace "text.arrow")]

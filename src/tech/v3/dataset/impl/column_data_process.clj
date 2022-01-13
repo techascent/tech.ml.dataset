@@ -1,5 +1,6 @@
 (ns tech.v3.dataset.impl.column-data-process
   (:require [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
