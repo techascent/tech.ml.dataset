@@ -44,8 +44,7 @@
            _ (arrow/dataset->stream! ds "alldtypes.arrow")
            mmap-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :mmap
                                                              :key-fn keyword})
-           copy-ds (arrow/stream->dataset "alldtypes.arrow" {:open-type :input-stream
-                                                             :key-fn keyword})]
+           copy-ds (arrow/stream->dataset "alldtypes.arrow" {:key-fn keyword})]
        (doseq [col (vals ds)]
          (let [cname ((meta col) :name)
                dt (dtype/elemwise-datatype col)
@@ -57,6 +56,30 @@
            (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
     (finally
       (.delete (java.io.File. "alldtypes.arrow")))))
+
+
+(deftest base-ds-seq-test
+  (try
+    (let [ds (supported-datatype-ds)
+          _ (arrow/dataset-seq->stream! "alldtypes-seq.arrow" [ds ds ds])
+          mmap-ds-seq (arrow/stream->dataset-seq "alldtypes-seq.arrow" {:key-fn keyword
+                                                                        :open-type :mmap})
+          copy-ds-seq (arrow/stream->dataset-seq "alldtypes-seq.arrow" {:key-fn keyword})]
+      (is (= 3 (count mmap-ds-seq)))
+      (is (= 3 (count copy-ds-seq)))
+      (let [mmap-ds (last mmap-ds-seq)
+            copy-ds (last copy-ds-seq)]
+        (doseq [col (vals ds)]
+         (let [cname ((meta col) :name)
+               dt (dtype/elemwise-datatype col)
+               inp-col (mmap-ds cname)
+               cp-col (copy-ds cname)]
+           (is (= dt (dtype/elemwise-datatype inp-col)) (str "inplace failure " cname))
+           (is (= dt (dtype/elemwise-datatype cp-col)) (str "copy failure " cname))
+           (is (= (vec col) (vec inp-col)) (str "inplace failure " cname))
+           (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
+    (finally
+      (.delete (java.io.File. "alldtypes-seq.arrow")))))
 
 
 (deftest simple-stocks

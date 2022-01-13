@@ -1070,7 +1070,6 @@
     (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
                                     messages)
           rest-messages (drop (count dict-messages) messages)
-
           dict-map (merge dict-map
                           (->> dict-messages
                                (map dictionary->strings)
@@ -1113,8 +1112,10 @@
   (->> (let [messages (case (get options :open-type :input-stream)
                         :mmap (->> (mmap/mmap-file fname options)
                                    (message-seq))
-                        :input-stream (->> (io/input-stream fname options)
+                        :input-stream (->> (apply io/input-stream fname
+                                                  (apply concat (seq options)))
                                            (stream-message-seq)))
+             messages (sequence (map parse-message) messages)
              schema (first messages)
              _ (when-not (= :schema (:message-type schema))
                  (throw (Exception. "Initial message is not a schema message.")))]
@@ -1170,7 +1171,7 @@ Please use stream->dataset-seq-inplace.")))
          (->> (mmap/mmap-file fname options)
               (message-seq))
          :input-stream
-         (->> (io/input-stream fname)
+         (->> (apply io/input-stream fname (apply concat (seq options)))
               (stream-message-seq)))
        (message-seq->dataset fname options)))
 
@@ -1201,7 +1202,7 @@ Please use stream->dataset-seq-inplace.")))
 (defn- simplify-datatype
   [datatype options]
   (let [datatype (packing/unpack-datatype datatype)]
-    (if (and (= :string datatype) (options :strings-as-text?))
+    (if (and (= :string datatype) (get options :strings-as-text?))
       :text
       datatype)))
 
@@ -1217,7 +1218,7 @@ Please use stream->dataset-seq-inplace.")))
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
      string tables."
-  ([ds-seq path options]
+  ([path options ds-seq]
    ;;We use the first dataset to setup schema information the rest of the datasets
    ;;must follow.  So the serialization of the first dataset differs from the serialization
    ;;of the subsequent datasets
@@ -1228,7 +1229,7 @@ Please use stream->dataset-seq-inplace.")))
          (fn [ds]
            ;;Ensure they have at least the same columns, in order, as the first dataset
            ;;and do a quick datatype check.
-           (let [ds (ds-base/select-columns cnames)
+           (let [ds (ds-base/select-columns ds cnames)
                  ds-meta (map meta (ds-base/columns ds))]
              (->
               (reduce (fn [ds col-meta]
@@ -1268,9 +1269,9 @@ Please use stream->dataset-seq-inplace.")))
              ;;Release any native mem created during this step just after this step
              ;;completes.
              (resource/stack-resource-context
-              (write-dataset writer ds))))))))
-  ([ds path]
-   (dataset-seq->stream! ds path {})))
+              (write-dataset writer ds options))))))))
+  ([path ds-seq]
+   (dataset-seq->stream! path nil ds-seq)))
 
 
 (defn ^:no-doc read-stream-dataset-copying
