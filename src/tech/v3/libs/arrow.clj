@@ -397,8 +397,8 @@
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
          datatype (packing/unpack-datatype datatype)]
-     (case (if (or (= :epoch-milliseconds datatype)
-                   (= :epoch-days datatype))
+     (case (if #{:epoch-microseconds :epoch-milliseconds
+                 :epoch-days}
              datatype
              (casting/un-alias-datatype datatype))
        :boolean (ft-fn (ArrowType$Bool.))
@@ -414,7 +414,12 @@
        :float64 (ft-fn (ArrowType$FloatingPoint. FloatingPointPrecision/DOUBLE))
        :epoch-milliseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
                                                         (str (:timezone extra-data))))
+       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
+                                             (str (:timezone extra-data))))
+       :epoch-microsecond (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
+                                                        (str (:timezone extra-data))))
        :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
+       :local-date (ft-fn (ArrowType$Date. DateUnit/DAY))
        ;;packed local time is 64bit microseconds since midnight
        :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
        :time-nanosecond (ft-fn (ArrowType$Time. TimeUnit/NANOSECOND (int 8)))
@@ -422,8 +427,6 @@
        :time-millisecond (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 4)))
        :time-second (ft-fn (ArrowType$Time. TimeUnit/SECOND (int 4)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
-       :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MILLISECOND
-                                             (str (:timezone extra-data))))
        :string (if-let [^DictionaryEncoding encoding (:encoding extra-data)]
                  (ft-fn (ArrowType$Utf8.) encoding)
                  ;;If no encoding is provided then just save the string as text
@@ -471,33 +474,7 @@
      (dtype-dt/utc-zone-id))))
 
 
-(defn- datetime-cols->epoch
-  [ds {:keys [timezone]}]
-  (let [timezone (when timezone (->timezone timezone))]
-    (reduce
-     (fn [ds col]
-       (let [col-dt (packing/unpack-datatype (dtype/elemwise-datatype col))]
-         (if (and (not= col-dt :local-time)
-                  (dtype-dt/datetime-datatype? col-dt))
-           (assoc ds
-                  (col-proto/column-name col)
-                  (col-impl/new-column
-                   (col-proto/column-name col)
-                   (dtype-dt/datetime->epoch
-                    timezone
-                    (if (= :local-date (packing/unpack-datatype col-dt))
-                      :epoch-days
-                      :epoch-milliseconds)
-                    col)
-                   (assoc (meta col)
-                          :timezone (str timezone)
-                          :source-datatype (dtype/elemwise-datatype col))
-                   (col-proto/missing col)))
-           ds)))
-     ds
-     (ds-base/columns ds))))
-
-(defn- prepare-dataset-for-write
+(defn ^:no-doc prepare-dataset-for-write
   "Convert dataset column datatypes to datatypes appropriate for arrow
   serialization.
 
@@ -506,9 +483,9 @@
   * `:strings-as-text` - Serialize strings as text.  This leads to the most efficient
   format for mmap operations."
   ([ds options]
-   (cond-> (datetime-cols->epoch ds options)
-     (not (:strings-as-text? options))
-     (ds-base/ensure-dataset-string-tables)))
+   (if (not (:strings-as-text? options))
+     (ds-base/ensure-dataset-string-tables ds)
+     ds))
   ([ds]
    (prepare-dataset-for-write ds nil)))
 
@@ -715,7 +692,7 @@
                       :length (count byte-data)}])]
     (write-message-header writer
                           (finish-builder builder
-                                          (message-id->message-type :dictionary-batch)
+                                          (message-type->message-id :dictionary-batch)
                                           (DictionaryBatch/createDictionaryBatch
                                            builder enc-id rbatch-off false)
                                           (+ missing-len offset-len data-len)))
@@ -746,7 +723,7 @@
                       (toggle-bit nbuf (Integer/toUnsignedLong data)))))
     nbuf))
 
-(defn- boolean-bytes
+(defn ^:no-doc boolean-bytes
   ^bytes [data]
   (let [rdr (dtype/->reader data)
         len (.lsize rdr)
@@ -784,7 +761,7 @@
              ;;else data is not represented
              (throw (Exception. "Numeric buffer missing concrete representation"))))])
       (case col-dt
-        :boolean [(nio-buffer/as-nio-buffer (boolean-bytes cbuf))]
+        :boolean [(boolean-bytes cbuf)]
         :string (let [str-t (ds-base/ensure-column-string-table col)
                       indices (dtype-proto/->array-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
@@ -997,15 +974,13 @@
     (dtype-proto/set-and missing (range n-elems))))
 
 
-(defn- byte-buffer->bitwise-boolean-buffer
+(defn ^:no-doc byte-buffer->bitwise-boolean-buffer
   ^Buffer[bitbuffer ^long n-elems]
   (let [buf (dtype/->buffer bitbuffer)]
     (dtype/make-reader :boolean n-elems
-                       (let [data (.readByte buf (quot idx 8))]
-                         (if (pmath/== 1 (pmath/bit-and
-                                          data
-                                          (pmath/bit-shift-left
-                                           1 (rem idx 8))))
+                       (let [data (.readByte buf (quot idx 8))
+                             shift-val (pmath/bit-shift-left 1 (rem idx 8))]
+                         (if (pmath/== shift-val (pmath/bit-and data shift-val))
                            true
                            false)))))
 
@@ -1022,7 +997,7 @@
                   field-dtype (if-not (:integer-datetime-types? options)
                                 (case field-dtype
                                   :time-microseconds :packed-local-time
-                                  :epoch-milliseconds :packed-instant
+                                  :epoch-microseconds :packed-instant
                                   :epoch-days :packed-local-date
                                   field-dtype)
                                 field-dtype)
