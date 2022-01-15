@@ -40,7 +40,7 @@
                                com.fasterxml.jackson.core/jackson-databind
                                org.slf4j/slf4j-api]
                   :scope "provided"]
-                 [uncomplicate/neanderthal "0.35.0" :scope "provided"]
+                 [uncomplicate/neanderthal "0.43.3" :scope "provided"]
 
                  ;;Geni dependencies
                  [zero.one/geni "0.0.34" :scope "provided"
