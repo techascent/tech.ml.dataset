@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "8.056"]
+                 [cnuernber/dtype-next             "8.062"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -33,6 +33,7 @@
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
                  [org.bytedeco/openblas-platform "0.3.10-1.5.4" :scope "provided"]
+                 ;;Arrow dependencies
                  [org.apache.arrow/arrow-vector "6.0.0"
                   :exclusions [commons-codec
                                com.fasterxml.jackson.core/jackson-core
@@ -40,8 +41,9 @@
                                com.fasterxml.jackson.core/jackson-databind
                                org.slf4j/slf4j-api]
                   :scope "provided"]
-                 [uncomplicate/neanderthal "0.43.3" :scope "provided"]
+                 [org.lz4/lz4-java "1.8.0" :scope "provided"]
 
+                 [uncomplicate/neanderthal "0.43.3" :scope "provided"]
                  ;;Geni dependencies
                  [zero.one/geni "0.0.34" :scope "provided"
                   :exclusions [commons-codec]]

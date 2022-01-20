@@ -27,11 +27,15 @@
 
   ## Required Dependencies
 
-  In order to support both memory mapping and JDK-17, only rely on the Arrow SDK's
+  In order to support both memory mapping and JDK-17, we only rely on the Arrow SDK's
   flatbuffer and schema definitions:
 
 ```clojure
   [org.apache.arrow/arrow-vector \"6.0.0\"]
+
+  ;;Compression codecs
+  [org.lz4/lz4-java \"1.8.0\"]
+  [com.github.luben/zstd-jni \"1.5.1-1\"]
 ```"
   (:require [tech.v3.datatype.mmap :as mmap]
             [tech.v3.datatype.datetime :as dtype-dt]
@@ -58,7 +62,7 @@
             [clojure.datafy :refer [datafy]])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
-            FieldNode Buffer]
+            FieldNode Buffer BodyCompression BodyCompressionMethod]
            [org.roaringbitmap RoaringBitmap]
            [com.google.flatbuffers FlatBufferBuilder]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
@@ -66,6 +70,7 @@
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
             ArrowType$LargeUtf8]
+           [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
            [tech.v3.dataset.string_table StringTable]
@@ -73,10 +78,17 @@
            [tech.v3.dataset Text]
            [tech.v3.datatype.native_buffer NativeBuffer]
            [tech.v3.datatype ObjectReader ArrayHelpers ByteConversions BooleanBuffer]
-           [java.io OutputStream InputStream]
+           [tech.v3.datatype.array_buffer ArrayBuffer]
+           [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
+           [java.nio ByteBuffer]
            [java.util List ArrayList Map]
            [java.time ZoneId]
-           [java.nio.channels WritableByteChannel]))
+           [java.nio.channels WritableByteChannel]
+           ;;Compression codecs
+           [com.github.luben.zstd Zstd]
+           [org.apache.commons.compress.compressors.lz4 FramedLZ4CompressorInputStream
+            FramedLZ4CompressorOutputStream]
+           [net.jpountz.lz4 LZ4Factory]))
 
 
 (set! *warn-on-reflection* true)
@@ -125,6 +137,140 @@
               written)))
         (WriteChannel.))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Compression -
+;; Compression happens in jvm-heap land.
+;; Decompression happens in native-heap land.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- ensure-bytes-array-buffer
+  ^ArrayBuffer [data]
+  (if-let [ary-buf (dtype/as-array-buffer data)]
+    (if (= :int8 (dtype/elemwise-datatype ary-buf))
+      ary-buf
+      (dtype/make-container :int8 data))))
+
+
+(defn- create-zstd-compressor
+  [comp-map]
+  (assert (= :zstd (get comp-map :compression-type)))
+  (let [comp-level (int (get comp-map :level 3))]
+    (fn [compbuf dstbuf]
+      (let [ninput (dtype/ecount compbuf)
+            maxlen (Zstd/compressBound ninput)
+            ^bytes dstbuf (-> (if (< (dtype/ecount dstbuf) maxlen)
+                                (byte-array maxlen)
+                                dstbuf))
+            srcbuf (ensure-bytes-array-buffer compbuf)
+            ^bytes src-data (.ary-data srcbuf)
+            n-written (Zstd/compressByteArray
+                       dstbuf 0 maxlen
+                       src-data
+                       (unchecked-int (.offset srcbuf))
+                       (unchecked-int (.n-elems srcbuf))
+                       comp-level)]
+        {:writer-cache dstbuf
+         :dst-buffer (dtype/sub-buffer dstbuf 0 n-written)}))))
+
+
+(defn- create-zstd-decompressor
+  []
+  (fn [compbuf resbuf]
+    (Zstd/decompress ^ByteBuffer (nio-buffer/as-nio-buffer resbuf)
+                     ^ByteBuffer (nio-buffer/as-nio-buffer compbuf))
+    resbuf))
+
+
+(defn- create-apache-lz4-frame-compressor
+  [comp-map]
+  (assert (= :lz4 (get comp-map :compression-type)))
+  (fn [compbuf dstbuf]
+    (let [^ByteArrayOutputStream dstbuf (or dstbuf (ByteArrayOutputStream.))
+          os (FramedLZ4CompressorOutputStream. dstbuf)
+          srcbuf (ensure-bytes-array-buffer compbuf)
+          ^bytes src-data (.ary-data srcbuf)]
+      (.write os src-data (unchecked-int (.offset srcbuf)) (unchecked-int (.n-elems srcbuf)))
+      (.finish os)
+      (let [final-bytes (.toByteArray dstbuf)]
+        (.reset dstbuf)
+        {:writer-cache dstbuf
+         :dst-buffer final-bytes}))))
+
+
+(defn- create-lz4-frame-compressor
+  [comp-map]
+  (assert (= :lz4 (get comp-map :compression-type)))
+  (let [fact (LZ4Factory/fastestInstance)
+        compressor (.fastCompressor fact)]
+    (fn [srcbuf dstbuf]
+      (let [maxlen (.maxCompressedLength compressor (dtype/ecount srcbuf))
+            ^bytes dstbuf (-> (if (< (dtype/ecount dstbuf) maxlen)
+                                (byte-array maxlen)
+                                dstbuf))
+            srcbuf (ensure-bytes-array-buffer srcbuf)
+            ^bytes src-data (.ary-data srcbuf)
+            n-written
+            (.compress compressor
+                       src-data
+                       (unchecked-int (.offset srcbuf))
+                       (unchecked-int (.n-elems srcbuf))
+                       dstbuf 0 maxlen)]
+        {:writer-cache dstbuf
+         :dst-buffer (dtype/sub-buffer dstbuf 0 n-written)}))))
+
+
+(defn- create-lz4-decompressor
+  []
+  (let [fact (LZ4Factory/fastestInstance)
+        decompressor (.fastDecompressor fact)]
+    (fn [compbuf dstbuf]
+      (.decompress decompressor
+                   ^ByteBuffer (nio-buffer/as-nio-buffer compbuf)
+                   ^ByteBuffer (nio-buffer/as-nio-buffer dstbuf))
+      dstbuf)))
+
+
+(def ^:private compression-info
+  {:lz4 {:file-type CompressionType/LZ4_FRAME
+         :compressor-fn create-lz4-frame-compressor
+         :decompressor-fn create-lz4-decompressor}
+   :zstd {:file-type CompressionType/ZSTD
+          :compressor-fn create-zstd-compressor
+          :decompressor-fn create-zstd-decompressor}})
+
+
+(defn- create-compressor
+  "Returns a function that takes two arguments, first is the buffer to be compressed
+  and second is a cache argument that is returned upon use of the compressor to allow
+  using the same buffer to compress data to.  Compression happens in jvm-heap land
+  so the buffer to be compressed will be copied to a byte array."
+  [comp-map]
+  (if-let [comp-data (get compression-info (comp-map :compression-type))]
+    ((comp-data :compressor-fn) comp-map)
+    (throw (Exception. (format "Unrecognized compressor map %s" comp-map)))))
+
+
+(def file-type->compression-kwd
+  (->> compression-info
+       (map (fn [[k data]]
+              [(data :file-type) k]))
+       (into {})))
+
+(def compression-kwd->file-type
+  (->> compression-info
+       (map (fn [[k data]]
+              [k (data :file-type)]))
+       (into {})))
+
+
+(defn- create-decompressor
+  "Returns a function that takes a native-heap compressed buffer and a native-heap
+  buffer to hold the decompressed data and performs the decompression."
+  [^long comp-type]
+  (if-let [kwd (file-type->compression-kwd comp-type)]
+    ((get-in compression-info [kwd :decompressor-fn]))
+    (throw (Exception. (format "Unrecognized file compression enum: %s" comp-type)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Protocol extensions for arrow schema types
@@ -579,26 +725,57 @@
 (defn- write-schema
   "Writes a schema to a message header."
   [writer schema]
-  (write-message-header writer
-                        (MessageSerializer/serializeMetadata ^Schema schema)))
+  (write-message-header writer (MessageSerializer/serializeMetadata ^Schema schema)))
+
+
+(defn- decompress-buffers
+  [^BodyCompression compression buffers]
+  (when-not (== 0 (.method compression))
+    (throw (Exception. (format "Only buffer batch compression supported - got %d"
+                               (.method compression)))))
+  (let [decompressor (create-decompressor (.codec compression))
+        buffers (mapv (fn [buffer]
+                        (let [orig-len (native-buffer/read-long buffer)]
+                          {:orig-len orig-len
+                           :buffer (dtype/sub-buffer buffer 8)}))
+                      buffers)
+        decomp-buf-len (->> (map :orig-len buffers)
+                            (remove #(== -1 (long %)))
+                            (apply +)
+                            (long))
+        decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
+    (->> buffers
+         (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
+                   ;;-1 indicates the buffer isn't actually compressed.
+                   (if (== -1 (long orig-len))
+                     [(conj res buffer) decomp-buf]
+                     [(conj res (decompressor buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
+                      (dtype/sub-buffer decomp-buf orig-len)]))
+                 [[] decomp-buf])
+         (first))))
 
 
 (defn- read-record-batch
   ([^RecordBatch record-batch ^NativeBuffer data]
-   {:nodes (->> (range (.nodesLength record-batch))
-                (mapv #(let [node (.nodes record-batch (int %))]
-                         {:n-elems (.length node)
-                          :n-null-entries (.nullCount node)})))
-    :buffers (->> (range (.buffersLength record-batch))
-                  (mapv #(let [buffer (.buffers record-batch (int %))]
-                           (dtype/sub-buffer data (.offset buffer)
-                                             (.length buffer)))))})
+   (let [compression (.compression record-batch)
+         buffers (->> (range (.buffersLength record-batch))
+                      (mapv #(let [buffer (.buffers record-batch (int %))]
+                               (dtype/sub-buffer data (.offset buffer)
+                                                 (.length buffer)))))
+         buffers (if compression
+                   (decompress-buffers compression buffers)
+                   buffers)]
+     {:nodes (->> (range (.nodesLength record-batch))
+                  (mapv #(let [node (.nodes record-batch (int %))]
+                           {:n-elems (.length node)
+                            :n-null-entries (.nullCount node)})))
+      :buffers buffers}))
   ([{:keys [message body _message-type]}]
    (read-record-batch (.header ^Message message (RecordBatch.)) body)))
 
 
 (defn- write-record-batch-header
-  ^long [^FlatBufferBuilder builder n-rows nodes buffers]
+  [^FlatBufferBuilder builder n-rows nodes buffers compression-type]
   (let [_ (RecordBatch/startNodesVector builder (count nodes))
         ;;Apparently you have to reverse structs when writing to a vector...
         _ (doseq [node (reverse nodes)]
@@ -611,9 +788,15 @@
             (Buffer/createBuffer builder
                                  (long (buffer :offset))
                                  (long (buffer :length))))
-        buffers-offset (.endVector builder)]
+        buffers-offset (.endVector builder)
+        comp-offset (when compression-type
+                      (BodyCompression/createBodyCompression
+                       builder
+                       (unchecked-byte compression-type)
+                       (BodyCompressionMethod/BUFFER)))]
     (RecordBatch/startRecordBatch builder)
     (RecordBatch/addLength builder (long n-rows))
+    (when comp-offset (RecordBatch/addCompression builder (unchecked-int comp-offset)))
     (RecordBatch/addNodes builder node-offset)
     (RecordBatch/addBuffers builder buffers-offset)
     (RecordBatch/endRecordBatch builder)))
@@ -641,7 +824,7 @@
 
 (defn- serialize-to-bytes
   "Serialize a numeric buffer to a write channel."
-  [^WriteChannel writer num-data]
+  ^java.nio.Buffer [num-data]
   (let [data-dt (casting/un-alias-datatype (dtype/elemwise-datatype num-data))
         n-bytes (byte-length num-data)
         backing-buf (byte-array n-bytes)
@@ -676,7 +859,7 @@
                      (.put ^floats ary-data))
         :float64 (-> (.asDoubleBuffer bbuf)
                      (.put ^doubles ary-data))))
-    (.write writer backing-buf)))
+    backing-buf))
 
 
 (defn- finish-builder
@@ -693,12 +876,57 @@
   (.dataBuffer builder))
 
 
+(defn- compress-record-batch-buffers
+  [buffers options]
+  (if-let [comp-map (get options :compression)]
+    (let [comp-fn (create-compressor comp-map)
+          os (ByteArrayOutputStream.)
+          data-len (byte-array 8)
+          ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
+          data-len-buf (dtype/->buffer data-len)]
+      {:compression-type (compression-kwd->file-type (comp-map :compression-type))
+       :buffers
+       (first
+        (reduce (fn [[res writer-cache] buffer]
+                  (let [buffer (serialize-to-bytes buffer)
+                        uncomp-len (dtype/ecount buffer)
+                        _ (ByteConversions/longToWriterLE uncomp-len data-len-buf 0)
+                        {:keys [writer-cache dst-buffer]} (comp-fn buffer writer-cache)
+                        dst-bytes (dtype/as-array-buffer dst-buffer)
+                        _ (.write os data-len)
+                        _ (.write os ^bytes (.ary-data dst-bytes)
+                                  (unchecked-int (.offset dst-bytes))
+                                  (unchecked-int (.n-elems dst-bytes)))
+                        dst-buffer (.toByteArray os)]
+                    (.reset os)
+                    [(conj res (nio-buffer/as-nio-buffer dst-buffer))
+                     writer-cache]))
+                [[] nil]
+                buffers))})
+    {:buffers (mapv #(-> (serialize-to-bytes %)
+                         (nio-buffer/as-nio-buffer))
+                    buffers)}))
+
+(defn- buffers->buf-entries
+  [buffers]
+  (->
+   (reduce (fn [[res offset] buffer]
+             [(conj res {:offset offset
+                         :length (dtype/ecount buffer)})
+              (pad (+ (long offset) (dtype/ecount buffer)))])
+           [[] 0]
+           buffers)
+   (first)))
+
+
 (defn- write-dictionary
   "Write a dictionary to a dictionary batch"
-  [^WriteChannel writer {:keys [byte-data offsets encoding]}]
+  [^WriteChannel writer {:keys [byte-data offsets encoding]} options]
   (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
-        missing-len (pad (count missing))
+        {:keys [compression-type buffers]}
+        (compress-record-batch-buffers [missing offsets byte-data] options)
+        buffer-entries (buffers->buf-entries buffers)
         enc-id (.getId ^DictionaryEncoding encoding)
         offset-len (pad (byte-length offsets))
         data-len (pad (count byte-data))
@@ -708,24 +936,20 @@
                     n-elems
                     [{:n-elems n-elems
                       :n-null-entries 0}]
-                    [{:offset 0
-                      :length missing-len}
-                     {:offset missing-len
-                      :length offset-len}
-                     {:offset (+ missing-len offset-len)
-                      :length (count byte-data)}])]
+                    buffer-entries
+                    compression-type)
+        last-entry (last buffer-entries)
+        body-len (pad (+ (long (last-entry :offset))
+                         (long (last-entry :length))))]
     (write-message-header writer
                           (finish-builder builder
                                           (message-type->message-id :dictionary-batch)
                                           (DictionaryBatch/createDictionaryBatch
                                            builder enc-id rbatch-off false)
-                                          (+ missing-len offset-len data-len)))
-    (serialize-to-bytes writer missing)
-    (.align writer)
-    (serialize-to-bytes writer offsets)
-    (.align writer)
-    (serialize-to-bytes writer byte-data)
-    (.align writer)))
+                                          body-len))
+    (doseq [buf buffers]
+      (.write writer ^ByteBuffer buf)
+      (.align writer))))
 
 
 (defn- toggle-bit
@@ -828,24 +1052,24 @@
                        :buffers buffers
                        :length col-len}))))
         nodes (map :node nodes-buffs-lens)
-        data-bufs (mapcat :buffers nodes-buffs-lens)
-        buffers (->> data-bufs
-                     (reduce (fn [[cur-off buffers] buffer]
-                               (let [nlen (pad (byte-length buffer))]
-                                 [(+ (long cur-off) nlen)
-                                  (conj buffers {:offset cur-off
-                                                 :length nlen})]))
-                             [0 []])
-                     (second))
+        {:keys [compression-type buffers]}
+        (compress-record-batch-buffers
+         (mapcat :buffers nodes-buffs-lens)
+         options)
+
+        buf-entries (buffers->buf-entries buffers)
+        last-entry (last buf-entries)
+        body-len (pad (+ (long (last-entry :offset)) (long (last-entry :length))))
         builder (FlatBufferBuilder.)]
     (write-message-header writer
                           (finish-builder
                            ;;record-batch message type
                            builder (message-type->message-id :record-batch)
-                           (write-record-batch-header builder n-rows nodes buffers)
-                           (apply + (map :length nodes-buffs-lens))))
-    (doseq [buffer data-bufs]
-      (serialize-to-bytes writer buffer)
+                           (write-record-batch-header builder n-rows nodes buf-entries
+                                                      compression-type)
+                           body-len))
+    (doseq [buf buffers]
+      (.write writer ^ByteBuffer buf)
       (.align writer))))
 
 
@@ -1176,6 +1400,35 @@ Please use stream->dataset-seq-inplace.")))
        (message-seq->dataset fname options)))
 
 
+(def compression-type
+  {:zstd CompressionType/ZSTD
+   :lz4 CompressionType/LZ4_FRAME})
+
+
+(defn- ensure-valid-compression-keyword
+  [kwd]
+  (if (contains? compression-type kwd)
+    kwd
+    (throw (Exception. (format "Unrecognized compression type %s" kwd)))))
+
+
+(defn- validate-compression-for-write
+  [compression]
+  (when compression
+    (->
+     (cond
+       (map? compression)
+       (do
+         (when-not (get compression :compression-type)
+           (throw (Exception. (format "Invalid compression map %s" compression))))
+         (update compression :compression-type ensure-valid-compression-keyword))
+       (keyword? compression)
+       {:compression-type (ensure-valid-compression-keyword compression)}
+       :else
+       (throw (Exception. "Unrecognized compression type")))
+     #_(create-compressor))))
+
+
 (defn dataset->stream!
   "Write a dataset as an arrow stream file.  File will contain one record set.
 
@@ -1184,16 +1437,24 @@ Please use stream->dataset-seq-inplace.")))
   * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
-     string tables."
+     string tables.
+
+  * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
+     Per-column compression of the data can result in some significant size savings
+     (2x+) and thus some significant time savings when loading over the network.
+     Using compression makes loading via mmap non-lazy - If you are going to use
+     compression mmap probably doesn't make sense on load and most likely will
+     result on slower loading times."
   ([ds path options]
    (let [ds (prepare-dataset-for-write ds options)
+         options (update options :compression validate-compression-for-write)
          {:keys [schema dictionaries]} (ds->schema ds options)]
      ;;Any native mem allocated in this context will be released
      (resource/stack-resource-context
       (with-open [ostream (io/output-stream! path)]
         (let [writer (arrow-output-stream-writer ostream)]
           (write-schema writer schema)
-          (doseq [dict dictionaries] (write-dictionary writer dict))
+          (doseq [dict dictionaries] (write-dictionary writer dict options))
           (write-dataset writer ds options))))))
   ([ds path]
    (dataset->stream! ds path {})))
@@ -1217,7 +1478,14 @@ Please use stream->dataset-seq-inplace.")))
   * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
-     string tables."
+     string tables.
+
+  * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
+     Per-column compression of the data can result in some significant size savings
+     (2x+) and thus some significant time savings when loading over the network.
+     Using compression makes loading via mmap non-lazy - If you are going to use
+     compression mmap probably doesn't make sense and most likely will result in
+     slower loading times."
   ([path options ds-seq]
    ;;We use the first dataset to setup schema information the rest of the datasets
    ;;must follow.  So the serialization of the first dataset differs from the serialization
@@ -1256,7 +1524,7 @@ Please use stream->dataset-seq-inplace.")))
        (let [writer (arrow-output-stream-writer ostream)
              {:keys [schema dictionaries]} (ds->schema ds (assoc options ::hash-salt -1))]
          (write-schema writer schema)
-         (doseq [dict dictionaries] (write-dictionary writer dict))
+         (doseq [dict dictionaries] (write-dictionary writer dict options))
          ;;Release any native mem created during this step just after step completes
          (resource/stack-resource-context
           (write-dataset writer ds options))
@@ -1265,7 +1533,7 @@ Please use stream->dataset-seq-inplace.")))
            ;;dictionaries which may not be ideal for other engines without adding meaningful
            ;;support for isDelta.
            (let [{:keys [dictionaries]} (ds->schema ds (assoc options ::hash-salt idx))]
-             (doseq [dict dictionaries] (write-dictionary writer dict))
+             (doseq [dict dictionaries] (write-dictionary writer dict options))
              ;;Release any native mem created during this step just after this step
              ;;completes.
              (resource/stack-resource-context

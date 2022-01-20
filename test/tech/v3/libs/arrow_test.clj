@@ -135,6 +135,32 @@
         (.delete (java.io.File. "temp.ames.arrow")))))
 
 
+(deftest ames-compression-test
+  (try
+    (let [ames (ds/->dataset "test/data/ames-house-prices/train.csv")
+          _ (arrow/dataset->stream! ames "ames-uncompressed.arrow")
+          _ (arrow/dataset->stream! ames "ames-zstd.arrow" {:compression
+                                                            {:compression-type :zstd
+                                                             ;;default is 3
+                                                             :level 5}})
+          _ (arrow/dataset->stream! ames "ames-lz4.arrow" {:compression :lz4})
+          file-len (fn [path] (.length (java.io.File. (str path))))
+          _ (println (ds/->dataset {:save-type [:uncompressed :zstd :lz4]
+                                    :file-size [(file-len "ames-uncompressed.arrow")
+                                                (file-len "ames-zstd.arrow")
+                                                (file-len "ames-lz4.arrow")]}))
+          uncomp (arrow/stream->dataset "ames-uncompressed.arrow")
+          zstd (arrow/stream->dataset "ames-zstd.arrow")
+          lz4 (arrow/stream->dataset "ames-lz4.arrow")]
+      (System/gc)
+      (is (dfn/equals (uncomp "SalePrice") (zstd "SalePrice")))
+      (is (dfn/equals (uncomp "SalePrice") (lz4 "SalePrice"))))
+    (finally
+      (.delete (java.io.File. "ames-uncompressed.arrow"))
+      (.delete (java.io.File. "ames-zstd.arrow"))
+      (.delete (java.io.File. "ames-lz4.arrow")))))
+
+
 (deftest date-arrow-test
   (let [date-data (arrow/read-stream-dataset-copying "test/data/with_date.arrow"
                                                      {:integer-datetime-types? true})]
