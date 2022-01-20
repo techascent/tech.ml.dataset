@@ -20,16 +20,16 @@ and strings are loaded into string tables.  These features together dramatically
 decrease the working set size in memory.  Because data is stored in columnar fashion
 columnwise operations on the dataset are very fast.
 
+
 Conversion back into sequences of maps is very efficient and we have support for
 writing the dataset back out to csv, tsv, and gzipped varieties of those.
 
-Upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We support
-copying pathway using the standard api -- data is copied from disk into buffers.  We also
-support a more or less [from-scratch implementation](src/tech/v3/libs/arrow/in_place.clj) of an in-place
-pathway built expressly to enable both datasets that are larger than machine
-RAM and purely for performance on top of the
-['tech.v3.datatype.mmap'](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype/mmap.clj#L16)
-namespace.
+
+We have upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We have
+full support including mmap support for JDK-8->JDK-17 although if you are on an M-1 Mac you will need to use
+JDK-17.  We also support per-column compression (LZ4, ZSTD) across all supported platforms.  The official Arrow
+SDK does not support mmap, JDK-17, and has no user-accessible way to save a compressed streaming format
+file.
 
 
 Large aggregations of potentially out-of-memory datasets are represented by a sequence of datasets.
