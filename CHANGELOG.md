@@ -1,4 +1,11 @@
 # Changelog
+## 6.050
+ * Arrow compression is now supported.  See documentation in the libs/arrow namespace.
+ * Major dtype-next upgrade - now with a Java (tm) API :-).
+ 
+## 6.049
+ * Arrow has been rebuilt to be minimally dependent on the official arrow SDK
+   and support JDK-17.
 
 ## 6.048
  * Small upgrade to dtype-next with a more flexible new-array-of-structs definition

@@ -251,13 +251,13 @@
     (throw (Exception. (format "Unrecognized compressor map %s" comp-map)))))
 
 
-(def file-type->compression-kwd
+(def ^:private file-type->compression-kwd
   (->> compression-info
        (map (fn [[k data]]
               [(data :file-type) k]))
        (into {})))
 
-(def compression-kwd->file-type
+(def ^:private compression-kwd->file-type
   (->> compression-info
        (map (fn [[k data]]
               [k (data :file-type)]))
@@ -1400,7 +1400,7 @@ Please use stream->dataset-seq-inplace.")))
        (message-seq->dataset fname options)))
 
 
-(def compression-type
+(def ^:private compression-type
   {:zstd CompressionType/ZSTD
    :lz4 CompressionType/LZ4_FRAME})
 
