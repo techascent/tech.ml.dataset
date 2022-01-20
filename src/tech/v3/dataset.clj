@@ -78,11 +78,10 @@
      will fail to parse.  For more information on this option, please visit:
      https://github.com/uniVocity/univocity-parsers/issues/301
   - `:text-temp-dir` - The temporary directory to use for file-backed text.  Setting
-     this value to boolean 'false' turns off file backed text.  If a tech.v3.resource
-     stack context is opened the file will be deleted when the context closes else it
-     will be deleted when the gc cleans up the dataset.  A shutdown hook is added as
-     a last resort to ensure the file is cleaned up. Each column's data filefile will
-     be created in `(System/getProperty \"java.io.tmpdir\")` by default.
+    this value to boolean 'false' turns off file backed text which is the default.  If a
+    tech.v3.resource stack context is opened the file will be deleted when the context
+    closes else it will be deleted when the gc cleans up the dataset.  A shutdown hook is
+    added as a last resort to ensure the file is cleaned up.
   - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the
      header row.  Works across both csv and spreadsheet datasets.
   - `:parser-type` - Default parser to use if no parser-fn is specified for that column.
@@ -524,6 +523,11 @@ null [6 3]:
   (tech.v3.dataset.base/dataset-name dataset)))
 
 
+(defn dataset?
+  ([ds]
+  (tech.v3.dataset.impl.dataset/dataset? ds)))
+
+
 (defn descriptive-stats
   "Get descriptive statistics across the columns of the dataset.
   In addition to the standard stats.
@@ -561,6 +565,11 @@ null [6 3]:
   "Drop rows from dataset or column"
   ([dataset-or-col row-indexes]
   (tech.v3.dataset.base/drop-rows dataset-or-col row-indexes)))
+
+
+(defn empty-dataset
+  ([]
+  (tech.v3.dataset.impl.dataset/empty-dataset )))
 
 
 (defn ensure-array-backed
@@ -972,7 +981,9 @@ test/data/stocks.csv [5 4]:
 
   The smaller the maps returned from mapcat-fn the better, perhaps consider using records.
   In the case that a mapcat-fn result map has a key that overlaps a column name the
-  column will be replaced with the output of mapcat-fn.
+  column will be replaced with the output of mapcat-fn.  The returned map will have the
+  key `:_row-id` assoc'd onto it so for absolutely minimal gc usage include this
+  as a member variable in your map.
 
   Options:
 

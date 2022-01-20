@@ -3,17 +3,11 @@
   to be metamorph-compliant which means transforming an argument that is just a dataset into
   an argument that is a metamorph context - a map of `{:metamorph/data ds}`.  They also return
   their result as a metamorph context."
-  (:require [tech.v3.dataset]
+  (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling]
             [tech.v3.protocols.dataset :as prot])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
-
-
-(defn dataset?
-  "Is `ds` a `dataset` type?"
-  [ds]
-  (satisfies? prot/PColumnarDataset ds))
 
 (defmacro build-pipelined-function
   [f m]
@@ -24,7 +18,7 @@
                :let [narg (mapv #(if (map? %) 'options %) arg)
                      [a & r] (split-with (partial not= '&) narg)]]
            (list narg `(fn [ds#]
-                         (let [ctx# (if (dataset? ds#)
+                         (let [ctx# (if (ds/dataset? ds#)
                                       {:metamorph/data ds#} ds#)]
                            (assoc ctx# :metamorph/data (apply ~f (ctx# :metamorph/data) ~@a ~(rest r))))))))))
 

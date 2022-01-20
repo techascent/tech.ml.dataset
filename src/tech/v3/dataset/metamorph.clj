@@ -374,9 +374,8 @@ null [6 3]:
 
 
 (defn dataset?
-  "Is `ds` a `dataset` type?"
-  ([ds]
-  (tech.v3.dataset.metamorph-api/dataset? ds)))
+  ([]
+  (tech.v3.dataset.metamorph-api/dataset? )))
 
 
 (defn descriptive-stats
@@ -416,6 +415,11 @@ null [6 3]:
   "Drop rows from dataset or column"
   ([row-indexes]
   (tech.v3.dataset.metamorph-api/drop-rows row-indexes)))
+
+
+(defn empty-dataset
+  ([]
+  (tech.v3.dataset.metamorph-api/empty-dataset )))
 
 
 (defn ensure-array-backed
@@ -916,7 +920,9 @@ test/data/stocks.csv [5 4]:
 
   The smaller the maps returned from mapcat-fn the better, perhaps consider using records.
   In the case that a mapcat-fn result map has a key that overlaps a column name the
-  column will be replaced with the output of mapcat-fn.
+  column will be replaced with the output of mapcat-fn.  The returned map will have the
+  key `:_row-id` assoc'd onto it so for absolutely minimal gc usage include this
+  as a member variable in your map.
 
   Options:
 
