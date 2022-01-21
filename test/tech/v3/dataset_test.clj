@@ -841,6 +841,7 @@
                  (ds/missing)
                  (dtype/ecount))))))
 
+
 (deftest replace-missing-selector-fn
   (let [ds (ds/->dataset {:a [nil nil 2 4]
                           :b [nil nil 4 6]
@@ -1403,6 +1404,15 @@
         (is (= (vec (cmap (:name prop)))
                (vec col))
             (str prop))))))
+
+
+(deftest replace-missing-packed-local-date
+  (let [date (dtype-dt/local-date)
+        ds (-> (ds/->dataset {:a [date nil nil date nil]})
+               (ds/replace-missing :all :value date))]
+    (is (== 0 (dtype/ecount (ds/missing ds))))
+    (is (= (vec (repeat 5 date))
+           (vec (ds :a))))))
 
 
 (comment

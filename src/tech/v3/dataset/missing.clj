@@ -6,13 +6,15 @@
             [tech.v3.datatype.update-reader :as update-rdr]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [clojure.tools.logging :as log])
   (:import [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
-           [tech.v3.datatype ObjectReader]))
+           [tech.v3.datatype ObjectReader]
+           [tech.v3.dataset.impl.column Column]))
 
 
 (defn- iterable-sequence?
@@ -36,21 +38,29 @@
               (.remove rb k)
               rb) rb ks)))
 
+(defn- maybe-column-buffer
+  [col]
+  (if (instance? Column col)
+    (.buffer ^Column col)
+    col))
+
 (defn- replace-missing-with-value
   [col missing value]
-  (col/new-column (col/column-name col)
-                  (update-rdr/update-reader
-                   col (cond
-                         (map? value) value
-                         (iterable-sequence? value) (zipmap missing (cycle value))
-                         :else (bitmap/bitmap-value->bitmap-map
-                                missing
-                                (casting/cast value
-                                              (dtype/elemwise-datatype col)))))
-                  (meta col)
-                  (if (map? value)
-                    (remove-from-rbitmap missing (keys value))
-                    (RoaringBitmap.))))
+  (let [unpack-data (packing/unpack (maybe-column-buffer col))]
+    (col/new-column (col/column-name col)
+                    (update-rdr/update-reader
+                     unpack-data
+                     (cond
+                       (map? value) value
+                       (iterable-sequence? value) (zipmap missing (cycle value))
+                       :else (bitmap/bitmap-value->bitmap-map
+                              missing
+                              (let [col-dt (dtype/elemwise-datatype unpack-data)]
+                                (casting/cast value col-dt)))))
+                    (meta col)
+                    (if (map? value)
+                      (remove-from-rbitmap missing (keys value))
+                      (RoaringBitmap.)))))
 
 (defn- missing-direction-prev
   ^long [^RoaringBitmap rb ^long idx]
