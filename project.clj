@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.052-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.051"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -71,7 +71,7 @@
              {:source-paths ["src" "dev"]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]
-                             [com.cnuernber/codox "1.000"]]
+                             [com.cnuernber/codox "1.001"]]
               :codox {:project {:name "tech.ml.dataset"}
                       :metadata {:doc/format :markdown}
                       :themes [:rdash]
