@@ -15,8 +15,8 @@ import tech.v3.datatype.IFnDef;
 /**
  *
  */
-public class DS {
-  private DS(){}
+public class TMD {
+  private TMD(){}
 
   static final IFn toDatasetFn = requiringResolve("tech.v3.dataset-api", "->dataset");
   static final IFn isDatasetFn = requiringResolve("tech.v3.dataset-api", "dataset?");
