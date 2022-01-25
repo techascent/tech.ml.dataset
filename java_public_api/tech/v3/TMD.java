@@ -357,7 +357,11 @@ public class TMD {
   }
   /**
    * Parallelize mapping a function from dataset->dataset across a dataset.  Function may
-   * return null.
+   * return null.  The original dataset is simply sliced into n-core results and
+   * map-fn is called n-core times with the results either concatenated into a new dataset or
+   * returned as an Iterable.
+   *
+   * @param mapFn a function from dataset->dataset although it may return null.
    *
    * Options:
    *
@@ -371,83 +375,231 @@ public class TMD {
     return call(pmapDsFn, ds, mapFn, options);
   }
 
+  /**
+   * Sort a dataset by first mapping `sortFn` over it and then sorting over the result.
+   * `sortFn` is passed each row in map form and the return value is used to sort the
+   * dataset.
+   *
+   * @param sortFn function taking a single argument which is the row-map and returns the value
+   * to sort on.
+   * @param compareFn Comparison operator or comparator.  Some examples are the Clojure '<' or
+   * '>' operators - tech.v3.Clj.lessThanFn, tech.v3.Clj.greaterThanFn.  The clojure keywords
+   * `:tech.numerics/<` and `:tech.numerics/>` can be used for somewhat higher performance
+   * unboxed primitive comparisons or the Clojure function `compare` - tech.v3.Clj.compareFn -
+   * which is similar to .compareTo except it works with null and the input must implement
+   * Comparable.  Finally you can instantiate an instance of java.util.Comparator.
+   *
+   * Options:
+   *
+   *  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+   *  `:exception`.
+   *  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false.
+   */
   public static Map sortBy(Object ds, IFn sortFn, Object compareFn, Object options) {
     return (Map)call(sortByFn, ds, sortFn, compareFn, options);
   }
+  /** Sort a dataset.  See documentation of 4-arity version.*/
   public static Map sortBy(Object ds, IFn sortFn, Object compareFn) {
     return (Map)call(sortByFn, ds, sortFn, compareFn, null);
   }
+  /** Sort a dataset.  See documentation of 4-arity version.*/
   public static Map sortBy(Object ds, IFn sortFn) {
     return (Map)call(sortByFn, ds, sortFn);
   }
+
+  /**
+   * Sort a dataset by using the values from column `cname`.
+   * to sort on.
+   * @param compareFn Comparison operator or comparator.  Some examples are the Clojure '<' or
+   * '>' operators - tech.v3.Clj.lessThanFn, tech.v3.Clj.greaterThanFn.  The clojure keywords
+   * `:tech.numerics/<` and `:tech.numerics/>` can be used for somewhat higher performance
+   * unboxed primitive comparisons or the Clojure function `compare` - tech.v3.Clj.compareFn -
+   * which is similar to .compareTo except it works with null and the input must implement
+   * Comparable.  Finally you can instantiate an instance of java.util.Comparator.
+   *
+   * Options:
+   *
+   *  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+   *  `:exception`.
+   *  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false.
+   */
   public static Map sortByColumn(Object ds, Object cname, Object compareFn, Object options) {
     return (Map)call(sortByColumnFn, ds, cname, compareFn, options);
   }
+  /** Sort a dataset by a specific column.  See documentation on 4-arity version.*/
   public static Map sortByColumn(Object ds, Object cname, Object compareFn) {
     return (Map)call(sortByColumnFn, ds, cname, compareFn, null);
   }
+  /** Sort a dataset by a specific column.  See documentation on 4-arity version.*/
   public static Map sortByColumn(Object ds, Object cname) {
     return (Map)call(sortByColumnFn, ds, cname);
   }
+  /**
+   * Filter a dataset.  Predicate gets passed all rows and must return a `truthy` values.
+   */
   public static Map filter(Object ds, IFn predicate) {
     return (Map)call(filterFn, ds, predicate);
   }
+  /**
+   * Filter a dataset.  Predicate gets passed a values from column cname and must
+   * return a `truthy` values.
+   */
   public static Map filterColumn(Object ds, Object cname, IFn predicate) {
     return (Map)call(filterColumnFn, ds, cname, predicate);
   }
+  /**
+   * Group a dataset returning a Map of keys to dataset.
+   *
+   * @param groupFn Gets passed each row in map format and must return the desired key.
+   *
+   * @return a map of key to dataset.
+   */
   public static Map groupBy(Object ds, IFn groupFn) {
     return (Map)call(groupByFn, ds, groupFn);
   }
+  /**
+   * Group a dataset by a specific column returning a Map of keys to dataset.
+   *
+   * @return a map of key to dataset.
+   */
   public static Map groupByColumn(Object ds, Object cname) {
     return (Map)call(groupByColumnFn, ds, cname);
   }
+  /**
+   * Concatenate an Iterable of datasets into one dataset via copying data into one
+   * dataset.  This generally results in higher performance than an in-place concatenation
+   * with the exception of small (< 3) numbers of datasets. Null datasets will be silently
+   * ignored.
+   */
   public static Map concatCopying(Object datasets) {
     return (Map)call(applyFn, concatCopyingFn, datasets);
   }
+
+  /**
+   * Concatenate an Iterable of datasets into one dataset via creating virtual buffers that
+   * index into the previous datasets. This generally results in lower performance than a
+   * copying concatenation with the exception of small (< 3) numbers of datasets.  Null
+   * datasets will be silently ignored.
+   */
   public static Map concatInplace(Object datasets) {
     return (Map)call(applyFn, concatInplaceFn, datasets);
   }
-  public static Map concat(Object datasets) {
-    return (Map)call(applyFn, concatCopyingFn, datasets);
-  }
+  /**
+   * Create a dataset with no duplicates by taking first of duplicate values.
+   *
+   * @param uniqueFn is passed a row and must return the uniqueness criteria.  A uniqueFn is
+   * the identity function.
+   */
   public static Map uniqueBy(Object ds, IFn uniqueFn) {
     return (Map)call(uniqueByFn, ds, uniqueFn);
   }
+  /**
+   * Make a dataset unique using a particular column as the uniqueness criteria and taking
+   * the first value.
+   */
   public static Map uniqueByColumn(Object ds, Object cname) {
     return (Map)call(uniqueByFn, ds, cname);
   }
 
+  /**
+   * Create a dataset of the descriptive statistics of the input dataset.  This works with
+   * date-time columns, missing values, etc. and serves as very fast way to quickly get a feel
+   * for a dataset.
+   *
+   * Options:
+   *
+   * * `:stat-names` - A set of desired stat names.  Possible statistic operations are:
+   *  `[:col-name :datatype :n-valid :n-missing :min :quartile-1 :mean :mode :median
+   *   :quartile-3 :max :standard-deviation :skew :n-values :values :histogram :first
+   *   :last]`
+   */
   public static Map descriptiveStats(Object ds, Object options) {
     return (Map)call(descriptiveStatsFn, ds, options);
   }
+  /**
+   * Create a dataset of the descriptive statistics of the input dataset.  This works with
+   * date-time columns, missing values, etc. and serves as very fast way to quickly get a feel
+   * for a dataset.
+   *
+   * Options:
+   *
+   * * `:stat-names` - A set of desired stat names.  Possible statistic operations are:
+   *  `[:col-name :datatype :n-valid :n-missing :min :quartile-1 :mean :mode :median
+   *   :quartile-3 :max :standard-deviation :skew :n-values :values :histogram :first
+   *   :last]`
+   */
   public static Map descriptiveStats(Object ds) {
     return (Map)call(descriptiveStatsFn, ds);
   }
 
+  /**
+   * Convert a dataset to a neanderthal 2D matrix such that the columns of the dataset
+   * become the columns of the matrix.  This function dynamically loads the neanderthal
+   * MKL bindings so there may be some pause when first called.  If you would like to have
+   * the pause somewhere else call `require("tech.v3.dataset.neanderthal"); at some
+   * previous point of the program.  You must have an update-to-date version of
+   * neanderthal in your classpath such as `[uncomplicate/neanderthal "0.43.3"]`.
+   *
+   * See the [neanderthal documentation](https://neanderthal.uncomplicate.org/)`
+   *
+   * @param layout One of `:column` or `:row`.
+   * @param datatype One of `:float32` or `:float64`.
+   *
+   * Note that you can get a tech tensor (tech.v3.datatype.NDBuffer) from a neanderthal
+   * matrix using `tech.v3.DType.asTensor()`.
+   *
+   */
   public static Object toNeanderthal(Object ds, Keyword layout, Keyword datatype) {
     return call(deref(toNeanderthalDelay), ds, layout, datatype);
   }
+  /**
+   * Convert a dataset to a neanderthal 2D matrix such that the columns of the dataset
+   * become the columns of the matrix.  See documentation for 4-arity version of
+   * function.  This function creates a column-major float64 (double) matrix.
+   */
   public static Object toNeanderthal(Object ds) {
     return call(deref(toNeanderthalDelay), ds);
   }
+  /**
+   * Convert a neanderthal matrix to a dataset such that the columns of the matrix
+   * become the columns of the dataset.  Column names are the indexes of the columns.
+   */
   public static Map neanderthalToDataset(Object denseMat) {
     return (Map)call(deref(neanderthalToDatasetDelay), denseMat);
   }
-
+  /**
+   * Convert a dataset to a jvm-heap based 2D tensor such that the columns of the
+   * dataset become the columns of the tensor.
+   *
+   * @param datatype Any numeric datatype - `:int8`, `:uint8`, `:float32`, `:float64`, etc.
+   */
   public static NDBuffer toTensor(Object ds, Keyword datatype) {
     return (NDBuffer)call(deref(toTensorDelay), ds, datatype);
   }
+  /**
+   *  Convert a dataset to a jvm-heap based 2D double (float64) tensor.
+   */
   public static NDBuffer toTensor(Object ds) {
     return (NDBuffer)call(deref(toTensorDelay), ds);
   }
+  /**
+   * Convert a tensor to a dataset such that the columns of the tensor
+   * become the columns of the dataset named after their index.
+   */
   public static Map tensorToDataset(Object tens) {
     return (Map)call(deref(tensorToDatasetDelay), tens);
   }
-
+  /**
+   * Write a dataset to disc as csv, tsv, csv.gz, tsv.gz or nippy.
+   *
+   * Reading/writing to parquet or arrow is accessible via separate clasess
+   */
   public static void writeDataset(Object ds, String path, Object options) {
     call(writeFn, ds, path, options);
   }
-
+  /**
+   * Write a dataset to disc as csv, tsv, csv.gz, tsv.gz or nippy.
+   */
   public static void writeDataset(Object ds, String path) {
     writeDataset(ds, path, null);
   }

@@ -531,7 +531,21 @@
 
 
 (defn sort-by
-  "Sort a dataset by a key-fn and compare-fn."
+  "Sort a dataset by a key-fn and compare-fn.
+
+  * `key-fn` - function from map to sort value.
+  * `compare-fn` may be one of:
+     - a clojure operator like clojure.core/<
+     - `:tech.numerics/<`, `:tech.numerics/>` for unboxing comparisons of primitive
+        values.
+     - clojure.core/compare
+     - A custom java.util.Comparator instantiation.
+
+  Options:
+
+  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+    `:exception`.
+  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false."
   ([dataset key-fn compare-fn & [options]]
    (when dataset
      (->> (ds-readers/mapseq-reader dataset)
@@ -543,7 +557,20 @@
 
 
 (defn sort-by-column
-  "Sort a dataset by a given column using the given compare fn."
+  "Sort a dataset by a given column using the given compare fn.
+
+  * `compare-fn` may be one of:
+     - a clojure operator like clojure.core/<
+     - `:tech.numerics/<`, `:tech.numerics/>` for unboxing comparisons of primitive
+        values.
+     - clojure.core/compare
+     - A custom java.util.Comparator instantiation.
+
+  Options:
+
+  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+    `:exception`.
+  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false."
   ([dataset colname compare-fn & [options]]
    (when dataset
      (->> (argops/argsort compare-fn options (packing/unpack (column dataset colname)))
