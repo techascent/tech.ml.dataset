@@ -13,7 +13,13 @@ import tech.v3.datatype.IFnDef;
 
 
 /**
+ * `tech.ml.dataset` is a high performance library for processing columnar data similar to
+ * pandas or R' data table.  Datasets are `maps` of their columns and columns derive from
+ * various Clojure interfaces such as IIndexed and IFn to make accessing their data as easy
+ * as possible.
  *
+ * Columns have a conversion to a `tech.v3.datate.Buffer` object accessible via `tech.v3.DType.toBuffer()`
+ * so if you want higher performance non-boxing access that is also available.
  */
 public class TMD {
   private TMD(){}
@@ -85,63 +91,144 @@ public class TMD {
   static final IFn writeFn = requiringResolve("tech.v3.dataset", "write!");
 
 
-
+  /**
+   * Basic pathway to take data and get back a datasets.  If dsData is a string
+   * a built in system can parse csv, tsv, csv.gz, tsv.gz and .nippy format files.
+   * Specific other formats such as xlsx, apache arrow and parquet formats are provided
+   * in other classes.
+   *
+   * Aside from string data formats, you can explicitly provide either a sequence of maps
+   * or a map of columns with the map of columns being by far more efficient.
+   *
+   * The options for parsing a dataset are extensive and documented at
+   * [->dataset](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var--.3Edataset).
+   *
+   * Example:
+   *
+   *```java
+   *  Map ds = makeDataset("https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv");
+   *  tech.v3.Clj.println(head(ds));
+   *```
+   */
   public static Map makeDataset(Object dsData, Map options) {
     return (Map)call(toDatasetFn, dsData, options);
   }
+  /**
+   * Make a dataset.  See 2-arity form of function.
+   */
   public static Map makeDataset(Object dsData) {
     return (Map)call(toDatasetFn, dsData, null);
   }
+  /**
+   * Returns true if this object is a dataset.
+   */
   public static boolean isDataset(Object ds) {
     return (boolean)call(isDatasetFn, ds);
   }
+  /** Return the number of rows. */
   public static long rowCount(Object ds) {
     return (long)call(rowCountFn, ds);
   }
+  /** Return the number of columns. */
   public static long columnCount(Object ds) {
     return (long)call(columnCountFn, ds);
   }
+  /** Return the column named `cname` else throw exception. */
   public static Object column(Object ds, Object cname) {
     return call(columnFn, ds, cname);
   }
+  /**
+   * Efficiently create a column definition explicitly specifying name, data, missing, and
+   * metadata.   The result can be `assoc`d back into the dataset.
+   */
   public static Map columnDef(Object name, Object data, Object missing, Object metadata) {
     return hashmap(keyword("tech.v3.dataset", "name"), name,
 		   keyword("tech.v3.dataset", "data"), data,
 		   keyword("tech.v3.dataset", "missing"), missing,
 		   keyword("tech.v3.dataset", "metadata"), metadata);
   }
+  /**
+   * Efficiently create a column definition explicitly specifying name, data, missing, and
+   * metadata.   The result can be `assoc`d back into the dataset.
+   */
   public static Map columnDef(Object data, Object missing) {
     return hashmap(keyword("tech.v3.dataset", "name"), "_unnamed",
 		   keyword("tech.v3.dataset", "data"), data,
 		   keyword("tech.v3.dataset", "missing"), missing);
   }
+  /**
+   * Efficiently create a column definition explicitly specifying name, data, missing, and
+   * metadata.   The result can be `assoc`d back into the dataset.
+   */
   public static Map columnDef(Object data, Object missing, Object metadata) {
     return hashmap(keyword("tech.v3.dataset", "name"), "_unnamed",
 		   keyword("tech.v3.dataset", "data"), data,
 		   keyword("tech.v3.dataset", "missing"), missing,
 		   keyword("tech.v3.dataset", "metadata"), metadata);
   }
+  /**
+   * Select a sub-rect of the dataset.  Dataset names is a sequence of column names that must
+   * exist in the dataset.  Rows is a sequence, list, array, or bitmap of integer row
+   * indexes to select.  Dataset returned has column in the order specified
+   * by `columnNames`.
+   */
   public static Map select(Object ds, Object columnNames, Object rows) {
     return (Map)call(selectFn, ds, columnNames, rows);
   }
+  /**
+   * Select columns by name.  All names must exist in the dataset.
+   */
   public static Map selectColumns(Object ds, Object columnNames ) {
     return (Map)call(selectColumnsFn, ds, columnNames);
   }
+  /**
+   * Drop columns by name.  All names must exist in the dataset.
+   * Another option is to use the Clojure function `dissoc`.
+   */
   public static Map dropColumns(Object ds, Object columnNames ) {
     return (Map)call(dropColumnsFn, ds, columnNames);
   }
+  /**
+   * Rename columns providing a map of oldname to newname.
+   */
   public static Map renameColumns(Object ds, Map renameMap) {
     return (Map)call(renameColumnsFn, ds, renameMap);
   }
+  /**
+   * Select rows by index.
+   */
   public static Map selectRows(Object ds, Object rowIndexes) {
     return (Map)call(selectRowsFn, ds, rowIndexes);
   }
+  /**
+   * Drop rows by index.
+   */
   public static Map dropRows(Object ds, Object rowIndexes) {
     return (Map)call(dropRowsFn, ds, rowIndexes);
   }
+  /**
+   * Return the missing set of a dataset or a column in the form of a RoaringBitmap.
+   */
   public static RoaringBitmap missing(Object dsOrColumn) {
     return (RoaringBitmap)call(missingFn, dsOrColumn);
   }
+  /**
+   * Replace the missing values from a column or set of columns.  To replace across
+   * all columns use the keyword :all.
+   *
+   * Strategy can be:
+   *
+   * * `:up` - take next value
+   * * `:down` - take previous value
+   * * `:lerp` - linearly interpolate across values.  Datetime objects will have
+   *    interpolation in done in millisecond space.
+   * * `vector(:value, val)` - Provide this value explicity to replace entries.
+   * * `:nearest` - use the nearest value.
+   * * `:midpoint` - use the mean of the range.
+   * * `:abb` - impute missing values using approximate bayesian bootstrap.
+   *
+   * Further documentation is located at [replace-missing](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-replace-missing).
+   */
   public static Map replaceMissing(Object ds, Object strategy, Object columns) {
     Keyword actualStrat;
     Object value;
@@ -159,60 +246,127 @@ public class TMD {
       return (Map)call(replaceMissingFn, ds, columns, actualStrat);
     }
   }
+  /**
+   * Replace missing values.  See 3-arity form of function for documentation.
+   */
   public static Map replaceMissing(Object ds, Object strategy) {
     return replaceMissing(ds, strategy, kw("all"));
   }
+  /**
+   * Return the rows of the dataset in a flyweight map format.  Maps share keys
+   * and read their data lazily from the base dataset.
+   */
   public static Buffer rows(Object ds) {
     return (Buffer)call(rowsFn, ds);
   }
+  /**
+   * Return the rows of the dataset where each row is just a flat Buffer of data.
+   *
+   * When copying is true data is copied upon each access from the underlying dataset.  This
+   * makes doing something like using each row as the key in a map more efficient.
+   */
   public static Buffer rowvecs(Object ds, boolean copying) {
     return (Buffer)call(rowvecsFn, ds, hashmap(kw("copying?"), copying));
   }
+  /** Return the rows of the dataset where each row is just a flat Buffer of data. */
   public static Buffer rowvecs(Object ds) {
     return (Buffer)call(rowvecsFn, ds);
   }
 
-
+  /** Return the first 5 rows of the dataset */
   public static Map head(Object ds) {
     return (Map)call(headFn, ds);
   }
+  /** Return the first N rows of the dataset */
   public static Map head(Object ds, long nRows) {
     return (Map)call(headFn, ds, nRows);
   }
+  /** Return the last 5 rows of the dataset */
   public static Map tail(Object ds) {
     return (Map)call(tailFn, ds);
   }
+  /** Return the last N rows of the dataset */
   public static Map tail(Object ds, long nRows) {
     return (Map)call(tailFn, ds, nRows);
   }
+  /** Return a random sampling of 5 rows without replacement of the data */
   public static Map sample(Object ds) {
     return (Map)call(sampleFn, ds);
   }
+  /** Return a random sampling of N rows without replacement of the data */
   public static Map sample(Object ds, long nRows) {
     return (Map)call(sampleFn, ds, nRows);
   }
+  /**
+   * Return a random sampling of N rows of the data.
+   *
+   * Options:
+   *
+   * * `:replacement?` - Do sampling with replacement. Defaults to false.
+   * * `:seed` - Either an integer or an implementation of java.util.Random.
+   */
   public static Map sample(Object ds, long nRows, Map options) {
     return (Map)call(sampleFn, ds, nRows, options);
   }
+  /** Randomly shuffle the dataset rows. */
   public static Map shuffle(Object ds) {
     return (Map)call(shuffleFn, ds);
   }
+  /**
+   * Randomly shuffle the dataset rows.
+   *
+   * Options:
+   *
+   * * `:seed` - Either an integer or an implementation of java.util.Random.
+   */
   public static Map shuffle(Object ds, Map options) {
     return (Map)call(shuffleFn, ds, options);
   }
+  /** Reverse the rows of the dataset */
   public static Map reverseRows(Object ds) {
     return (Map)call(reverseFn, ds);
   }
 
+  /**
+   * Map a function across 1 or more columns to produce a new column.  The new column is
+   * serially scanned to detect datatype and its missing set.
+   */
   public static Map columnMap(Object ds, Object resultCname, IFn mapFn, Object srcCnames) {
     return (Map)call(columnMapFn, ds, resultCname, mapFn, srcCnames);
   }
+  /**
+   * Map a function across the rows of the dataset with each row in map form.  Function must
+   * return a new map for each row.
+   */
   public static Map rowMap(Object ds, IFn mapFn) {
     return (Map)call(rowMapFn, ds, mapFn);
   }
+  /**
+   * Map a function across the rows of the dataset with each row in map form.  Function must
+   * return either null or a sequence of maps and thus can produce many new rows for
+   * each input row.  Function is called in a parallelized context.
+   *
+   * See options for pmapDs. Especially note `:max-batch-size` and `:result-type`. In
+   * order to conserve memory it may be much more efficient to return a sequence of
+   * datasets rather than one large dataset. If returning sequences of datasets
+   * perhaps consider a transducing pathway across them or the
+   * tech.v3.dataset.reductions namespace.
+   */
   public static Object rowMapcat(Object ds, IFn mapFn, Object options) {
     return call(rowMapcatFn, ds, mapFn, options);
   }
+  /**
+   * Parallelize mapping a function from dataset->dataset across a dataset.  Function may
+   * return null.
+   *
+   * Options:
+   *
+   * * `:max-batch-size` - Defaults to 64000.  This controls the size of each parallelized
+   *   chunk.
+   * * `:result-type` - Either `:as-seq` in which case the output of this function is a
+   *   sequence of datasets or `:as-ds` in which case the output is a single dataset.  The
+   *   default is `:as-ds`.
+   */
   public static Object pmapDS(Object ds, IFn mapFn, Object options) {
     return call(pmapDsFn, ds, mapFn, options);
   }

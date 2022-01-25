@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "8.064-SNAPSHOT"]
+                 [cnuernber/dtype-next             "8.064"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -69,6 +69,7 @@
                                  "--enable-native-access=ALL-UNNAMED"]}
              :codegen
              {:source-paths ["src" "dev"]}
+             :javadoc {:dependencies [[ch.raffael.pegdown-doclet/pegdown-doclet "1.1"]]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]
                              [com.cnuernber/codox "1.001"]]
