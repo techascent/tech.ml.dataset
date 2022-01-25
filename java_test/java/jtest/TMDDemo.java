@@ -77,6 +77,9 @@ public class TMDDemo {
     Buffer rowvecs = rowvecs(colmapDs);
     println("First rowvec:", call(rowvecs,0), ", last rowvec:", call(rowvecs,-1));
     // First rowvec: [9.0 0] , last rowvec: [0.0 9]
+
+    println("Tensor format:", toTensor(colmapDs));
+    println("Neanderthal format:", toNeanderthal(colmapDs));
     shutdownAgents();
   }
 }
