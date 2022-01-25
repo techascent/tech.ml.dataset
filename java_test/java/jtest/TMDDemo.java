@@ -79,7 +79,27 @@ public class TMDDemo {
     // First rowvec: [9.0 0] , last rowvec: [0.0 9]
 
     println("Tensor format:", toTensor(colmapDs));
+    // Tensor format: #tech.v3.tensor<float64>[10 2]
+    // [[9.000 0.000]
+    //  [8.000 1.000]
+    //  [7.000 2.000]
+    //  [6.000 3.000]
+    //  [5.000 4.000]
+    //  [4.000 5.000]
+    //  [3.000 6.000]
+    //  [2.000 7.000]
+    //  [1.000 8.000]
+    //  [0.000 9.000]]
+
     println("Neanderthal format:", toNeanderthal(colmapDs));
+    //Neanderthal format: #RealGEMatrix[double, mxn:10x2, layout:column, offset:0]
+    //   ▥       ↓       ↓       ┓
+    //   →       9.00    0.00
+    //   →       8.00    1.00
+    //   →       ⁙       ⁙
+    //   →       1.00    8.00
+    //   →       0.00    9.00
+    //   ┗                       ┛
     shutdownAgents();
   }
 }
