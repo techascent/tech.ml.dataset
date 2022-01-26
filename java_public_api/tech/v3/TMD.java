@@ -18,8 +18,25 @@ import tech.v3.datatype.IFnDef;
  * various Clojure interfaces such as IIndexed and IFn to make accessing their data as easy
  * as possible.
  *
- * Columns have a conversion to a `tech.v3.datate.Buffer` object accessible via `tech.v3.DType.toBuffer()`
- * so if you want higher performance non-boxing access that is also available.
+ * Columns have a conversion to a `tech.v3.datate.Buffer` object accessible via
+ * `tech.v3.DType.toBuffer()` so if you want higher performance non-boxing access that is
+ * also available.
+ *
+ * Datasets implement a subset of java.util.Map and clojure's persistent map interfaces.
+ * This means you can use various `java.util.Map` functions and you can also use
+ * `clojure.core/assoc`, `clojure.core/dissoc`, and `clojure.core/merge` in order to add and
+ * remove columns from the dataset.  These are exposed in `tech.v3.Clj` as equivalently named
+ * functions.  In combination with the fact that columns implement Clojure.lang.IIndexed
+ * providing `nth` as well as the single arity IFn invoke method you can do a surprising
+ * amount of dataset processing without using bespoke TMD functions at all.
+ *
+ * All of the functions in `tech.v3.datatype.VecMath` will work with column although most
+ * of those functions require the columns to have no missing data.  The recommendation is to
+ * do you missing-value processing first and then move into the various elemwise functions.
+ * Integer columns with missing values will upcast themselves to double columns for any math
+ * operation so the result keeps consistent w/r/t NaN behavior.  Again, ideally missing values
+ * should be dealt with before doing operations in the `VecMath` namespace.
+ *
  */
 public class TMD {
   private TMD(){}
@@ -62,6 +79,7 @@ public class TMD {
   static final IFn uniqueByColumnFn = requiringResolve("tech.v3.dataset", "unique-by-column");
 
   static final IFn descriptiveStatsFn = requiringResolve("tech.v3.dataset", "descriptive-stats");
+
   static final Object toNeanderthalDelay = delay(new IFnDef() {
       public Object invoke() {
 	//Bindings to make as-tensor work with neanderthal

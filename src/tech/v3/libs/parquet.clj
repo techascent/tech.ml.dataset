@@ -958,16 +958,15 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
 
   * `:hadoop-configuration` - Either nil or an instance of
   `org.apache.hadoop.conf.Configuration`.
-  * `:compression-codec` - Either nil or an instance of
-  `org.apache.parquet.hadoop.metadata.CompressionCodecName`.  Defaults to
-  `org.apache.parquet.column.ParquetProperties.WriterVersion`.
+  * `:compression-codec` - keyword describing compression codec.  Options are
+    `[:brotli :gzip :lz4 :lzo :snappy :uncompressed :zstd]`.  Defaults to
+     `:snappy`.
   * `:block-size` - Defaults to `ParquetWriter/DEFAULT_BLOCK_SIZE`.
   * `:page-size` - Defaults to `ParquetWriter/DEFAULT_PAGE_SIZE`.
   * `:dictionary-page-size` - Defaults to `ParquetWriter/DEFAULT_PAGE_SIZE`.
   * `:dictionary-enabled?` - Defaults to
      `ParquetWriter/DEFAULT_IS_DICTIONARY_ENABLED`.
   * `:validating?` - Defaults to `ParquetWriter/DEFAULT_IS_VALIDATING_ENABLED`.
-  * `:page-write-checksum?` - Defaults to true.  Output a crc check file in addition to
      parquet file.
   * `:writer-version` - Defaults to `ParquetWriter/DEFAULT_WRITER_VERSION`."
   ([path options ds-seq]

@@ -4,7 +4,10 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.rolling :as dt-rolling]
             [tech.v3.datatype.datetime.operations :as dtype-dt-ops]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.statistics :as stats]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.binary-op :as binary-op]
             [tech.v3.dataset.base :as ds-base])
   (:import [tech.v3.datatype Buffer])
   (:refer-clojure :exclude [min max nth first last]))
@@ -111,7 +114,7 @@
        for object types and `:clamp` which fills in the first,last values of the column
        respectively.  Defaults to `:clamp`.
     - `:comp-fn` - if provided must return a double which is the result of comparing
-      the first value of the range to the last which means `(fn [lhs rhs] (- rhs lhs))`
+      the last value of the range to the first which means `clojure.core/-`
       is a reasonable default.
     - `:units` - for datetime types, describes the units of `:window-size` and will
       dictate the numeric space if `:comp-fn` is not provided.
@@ -244,15 +247,20 @@ test/data/stocks.csv [5 6]:
             n-rows (:window-size window-data)
             (:relative-window-position window-data :center))
            :variable
-           (let [src-col (ds (:column-name window-data))]
+           (let [_ (when-not (:column-name window-data)
+                     (throw (Exception. (format "Variable rolling windows must have :column-name in the window data"))))
+                 src-col (ds-base/column ds (:column-name window-data))
+                 col-dt (dtype/elemwise-datatype src-col)]
              (vec (dt-rolling/variable-rolling-window-ranges
                    src-col (:window-size window-data)
                    {:comp-fn
                     (if-let [comp-fn (:comp-fn window-data)]
                       comp-fn
-                      (dtype-dt-ops/between-op
-                       (dtype/elemwise-datatype src-col)
-                       (:units window-data :milliseconds)))}))))]
+                      (when (dtype-dt/datetime-datatype? (packing/unpack-datatype col-dt))
+                        (dtype-dt-ops/between-op
+                         (dtype/elemwise-datatype src-col)
+                         (:units window-data :milliseconds)
+                         true)))}))))]
      (apply-window-ranges ds windows reducer-map (:edge-mode window-data :clamp))))
   ([ds window reducer-map]
    (rolling ds window reducer-map nil)))
