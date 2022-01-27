@@ -9,6 +9,7 @@
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
             [com.github.ztellman.primitive-math :as pmath]
@@ -397,14 +398,8 @@ outer-join [8 4]:
          (fn [tuple-data ds]
            (if (and (sequential? tuple-data)
                     (not= 1 (count tuple-data)))
-             (let [sub-ds (ds-base/select-columns ds tuple-data)
-                   rc (ds-base/row-count ds)
-                   col-readers (mapv dtype/->reader (ds-base/columns sub-ds))]
-               (reify ObjectReader
-                 (lsize [rdr] rc)
-                 (readObject [rdr idx]
-                   (mapv #(.readObject ^Buffer % idx)
-                         col-readers))))
+             (-> (ds-base/select-columns ds tuple-data)
+                 (ds-readers/value-reader {:copying? true}))
              (if (sequential? tuple-data)
                (ds-base/column ds (first tuple-data))
                (ds-base/column ds tuple-data))))
@@ -717,8 +712,8 @@ outer-join [8 4]:
    (when-not (#{:< :<= :nearest :>= :>} asof-op)
      (throw (Exception. (format "Unrecognized asof op: %s" asof-op))))
    (let [[lhs-colname rhs-colname] (colname->lhs-rhs-colnames colname)
-         lhs-col (lhs lhs-colname)
-         rhs-col (rhs rhs-colname)
+         lhs-col (ds-base/column lhs lhs-colname)
+         rhs-col (ds-base/column rhs rhs-colname)
          lhs-table-name (default-table-name lhs "left")
          rhs-table-name (default-table-name rhs "right")
          lhs-reader (ensure-numeric-reader lhs-col)

@@ -20,7 +20,28 @@ import tech.v3.datatype.IFnDef;
  *
  * Columns have a conversion to a `tech.v3.datate.Buffer` object accessible via
  * `tech.v3.DType.toBuffer()` so if you want higher performance non-boxing access that is
- * also available.
+ * also available.  Any bit of sequential data can be turned into a column.  The best way
+ * is if the data is already in a primitive array or nio buffer use that as a column - it
+ * will be used in place.  It is also possible to direclty instantiate a Buffer object in
+ * a read-only pathway to create a virtualized column:
+ *
+ *```java
+ *println(head(assoc(colmapDs, kw("c"), new tech.v3.datatype.LongReader() {
+ *	public long lsize() { return 10; }
+ *	public long readLong( long idx) {
+ *	  return 2*idx;
+ *	}
+ *    })));
+ *  //testds [5 3]:
+ *
+ *  //|  :b | :a | :c |
+ *  //|----:|---:|---:|
+ *  //| 9.0 |  0 |  0 |
+ *  //| 8.0 |  1 |  2 |
+ *  //| 7.0 |  2 |  4 |
+ *  //| 6.0 |  3 |  6 |
+ *  //| 5.0 |  4 |  8 |
+ *```
  *
  * Datasets implement a subset of java.util.Map and clojure's persistent map interfaces.
  * This means you can use various `java.util.Map` functions and you can also use
@@ -80,6 +101,9 @@ public class TMD {
 
   static final IFn descriptiveStatsFn = requiringResolve("tech.v3.dataset", "descriptive-stats");
 
+  static final IFn pdMergeFn = requiringResolve("tech.v3.dataset.join", "pd-merge");
+  static final IFn joinAsof = requiringResolve("tech.v3.dataset.join", "left-join-asof");
+
   static final Object toNeanderthalDelay = delay(new IFnDef() {
       public Object invoke() {
 	//Bindings to make as-tensor work with neanderthal
@@ -116,7 +140,9 @@ public class TMD {
    * in other classes.
    *
    * Aside from string data formats, you can explicitly provide either a sequence of maps
-   * or a map of columns with the map of columns being by far more efficient.
+   * or a map of columns with the map of columns being by far more the most efficient.
+   * In the map-of-columns approach arrays of primitive numeric data and native buffers will
+   * be used in-place.
    *
    * The options for parsing a dataset are extensive and documented at
    * [->dataset](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var--.3Edataset).
@@ -126,6 +152,32 @@ public class TMD {
    *```java
    *  Map ds = makeDataset("https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv");
    *  tech.v3.Clj.println(head(ds));
+   * // https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 3]:
+   * // | symbol |       date | price |
+   * // |--------|------------|------:|
+   * // |   MSFT | 2000-01-01 | 39.81 |
+   * // |   MSFT | 2000-02-01 | 36.35 |
+   * // |   MSFT | 2000-03-01 | 43.22 |
+   * // |   MSFT | 2000-04-01 | 28.37 |
+   * // |   MSFT | 2000-05-01 | 25.45 |
+   *Map colmapDs = makeDataset(hashmap(kw("a"), range(10),
+   *				       kw("b"), toDoubleArray(range(9,-1,-1))),
+   *			       hashmap(kw("dataset-name"), "testds"));
+   *println(colmapDs);
+   * // testds [10 2]:
+   *
+   * // |  :b | :a |
+   * // |----:|---:|
+   * // | 9.0 |  0 |
+   * // | 8.0 |  1 |
+   * // | 7.0 |  2 |
+   * // | 6.0 |  3 |
+   * // | 5.0 |  4 |
+   * // | 4.0 |  5 |
+   * // | 3.0 |  6 |
+   * // | 2.0 |  7 |
+   * // | 1.0 |  8 |
+   * // | 0.0 |  9 |
    *```
    */
   public static Map makeDataset(Object dsData, Map options) {
@@ -548,6 +600,190 @@ public class TMD {
    */
   public static Map descriptiveStats(Object ds) {
     return (Map)call(descriptiveStatsFn, ds);
+  }
+  /**
+   * Perform a join operation between two datasets.
+   *
+   * Options:
+   *
+   * * `:on` - column name or list of columns names.  Names must be found in both datasets.
+   * * `:left-on` - Column name or list of column names
+   * * `:right-on` - Column name or list of column names
+   * * `:how` - `:left`, `:right` `:inner`, `:outer`, `:cross`.  If `:cross`, then it is
+   *    an error to provide `:on`, `:left-on`, `:right-on`. Defaults to `:inner`.
+   *
+   * Examples:
+   *
+   *```java
+   *Map dsa = makeDataset(hashmap("a", vector("a", "b", "b", "a", "c"),
+   *				  "b", range(5),
+   *				  "c", range(5)));
+   *println(dsa);
+   * //_unnamed [5 3]:
+   *
+   * //| a | b | c |
+   * //|---|--:|--:|
+   * //| a | 0 | 0 |
+   * //| b | 1 | 1 |
+   * //| b | 2 | 2 |
+   * //| a | 3 | 3 |
+   * //| c | 4 | 4 |
+   *
+   *
+   *Map dsb = makeDataset(hashmap("a", vector("a", "b", "a", "b", "d"),
+   *				  "b", range(5),
+   *				  "c", range(6,11)));
+   *println(dsb);
+   * //_unnamed [5 3]:
+   *
+   * //| a | b |  c |
+   * //|---|--:|---:|
+   * //| a | 0 |  6 |
+   * //| b | 1 |  7 |
+   * //| a | 2 |  8 |
+   * //| b | 3 |  9 |
+   * //| d | 4 | 10 |
+   *
+   * //Join on the columns a,b.  Default join mode is inner
+   * println(join(dsa, dsb, hashmap(kw("on"), vector("a", "b"))));
+   * //inner-join [2 4]:
+   *
+   * //| a | b | c | right.c |
+   * //|---|--:|--:|--------:|
+   * //| a | 0 | 0 |       6 |
+   * //| b | 1 | 1 |       7 |
+   *
+   *
+   * //Outer join on same columns
+   *println(join(dsa, dsb, hashmap(kw("on"), vector("a", "b"),
+   *				   kw("how"), kw("outer"))));
+   * //outer-join [8 4]:
+   *
+   * //| a | b | c | right.c |
+   * //|---|--:|--:|--------:|
+   * //| a | 0 | 0 |       6 |
+   * //| b | 1 | 1 |       7 |
+   * //| b | 2 | 2 |         |
+   * //| a | 3 | 3 |         |
+   * //| c | 4 | 4 |         |
+   * //| a | 2 |   |       8 |
+   * //| b | 3 |   |       9 |
+   * //| d | 4 |   |      10 |
+   *```
+   */
+  public static Map join(Map leftDs, Map rightDs, Map options) {
+    return (Map)pdMergeFn.invoke(leftDs, rightDs, options);
+  }
+
+  /**
+   * Perform a left join but join on nearest value as opposed to matching value.
+   * Both datasets must be sorted by the join column and the join column itself
+   * must be either a datetime column or a numeric column.  When the join column
+   * is a datetime column the join happens in millisecond space.
+   *
+   * Options:
+   *
+   * * `:asof-op` - One of the keywords `[:< :<= :nearest :>= :>]`.  Defaults to `:<=`.
+   *
+   * Examples:
+   *
+   *```java
+   *println(head(googPrices, 200));
+   * //GOOG [68 3]:
+   * //| symbol |       date |  price |
+   * //|--------|------------|-------:|
+   * //|   GOOG | 2004-08-01 | 102.37 |
+   * //|   GOOG | 2004-09-01 | 129.60 |
+   * //|   GOOG | 2005-03-01 | 180.51 |
+   * //|   GOOG | 2004-11-01 | 181.98 |
+   * //|   GOOG | 2005-02-01 | 187.99 |
+   * //|   GOOG | 2004-10-01 | 190.64 |
+   * //|   GOOG | 2004-12-01 | 192.79 |
+   * //|   GOOG | 2005-01-01 | 195.62 |
+   * //|   GOOG | 2005-04-01 | 220.00 |
+   * //|   GOOG | 2005-05-01 | 277.27 |
+   * //|   GOOG | 2005-08-01 | 286.00 |
+   * //|   GOOG | 2005-07-01 | 287.76 |
+   * //|   GOOG | 2008-11-01 | 292.96 |
+   * //|   GOOG | 2005-06-01 | 294.15 |
+   * //|   GOOG | 2008-12-01 | 307.65 |
+   * //|   GOOG | 2005-09-01 | 316.46 |
+   * //|   GOOG | 2009-02-01 | 337.99 |
+   * //|   GOOG | 2009-01-01 | 338.53 |
+   * //|   GOOG | 2009-03-01 | 348.06 |
+   * //|   GOOG | 2008-10-01 | 359.36 |
+   * //|   GOOG | 2006-02-01 | 362.62 |
+   * //|   GOOG | 2006-05-01 | 371.82 |
+   * //|   GOOG | 2005-10-01 | 372.14 |
+   * //|   GOOG | 2006-08-01 | 378.53 |
+   * //|   GOOG | 2006-07-01 | 386.60 |
+   * //|   GOOG | 2006-03-01 | 390.00 |
+   * //|   GOOG | 2009-04-01 | 395.97 |
+   * //|   GOOG | 2008-09-01 | 400.52 |
+   * //|   GOOG | 2006-09-01 | 401.90 |
+   * //|   GOOG | 2005-11-01 | 404.91 |
+   * //|   GOOG | 2005-12-01 | 414.86 |
+   * //|   GOOG | 2009-05-01 | 417.23 |
+   * //|   GOOG | 2006-04-01 | 417.94 |
+   * //|   GOOG | 2006-06-01 | 419.33 |
+   * //|   GOOG | 2009-06-01 | 421.59 |
+   * //|   GOOG | 2006-01-01 | 432.66 |
+   * //|   GOOG | 2008-03-01 | 440.47 |
+   * //|   GOOG | 2009-07-01 | 443.05 |
+   * //|   GOOG | 2007-02-01 | 449.45 |
+   * //|   GOOG | 2007-03-01 | 458.16 |
+   * //|   GOOG | 2006-12-01 | 460.48 |
+   * //|   GOOG | 2009-08-01 | 461.67 |
+   * //|   GOOG | 2008-08-01 | 463.29 |
+   * //|   GOOG | 2008-02-01 | 471.18 |
+   * //|   GOOG | 2007-04-01 | 471.38 |
+   * //|   GOOG | 2008-07-01 | 473.75 |
+   * //|   GOOG | 2006-10-01 | 476.39 |
+   * //|   GOOG | 2006-11-01 | 484.81 |
+   * //|   GOOG | 2009-09-01 | 495.85 |
+   * //|   GOOG | 2007-05-01 | 497.91 |
+   * //|   GOOG | 2007-01-01 | 501.50 |
+   * //|   GOOG | 2007-07-01 | 510.00 |
+   * //|   GOOG | 2007-08-01 | 515.25 |
+   * //|   GOOG | 2007-06-01 | 522.70 |
+   * //|   GOOG | 2008-06-01 | 526.42 |
+   * //|   GOOG | 2010-02-01 | 526.80 |
+   * //|   GOOG | 2010-01-01 | 529.94 |
+   * //|   GOOG | 2009-10-01 | 536.12 |
+   * //|   GOOG | 2010-03-01 | 560.19 |
+   * //|   GOOG | 2008-01-01 | 564.30 |
+   * //|   GOOG | 2007-09-01 | 567.27 |
+   * //|   GOOG | 2008-04-01 | 574.29 |
+   * //|   GOOG | 2009-11-01 | 583.00 |
+   * //|   GOOG | 2008-05-01 | 585.80 |
+   * //|   GOOG | 2009-12-01 | 619.98 |
+   * //|   GOOG | 2007-12-01 | 691.48 |
+   * //|   GOOG | 2007-11-01 | 693.00 |
+   * //|   GOOG | 2007-10-01 | 707.00 |
+
+   *Map targetPrices = makeDataset(hashmap("price", new Double[] { 200.0, 300.0, 400.0 }));
+
+   *println(leftJoinAsof("price", targetPrices, googPrices, hashmap(kw("asof-op"), kw("<="))));
+   * //asof-<= [3 4]:
+   * //| price | symbol |       date | GOOG.price |
+   * //|------:|--------|------------|-----------:|
+   * //| 200.0 |   GOOG | 2005-04-01 |     220.00 |
+   * //| 300.0 |   GOOG | 2008-12-01 |     307.65 |
+   * //| 400.0 |   GOOG | 2008-09-01 |     400.52 |
+   * println(leftJoinAsof("price", targetPrices, googPrices, hashmap(kw("asof-op"), kw(">"))));
+   * //asof-> [3 4]:
+   * //| price | symbol |       date | GOOG.price |
+   * //|------:|--------|------------|-----------:|
+   * //| 200.0 |   GOOG | 2005-01-01 |     195.62 |
+   * //| 300.0 |   GOOG | 2005-06-01 |     294.15 |
+   * //| 400.0 |   GOOG | 2009-04-01 |     395.97 |
+   *```
+   */
+  public static Map leftJoinAsof(Object colname, Map lhs, Map rhs, Object options) {
+    return (Map)joinAsof.invoke(colname, lhs, rhs, options);
+  }
+  public static Map leftJoinAsof(Object colname, Map lhs, Map rhs) {
+    return (Map)joinAsof.invoke(colname, lhs, rhs);
   }
 
   /**

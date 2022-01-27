@@ -27,7 +27,7 @@ public class Rolling {
   static final IFn lastFn = requiringResolve("tech.v3.dataset.rolling", "last");
   static final IFn rollingFn = requiringResolve("tech.v3.dataset.rolling", "rolling");
 
-    /**
+  /**
    * Fixed or variable rolling window reductions.
    *
    * @param windowSpec Window specification specifying the type of window, either a
@@ -41,6 +41,9 @@ public class Rolling {
    *
    *```java
    * Map stocks = makeDataset("https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv");
+   *
+   * //Variable-sized windows require the source column to be sorted.
+   * stocks = sortByColumn(stocks, "date");
    * Map variableWin = Rolling.rolling(stocks,
    *				      Rolling.variableWindow("date", 3, kw("months")),
    *				      hashmap("price-mean-3m", Rolling.mean("price"),
@@ -146,7 +149,7 @@ public class Rolling {
    * @param winPos One of `[:left :center :right]`.  This combined with the default
    *        edge mode dictates windows of data the reducer sees.
    *
-   * @param edgeMode One of `[:zero, null, :clamp]`.
+   * @param edgeMode One of `[:zero, null, :clamp]`.  Clamp means repeat the end value.
    */
   public static Map fixedWindow(long windowSize, Keyword winPos, Keyword edgeMode) {
     return hashmap(kw("window-type"), kw("fixed"),
@@ -158,8 +161,8 @@ public class Rolling {
    * Create a columnwise reducer.  This reducer gets sub-windows from the column and
    * must return a scalar value.
    */
-  public static Map reducer(Object colname, IFn reduceFn) {
-    return hashmap(kw("column-name"), colname,
+  public static Map reducer(Object srcColname, IFn reduceFn) {
+    return hashmap(kw("column-name"), srcColname,
 		   kw("reducer"), reduceFn);
   }
   /** mean reducer*/
