@@ -58,6 +58,11 @@ import tech.v3.datatype.IFnDef;
  * operation so the result keeps consistent w/r/t NaN behavior.  Again, ideally missing values
  * should be dealt with before doing operations in the `VecMath` namespace.
  *
+ * Most of the functions of the dataset (filter, sort, groupBy) will auto-parallelize but
+ * but there are many times where the most efficient use of machine resources is to
+ * parallelize a the outermost level using `pmapDs`.  The parallelization primitives check and
+ * run in serial mode of the current thread is already in a parallelization pathway.
+ *
  */
 public class TMD {
   private TMD(){}
@@ -415,6 +420,11 @@ public class TMD {
    * Map a function across the rows of the dataset with each row in map form.  Function must
    * return either null or a sequence of maps and thus can produce many new rows for
    * each input row.  Function is called in a parallelized context.
+   *
+   * Most of the functions of the dataset (filter, sort, groupBy) will auto-parallelize but
+   * but there are many times where the most efficient use of machine resources is to
+   * parallelize a the outermost level.  The parallelization primitives check and run in
+   * serial mode of the current thread is already in a parallelization pathway.
    *
    * See options for pmapDs. Especially note `:max-batch-size` and `:result-type`. In
    * order to conserve memory it may be much more efficient to return a sequence of

@@ -8,8 +8,13 @@ import tech.v3.DType; //access to clone method
 import static tech.v3.DType.*;
 import tech.v3.datatype.Pred;
 import tech.v3.datatype.VecMath;
+import tech.v3.datatype.Stats;
 import tech.v3.datatype.Buffer;
+import tech.v3.datatype.IFnDef;
+import clojure.lang.RT;
 import java.util.Map;
+import java.util.stream.StreamSupport;
+
 
 
 public class TMDDemo {
@@ -149,6 +154,26 @@ public class TMDDemo {
     Map bySymbol = groupByColumn(stocks, "symbol");
     println(keys(bySymbol));
     //(MSFT AMZN IBM GOOG AAPL)
+
+    //Construct a new dataset by scanning a sequence of maps.  This performs the aggregation
+    //step after grouping by symbol.  There is a higher performance way of doing this
+    //described later but this method is most likely sufficient for many many use
+    //cases.
+    println(makeDataset(map(new IFnDef() {
+	public Object invoke(Object kv) {
+	  Map.Entry item = (Map.Entry)kv;
+	  return hashmap("symbol", item.getKey(),
+			 "meanPrice", Stats.mean(column(item.getValue(), "price")));
+	}}, bySymbol)));
+    // _unnamed [5 2]:
+    //| symbol |    meanPrice |
+    //|--------|-------------:|
+    //|   MSFT |  24.73674797 |
+    //|   AMZN |  47.98707317 |
+    //|    IBM |  91.26121951 |
+    //|   GOOG | 415.87044118 |
+    //|   AAPL |  64.73048780 |
+
 
     //Variable rolling window reductions require the target column to be monotonically
     //increasing - for each val x(n), x(n+1) is greater or equal.
@@ -361,7 +386,7 @@ public class TMDDemo {
 
 
     // If we load clojure.core.async - which neanderthal does - or we use
-    // pmap then we have to shutdown agents else we get a 1 minute hang
+    // clojure.core/pmap then we have to shutdown agents else we get a 1 minute hang
     // on shutdown.
     shutdownAgents();
   }
