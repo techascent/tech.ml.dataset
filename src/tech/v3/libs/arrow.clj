@@ -1379,12 +1379,12 @@ Please use stream->dataset-seq-inplace.")))
   `:input-stream` pathway.  When using `:mmap` resources will be released when the resource
   system dictates - see documentation for [tech.v3.resource](https://techascent.github.io/tech.resource/tech.v3.resource.html).
   When using `:input-stream` the stream will be closed when the lazy sequence is either fully realized or an
-  exception is thrown.
+  exception is thrown.  Memory mapping is not supported on m-1 macs unless you are using JDK-17.
 
   * `close-input-stream?` - When using `:input-stream` `:open-type`, close the input stream upon
   exception or when stream is fully realized.  Defaults to true.
 
-  * `:integer-datatime-types? - when true arrow columns in the appropriate packed
+  * `:integer-datatime-types?` - when true arrow columns in the appropriate packed
   datatypes will be represented as their integer types as opposed to their respective
   packed types.  For example columns of type `:epoch-days` will be returned to the user
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
