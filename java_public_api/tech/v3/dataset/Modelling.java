@@ -14,14 +14,10 @@ import java.util.Map;
  * For the purpose of this system, categorical data means a column of data that is not numeric.
  * it could be strings, keywords, or arbitrary objects.
  *
- * PCA *for now* requires either opencpp's blas library or smile's MKL bindings.  Expect this
- * requirement to change to solely requiring neanderthal in the near future.
- *
  * Minimal example extra dependencies for PCA:
  *
  *```console
- * [org.bytedeco/openblas "0.3.10-1.5.4"]
- * [org.bytedeco/openblas-platform "0.3.10-1.5.4"]
+ * [uncomplicate/neanderthal "0.43.3"]
  *```
  *
  * It is also important to note that you can serialize the fit results to nippy automatically

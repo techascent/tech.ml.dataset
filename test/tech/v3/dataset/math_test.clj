@@ -103,17 +103,3 @@
     (is (dfn/equals smile-transformed-ds
                     (ds-tens/dataset->tensor corr-transformed-ds)
                     0.01))))
-
-
-(deftest ^:travis-broken pca-definition
-  (let [test-data (dtt/transpose
-                   (dtt/->tensor [[7 4 6 8 8 7 5 9 7 8]
-                                  [4 1 3 6 5 2 3 5 4 2]
-                                  [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
-                   [1 0])
-        ;;Test the definition of PCA.
-        {:keys [means eigenvalues eigenvectors]} (ds-tens/fit-pca! (dtype/clone test-data))
-        mean-centered (:tensor (ds-tens/mean-center-columns! (dtype/clone test-data) {:means means}))
-        projected (ds-tens/matrix-multiply mean-centered eigenvectors)]
-    (is (dfn/equals (mapv dfn/mean (dtt/slice-right test-data 1)) means))
-    (is (dfn/equals (mapv dfn/variance (dtt/slice-right projected 1)) eigenvalues))))
