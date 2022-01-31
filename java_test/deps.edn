@@ -1,7 +1,7 @@
 {:paths ["classes"
          ;;Logback is on the classpath so we can minimize obnoxious logging
          "logback"]
- :deps {cnuernber/dtype-next {:mvn/version "9.003"}
+ :deps {cnuernber/dtype-next {:mvn/version "9.004"}
         techascent/tech.ml.dataset {:mvn/version "6.053-SNAPSHOT"
 
                                     ;;smile has bindings to slf4j that error out with an

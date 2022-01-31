@@ -1,4 +1,4 @@
-package tech.v3.dataset;
+package tech.v3.libs;
 
 import static tech.v3.Clj.*;
 import clojure.lang.IFn;
@@ -86,7 +86,7 @@ public class Arrow {
    * as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
    * will return integers as opposed to `java.time.LocalDate`s.
    */
-  public static Map streamtoDataset(Object pathOrInputStream, Object options) {
+  public static Map streamToDataset(Object pathOrInputStream, Object options) {
     return (Map)streamToDsFn.invoke(pathOrInputStream, options);
   }
 

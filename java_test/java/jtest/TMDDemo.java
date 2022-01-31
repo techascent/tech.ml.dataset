@@ -5,16 +5,19 @@ import static tech.v3.Clj.*;
 import static tech.v3.TMD.*;
 import tech.v3.dataset.Rolling;
 import tech.v3.dataset.Modelling;
+import tech.v3.libs.Arrow;
 import tech.v3.DType; //access to clone method
 import static tech.v3.DType.*;
 import tech.v3.datatype.Pred;
 import tech.v3.datatype.VecMath;
 import tech.v3.datatype.Stats;
 import tech.v3.datatype.Buffer;
+import tech.v3.libs.Nippy;
 import tech.v3.datatype.IFnDef;
 import clojure.lang.RT;
 import java.util.Map;
 import java.util.stream.StreamSupport;
+import java.time.LocalDate;
 
 
 
@@ -188,6 +191,38 @@ public class TMDDemo {
     // |   MSFT | 2000-01-01 |  39.81 |
     // |   AMZN | 2000-01-01 |  64.56 |
     // |   AAPL | 2000-02-01 |  28.66 |
+
+
+    //If we want our column of dates to be in epoch-days which is a lot more friendly to
+    //machine learning we can easily do so:
+    Buffer dateBuf = toBuffer(column(stocks, "date"));
+    //There are many ways to do this but here is a low-level way
+    println(head(assoc(stocks, "date",
+		       //all integer types funnel through LongBuffer/LongReader pathways.
+		       new tech.v3.datatype.LongReader() {
+			 //Aside from :int32, kw("epoch-days") is another valid datatype for
+			 //precisely this data.
+			 public Object elemwiseDatatype() { return int32; }
+			 public long lsize() { return dateBuf.lsize(); }
+			 public long readLong(long idx) {
+			   LocalDate ld = (LocalDate)dateBuf.readObject(idx);
+			   //Missing values will be null when using the readObject pathway.
+			   //The stocks dataset has no missing values.  We strongly encourage
+			   //you to deal with missing values before getting into your
+			   //pipeline processing pathways.
+			   return ld.toEpochDay();
+			 }
+		       })));
+    //https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 3]:
+
+    //| symbol |  date |  price |
+    //|--------|------:|-------:|
+    //|   AAPL | 10957 |  25.94 |
+    //|    IBM | 10957 | 100.52 |
+    //|   MSFT | 10957 |  39.81 |
+    //|   AMZN | 10957 |  64.56 |
+    //|   AAPL | 10988 |  28.66 |
+
 
 
     Map variableWin = Rolling.rolling(stocks,
@@ -390,11 +425,69 @@ public class TMDDemo {
     //We can do things like PCA transformations or train/test pathways.
     Object categoricalFit = Modelling.fitCategorical(stocks, "symbol");
     println(head(Modelling.transformCategorical(stocks, categoricalFit)));
-      
-    
+    //https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 3]:
+
+    //| symbol |       date |  price |
+    //|-------:|------------|-------:|
+    //|    1.0 | 2000-01-01 |  25.94 |
+    //|    4.0 | 2000-01-01 | 100.52 |
+    //|    3.0 | 2000-01-01 |  39.81 |
+    //|    2.0 | 2000-01-01 |  64.56 |
+    //|    1.0 | 2000-02-01 |  28.66 |
+
+
+    //Remember the rolling sinewave dataset from before?
+    //let's run PCA on the dataset.
+    //This pathway will use the slightly slow covariance based method that has the distinct
+    //advantage of producing accurate variances in the eigenvalues member.
+
+    Object pcaFit = Modelling.fitPCA(fixedWin, hashmap(kw("n-components"), 2));
+    println(head(Modelling.transformPCA(fixedWin, pcaFit)));
+    //_unnamed [5 2]:
+
+    //|           0 |           1 |
+    //|------------:|------------:|
+    //| -2.68909118 | -1.63147765 |
+    //| -2.65664577 | -1.31993055 |
+    //| -2.63001624 | -0.99954776 |
+    //| -2.65746329 | -0.60134499 |
+    //| -2.66466548 | -0.23414574 |
+
+
+    //We can save out pipeline data alltogether into a byte array using the Nippy namespace.
+    byte[] data = Nippy.freeze(hashmap("catFit", categoricalFit, "pcaFit", pcaFit));
+    println("pipeline data byte length:", data.length);
+    //pipeline data byte length: 864
+
+    //We can serialize *just* datasets to arrow which gives us an interesting possibility.
+    Arrow.datasetToStream(stocks, "test.arrow", null);
+
+    //We can mmap them back.  This step will fail if you are on an m-1 mac unless you add
+    //the memory module.  See deps.clj for example command line.
+    try(AutoCloseable resCtx = stackResourceContext()) {
+      //This dataset is loaded in-place.  This means that aside from string tables
+      //the columns are just loaded from the mmap pointers.
+      Map mmapds = Arrow.streamToDataset("test.arrow", hashmap(kw("open-type"), kw("mmap")));
+      println(head(mmapds));
+      //test.arrow [5 3]:
+
+      //| symbol |       date |  price |
+      //|--------|------------|-------:|
+      //|   AAPL | 2000-01-01 |  25.94 |
+      //|    IBM | 2000-01-01 | 100.52 |
+      //|   MSFT | 2000-01-01 |  39.81 |
+      //|   AMZN | 2000-01-01 |  64.56 |
+      //|   AAPL | 2000-02-01 |  28.66 |
+
+    }
+    catch(Exception e){
+      println(e);
+      e.printStackTrace(System.out);
+    }
+
     // If we load clojure.core.async - which neanderthal does - or we use
     // clojure.core/pmap then we have to shutdown agents else we get a 1 minute hang
-    // on shutdown.    
+    // on shutdown.
     shutdownAgents();
   }
 }
