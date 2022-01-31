@@ -31,7 +31,7 @@ public class Modelling {
   static final IFn invCatFn = requiringResolve("tech.v3.dataset.categorical", "invert-categorical-map");
   static final IFn fitOneHotFn = requiringResolve("tech.v3.dataset.categorical", "fit-one-hot");
   static final IFn transOneHotFn = requiringResolve("tech.v3.dataset.categorical", "transform-one-hot");
-  static final IFn invOneHotFn = requiringResolve("tech.v3.dataset.categorical", "invert-one-hot");
+  static final IFn invOneHotFn = requiringResolve("tech.v3.dataset.categorical", "invert-one-hot-map");
 
   static final IFn corrTableFn = requiringResolve("tech.v3.dataset.math", "correlation-table");
   static final IFn fillRangeReplaceFn = requiringResolve("tech.v3.dataset.math", "fill-range-replace");
@@ -163,8 +163,9 @@ public class Modelling {
    *
    * Options:
    *
-   * * `:method` - either `:svd` or `cov`.  Use either SVD transformation or covariance-matrix
-   *   base PCA.  `:cov` method is somewhat slower but returns accurate variances.
+   * * `:method` - either `:svd` or `:cov`.  Use either SVD transformation or covariance-matrix
+   *   base PCA.  `:cov` method is somewhat slower but returns accurate variances and thus
+   *   is the default.
    * * `:variance-amount` - Keep columns until variance is just less than variance-amount.
    *   Defaults to 0.95.
    * * `:n-components` - Return a fixed number of components.  Overrides `:variance-amount`

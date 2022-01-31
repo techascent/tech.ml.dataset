@@ -4,6 +4,7 @@ package jtest;
 import static tech.v3.Clj.*;
 import static tech.v3.TMD.*;
 import tech.v3.dataset.Rolling;
+import tech.v3.dataset.Modelling;
 import tech.v3.DType; //access to clone method
 import static tech.v3.DType.*;
 import tech.v3.datatype.Pred;
@@ -385,9 +386,15 @@ public class TMDDemo {
     //| 400.0 |   GOOG | 2009-04-01 |     395.97 |
 
 
+    //tech.v3.dataset.Modelling moves us more into machine learning pathways
+    //We can do things like PCA transformations or train/test pathways.
+    Object categoricalFit = Modelling.fitCategorical(stocks, "symbol");
+    println(head(Modelling.transformCategorical(stocks, categoricalFit)));
+      
+    
     // If we load clojure.core.async - which neanderthal does - or we use
     // clojure.core/pmap then we have to shutdown agents else we get a 1 minute hang
-    // on shutdown.
+    // on shutdown.    
     shutdownAgents();
   }
 }

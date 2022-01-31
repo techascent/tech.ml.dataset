@@ -536,9 +536,10 @@
                                   (.writeDouble cov-buf idx
                                                 (* inv-bias (.readDouble cov-buf idx))))
              fact (dt-nean/datatype->native-factory tens-dt)
-             w (n-core/ge fact n-cols 2)
+             w (n-core/ge fact n-cols 1)
              vl (n-core/ge fact n-cols n-cols)
-             _ (linalg/ev! cov-mat w vl nil)
+             sym-cov (n-core/view-sy cov-mat)
+             _ (linalg/ev! sym-cov w vl nil)
              wt (dtt/as-tensor w)
              eigvals (dtt/select wt :all 0)
              validx (argops/argsort :tech.numerics/> eigvals)
