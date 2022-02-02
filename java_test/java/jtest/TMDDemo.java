@@ -6,6 +6,7 @@ import static tech.v3.TMD.*;
 import tech.v3.dataset.Rolling;
 import tech.v3.dataset.Modelling;
 import tech.v3.libs.Arrow;
+import tech.v3.libs.Parquet;
 import tech.v3.DType; //access to clone method
 import static tech.v3.DType.*;
 import tech.v3.datatype.Pred;
@@ -478,13 +479,33 @@ public class TMDDemo {
       //|   MSFT | 2000-01-01 |  39.81 |
       //|   AMZN | 2000-01-01 |  64.56 |
       //|   AAPL | 2000-02-01 |  28.66 |
-
+      
+      //Cloning a dataset serves to both realize any lazy columns
+      //and copy the dataset into jvm-heap memory thus allowing you to return
+      //something from the stack resource context.
+      println(head(tech.v3.DType.clone(mmapds)));
     }
     catch(Exception e){
       println(e);
       e.printStackTrace(System.out);
     }
+    //Finally we can load/safe to parquet if that is your thing.
+    Parquet.datasetToParquet(stocks, "test.parquet", null);
+    //Specifying a subset of columns to load makes this *much* faster.
+    //To do this use :column-whitelist - see dataset api docs for `->dataset`.
+    //NOTE - If you don't disable debug logging then serializing to/from parquet is
+    //unreasonably slow.  See logging section of https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html.
+    println(head(Parquet.parquetToDataset("test.parquet", null)));
+    //_unnamed [5 3]:
 
+    //| symbol |       date |  price |
+    //|--------|------------|-------:|
+    //|   AAPL | 2000-01-01 |  25.94 |
+    //|    IBM | 2000-01-01 | 100.52 |
+    //|   MSFT | 2000-01-01 |  39.81 |
+    //|   AMZN | 2000-01-01 |  64.56 |
+    //|   AAPL | 2000-02-01 |  28.66 |
+      
     // If we load clojure.core.async - which neanderthal does - or we use
     // clojure.core/pmap then we have to shutdown agents else we get a 1 minute hang
     // on shutdown.

@@ -17,13 +17,15 @@
 (defn mean
   [column-name]
   {:column-name column-name
-   :reducer stats/mean})
+   :reducer stats/mean
+   :datatype :float64})
 
 
 (defn sum
   [column-name]
   {:column-name column-name
-   :reducer stats/sum})
+   :reducer stats/sum
+   :datatype :float64})
 
 
 (defn min
@@ -41,13 +43,15 @@
 (defn variance
   [column-name]
   {:column-name column-name
-   :reducer stats/variance})
+   :reducer stats/variance
+   :datatype :float64})
 
 
 (defn standard-deviation
   [column-name]
   {:column-name column-name
-   :reducer stats/standard-deviation})
+   :reducer stats/standard-deviation
+   :datatype :float64})
 
 
 (defn nth
@@ -66,8 +70,7 @@
 (defn last
   [column-name]
   {:column-name column-name
-   :reducer (fn [^Buffer rdr]
-              (rdr (dec (.lsize rdr))))})
+   :reducer (fn [rdr] (rdr -1))})
 
 
 (defn ^:no-doc apply-window-ranges

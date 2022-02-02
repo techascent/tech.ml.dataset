@@ -159,7 +159,22 @@ public class Rolling {
   }
   /**
    * Create a columnwise reducer.  This reducer gets sub-windows from the column and
-   * must return a scalar value.
+   * must return a scalar value.  If srcColname is a vector of colnames then reduceFn
+   * will be passed each column window as a separate argument.
+   *
+   * @param datatype Option datatype, may be nil in which case the dataset will scan the
+   * result to infer datatype.  If provided this will enforce the result column datatype.
+   * Reductions to numeric types with fixed datatypes will be slightly faster than
+   * generic reductions which require inference to find the final datatype.
+   */
+  public static Map reducer(Object srcColname, IFn reduceFn, Keyword datatype) {
+    return hashmap(kw("column-name"), srcColname,
+		   kw("reducer"), reduceFn,
+		   kw("datatype"), datatype);
+  }
+  /**
+   * Create a columnwise reducer eliding datatype parameter.  See documentation
+   * on 3-arity form of function.
    */
   public static Map reducer(Object srcColname, IFn reduceFn) {
     return hashmap(kw("column-name"), srcColname,
