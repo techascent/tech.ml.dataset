@@ -3,8 +3,12 @@
   width windows."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.rolling :as dt-rolling]
+            [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.datetime.operations :as dtype-dt-ops]
+            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.statistics :as stats]
+            [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.binary-op :as binary-op]
             [tech.v3.dataset.base :as ds-base])
   (:import [tech.v3.datatype Buffer])
   (:refer-clojure :exclude [min max nth first last]))
@@ -13,13 +17,15 @@
 (defn mean
   [column-name]
   {:column-name column-name
-   :reducer stats/mean})
+   :reducer stats/mean
+   :datatype :float64})
 
 
 (defn sum
   [column-name]
   {:column-name column-name
-   :reducer stats/sum})
+   :reducer stats/sum
+   :datatype :float64})
 
 
 (defn min
@@ -37,13 +43,15 @@
 (defn variance
   [column-name]
   {:column-name column-name
-   :reducer stats/variance})
+   :reducer stats/variance
+   :datatype :float64})
 
 
 (defn standard-deviation
   [column-name]
   {:column-name column-name
-   :reducer stats/standard-deviation})
+   :reducer stats/standard-deviation
+   :datatype :float64})
 
 
 (defn nth
@@ -62,8 +70,7 @@
 (defn last
   [column-name]
   {:column-name column-name
-   :reducer (fn [^Buffer rdr]
-              (rdr (dec (.lsize rdr))))})
+   :reducer (fn [rdr] (rdr -1))})
 
 
 (defn ^:no-doc apply-window-ranges
@@ -74,22 +81,36 @@
           (assoc red :dest-column-name k)))
        (group-by :column-name)
        (mapv (fn [[colname reducers]]
-               {:column (ds colname)
-                :reducers (vec reducers)}))
+               (let [colname (if (= :scalar (argtypes/arg-type colname))
+                               [colname]
+                               (vec colname))]
+                 {:columns (mapv (partial ds-base/column ds) colname)
+                  :reducers (vec reducers)})))
        (mapv
-        (fn [{:keys [column reducers]}]
-          (let [win-data (dt-rolling/window-ranges->window-reader
-                          column windows edge-mode)]
-            (mapv (fn [reducer]
-                    {:tech.v3.dataset/name (:dest-column-name reducer)
-                     :tech.v3.dataset/data
-                     (-> (dtype/emap (:reducer reducer) (:datatype reducer :object)
-                                     win-data)
-                         (dtype/clone))})
-                  reducers))))
+        (fn [{:keys [columns reducers]}]
+          ;;common case is 1 column
+          (if (== 1 (count columns))
+            (let [win-data (dt-rolling/window-ranges->window-reader
+                            (columns 0) windows edge-mode)]
+              (mapv (fn [reducer]
+                      {:tech.v3.dataset/name (:dest-column-name reducer)
+                       :tech.v3.dataset/data
+                       (-> (dtype/emap (:reducer reducer) (:datatype reducer :object)
+                                       win-data)
+                           (dtype/clone))})
+                    reducers))
+            (let [win-data (mapv #(dt-rolling/window-ranges->window-reader
+                                   % windows edge-mode)
+                                 columns)]
+              (mapv (fn [reducer]
+                      {:tech.v3.dataset/name (:dest-column-name reducer)
+                       :tech.v3.dataset/data
+                       (-> (apply dtype/emap (:reducer reducer) (:datatype reducer :object)
+                                  win-data)
+                           (dtype/clone))})
+                    reducers)))))
        (apply concat)
-       (reduce #(ds-base/add-column %1 %2)
-               ds)))
+       (reduce #(ds-base/add-column %1 %2) ds)))
 
 
 (defn rolling
@@ -111,14 +132,17 @@
        for object types and `:clamp` which fills in the first,last values of the column
        respectively.  Defaults to `:clamp`.
     - `:comp-fn` - if provided must return a double which is the result of comparing
-      the first value of the range to the last which means `(fn [lhs rhs] (- rhs lhs))`
+      the last value of the range to the first which means `clojure.core/-`
       is a reasonable default.
     - `:units` - for datetime types, describes the units of `:window-size` and will
       dictate the numeric space if `:comp-fn` is not provided.
   * reducer-map - A map of result column name to reducer map.  The reducer map is a
     map which must contain at least `{:column-name :reducer}` where reducer is an ifn
     that is passed each window.  The result column is scanned to ascertain datatype and
-    missing value status.
+    missing value status.  Multi-column reducers are supported if column-name is a vector
+    of column names.  In that case each column's window is passed to the reducer.  The
+    reducer can also specify the final datatype if `:datatype` is a key in the map.  Beware,
+    however, that this disables missing value detection for integer datatypes.
 
 
 **Fixed Window Examples:**
@@ -171,9 +195,25 @@ _unnamed [5 4]:
 | 0.09983342 | 0.50138810 | 0.09983342 | 0.84147098 |
 | 0.19866933 | 0.58052549 | 0.19866933 | 0.89120736 |
 | 0.29552021 | 0.65386247 | 0.29552021 | 0.93203909 |
-| 0.38941834 | 0.72066627 | 0.38941834 | 0.96355819 |
-```
+ | 0.38941834 | 0.72066627 | 0.38941834 | 0.96355819 |
 
+user> ;;Multi column reducer
+user> (ds/head (ds-roll/rolling test-ds 10
+                                {:c {:column-name [:a :a]
+                                     :reducer (fn [a b]
+                                                (Math/round
+                                                 (+ (dfn/sum a) (dfn/sum b))))
+                                     :datatype :int16}}))
+_unnamed [5 2]:
+
+|         :a | :c |
+|-----------:|---:|
+| 0.00000000 |  2 |
+| 0.09983342 |  3 |
+| 0.19866933 |  4 |
+| 0.29552021 |  5 |
+| 0.38941834 |  7 |
+```
 
 **Variable Window Examples:**
 
@@ -244,15 +284,20 @@ test/data/stocks.csv [5 6]:
             n-rows (:window-size window-data)
             (:relative-window-position window-data :center))
            :variable
-           (let [src-col (ds (:column-name window-data))]
+           (let [_ (when-not (:column-name window-data)
+                     (throw (Exception. (format "Variable rolling windows must have :column-name in the window data"))))
+                 src-col (ds-base/column ds (:column-name window-data))
+                 col-dt (dtype/elemwise-datatype src-col)]
              (vec (dt-rolling/variable-rolling-window-ranges
                    src-col (:window-size window-data)
                    {:comp-fn
                     (if-let [comp-fn (:comp-fn window-data)]
                       comp-fn
-                      (dtype-dt-ops/between-op
-                       (dtype/elemwise-datatype src-col)
-                       (:units window-data :milliseconds)))}))))]
+                      (when (dtype-dt/datetime-datatype? (packing/unpack-datatype col-dt))
+                        (dtype-dt-ops/between-op
+                         (dtype/elemwise-datatype src-col)
+                         (:units window-data :milliseconds)
+                         true)))}))))]
      (apply-window-ranges ds windows reducer-map (:edge-mode window-data :clamp))))
   ([ds window reducer-map]
    (rolling ds window reducer-map nil)))

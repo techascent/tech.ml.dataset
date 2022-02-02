@@ -40,10 +40,10 @@
                  str-table))))
 
 
-(defrecord CategoricalMap [lookup-table src-column result-datatype])
+(defrecord ^:private CategoricalMap [lookup-table src-column result-datatype])
 
 
-(defn create-categorical-map
+(defn ^:no-doc create-categorical-map
   [lookup-table src-colname result-datatype]
     (map->CategoricalMap
    {:lookup-table lookup-table
@@ -107,7 +107,7 @@
     (transform-categorical-map dataset t)))
 
 
-(defn dataset->categorical-maps
+(defn ^:no-doc dataset->categorical-maps
   "Given a dataset, return a map of column names to categorical label maps.
   This aids in inverting all of the label maps in a dataset.
   The source column name is src-column."
@@ -209,7 +209,7 @@
     (transform-one-hot dataset t)))
 
 
-(defn dataset->one-hot-maps
+(defn ^:no-doc dataset->one-hot-maps
   "Given a dataset, return a sequence of applied on-hot transformations."
   [dataset]
   (->> (vals dataset)

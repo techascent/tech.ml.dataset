@@ -11,14 +11,18 @@
 (defn dataset->dense
   "Convert a dataset into a dense neanderthal CPU matrix.  If the matrix
   is column-major, then potentially you can get accelerated copies from the dataset
-  into neanderthal."
+  into neanderthal.
+
+  * neanderthal-layout - either :column for a column-major matrix or :row for a row-major
+    matrix.
+  * datatype - either :float64 or :float32"
   ([dataset neanderthal-layout datatype]
    (let [[n-cols n-rows] (dtype/shape dataset)
          retval (case datatype
                   :float64
-                  (n-native/dge n-rows n-cols
-                                {:layout
-                                 neanderthal-layout}))
+                  (n-native/dge n-rows n-cols {:layout neanderthal-layout})
+                  :float32
+                  (n-native/fge n-rows n-cols {:layout neanderthal-layout}))
          tens (dtt/ensure-tensor retval)
          tens-cols (dtt/columns tens)]
      ;;If possible, these will be accelerated copies

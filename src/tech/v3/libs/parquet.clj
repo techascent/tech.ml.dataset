@@ -735,23 +735,35 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
    (parquet->ds-seq path nil)))
 
 
+(defn parquet->ds
+  "Load a parquet file.  Input must be a file on disk.
+
+  Options are a subset of the options used for loading datasets - specifically
+  `:column-whitelist` and `:column-blacklist` can be useful here.  The parquet
+  metadata ends up as metadata on the datasets."
+  ([input options]
+   (let [data-file (io/file input)
+         _ (errors/when-not-errorf
+            (.exists data-file)
+            "Only on-disk files work with parquet.  %s does not resolve to a file"
+            input)
+         dataset-seq (parquet->ds-seq (.getCanonicalPath data-file) options)]
+     (when-not (or (:disable-parquet-warn-on-multiple-datasets options)
+                   (== 1 (count dataset-seq)))
+       (log/warnf "Concatenating multiple datasets (%d) into one.
+To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
+                  (count dataset-seq)))
+     (if (== 1 (count dataset-seq))
+       (first dataset-seq)
+       (apply ds-base/concat-copying dataset-seq))))
+  ([input]
+   (parquet->ds input nil)))
+
+
 
 (defmethod ds-io/data->dataset :parquet
   [input options]
-  (let [data-file (io/file input)
-        _ (errors/when-not-errorf
-           (.exists data-file)
-           "Only on-disk files work with parquet.  %s does not resolve to a file"
-           input)
-        dataset-seq (parquet->ds-seq (.getCanonicalPath data-file) options)]
-    (when-not (or (:disable-parquet-warn-on-multiple-datasets options)
-                  (== 1 (count dataset-seq)))
-      (log/warnf "Concatenating multiple datasets (%d) into one.
-To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
-                 (count dataset-seq)))
-    (if (== 1 (count dataset-seq))
-      (first dataset-seq)
-      (apply ds-base/concat-copying dataset-seq))))
+  (parquet->ds input options))
 
 
 (def ^:private int32-set #{:int8 :uint8 :int16 :uint16 :int32
@@ -958,16 +970,15 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
 
   * `:hadoop-configuration` - Either nil or an instance of
   `org.apache.hadoop.conf.Configuration`.
-  * `:compression-codec` - Either nil or an instance of
-  `org.apache.parquet.hadoop.metadata.CompressionCodecName`.  Defaults to
-  `org.apache.parquet.column.ParquetProperties.WriterVersion`.
+  * `:compression-codec` - keyword describing compression codec.  Options are
+    `[:brotli :gzip :lz4 :lzo :snappy :uncompressed :zstd]`.  Defaults to
+     `:snappy`.
   * `:block-size` - Defaults to `ParquetWriter/DEFAULT_BLOCK_SIZE`.
   * `:page-size` - Defaults to `ParquetWriter/DEFAULT_PAGE_SIZE`.
   * `:dictionary-page-size` - Defaults to `ParquetWriter/DEFAULT_PAGE_SIZE`.
   * `:dictionary-enabled?` - Defaults to
      `ParquetWriter/DEFAULT_IS_DICTIONARY_ENABLED`.
   * `:validating?` - Defaults to `ParquetWriter/DEFAULT_IS_VALIDATING_ENABLED`.
-  * `:page-write-checksum?` - Defaults to true.  Output a crc check file in addition to
      parquet file.
   * `:writer-version` - Defaults to `ParquetWriter/DEFAULT_WRITER_VERSION`."
   ([path options ds-seq]

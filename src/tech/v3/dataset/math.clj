@@ -5,8 +5,7 @@
   project:
 
 ```clojure
-[org.bytedeco/openblas \"0.3.10-1.5.4\"]
-[org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
+[uncomplicate/neanderthal \"0.43.3\"]
 ```"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
@@ -264,7 +263,7 @@
     "Cannot pca a dataset with missing entries.  See replace-missing.")
    (let [result-datatype :float64
          {:keys [eigenvalues] :as pca-result}
-         (ds-tens/fit-pca! (ds-tens/dataset->tensor dataset :float64) options)
+         (ds-tens/fit-pca-neanderthal! (ds-tens/dataset->tensor dataset :float64) options)
          ;;The eigenvalues are the variance.
          variance-amount (double variance-amount)
          ;;We know the eigenvalues are sorted from greatest to least
@@ -295,7 +294,7 @@
   is indicated in the metadata of the dataset."
   [dataset {:keys [n-components result-datatype] :as pca-transform}]
   (-> (ds-tens/dataset->tensor dataset result-datatype)
-      (ds-tens/transform-pca! pca-transform n-components)
+      (ds-tens/transform-pca-neanderthal! pca-transform n-components)
       (ds-tens/tensor->dataset dataset :pca-result)
       (vary-meta assoc :pca-method (:method pca-transform))))
 

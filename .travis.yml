@@ -1,13 +1,13 @@
 language: clojure
+dist: focal
 lein: 2.9.3
-jdk: openjdk8
-dist: bionic
 before_install:
   - curl -O https://download.clojure.org/install/linux-install-1.10.0.403.sh && chmod +x linux-install-1.10.0.403.sh && sudo ./linux-install-1.10.0.403.sh
 addons:
   apt:
     packages:
     - libopenblas-dev
+    - intel-mkl
 before_script:
  - ./scripts/get-data.sh
 script:

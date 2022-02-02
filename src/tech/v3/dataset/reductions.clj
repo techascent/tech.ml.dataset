@@ -372,22 +372,22 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                   [ds-seq]
                   ds-seq)
          src-colname colname
-         [colname ds-seq] (if (and (sequential? colname)
-                                   (nil? ((first ds-seq) colname)))
-                            (let [tmp-colname ::_temp_col]
-                              [tmp-colname
-                               (map #(assoc % tmp-colname
-                                            (ds-col/new-column
-                                             #:tech.v3.dataset{:name tmp-colname
-                                                               :data
-                                                               (-> (ds-base/select-columns % colname)
-                                                                   (ds-readers/value-reader
-                                                                    {:copying? true}))
-                                                               :metadata {}
-                                                               :missing (bitmap/->bitmap)
-                                                               :force-datatype? true}))
-                                    ds-seq)])
-                            [colname ds-seq])
+         [colname ds-seq]
+         (if (and (sequential? colname)
+                  (nil? ((first ds-seq) colname)))
+           (let [tmp-colname ::_temp_col]
+             [tmp-colname
+              (map #(assoc % tmp-colname
+                           (ds-col/new-column
+                            #:tech.v3.dataset{:name tmp-colname
+                                              :data
+                                              (-> (ds-base/select-columns % colname)
+                                                  (ds-readers/value-reader {:copying? true}))
+                                              :metadata {}
+                                              :missing (bitmap/->bitmap)
+                                              :force-datatype? true}))
+                   ds-seq)])
+           [colname ds-seq])
          ;;ensure the unique columns are in the result
 
          ;;group by using this reducer followed by this consumer fn.

@@ -1,10 +1,10 @@
-(defproject techascent/tech.ml.dataset "6.051"
+(defproject techascent/tech.ml.dataset "6.053-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "8.062"]
+                 [cnuernber/dtype-next             "9.004"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -69,6 +69,7 @@
                                  "--enable-native-access=ALL-UNNAMED"]}
              :codegen
              {:source-paths ["src" "dev"]}
+             :javadoc {:dependencies [[ch.raffael.pegdown-doclet/pegdown-doclet "1.1"]]}
              :codox
              {:dependencies [[codox-theme-rdash "0.1.2"]
                              [com.cnuernber/codox "1.001"]]
@@ -112,6 +113,6 @@
                        :uberjar-name "dataset.jar"}
              :larray {:source-paths ["graal-native"]}}
   :jvm-opts ["-Djdk.attach.allowAttachSelf=true"]
-  :java-source-paths ["java"]
+  :java-source-paths ["java" "java_public_api"]
   :aliases {"codox" ["with-profile" "codox,dev" "run" "-m" "codox.main/-main"]
             "codegen" ["with-profile" "codegen,dev" "run" "-m" "tech.v3.dataset.codegen/-main"]})

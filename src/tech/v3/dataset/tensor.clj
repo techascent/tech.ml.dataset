@@ -12,7 +12,14 @@
   (:require [tech.v3.tensor :as dtt]
             [tech.v3.tensor.dimensions :as dims]
             [tech.v3.datatype.statistics :as stats]
+            [tech.v3.libs.neanderthal :as dt-nean]
+            [uncomplicate.neanderthal.native :as n-native]
+            [uncomplicate.neanderthal.core :as n-core]
+            [uncomplicate.neanderthal.linalg :as linalg]
+            [uncomplicate.neanderthal.vect-math :as vect-math]
+            [uncomplicate.commons.core :as n-com-core]
             [tech.v3.datatype.errors :as errors]
+            [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset :as ds]
@@ -357,7 +364,7 @@
    (mean-center-columns! tens nil)))
 
 
-(defn fit-pca!
+(defn fit-pca-smile!
   "Run Principle Component Analysis on a tensor.
 
   Keep in mind that PCA may be highly influenced by outliers in the dataset
@@ -428,10 +435,10 @@
                             ;;tensor from a smile matrix.
                             (dtt/select :all eig-order))}))))
   ([tensor]
-   (fit-pca! tensor nil)))
+   (fit-pca-smile! tensor nil)))
 
 
-(defn transform-pca!
+(defn transform-pca-smile!
   "PCA transform the dataset returning a new tensor.  Mean-centers
   the tensor in-place."
   [tensor pca-info n-components]
@@ -449,3 +456,129 @@
         tensor (:tensor (mean-center-columns! tensor (select-keys pca-info [:means])))
         project-matrix (dtt/select eigenvectors :all (range n-components))]
     (matrix-multiply tensor project-matrix)))
+
+
+(comment
+  (def test-tens (-> (dtt/transpose
+                      (dtt/->tensor [[7 4 6 8 8 7 5 9 7 8]
+                                     [4 1 3 6 5 2 3 5 4 2]
+                                     [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
+                      [1 0])))
+
+  ;; answer
+  {:means  [8.882E-17, 0.000, -4.441E-17],
+   :method :svd,
+   :eigenvalues [8.629338515997084, 5.751970392932843, 2.597951765363097],
+   :eigenvectors [[-0.1376 0.6990 -0.7017]
+                  [-0.2505 0.6609  0.7075]
+                  [ 0.9583 0.2731 0.08416]]}
+  )
+
+
+(defn fit-pca-neanderthal!
+  "Run Principle Component Analysis on a tensor.
+
+  Keep in mind that PCA may be highly influenced by outliers in the dataset
+  and a probabilistic or some level of auto-encoder dimensionality reduction
+  more effective for your problem.
+
+
+  Returns a map of:
+
+    * :means - vec of means
+    * :eigenvalues - vec of eigenvalues.  These are the variance of columns of the
+       post-projected tensor if :cov is used.  They are in the ballpark if :svd is used.
+    * :eigenvectors - matrix of eigenvectors
+
+  Options:
+
+  - method - svd, cov - Either use SVD or covariance based method.  SVD is faster
+    but covariance method means the post-projection variances are accurate.  Both
+    methods produce an identical or extremely similar projection matrix. Defaults
+    to `:cov`.
+  - covariance-bias? - When using :cov, divide by n-rows if true and (dec n-rows)
+    if false. defaults to false."
+  ([tensor {:keys [method
+                   covariance-bias?]
+            :or {method :cov
+                 covariance-bias? false}
+            :as _options}]
+   (let [{:keys [means tensor]} (mean-center-columns! tensor {:nan-strategy :keep})
+         [n-rows n-cols] (dtype/shape tensor)
+         n-rows (long n-rows)
+         n-cols (long n-cols)
+         matrix (dt-nean/tensor->matrix tensor)]
+     (case method
+       :svd
+       (let [{:keys [sigma u vt]} (linalg/svd matrix false true)
+             retval {:eigenvalues (dtype/clone (dtt/as-tensor (n-core/dia sigma)))
+                     :means means
+                     :method :svd
+                     :eigenvectors (dtype/clone (dtt/transpose (dtt/as-tensor vt) [1 0]))}]
+         (n-com-core/release matrix)
+         (n-com-core/release sigma)
+         (n-com-core/release u)
+         (n-com-core/release vt)
+         retval)
+       :cov
+       (let [;;Because we have subtracted out the means above, the covariance matrix
+             ;;is defined by (/ (Xt*X) (- n-rows 1))
+             tens-dt (dtype/elemwise-datatype tensor)
+             trans-mat (n-core/trans matrix)
+             cov-mat (n-core/mm trans-mat matrix)
+             bias (double (if covariance-bias?
+                            n-rows
+                            (dec n-rows)))
+             cov-buf (dtype/as-buffer cov-mat)
+             ;; Neanderthal's vecmath space failed us here
+             inv-bias (/ 1.0 bias)
+             _ (pfor/parallel-for idx (* n-cols n-cols)
+                                  (.writeDouble cov-buf idx
+                                                (* inv-bias (.readDouble cov-buf idx))))
+             fact (dt-nean/datatype->native-factory tens-dt)
+             w (n-core/ge fact n-cols 1)
+             vl (n-core/ge fact n-cols n-cols)
+             sym-cov (n-core/view-sy cov-mat)
+             _ (linalg/ev! sym-cov w vl nil)
+             wt (dtt/as-tensor w)
+             eigvals (dtt/select wt :all 0)
+             validx (argops/argsort :tech.numerics/> eigvals)
+             eigvals (dtype/clone (dtt/select eigvals validx))
+             eigvecs (dtype/clone (dtt/select vl :all validx))]
+         (n-com-core/release matrix)
+         (n-com-core/release cov-mat)
+         (n-com-core/release w)
+         (n-com-core/release vl)
+         {:eigenvalues eigvals
+          :means means
+          :eigenvectors eigvecs
+          :method :cov}))))
+  ([tensor]
+   (fit-pca-neanderthal! tensor nil)))
+
+
+(defn transform-pca-neanderthal!
+  "PCA transform the dataset returning a new tensor.  Mean-centers
+  the tensor in-place."
+  [tensor pca-info n-components]
+  (let [[_n-row n-cols] (dtype/shape tensor)
+        eigenvectors (:eigenvectors pca-info)
+        [_n-eig-rows n-eig-cols] (dtype/shape eigenvectors)
+        _ (errors/when-not-errorf
+           (= (long n-cols) (long n-eig-cols))
+           "Column count of dataset (%d) does not match column count of eigenvectors (%d)"
+           n-cols n-eig-cols)
+        _ (errors/when-not-errorf
+           (<= (long n-components) (long n-cols))
+           "Num components (%d) must be <= num cols (%d)"
+           n-components n-cols)
+        tensor (:tensor (mean-center-columns! tensor (select-keys pca-info [:means])))
+        project-matrix (dtt/select eigenvectors :all (range n-components))
+        ntens (dt-nean/tensor->matrix tensor)
+        nproj (dt-nean/tensor->matrix project-matrix nil (dtype/elemwise-datatype tensor))
+        resmat (n-core/mm ntens nproj)
+        result (dtype/clone (dtt/as-tensor resmat))]
+    (n-com-core/release ntens)
+    (n-com-core/release nproj)
+    (n-com-core/release resmat)
+    result))

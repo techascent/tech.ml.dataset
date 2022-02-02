@@ -1,4 +1,6 @@
 # Changelog
+## 6.052
+ * `tech.v3.dataset.neaderthal/dataset->dense` supports float32 datatypes.
 ## 6.051
  * Replace-missing on packed datatypes now works - you have to pass in the unpacked
    value (which most users will anyway).

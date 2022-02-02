@@ -11,6 +11,7 @@
             [tech.v3.dataset.join :as ds-join]
             [tech.v3.datatype.rolling :as rolling]
             [tech.v3.dataset.test-utils :as test-utils]
+            [tech.v3.dataset.rolling :as ds-roll]
             [tech.v3.dataset.column-filters :as cf]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
@@ -1413,6 +1414,34 @@
     (is (== 0 (dtype/ecount (ds/missing ds))))
     (is (= (vec (repeat 5 date))
            (vec (ds :a))))))
+
+
+(deftest variable-rolling-window-doubles
+  (let [ds (ds/->dataset {:a (double-array (range 100))
+                          :b (range 100)})
+        small-win (ds/head (ds-roll/rolling ds {:window-type :variable
+                                                :window-size 10
+                                                :column-name :a}
+                                            {:b-mean (ds-roll/mean :b)}))
+        big-win (ds/head (ds-roll/rolling ds  {:window-type :variable
+                                               :window-size 20
+                                               :column-name :a}
+                                          {:b-mean (ds-roll/mean :b)}))]
+    (is (dfn/equals [4.5 5.5 6.5 7.5 8.5] (vec (small-win :b-mean))))
+    (is (dfn/equals [9.5 10.5 11.5 12.5 13.5] (vec (big-win :b-mean))))))
+
+
+
+(deftest rolling-multi-column-reducer
+  (let [ds (ds/->dataset {:a (range 100)
+                          :b (range 100)})
+        fin-ds (ds-roll/rolling ds 10 {:c {:column-name [:a :b]
+                                           :reducer (fn [a b]
+                                                      (+ (dfn/sum a) (dfn/sum b)))
+                                           :datatype :int16}})]
+    (is (= :int16 (dtype/elemwise-datatype (fin-ds :c))))
+    (is (= [20 30 42 56 72]
+           (vec (take 5 (fin-ds :c)))))))
 
 
 (comment

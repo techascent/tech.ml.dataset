@@ -24,4 +24,12 @@
         (is (every? #(dfn/equals (first %) (second %))
                     (map vector
                          (ds/columns test-ds)
+                         (ds/columns res-ds))))))
+    (testing "Column major conversion - float32"
+      (let [n-mat (ds-neanderthal/dataset->dense test-ds :column :float32)
+            res-ds (ds-neanderthal/dense->dataset n-mat)]
+        (is (= 3 (ds/column-count res-ds)))
+        (is (every? #(dfn/equals (first %) (second %))
+                    (map vector
+                         (ds/columns test-ds)
                          (ds/columns res-ds))))))))
