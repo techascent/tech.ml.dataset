@@ -1,4 +1,9 @@
 # Changelog
+## 6.053
+ * Java API, Documentation and Sample.
+ * Non-backward-compatible Fixes to rolling API's `:comp-fn` optional argument - the 
+   parameters to the function are reversed so that things like `clojure.core/-` work.
+ 
 ## 6.052
  * `tech.v3.dataset.neaderthal/dataset->dense` supports float32 datatypes.
 ## 6.051
