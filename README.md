@@ -5,6 +5,7 @@
 
 
 * [API Documentation](https://techascent.github.io/tech.ml.dataset/)
+* Java API [Documentation](https://techascent.github.io/tech.ml.dataset/javadoc/index.html) and [Sample](java_test/java/jtest/TMDDemo.java).
 * [Get Started Now](https://github.com/cnuernber/simpledata)
 
 
