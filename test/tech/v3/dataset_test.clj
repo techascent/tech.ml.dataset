@@ -1431,6 +1431,19 @@
     (is (dfn/equals [9.5 10.5 11.5 12.5 13.5] (vec (big-win :b-mean))))))
 
 
+
+(deftest rolling-multi-column-reducer
+  (let [ds (ds/->dataset {:a (range 100)
+                          :b (range 100)})
+        fin-ds (ds-roll/rolling ds 10 {:c {:column-name [:a :b]
+                                           :reducer (fn [a b]
+                                                      (+ (dfn/sum a) (dfn/sum b)))
+                                           :datatype :int16}})]
+    (is (= :int16 (dtype/elemwise-datatype (fin-ds :c))))
+    (is (= [20 30 42 56 72]
+           (vec (take 5 (fin-ds :c)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
