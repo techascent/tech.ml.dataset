@@ -1209,7 +1209,21 @@ user> (take 5 (ds/rowvecs stocks))
 
 
 (defn sort-by
-  "Sort a dataset by a key-fn and compare-fn."
+  "Sort a dataset by a key-fn and compare-fn.
+
+  * `key-fn` - function from map to sort value.
+  * `compare-fn` may be one of:
+     - a clojure operator like clojure.core/<
+     - `:tech.numerics/<`, `:tech.numerics/>` for unboxing comparisons of primitive
+        values.
+     - clojure.core/compare
+     - A custom java.util.Comparator instantiation.
+
+  Options:
+
+  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+    `:exception`.
+  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false."
   ([dataset key-fn compare-fn & args]
   (apply tech.v3.dataset.base/sort-by dataset key-fn compare-fn args))
   ([dataset key-fn]
@@ -1217,7 +1231,20 @@ user> (take 5 (ds/rowvecs stocks))
 
 
 (defn sort-by-column
-  "Sort a dataset by a given column using the given compare fn."
+  "Sort a dataset by a given column using the given compare fn.
+
+  * `compare-fn` may be one of:
+     - a clojure operator like clojure.core/<
+     - `:tech.numerics/<`, `:tech.numerics/>` for unboxing comparisons of primitive
+        values.
+     - clojure.core/compare
+     - A custom java.util.Comparator instantiation.
+
+  Options:
+
+  * `:nan-strategy` - General missing strategy.  Options are `:first`, `:last`, and
+    `:exception`.
+  * `:parallel?` - Uses parallel quicksort when true and regular quicksort when false."
   ([dataset colname compare-fn & args]
   (apply tech.v3.dataset.base/sort-by-column dataset colname compare-fn args))
   ([dataset colname]
