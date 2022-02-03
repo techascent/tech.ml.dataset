@@ -46,6 +46,7 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.sampling :as dt-sample]
             [tech.v3.datatype.statistics :as dt-stats]
+            [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.export-symbols :refer [export-symbols]]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.readers :as ds-readers]
@@ -145,7 +146,7 @@ user> (ds-reduce/group-by-column-agg
 
 
 (defn distinct
-  "Create a reducer that will return a "
+  "Create a reducer that will return a set of values."
   ([colname finalizer]
    (ds-reduce-impl/staged-consumer-reducer
     :object colname #(SetConsumer. (HashSet.))
@@ -285,6 +286,80 @@ user> (ds-reduce/group-by-column-agg
 (export-symbols tech.v3.dataset.reductions.impl
                 reservoir-dataset)
 
+(defn reducer
+  "Make a group-by-agg reducer.
+
+  * `column-name` - Single column name or multiple columns.
+  * `per-elem-fn` - Called with the context as the first arg and each column's data
+     as further arguments.
+  * `finalize-fn` - finalize the result after aggregation.  Optional, will be replaced
+     with identity of not provided."
+  ([column-name per-elem-fn finalize-fn]
+   (let [finalize-fn (or finalize-fn identity)
+         column-names (if (= :scalar (argtypes/arg-type column-name))
+                        [column-name]
+                        (vec column-name))]
+     (case (count column-names)
+       1
+       (reify IndexReduction
+         (prepareBatch [this dataset]
+           (dtype/->buffer (ds-base/column dataset (column-names 0))))
+         (reduceIndex [this col obj-ctx idx]
+           (per-elem-fn obj-ctx (.readObject ^Buffer col idx)))
+         (reduceReductions [this lhs rhs]
+           (throw (Exception. "Merge pathway not provided")))
+         (finalize [this ctx]
+           (finalize-fn ctx)))
+       2
+       (reify IndexReduction
+         (prepareBatch [this dataset]
+           (->> (map #(-> (ds-base/column dataset %)
+                          (dtype/->buffer))
+                     column-names)
+                (object-array)))
+         (reduceIndex [this columns obj-ctx idx]
+           (let [^objects columns columns]
+             (per-elem-fn obj-ctx
+                          (.readObject ^Buffer (aget columns 0) idx)
+                          (.readObject ^Buffer (aget columns 1) idx))))
+         (reduceReductions [this lhs rhs]
+           (throw (Exception. "Merge pathway not provided")))
+         (finalize [this ctx]
+           (finalize-fn ctx)))
+       3
+       (reify IndexReduction
+         (prepareBatch [this dataset]
+           (->> (map #(-> (ds-base/column dataset %)
+                          (dtype/->buffer))
+                     column-names)
+                (object-array)))
+         (reduceIndex [this columns obj-ctx idx]
+           (let [^objects columns columns]
+             (per-elem-fn obj-ctx
+                          (.readObject ^Buffer (aget columns 0) idx)
+                          (.readObject ^Buffer (aget columns 1) idx)
+                          (.readObject ^Buffer (aget columns 2) idx))))
+         (reduceReductions [this lhs rhs]
+           (throw (Exception. "Merge pathway not provided")))
+         (finalize [this ctx]
+           (finalize-fn ctx)))
+       (reify IndexReduction
+         (prepareBatch [this dataset]
+           (mapv #(-> (ds-base/column dataset %)
+                      (dtype/->buffer))
+                 column-names))
+         (reduceIndex [this columns obj-ctx idx]
+           (apply per-elem-fn obj-ctx
+                  (sequence
+                   (map #(.readObject ^Buffer % idx))
+                   columns)))
+         (reduceReductions [this lhs rhs]
+           (throw (Exception. "Merge pathway not provided")))
+         (finalize [this ctx]
+           (finalize-fn ctx))))))
+  ([column-name per-elem-fn]
+   (reducer column-name per-elem-fn nil)))
+
 (defn group-by-column-agg
   "Group a sequence of datasets by a column and aggregate down into a new dataset.
 
@@ -352,7 +427,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 |  e | 99 |  3 |
 ```"
   ([colname agg-map options ds-seq]
-   (let [results (ArrayList. 100000)
+   (let [results (ArrayList. 10000)
          ;;By default, we include the key-columns in the result.
          ;;Users can override this by passing in the column in agg-map
          agg-map (merge
