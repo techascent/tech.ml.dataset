@@ -9,7 +9,15 @@
 
   If you have an xlsx file that contains multiple sheets and you want a dataset
   out of each sheet you have to use `workbook->datasets` as opposed to the higher level
-  `->dataset` operator."
+  `->dataset` operator.
+
+  This dependency has a known conflict with cognitec's aws library - see [issue 283](https://github.com/techascent/tech.ml.dataset/issues/283).
+
+  Required Dependencies:
+
+```clojure
+  [org.dhatim/fastexcel-reader \"0.12.8\" :exclusions [org.apache.poi/poi-ooxml]]
+```"
   (:require [tech.v3.io :as io]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]

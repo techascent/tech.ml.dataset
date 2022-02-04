@@ -11,7 +11,8 @@
                  [org.apache.poi/poi-ooxml         "5.1.0"
                   :exclusions [commons-codec]]
                  [org.dhatim/fastexcel-reader      "0.12.8"
-                  :exclusions [org.apache.poi/poi-ooxml]]
+                  :exclusions [org.apache.poi/poi-ooxml]
+                  :scope "provided"]
                  [com.github.haifengl/smile-core   "2.6.0"
                   :exclusions [org.slf4j/slf4j-api]]
                  [com.github.haifengl/smile-io     "2.6.0"

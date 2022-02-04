@@ -1,4 +1,8 @@
 # Changelog
+## 6.054-SNAPSHOT
+ * Removed fastexcel as an automatic dependency due to [ussue 283](https://github.com/techascent/tech.ml.dataset/issues/283).  The api documentation now 
+   indicates the known working fastexcel version.
+
 ## 6.053
  * Java API, Documentation and Sample.
  * Non-backward-compatible Fixes to rolling API's `:comp-fn` optional argument - the 
