@@ -1,4 +1,7 @@
 # Changelog
+## 6.056
+ * JSON read/write upgraded to support gzip - ".json.gz".
+
 ## 6.055
  * Fixes [issue 284](https://github.com/techascent/tech.ml.dataset/issues/284) - unroll column fails on single column dataset.
 

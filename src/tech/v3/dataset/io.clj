@@ -49,14 +49,20 @@
 
 (defmethod data->dataset :json
   [data options]
-  (->> (apply io/get-json data (apply concat (seq options)))
-       (parse-mapseq-colmap/mapseq->dataset options)))
+  (with-open [is (if (get options :gzipped?)
+                   (io/gzip-input-stream data)
+                   (io/input-stream data))]
+    (->> (apply io/get-json is (apply concat (seq options)))
+         (parse-mapseq-colmap/mapseq->dataset options))))
 
 
 (defmethod data->dataset :edn
   [data options]
-  (->> (apply io/get-edn data (apply concat (seq options)))
-       (parse-mapseq-colmap/mapseq->dataset options)))
+  (with-open [is (if (get options :gzipped?)
+                   (io/gzip-input-stream data)
+                   (io/input-stream data))]
+    (->> (apply io/get-edn is (apply concat (seq options)))
+         (parse-mapseq-colmap/mapseq->dataset options))))
 
 
 (defmulti dataset->data!
@@ -65,17 +71,23 @@
 
 
 (defmethod dataset->data! :json
-  [data options]
-  (apply io/put-json! data
-         (readers/mapseq-reader data)
-         (apply concat (seq options))))
+  [data output options]
+  (with-open [os (if (get options :gzipped?)
+                   (io/gzip-output-stream! output)
+                   (io/output-stream! output))]
+    (apply io/put-json! os
+           (readers/mapseq-reader data)
+           (apply concat (seq options)))))
 
 
 (defmethod dataset->data! :edn
-  [data options]
-  (apply io/put-edn! data
-         (readers/mapseq-reader data)
-         (apply concat (seq options))))
+  [data output options]
+  (with-open [os (if (get options :gzipped?)
+                     (io/gzip-output-stream! output)
+                     (io/output-stream! output))]
+    (apply io/put-edn! os
+           (readers/mapseq-reader data)
+           (apply concat (seq options)))))
 
 
 (defmethod dataset->data! :default
