@@ -535,7 +535,8 @@ public class TMDDemo {
     Map srcds = makeDataset(hashmap("simulation", repeatedly(nRows, new IFnDef() { public Object invoke() { return rand.nextInt(nSims); }}),
 				    "placement", repeatedly(nRows, new IFnDef() { public Object invoke() { return rand.nextInt(nPlacements); }}),
 				    "start", startDates,
-				    "end", map(new IFnDef() { public Object invoke(Object sd) { return ((LocalDate)sd).plusDays(rand.nextInt(nExpansion)); }}, startDates)));
+				    "end", map(new IFnDef() { public Object invoke(Object sd) { return ((LocalDate)sd).plusDays(rand.nextInt(nExpansion)); }},
+					       startDates)));
     println(head(srcds));
     //_unnamed [5 4]:
 
