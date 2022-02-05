@@ -14,6 +14,7 @@ import clojure.lang.IMapEntry;
 import clojure.lang.ASeq;
 import clojure.lang.Util;
 import clojure.lang.RT;
+import clojure.lang.IFn;
 import com.github.ztellman.primitive_math.Primitives;
 import java.io.Serializable;
 import java.util.NoSuchElementException;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Collections;
+import tech.v3.datatype.IFnDef;
 
 
 
@@ -43,15 +45,6 @@ public class FastStruct extends APersistentMap implements IObj{
   public FastStruct(Map _slots, List _vals) {
     this( PersistentHashMap.EMPTY, _slots, _vals,
 	  PersistentHashMap.EMPTY);
-  }
-
-  public static FastStruct createFromColumnNames(List colnames, List vals) {
-    int nEntries = colnames.size();
-    HashMap slots = new HashMap(nEntries);
-    for (int idx = 0; idx < nEntries; ++idx ) {
-      slots.put(colnames.get(idx), idx);
-    }
-    return new FastStruct(Collections.unmodifiableMap(slots), vals);
   }
 
   public int columnIndex(Object key) throws Exception {
@@ -170,5 +163,34 @@ public class FastStruct extends APersistentMap implements IObj{
     for (int idx = 0; idx < slots.size(); ++idx)
       newData.add(null);
     return new FastStruct(slots, newData);
+  }
+
+  public static IFn createFactory(List colnames) {
+    int nEntries = colnames.size();
+    if( nEntries == 0 ) {
+      throw new RuntimeException("No column names provided");
+    }
+    HashMap slots = new HashMap(nEntries);
+    for (int idx = 0; idx < nEntries; ++idx ) {
+      slots.put(colnames.get(idx), idx);
+    }
+    Map constSlots = (Map)Collections.unmodifiableMap(slots);
+    if( colnames.size() != slots.size() ) {
+      throw new RuntimeException("Duplicate colname name: " + String.valueOf(slots));
+    }
+    return new IFnDef() {
+      public Object invoke(Object vals) {
+	List valList = (List)vals;
+	if( slots.size() != valList.size() ) {
+	  throw new RuntimeException("Number of values: " + String.valueOf(valList.size()) +
+				     " doesn't equal the number of keys: " + String.valueOf(slots.size()));
+	}
+	return new FastStruct(constSlots, valList);
+      }
+    };
+  }
+
+  public static FastStruct createFromColumnNames(List colnames, List vals) {
+    return (FastStruct)createFactory(colnames).invoke(vals);
   }
 }

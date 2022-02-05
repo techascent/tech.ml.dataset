@@ -5,6 +5,7 @@ import static tech.v3.Clj.*;
 import static tech.v3.TMD.*;
 import tech.v3.dataset.Rolling;
 import tech.v3.dataset.Modelling;
+import tech.v3.dataset.Reductions;
 import tech.v3.libs.Arrow;
 import tech.v3.libs.Parquet;
 import tech.v3.DType; //access to clone method
@@ -15,10 +16,22 @@ import tech.v3.datatype.Stats;
 import tech.v3.datatype.Buffer;
 import tech.v3.libs.Nippy;
 import tech.v3.datatype.IFnDef;
+//Fast map creation when you know you will have to create many maps.
+import tech.v3.dataset.FastStruct;
 import clojure.lang.RT;
+import clojure.lang.IFn;
 import java.util.Map;
+
+//Imports for the advanced reduction example at the end.
+import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.StreamSupport;
+import java.util.function.BiFunction;
+import java.util.function.BiConsumer;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.Random;
 
 
 
@@ -479,7 +492,7 @@ public class TMDDemo {
       //|   MSFT | 2000-01-01 |  39.81 |
       //|   AMZN | 2000-01-01 |  64.56 |
       //|   AAPL | 2000-02-01 |  28.66 |
-      
+
       //Cloning a dataset serves to both realize any lazy columns
       //and copy the dataset into jvm-heap memory thus allowing you to return
       //something from the stack resource context.
@@ -505,7 +518,136 @@ public class TMDDemo {
     //|   MSFT | 2000-01-01 |  39.81 |
     //|   AMZN | 2000-01-01 |  64.56 |
     //|   AAPL | 2000-02-01 |  28.66 |
-      
+
+
+    //Here is a somewhat advanced example.  We have a dataset composed of events where each
+    //row has a start,end date.  We want to tally information based the days per a given month
+    //that the event happened which means we need to expand the dataset into days then reduce
+    //it to tally over months.
+    int nSims = 100;
+    int nPlacements = 50;
+    int nExpansion = 20;
+    long nRows = 1000000;
+    LocalDate today = LocalDate.now();
+    Random rand = new Random();
+    Object startDates = vec(repeatedly(nRows, new IFnDef() { public Object invoke() { return today.minusDays(400 + rand.nextInt(100)); } }));
+    //Dataset with 1 million rows
+    Map srcds = makeDataset(hashmap("simulation", repeatedly(nRows, new IFnDef() { public Object invoke() { return rand.nextInt(nSims); }}),
+				    "placement", repeatedly(nRows, new IFnDef() { public Object invoke() { return rand.nextInt(nPlacements); }}),
+				    "start", startDates,
+				    "end", map(new IFnDef() { public Object invoke(Object sd) { return ((LocalDate)sd).plusDays(rand.nextInt(nExpansion)); }}, startDates)));
+    println(head(srcds));
+    //_unnamed [5 4]:
+
+    //| placement  |      start | simulation  |        end |
+    //|-----------:|------------|------------:|------------|
+    //|         14 | 2020-09-28 |          86 | 2020-09-29 |
+    //|         32 | 2020-12-17 |          20 | 2021-01-03 |
+    //|         23 | 2020-10-15 |          37 | 2020-10-24 |
+    //|         49 | 2020-10-07 |          18 | 2020-10-22 |
+    //|          6 | 2020-12-08 |          48 | 2020-12-08 |
+
+
+
+
+    //We are going to be creating a lot of these.
+    IFn mapConstructor = FastStruct.createFactory((List)vector("year-month", "count"));
+    //We want to produce map of yearmonth to day counts.
+    BiFunction incrementor = new BiFunction() {
+	public Object apply(Object k, Object v) {
+	  if (v != null) {
+	    return ((long)v) + 1;
+	  } else {
+	    return 1L;
+	  }
+	}
+      };
+    //Tally the days between start/end, record in map of yearMonth to day tally
+    //Returns a list of maps of "year-month", "count".
+    IFn tallyDays = new IFnDef() {
+	public Object invoke(Object row) {
+	  Map rowMap = (Map) row;
+	  LocalDate sd = (LocalDate)rowMap.get("start");
+	  LocalDate ed = (LocalDate)rowMap.get("end");
+	  long ndays = sd.until(ed, java.time.temporal.ChronoUnit.DAYS);
+	  HashMap tally = new HashMap();
+	  for (long idx = 0; idx < ndays; ++idx) {
+	    LocalDate cur = sd.plusDays(idx);
+	    YearMonth rm = YearMonth.from(cur);
+	    tally.compute(rm, incrementor);
+	  }
+	  ArrayList retval = new ArrayList(tally.size());
+	  tally.forEach(new BiConsumer() {
+	      public void accept(Object k, Object v) {
+		retval.add(mapConstructor.invoke(vector(k,v)));
+	      }
+	    });
+	  return retval;
+	}
+      };
+
+    println(vec(tallyDays.invoke(hashmap("start", LocalDate.parse("2020-12-17"),
+					 "end", LocalDate.parse("2021-01-03")))));
+    //[{year-month #object[java.time.YearMonth 0x5eafef3a 2020-12], count 15} {year-month #object[java.time.YearMonth 0x3bcfebf6 2021-01], count 2}]
+
+    //Next we expand our original dataset to be year-month tallies in addition to
+    //to start/end dates.
+    println(rowMapcat(head(srcds), tallyDays, null));
+    //_unnamed [7 6]:
+
+    //| placement |      start | simulation |        end | count | year-month |
+    //|----------:|------------|-----------:|------------|------:|------------|
+    //|        11 | 2020-10-29 |         41 | 2020-11-02 |     1 |    2020-11 |
+    //|        11 | 2020-10-29 |         41 | 2020-11-02 |     3 |    2020-10 |
+    //|        13 | 2020-10-11 |          5 | 2020-10-19 |     8 |    2020-10 |
+    //|        16 | 2020-12-08 |         10 | 2020-12-11 |     3 |    2020-12 |
+    //|         1 | 2020-10-15 |         52 | 2020-10-19 |     4 |    2020-10 |
+
+    //Begin parallelized expansion
+    Iterable dsSeq = (Iterable)rowMapcat(srcds, tallyDays, hashmap(kw("result-type"), kw("as-seq")));
+
+    //The first aggregation is to summarize by placement and simulation the year-month tallies.
+    //We are essentially replacing count with a summarized count.  After this statement
+    //we can guarantee that the dataset has unique tuples of [simulation, placement, year-month]
+    Map initAgg = Reductions.groupByColumnsAgg(dsSeq, vector("simulation", "placement", "year-month"),
+					       hashmap("count", Reductions.sum("count")),
+					       null);
+    println(head(initAgg));
+    //["simulation" "placement" "year-month"]-aggregation [5 4]:
+
+    //| simulation | placement | year-month | count |
+    //|-----------:|----------:|------------|------:|
+    //|          0 |         0 |    2020-12 | 622.0 |
+    //|          0 |         1 |    2020-12 | 591.0 |
+    //|          0 |         2 |    2020-12 | 500.0 |
+    //|          0 |         3 |    2020-12 | 549.0 |
+    //|          0 |         4 |    2020-12 | 595.0 |
+
+    // The second aggregation allows us to build of statistics over each placement/year-month
+    // pair thus finding out the distribution of a given placement, year-month across simluations
+    Map result = Reductions.groupByColumnsAgg(vector(initAgg), vector("placement", "year-month"),
+					      hashmap("min-count",     Reductions.probQuantile("count", 0.0),
+						      "low-95-count",  Reductions.probQuantile("count", 0.05),
+						      "q1-count",      Reductions.probQuantile("count", 0.25),
+						      "median-count",  Reductions.probQuantile("count", 0.5),
+						      "q3-count",      Reductions.probQuantile("count", 0.75),
+						      "high-95-count", Reductions.probQuantile("count", 0.95),
+						      "max-count",     Reductions.probQuantile("count", 1.0),
+						      "count",         Reductions.sum("count")),
+					      null);
+    //Take a million row dataset, expand it, then perform two grouping aggregations.
+    println(head(result));
+    //["placement" "year-month"]-aggregation [5 10]:
+
+    //| q3-count | median-count | min-count | high-95-count | placement | max-count |   count | low-95-count | q1-count | year-month |
+    //|---------:|-------------:|----------:|--------------:|----------:|----------:|--------:|-------------:|---------:|------------|
+    //|    646.0 |        593.0 |     366.0 |         716.0 |        36 |     809.0 | 58920.0 |        475.0 |    536.0 |    2020-12 |
+    //|    621.0 |        560.0 |     376.0 |         739.0 |        36 |     782.0 | 57107.0 |        459.0 |    512.0 |    2020-10 |
+    //|    168.0 |        139.0 |      25.0 |         211.0 |         0 |     246.0 | 13875.0 |         76.0 |    112.0 |    2021-01 |
+    //|    658.0 |        607.0 |     384.0 |         745.0 |         0 |     825.0 | 60848.0 |        486.0 |    561.0 |    2020-12 |
+    //|    628.0 |        581.0 |     422.0 |         693.0 |         0 |     802.0 | 58148.0 |        468.0 |    539.0 |    2020-11 |
+
+
     // If we load clojure.core.async - which neanderthal does - or we use
     // clojure.core/pmap then we have to shutdown agents else we get a 1 minute hang
     // on shutdown.

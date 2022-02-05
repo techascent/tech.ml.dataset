@@ -1,7 +1,9 @@
 # Changelog
-## 6.054-SNAPSHOT
- * Removed fastexcel as an automatic dependency due to [ussue 283](https://github.com/techascent/tech.ml.dataset/issues/283).  The api documentation now 
+
+## 6.054
+ * Removed fastexcel as an automatic dependency due to [issue 283](https://github.com/techascent/tech.ml.dataset/issues/283).  The api documentation now 
    indicates the known working fastexcel version.
+ * Added Reductions namespace with example to Java API.
 
 ## 6.053
  * Java API, Documentation and Sample.

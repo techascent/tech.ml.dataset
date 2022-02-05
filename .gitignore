@@ -28,3 +28,5 @@ __pycache__
 .clj-kondo
 .lsp
 repro
+java_test/test.parquet
+java_test/test.arrow
