@@ -1444,6 +1444,14 @@
            (vec (take 5 (fin-ds :c)))))))
 
 
+(deftest unroll-single-column
+  (is (= (vec (range 9))
+         (-> (ds/->dataset {:a [[0 1 2 3] [4 5] [6 7 8]]})
+             (ds/unroll-column :a)
+             (ds/column :a)
+             (vec)))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

@@ -1078,8 +1078,8 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                      (when lhs-idx-container
                        (.addAll ^List lhs-idx-container ^List rhs-idx-container))
                      [lhs-indexes lhs-container lhs-idx-container])))]
-     (-> (remove-column dataset column-name)
-         (select-rows indexes)
+     (-> (-> (remove-column dataset column-name)
+             (select-rows indexes))
          (add-or-update-column column-name (col-impl/new-column
                                             column-name
                                             container))

@@ -136,11 +136,7 @@
 ```
   "
   [dataset col-name]
-  (let [retval
-        (dissoc dataset col-name)]
-    (if (== 0 (column-count retval))
-      nil
-      retval)))
+  (dissoc dataset col-name))
 
 
 (declare select-columns)
