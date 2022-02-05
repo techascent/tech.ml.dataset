@@ -140,7 +140,7 @@ public class TMD {
 
   /**
    * Basic pathway to take data and get back a datasets.  If dsData is a string
-   * a built in system can parse csv, tsv, csv.gz, tsv.gz, .json and .nippy format files.
+   * a built in system can parse csv, tsv, csv.gz, tsv.gz, .json, json.gz and .nippy format files.
    * Specific other formats such as xlsx, apache arrow and parquet formats are provided
    * in other classes.
    *
@@ -854,7 +854,7 @@ public class TMD {
     return (Map)call(deref(tensorToDatasetDelay), tens);
   }
   /**
-   * Write a dataset to disc as csv, tsv, csv.gz, tsv.gz or nippy.
+   * Write a dataset to disc as csv, tsv, csv.gz, tsv.gz, json, json.gz or nippy.
    *
    * Reading/writing to parquet or arrow is accessible via separate clasess
    */
