@@ -1,15 +1,17 @@
 # Changelog
+## 6.055
+ * Fixes [issue 284](https://github.com/techascent/tech.ml.dataset/issues/284) - unroll column fails on single column dataset.
 
 ## 6.054
- * Removed fastexcel as an automatic dependency due to [issue 283](https://github.com/techascent/tech.ml.dataset/issues/283).  The api documentation now 
+ * Removed fastexcel as an automatic dependency due to [issue 283](https://github.com/techascent/tech.ml.dataset/issues/283).  The api documentation now
    indicates the known working fastexcel version.
  * Added Reductions namespace with example to Java API.
 
 ## 6.053
  * Java API, Documentation and Sample.
- * Non-backward-compatible Fixes to rolling API's `:comp-fn` optional argument - the 
+ * Non-backward-compatible Fixes to rolling API's `:comp-fn` optional argument - the
    parameters to the function are reversed so that things like `clojure.core/-` work.
- 
+
 ## 6.052
  * `tech.v3.dataset.neaderthal/dataset->dense` supports float32 datatypes.
 ## 6.051
