@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.function.Function;
 import tech.v3.datatype.IFnDef;
 
 
@@ -165,7 +166,11 @@ public class FastStruct extends APersistentMap implements IObj{
     return new FastStruct(slots, newData);
   }
 
-  public static IFn createFactory(List colnames) {
+  /**
+   * Create a factory that will create map implementations based on a single list of values.
+   * Values have to be in the same order as column names.
+   */
+  public static Function<List,Map> createFactory(List colnames) {
     int nEntries = colnames.size();
     if( nEntries == 0 ) {
       throw new RuntimeException("No column names provided");
@@ -178,9 +183,8 @@ public class FastStruct extends APersistentMap implements IObj{
     if( colnames.size() != slots.size() ) {
       throw new RuntimeException("Duplicate colname name: " + String.valueOf(slots));
     }
-    return new IFnDef() {
-      public Object invoke(Object vals) {
-	List valList = (List)vals;
+    return new Function<List,Map>() {
+      public Map apply(List valList) {
 	if( slots.size() != valList.size() ) {
 	  throw new RuntimeException("Number of values: " + String.valueOf(valList.size()) +
 				     " doesn't equal the number of keys: " + String.valueOf(slots.size()));
@@ -191,6 +195,6 @@ public class FastStruct extends APersistentMap implements IObj{
   }
 
   public static FastStruct createFromColumnNames(List colnames, List vals) {
-    return (FastStruct)createFactory(colnames).invoke(vals);
+    return (FastStruct)createFactory(colnames).apply(vals);
   }
 }

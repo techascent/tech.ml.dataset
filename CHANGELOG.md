@@ -1,4 +1,7 @@
 # Changelog
+## 6.057
+ * Typed out faststruct's constructor.
+
 ## 6.056
  * JSON read/write upgraded to support gzip - ".json.gz".
 

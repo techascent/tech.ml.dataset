@@ -4,4 +4,4 @@ mkdir -p classes
 
 rm -rf classes/*
 
-javac -classpath "$(clj -Spath)" -d classes -sourcepath java $(find java | grep .*.java)
+javac -classpath "$(clj -Spath)" -d classes -Xlint:unchecked -sourcepath java $(find java | grep .*.java)

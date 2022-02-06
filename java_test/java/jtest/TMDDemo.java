@@ -21,6 +21,7 @@ import tech.v3.dataset.FastStruct;
 import clojure.lang.RT;
 import clojure.lang.IFn;
 import java.util.Map;
+import java.util.function.Function;
 
 //Imports for the advanced reduction example at the end.
 import java.util.HashMap;
@@ -494,10 +495,10 @@ public class TMDDemo {
 
 
     //We are going to be creating a lot of these.
-    IFn mapConstructor = FastStruct.createFactory((List)vector("year-month", "count"));
+    Function<List,Map> mapConstructor = FastStruct.createFactory(vector("year-month", "count"));
     //We want to produce map of yearmonth to day counts.
-    BiFunction incrementor = new BiFunction() {
-	public Object apply(Object k, Object v) {
+    BiFunction<YearMonth,Long,Long> incrementor = new BiFunction<YearMonth,Long,Long>() {
+	public Long apply(YearMonth k, Long v) {
 	  if (v != null) {
 	    return ((long)v) + 1;
 	  } else {
@@ -513,16 +514,16 @@ public class TMDDemo {
 	  LocalDate sd = (LocalDate)rowMap.get("start");
 	  LocalDate ed = (LocalDate)rowMap.get("end");
 	  long ndays = sd.until(ed, java.time.temporal.ChronoUnit.DAYS);
-	  HashMap tally = new HashMap();
+	  HashMap<YearMonth,Long> tally = new HashMap<YearMonth,Long>();
 	  for (long idx = 0; idx < ndays; ++idx) {
 	    LocalDate cur = sd.plusDays(idx);
 	    YearMonth rm = YearMonth.from(cur);
 	    tally.compute(rm, incrementor);
 	  }
-	  ArrayList retval = new ArrayList(tally.size());
-	  tally.forEach(new BiConsumer() {
-	      public void accept(Object k, Object v) {
-		retval.add(mapConstructor.invoke(vector(k,v)));
+	  ArrayList<Map> retval = new ArrayList<Map>(tally.size());
+	  tally.forEach(new BiConsumer<YearMonth,Long>() {
+	      public void accept(YearMonth k, Long v) {
+		retval.add(mapConstructor.apply(vector(k,v)));
 	      }
 	    });
 	  return retval;
