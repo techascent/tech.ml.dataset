@@ -47,6 +47,7 @@ Summations/means in this area are implemented using the
 * Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
 * It's damn fast even with Parquet - [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/).
 * Graal native [example project](https://github.com/cnuernber/ds-graal).
+* Looking to jump straight into data science?  Check out the [sciclog.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials).
 
 
 ## Mini Walkthrough
