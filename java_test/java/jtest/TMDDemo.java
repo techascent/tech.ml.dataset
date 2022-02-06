@@ -77,13 +77,13 @@ public class TMDDemo {
     println("first value:", call(priceCol, 0), ", last value:", call(priceCol, -1));
     //first value: 39.81 , last value: 223.02
 
-    Map colmapDs = makeDataset(hashmap(kw("a"), range(10),
-				       kw("b"), toDoubleArray(range(9,-1,-1))),
+    Map colmapDs = makeDataset(hashmap("a", range(10),
+				       "b", toDoubleArray(range(9,-1,-1))),
 			       hashmap(kw("dataset-name"), "testds"));
     println(colmapDs);
     // testds [10 2]:
 
-    // |  :b | :a |
+    // |  b  |  a |
     // |----:|---:|
     // | 9.0 |  0 |
     // | 8.0 |  1 |
@@ -100,15 +100,17 @@ public class TMDDemo {
     // {:name testds}
 
     //It is also trivial to add a virtual column by instantiating a Buffer object
-    println(head(assoc(colmapDs, kw("c"), new tech.v3.datatype.LongReader() {
+    //One thing to note is that colmapDs itself wasn't changed.  Assoc create a new
+    //dataset that shared the unchanged portions with the original dataset
+    println(assoc(colmapDs, "c", new tech.v3.datatype.LongReader() {
 	public long lsize() { return 10; }
 	public long readLong( long idx) {
 	  return 2*idx;
 	}
-      })));
+      }));
     //testds [5 3]:
 
-    //|  :b | :a | :c |
+    //|  b  | a  | c  |
     //|----:|---:|---:|
     //| 9.0 |  0 |  0 |
     //| 8.0 |  1 |  2 |
@@ -117,12 +119,13 @@ public class TMDDemo {
     //| 5.0 |  4 |  8 |
 
 
-    println(meta(call(colmapDs, kw("a"))), meta(call(colmapDs, kw("b"))));
-    // {:name :a, :datatype :int64, :n-elems 10} {:name :b, :datatype :float64, :n-elems 10}
+    // The metadata on columns has quite a bit of useful informatio in it.
+    println(meta(call(colmapDs, "a")), meta(call(colmapDs, "b")));
+    // {:name a, :datatype :int64, :n-elems 10} {:name b, :datatype :float64, :n-elems 10}
 
     Buffer rows = rows(colmapDs);
     println("First row:", call(rows,0), ", last row:", call(rows,-1));
-    // First row: {:b 9.0, :a 0} , last row: {:b 0.0, :a 9}
+    // First row: {b 9.0, a 0} , last row: {b 0.0, a 9}
 
     Buffer rowvecs = rowvecs(colmapDs);
     println("First rowvec:", call(rowvecs,0), ", last rowvec:", call(rowvecs,-1));
@@ -194,24 +197,25 @@ public class TMDDemo {
 
 
     //Variable rolling window reductions require the target column to be monotonically
-    //increasing - for each val x(n), x(n+1) is greater or equal.
-    stocks = sortByColumn(stocks, "date");
-    println(head(stocks));
-    // https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 3]:
-    // | symbol |       date |  price |
-    // |--------|------------|-------:|
-    // |   AAPL | 2000-01-01 |  25.94 |
-    // |    IBM | 2000-01-01 | 100.52 |
-    // |   MSFT | 2000-01-01 |  39.81 |
-    // |   AMZN | 2000-01-01 |  64.56 |
-    // |   AAPL | 2000-02-01 |  28.66 |
+    //increasing - for each val x(n), x(n+1) is greater or equal.  So for financial data
+    //this usually means ordered by date.
+    Map goog = sortByColumn(bySymbol.get("GOOG"), "date");
+    println(head(goog));
+    //GOOG [5 3]:
 
+    //| symbol |       date |  price |
+    //|--------|------------|-------:|
+    //|   GOOG | 2004-08-01 | 102.37 |
+    //|   GOOG | 2004-09-01 | 129.60 |
+    //|   GOOG | 2004-10-01 | 190.64 |
+    //|   GOOG | 2004-11-01 | 181.98 |
+    //|   GOOG | 2004-12-01 | 192.79 |
 
     //If we want our column of dates to be in epoch-days which is a lot more friendly to
     //machine learning we can easily do so:
-    Buffer dateBuf = toBuffer(column(stocks, "date"));
+    Buffer dateBuf = toBuffer(column(goog, "date"));
     //There are many ways to do this but here is a low-level way
-    println(head(assoc(stocks, "date",
+    println(head(assoc(goog, "date",
 		       //all integer types funnel through LongBuffer/LongReader pathways.
 		       new tech.v3.datatype.LongReader() {
 			 //Aside from :int32, kw("epoch-days") is another valid datatype for
@@ -227,37 +231,34 @@ public class TMDDemo {
 			   return ld.toEpochDay();
 			 }
 		       })));
-    //https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [5 3]:
+    //GOOG [5 3]:
 
     //| symbol |  date |  price |
     //|--------|------:|-------:|
-    //|   AAPL | 10957 |  25.94 |
-    //|    IBM | 10957 | 100.52 |
-    //|   MSFT | 10957 |  39.81 |
-    //|   AMZN | 10957 |  64.56 |
-    //|   AAPL | 10988 |  28.66 |
+    //|   GOOG | 12631 | 102.37 |
+    //|   GOOG | 12662 | 129.60 |
+    //|   GOOG | 12692 | 190.64 |
+    //|   GOOG | 12723 | 181.98 |
+    //|   GOOG | 12753 | 192.79 |
 
 
 
-    Map variableWin = Rolling.rolling(stocks,
+    Map variableWin = Rolling.rolling(goog,
 				      Rolling.variableWindow("date", 3, kw("months")),
 				      hashmap("price-mean-3m", Rolling.mean("price"),
 					      "price-max-3m", Rolling.max("price"),
 					      "price-min-3m", Rolling.min("price")));
     println(head(variableWin, 10));
-    //https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv [10 6]:
+    //GOOG [10 6]:
+
     //| symbol |       date |  price | price-max-3m | price-mean-3m | price-min-3m |
     //|--------|------------|-------:|-------------:|--------------:|-------------:|
-    //|   AAPL | 2000-01-01 |  25.94 |       106.11 |   58.92500000 |        25.94 |
-    //|    IBM | 2000-01-01 | 100.52 |       106.11 |   61.92363636 |        28.66 |
-    //|   MSFT | 2000-01-01 |  39.81 |       106.11 |   58.06400000 |        28.66 |
-    //|   AMZN | 2000-01-01 |  64.56 |       106.11 |   60.09222222 |        28.66 |
-    //|   AAPL | 2000-02-01 |  28.66 |       106.11 |   57.56583333 |        28.37 |
-    //|   MSFT | 2000-02-01 |  36.35 |       106.11 |   60.19363636 |        28.37 |
-    //|    IBM | 2000-02-01 |  92.11 |       106.11 |   62.57800000 |        28.37 |
-    //|   AMZN | 2000-02-01 |  68.87 |       106.11 |   59.29666667 |        28.37 |
-    //|   AMZN | 2000-03-01 |  67.00 |       106.11 |   54.65583333 |        21.00 |
-    //|   MSFT | 2000-03-01 |  43.22 |       106.11 |   53.53363636 |        21.00 |
+    //|   GOOG | 2004-08-01 | 102.37 |       190.64 |  140.87000000 |       102.37 |
+    //|   GOOG | 2004-09-01 | 129.60 |       190.64 |  167.40666667 |       129.60 |
+    //|   GOOG | 2004-10-01 | 190.64 |       192.79 |  188.47000000 |       181.98 |
+    //|   GOOG | 2004-11-01 | 181.98 |       195.62 |  190.13000000 |       181.98 |
+    //|   GOOG | 2004-12-01 | 192.79 |       195.62 |  192.13333333 |       187.99 |
+    //|   GOOG | 2005-01-01 | 195.62 |       195.62 |  188.04000000 |       180.51 |
 
     //Create a vector from 0->6*PI in 90 increments.
     Object radians = VecMath.mul(2.0*Math.PI, VecMath.div(range(33), 32.0));
@@ -322,6 +323,22 @@ public class TMDDemo {
     //| b | 1 | 1 |       7 |
 
 
+    //Single column join doesn't require column names wrapped in vectors
+    println(join(dsa, dsb, hashmap(kw("on"), "a")));
+    //inner-join [8 5]:
+
+    //| a | b | c | right.b | right.c |
+    //|---|--:|--:|--------:|--------:|
+    //| a | 0 | 0 |       0 |       6 |
+    //| a | 3 | 3 |       0 |       6 |
+    //| b | 1 | 1 |       1 |       7 |
+    //| b | 2 | 2 |       1 |       7 |
+    //| a | 0 | 0 |       2 |       8 |
+    //| a | 3 | 3 |       2 |       8 |
+    //| b | 1 | 1 |       3 |       9 |
+    //| b | 2 | 2 |       3 |       9 |
+
+
     //Outer join on same columns
     println(join(dsa, dsb, hashmap(kw("on"), vector("a", "b"),
 				   kw("how"), kw("outer"))));
@@ -342,91 +359,16 @@ public class TMDDemo {
     //named leftJoinAsof where every column of the left dataset is represented and it is
     //matched with the 'nearest' of a column of the right dataset.
 
-    Map googPrices = sortByColumn(bySymbol.get("GOOG"), "price");
-    //Print all entries
-    println(head(googPrices, 200));
-    //GOOG [68 3]:
-    //| symbol |       date |  price |
-    //|--------|------------|-------:|
-    //|   GOOG | 2004-08-01 | 102.37 |
-    //|   GOOG | 2004-09-01 | 129.60 |
-    //|   GOOG | 2005-03-01 | 180.51 |
-    //|   GOOG | 2004-11-01 | 181.98 |
-    //|   GOOG | 2005-02-01 | 187.99 |
-    //|   GOOG | 2004-10-01 | 190.64 |
-    //|   GOOG | 2004-12-01 | 192.79 |
-    //|   GOOG | 2005-01-01 | 195.62 |
-    //|   GOOG | 2005-04-01 | 220.00 |
-    //|   GOOG | 2005-05-01 | 277.27 |
-    //|   GOOG | 2005-08-01 | 286.00 |
-    //|   GOOG | 2005-07-01 | 287.76 |
-    //|   GOOG | 2008-11-01 | 292.96 |
-    //|   GOOG | 2005-06-01 | 294.15 |
-    //|   GOOG | 2008-12-01 | 307.65 |
-    //|   GOOG | 2005-09-01 | 316.46 |
-    //|   GOOG | 2009-02-01 | 337.99 |
-    //|   GOOG | 2009-01-01 | 338.53 |
-    //|   GOOG | 2009-03-01 | 348.06 |
-    //|   GOOG | 2008-10-01 | 359.36 |
-    //|   GOOG | 2006-02-01 | 362.62 |
-    //|   GOOG | 2006-05-01 | 371.82 |
-    //|   GOOG | 2005-10-01 | 372.14 |
-    //|   GOOG | 2006-08-01 | 378.53 |
-    //|   GOOG | 2006-07-01 | 386.60 |
-    //|   GOOG | 2006-03-01 | 390.00 |
-    //|   GOOG | 2009-04-01 | 395.97 |
-    //|   GOOG | 2008-09-01 | 400.52 |
-    //|   GOOG | 2006-09-01 | 401.90 |
-    //|   GOOG | 2005-11-01 | 404.91 |
-    //|   GOOG | 2005-12-01 | 414.86 |
-    //|   GOOG | 2009-05-01 | 417.23 |
-    //|   GOOG | 2006-04-01 | 417.94 |
-    //|   GOOG | 2006-06-01 | 419.33 |
-    //|   GOOG | 2009-06-01 | 421.59 |
-    //|   GOOG | 2006-01-01 | 432.66 |
-    //|   GOOG | 2008-03-01 | 440.47 |
-    //|   GOOG | 2009-07-01 | 443.05 |
-    //|   GOOG | 2007-02-01 | 449.45 |
-    //|   GOOG | 2007-03-01 | 458.16 |
-    //|   GOOG | 2006-12-01 | 460.48 |
-    //|   GOOG | 2009-08-01 | 461.67 |
-    //|   GOOG | 2008-08-01 | 463.29 |
-    //|   GOOG | 2008-02-01 | 471.18 |
-    //|   GOOG | 2007-04-01 | 471.38 |
-    //|   GOOG | 2008-07-01 | 473.75 |
-    //|   GOOG | 2006-10-01 | 476.39 |
-    //|   GOOG | 2006-11-01 | 484.81 |
-    //|   GOOG | 2009-09-01 | 495.85 |
-    //|   GOOG | 2007-05-01 | 497.91 |
-    //|   GOOG | 2007-01-01 | 501.50 |
-    //|   GOOG | 2007-07-01 | 510.00 |
-    //|   GOOG | 2007-08-01 | 515.25 |
-    //|   GOOG | 2007-06-01 | 522.70 |
-    //|   GOOG | 2008-06-01 | 526.42 |
-    //|   GOOG | 2010-02-01 | 526.80 |
-    //|   GOOG | 2010-01-01 | 529.94 |
-    //|   GOOG | 2009-10-01 | 536.12 |
-    //|   GOOG | 2010-03-01 | 560.19 |
-    //|   GOOG | 2008-01-01 | 564.30 |
-    //|   GOOG | 2007-09-01 | 567.27 |
-    //|   GOOG | 2008-04-01 | 574.29 |
-    //|   GOOG | 2009-11-01 | 583.00 |
-    //|   GOOG | 2008-05-01 | 585.80 |
-    //|   GOOG | 2009-12-01 | 619.98 |
-    //|   GOOG | 2007-12-01 | 691.48 |
-    //|   GOOG | 2007-11-01 | 693.00 |
-    //|   GOOG | 2007-10-01 | 707.00 |
-
     Map targetPrices = makeDataset(hashmap("price", new Double[] { 200.0, 300.0, 400.0 }));
 
-    println(leftJoinAsof("price", targetPrices, googPrices, hashmap(kw("asof-op"), kw("<="))));
+    println(leftJoinAsof("price", targetPrices, goog, hashmap(kw("asof-op"), kw("<="))));
     //asof-<= [3 4]:
     //| price | symbol |       date | GOOG.price |
     //|------:|--------|------------|-----------:|
     //| 200.0 |   GOOG | 2005-04-01 |     220.00 |
     //| 300.0 |   GOOG | 2008-12-01 |     307.65 |
     //| 400.0 |   GOOG | 2008-09-01 |     400.52 |
-    println(leftJoinAsof("price", targetPrices, googPrices, hashmap(kw("asof-op"), kw(">"))));
+    println(leftJoinAsof("price", targetPrices, goog, hashmap(kw("asof-op"), kw(">"))));
     //asof-> [3 4]:
     //| price | symbol |       date | GOOG.price |
     //|------:|--------|------------|-----------:|
@@ -647,6 +589,43 @@ public class TMDDemo {
     //|    168.0 |        139.0 |      25.0 |         211.0 |         0 |     246.0 | 13875.0 |         76.0 |    112.0 |    2021-01 |
     //|    658.0 |        607.0 |     384.0 |         745.0 |         0 |     825.0 | 60848.0 |        486.0 |    561.0 |    2020-12 |
     //|    628.0 |        581.0 |     422.0 |         693.0 |         0 |     802.0 | 58148.0 |        468.0 |    539.0 |    2020-11 |
+
+
+    //Let's do a quick file size comparison of the original simulation dataset.
+    //We have four columns, placement simulation startdate enddate.  We know, however,
+    //that placement and simulation will fit into byte data as they are integers 0-49 and 0-99,
+    //respectively.  So let's start there.
+    Map simds = (Map)assoc(srcds,
+			   //These are checked casts.
+			   "simulation", makeContainer(kw("uint8"), srcds.get("simulation")),
+			   "placement", makeContainer(kw("uint8"), srcds.get("placement")));
+    writeDataset(simds, "simulation.csv.gz");
+    Arrow.datasetToStream(simds, "simulation.arrow-ipc", null);
+    Arrow.datasetToStream(simds, "simulation-compressed.arrow-ipc", hashmap(kw("compression"), kw("zstd")));
+    Parquet.datasetToParquet(simds, "simulation.parquet", null);
+
+
+    IFn fileLen = new IFnDef() {
+	public Object invoke(Object fname) {
+	  return new java.io.File(str(fname)).length();
+	}
+      };
+    println(makeDataset(vector(hashmap("file-type", "gzipped csv",
+				       "length", fileLen.invoke("simulation.csv.gz")),
+			       hashmap("file-type", "arrow ipc",
+				       "length", fileLen.invoke("simulation.arrow-ipc")),
+			       hashmap("file-type", "arrow ipc-compressed",
+				       "length", fileLen.invoke("simulation-compressed.arrow-ipc")),
+			       hashmap("file-type", "parquet",
+				       "length", fileLen.invoke("simulation.parquet")))));
+    //_unnamed [4 2]:
+
+    //|            file-type |   length |
+    //|----------------------|---------:|
+    //|          gzipped csv |  5748193 |
+    //|            arrow ipc | 10500800 |
+    //| arrow ipc-compressed |  3900904 |
+    //|              parquet |  3396375 |
 
 
     // If we load clojure.core.async - which neanderthal does - or we use

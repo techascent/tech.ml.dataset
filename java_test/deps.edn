@@ -1,8 +1,7 @@
 {:paths ["classes"
-         ;;Logback is on the classpath so we can minimize obnoxious logging
+         ;;Parquet logging is just over the top.  We eliminate a lot of noise here.
          "logback"]
- :deps {cnuernber/dtype-next {:mvn/version "9.005"}
-        techascent/tech.ml.dataset {:mvn/version "6.054-SNAPSHOT"
+ :deps {techascent/tech.ml.dataset {:mvn/version "6.056"
 
                                     ;;smile has bindings to slf4j that error out with an
                                     ;;exception if there is no logging backend so I
