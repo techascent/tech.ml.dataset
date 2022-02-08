@@ -705,7 +705,10 @@ _unnamed [4 5]:
 
 (def ^{:tag 'long} major-version tech.v3.dataset-api/major-version)
 (defn mapseq-reader
-  "Return a reader that produces a map of column-name->column-value"
+  "Return a reader that produces a map of column-name->column-value
+  upon read."
+  (^{:tag tech.v3.datatype.Buffer} [dataset options]
+  (tech.v3.dataset.readers/mapseq-reader dataset options))
   (^{:tag tech.v3.datatype.Buffer} [dataset]
   (tech.v3.dataset.readers/mapseq-reader dataset)))
 
@@ -1037,8 +1040,14 @@ user>
 
 
 (defn rows
-  "Get the rows of the dataset as a list of flyweight maps.  This is a shorter form
-  of `mapseq-reader`.
+  "Get the rows of the dataset as a list of potentially flyweight maps.
+
+  Options:
+
+  * copying? - When true the data is copied out of the dataset row by row upon read of that
+  row.  When false the data is only referenced upon each read of a particular key.  Copying
+  is appropriate if you want to use the row values as keys a map and it is inappropriate if
+  you are only going to read a given key for a given row once.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
@@ -1058,6 +1067,8 @@ user> (take 5 (ds/rows stocks))
   \"symbol\" \"MSFT\",
   \"price\" 25.45})
 ```"
+  (^{:tag tech.v3.datatype.Buffer} [ds options]
+  (tech.v3.dataset-api/rows ds options))
   (^{:tag tech.v3.datatype.Buffer} [ds]
   (tech.v3.dataset-api/rows ds)))
 
@@ -1077,7 +1088,14 @@ user> (ds/rowvec-at stocks -1)
 
 
 (defn rowvecs
-  "Return a randomly addressable list of rows in persisent vector-like form.
+  "Return a randomly addressable list of rows in persistent vector-like form.
+
+  Options:
+
+  * copying? - When true the data is copied out of the dataset row by row upon read of that
+  row.  When false the data is only referenced upon each read of a particular key.  Copying
+  is appropriate if you want to use the row values as keys a map and it is inappropriate if
+  you are only going to read a given key for a given row once.
 
 ```clojure
 user> (take 5 (ds/rowvecs stocks))
@@ -1399,8 +1417,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
 (defn value-reader
   "Return a reader that produces a reader of column values per index.
   Options:
-  :missing-nil? - Default to true - Substitute nil in for missing values to make
-    missing value detection downstream to be column datatype independent."
+  :copying? - Default to false - When true row values are copied on read."
   (^{:tag tech.v3.datatype.Buffer} [dataset options]
   (tech.v3.dataset.readers/value-reader dataset options))
   (^{:tag tech.v3.datatype.Buffer} [dataset]

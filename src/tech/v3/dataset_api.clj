@@ -106,8 +106,14 @@
 
 
 (defn rows
-  "Get the rows of the dataset as a list of flyweight maps.  This is a shorter form
-  of `mapseq-reader`.
+  "Get the rows of the dataset as a list of potentially flyweight maps.
+
+  Options:
+
+  * copying? - When true the data is copied out of the dataset row by row upon read of that
+  row.  When false the data is only referenced upon each read of a particular key.  Copying
+  is appropriate if you want to use the row values as keys a map and it is inappropriate if
+  you are only going to read a given key for a given row once.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
@@ -127,8 +133,10 @@ user> (take 5 (ds/rows stocks))
   \"symbol\" \"MSFT\",
   \"price\" 25.45})
 ```"
-  ^Buffer [ds]
-  (mapseq-reader ds))
+  (^Buffer [ds options]
+   (mapseq-reader ds options))
+  (^Buffer [ds]
+   (mapseq-reader ds)))
 
 
 (defn row-at
@@ -150,7 +158,14 @@ user> (ds/row-at stocks -1)
 
 
 (defn rowvecs
-  "Return a randomly addressable list of rows in persisent vector-like form.
+  "Return a randomly addressable list of rows in persistent vector-like form.
+
+  Options:
+
+  * copying? - When true the data is copied out of the dataset row by row upon read of that
+  row.  When false the data is only referenced upon each read of a particular key.  Copying
+  is appropriate if you want to use the row values as keys a map and it is inappropriate if
+  you are only going to read a given key for a given row once.
 
 ```clojure
 user> (take 5 (ds/rowvecs stocks))

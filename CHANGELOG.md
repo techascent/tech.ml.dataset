@@ -1,4 +1,9 @@
 # Changelog
+## 6.058
+ * Upgrade datatype to provide faster map/vector constructors.
+ * Upgrade rowvecs pathway so the copying option is considerably faster for dataset
+   of columns or less.
+
 ## 6.057
  * Typed out faststruct's constructor.
 

@@ -2,7 +2,7 @@ package tech.v3.dataset;
 
 
 import clojure.lang.PersistentStructMap;
-import clojure.lang.PersistentHashMap;
+import clojure.lang.PersistentArrayMap;
 import clojure.lang.APersistentMap;
 import clojure.lang.IPersistentMap;
 import clojure.lang.IPersistentCollection;
@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.function.Function;
 import tech.v3.datatype.IFnDef;
+import com.google.common.collect.Iterables;
 
 
 
@@ -44,8 +45,8 @@ public class FastStruct extends APersistentMap implements IObj{
   }
 
   public FastStruct(Map _slots, List _vals) {
-    this( PersistentHashMap.EMPTY, _slots, _vals,
-	  PersistentHashMap.EMPTY);
+    this( PersistentArrayMap.EMPTY, _slots, _vals,
+	  PersistentArrayMap.EMPTY);
   }
 
   public int columnIndex(Object key) throws Exception {
@@ -127,20 +128,28 @@ public class FastStruct extends APersistentMap implements IObj{
       private Iterator ks = slots.entrySet().iterator();
       private Iterator extIter = ext == null ? null : ext.iterator();
       public boolean hasNext(){
-	return (ks != null && ks.hasNext() || (extIter != null && extIter.hasNext()));
+	if (ks != null) {
+	  if (ks.hasNext())
+	    return true;
+	  ks = null;
+	}
+	if (extIter != null) {
+	  if (extIter.hasNext()) {
+	    return true;
+	  }
+	  extIter = null;
+	}
+	return false;
       }
 
       public Object next(){
 	if(ks != null) {
 	  Map.Entry data = (Map.Entry) ks.next();
-	  ks = ks.hasNext() ? ks : null;
 	  int valIdx = RT.uncheckedIntCast(data.getValue());
 	  return new MapEntry( data.getKey(), vals.get(valIdx));
 	}
-	else if(extIter != null && extIter.hasNext()) {
-	  Object data = extIter.next();
-	  extIter = extIter.hasNext() ? extIter : null;
-	  return data;
+	else if (extIter != null) {
+	  return extIter.next();
 	}
 	else
 	  throw new NoSuchElementException();
