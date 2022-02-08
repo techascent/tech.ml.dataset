@@ -1,11 +1,17 @@
 (ns tech.v3.dataset.math
   "Various mathematic transformations of datasets such as building correlation tables,
   pca, and normalizing columns to have mean of 0 and variance of 1. In order to use pca
-  you need to add either latest javacpp openblas support or smile mkl support to your
-  project:
+  you need to add preferrablye neanderthal or either latest javacpp openblas support or
+  smile mkl support to your project:
 
 ```clojure
-[uncomplicate/neanderthal \"0.43.3\"]
+  ;;preferrably
+  [uncomplicate/neanderthal \"0.43.3\"]
+
+
+  ;;alternatively
+  [org.bytedeco/openblas \"0.3.10-1.5.4\"]
+  [org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
 ```"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
@@ -225,6 +231,20 @@
 
 (defrecord PCATransform [means eigenvalues eigenvectors n-components result-datatype])
 
+(def ^:private neanderthal-fns*
+  (delay
+    (try
+      {:fit-pca (requiring-resolve 'tech.v3.dataset.neanderthal/fit-pca!)
+       :transform-pca (requiring-resolve 'tech.v3.dataset.neanderthal/transform-pca!)}
+      (catch Exception e
+        (log/debugf "Neanderthal loading failed: %s" (str e))
+        {}))))
+
+
+(defn neanderthal-enabled?
+  []
+  (empty? @neanderthal-fns*))
+
 
 (defn fit-pca
   "Run PCA on the dataset.  Dataset must not have missing values
@@ -262,8 +282,9 @@
     (== 0 (dtype/ecount (ds-base/missing dataset)))
     "Cannot pca a dataset with missing entries.  See replace-missing.")
    (let [result-datatype :float64
+         fit-pca! (or (@neanderthal-fns* :fit-pca) ds-tens/fit-pca-smile!)
          {:keys [eigenvalues] :as pca-result}
-         (ds-tens/fit-pca-neanderthal! (ds-tens/dataset->tensor dataset :float64) options)
+         (fit-pca! (ds-tens/dataset->tensor dataset :float64) options)
          ;;The eigenvalues are the variance.
          variance-amount (double variance-amount)
          ;;We know the eigenvalues are sorted from greatest to least
@@ -293,10 +314,11 @@
   "PCA transform the dataset returning a new dataset.  The method used to generate the pca information
   is indicated in the metadata of the dataset."
   [dataset {:keys [n-components result-datatype] :as pca-transform}]
-  (-> (ds-tens/dataset->tensor dataset result-datatype)
-      (ds-tens/transform-pca-neanderthal! pca-transform n-components)
-      (ds-tens/tensor->dataset dataset :pca-result)
-      (vary-meta assoc :pca-method (:method pca-transform))))
+  (let [transform-pca! (or (@neanderthal-fns* :transform-pca) ds-tens/transform-pca-smile!)]
+    (-> (ds-tens/dataset->tensor dataset result-datatype)
+        (transform-pca! pca-transform n-components)
+        (ds-tens/tensor->dataset dataset :pca-result)
+        (vary-meta assoc :pca-method (:method pca-transform)))))
 
 
 (extend-type PCATransform

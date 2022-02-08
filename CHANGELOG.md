@@ -1,4 +1,10 @@
 # Changelog
+## 6.060
+ * Neanderthal is preferred but is not a required dependency.
+
+## 6.059
+ * Lazily load neanderthal specifically for PCA when necessary.
+ 
 ## 6.058
  * Upgrade datatype to provide faster map/vector constructors.
  * Upgrade rowvecs pathway so the copying option is considerably faster for dataset
