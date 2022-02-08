@@ -466,7 +466,8 @@ public class TMDDemo {
     //Here is a somewhat advanced example.  We have a dataset composed of events where each
     //row has a start,end date.  We want to tally information based the days per a given month
     //that the event happened which means we need to expand the dataset into days then reduce
-    //it to tally over months.
+    //it to tally over months.  Finally we do another crosswise summation to pull out statistics
+    //based on row information in the dataset.
     int nSims = 100;
     int nPlacements = 50;
     int nExpansion = 20;
@@ -495,7 +496,7 @@ public class TMDDemo {
 
 
     //We are going to be creating a lot of these.
-    Function<List,Map> mapConstructor = FastStruct.createFactory(vector("year-month", "count"));
+    IFn mapFact = mapFactory(vector("year-month", "count"));
     //We want to produce map of yearmonth to day counts.
     BiFunction<YearMonth,Long,Long> incrementor = new BiFunction<YearMonth,Long,Long>() {
 	public Long apply(YearMonth k, Long v) {
@@ -523,7 +524,7 @@ public class TMDDemo {
 	  ArrayList<Map> retval = new ArrayList<Map>(tally.size());
 	  tally.forEach(new BiConsumer<YearMonth,Long>() {
 	      public void accept(YearMonth k, Long v) {
-		retval.add(mapConstructor.apply(vector(k,v)));
+		retval.add((Map)mapFact.invoke(k, v));
 	      }
 	    });
 	  return retval;
