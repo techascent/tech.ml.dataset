@@ -1452,6 +1452,15 @@
              (vec)))))
 
 
+(deftest construct-with-hashmap
+  (let [hm (doto (java.util.HashMap.)
+             (.put :a 1)
+             (.put :b 2))
+        ds (ds/->dataset [hm hm hm])]
+    (is (= (vector 1 1 1)
+           (vec (ds :a))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

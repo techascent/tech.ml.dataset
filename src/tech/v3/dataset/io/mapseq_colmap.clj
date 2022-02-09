@@ -8,7 +8,7 @@
             [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.dataset.impl.dataset :as ds-impl])
-  (:import [java.util HashMap Map$Entry]
+  (:import [java.util HashMap Map$Entry Map]
            [java.util.function Function]))
 
 
@@ -33,10 +33,12 @@
                        row-idx 0]
                   (if continue?
                     (do
-                      (when-let [row (.next iter)]
+                      (when-let [^Map row (.next iter)]
                         (pfor/doiter
-                         cell row
-                         (let [[k v] cell
+                         cell (.entrySet row)
+                         (let [^Map$Entry cell cell
+                               k (.getKey cell)
+                               v (.getValue cell)
                                parser (colname->parser k)]
                            (column-parsers/add-value! parser row-idx v))))
                       (recur (.hasNext iter)
