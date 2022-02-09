@@ -1,4 +1,7 @@
 # Changelog
+# 6.062
+ * Upgrade dtype-next which removed an experimental fast list creation pathway.
+
 ## 6.061
  * Construct a dataset with sequences of java.util.HashMap now works.
 

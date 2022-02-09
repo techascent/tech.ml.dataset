@@ -1,6 +1,5 @@
 (ns ^:no-doc tech.v3.dataset.readers
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.imlist :refer [imlist]]
             [tech.v3.protocols.dataset :as ds-proto])
   (:import [tech.v3.datatype ObjectReader Buffer ListPersistentVector]
            [tech.v3.dataset FastStruct]
@@ -28,35 +27,35 @@
          n-cols (long (first (dtype/shape dataset)))
          copying? (boolean (get options :copying?))]
      ;;we have a fast vector constructor in this case
-     (if (and copying? (< n-cols 6))
+     (if (and copying? (< n-cols 7))
        (case n-cols
          0 (reify ObjectReader
              (lsize [rdr] n-rows)
-             (readObject [rdr row-idx] (imlist)))
+             (readObject [rdr row-idx] []))
          1 (let [c0 (.get readers 0)]
              (reify ObjectReader
                (lsize [rdr] n-rows)
-               (readObject [rdr row-idx] (imlist (c0 row-idx)))))
+               (readObject [rdr row-idx] [(c0 row-idx)])))
          2 (let [c0 (.get readers 0)
                  c1 (.get readers 1)]
              (reify ObjectReader
                (lsize [rdr] n-rows)
-               (readObject [rdr row-idx] (imlist (c0 row-idx) (c1 row-idx)))))
+               (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)])))
          3 (let [c0 (.get readers 0)
                  c1 (.get readers 1)
                  c2 (.get readers 2)]
              (reify ObjectReader
                (lsize [rdr] n-rows)
-               (readObject [rdr row-idx] (imlist (c0 row-idx) (c1 row-idx)
-                                                 (c2 row-idx)))))
+               (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                          (c2 row-idx)])))
          4 (let [c0 (.get readers 0)
                  c1 (.get readers 1)
                  c2 (.get readers 2)
                  c3 (.get readers 3)]
              (reify ObjectReader
                (lsize [rdr] n-rows)
-               (readObject [rdr row-idx] (imlist (c0 row-idx) (c1 row-idx)
-                                                 (c2 row-idx) (c3 row-idx)))))
+               (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                          (c2 row-idx) (c3 row-idx)])))
          5 (let [c0 (.get readers 0)
                  c1 (.get readers 1)
                  c2 (.get readers 2)
@@ -64,9 +63,20 @@
                  c4 (.get readers 4)]
              (reify ObjectReader
                (lsize [rdr] n-rows)
-               (readObject [rdr row-idx] (imlist (c0 row-idx) (c1 row-idx)
-                                                 (c2 row-idx) (c3 row-idx)
-                                                 (c4 row-idx))))))
+               (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                          (c2 row-idx) (c3 row-idx)
+                                          (c4 row-idx)])))
+         6 (let [c0 (.get readers 0)
+                 c1 (.get readers 1)
+                 c2 (.get readers 2)
+                 c3 (.get readers 3)
+                 c4 (.get readers 4)
+                 c5 (.get readers 5)]
+             (reify ObjectReader
+               (lsize [rdr] n-rows)
+               (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                          (c2 row-idx) (c3 row-idx)
+                                          (c4 row-idx) (c5 row-idx)]))))
        (if copying?
          (reify ObjectReader
            (lsize [rdr] n-rows)
