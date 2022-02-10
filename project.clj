@@ -1,10 +1,10 @@
-(defproject techascent/tech.ml.dataset "6.063-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.063"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "9.006"]
+                 [cnuernber/dtype-next             "9.009"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -76,6 +76,14 @@
                              [com.cnuernber/codox "1.001"]]
               :codox {:project {:name "tech.ml.dataset"}
                       :metadata {:doc/format :markdown}
+                      :google-analytics "G-RGTB4J7LGP"
+                      :html {:transforms [[:head] [:append [:script {:async true
+                                                                     :src "https://www.googletagmanager.com/gtag/js?id=G-RGTB4J7LGP"}]]
+                                          [:head] [:append [:script "window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-RGTB4J7LGP');"]]]}
                       :themes [:rdash]
                       :source-paths ["src"]
                       :output-path "docs"
