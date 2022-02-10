@@ -7,6 +7,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.jvm-map :as jvm-map]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
+            [tech.v3.parallel.for :as pfor]
             [clojure.test :refer [deftest is]])
   (:import [tech.v3.datatype UnaryPredicate]
            [java.time LocalDate YearMonth]
@@ -231,6 +232,63 @@
          :count            (ds-reduce/sum :count)})))
 
 
+(defn- tally-days-columnwise
+  [ds]
+  (let [starts (dtype/->buffer (ds :start))
+        ends (dtype/->buffer (ds :end))
+        indexes (dtype/make-list :int64)
+        year-months (dtype/make-list :object) ;;ArrayList works fine here also.
+        counts (dtype/make-list :int32)
+        n-rows (.lsize starts)
+        incrementor (jvm-map/bi-function k v
+                                         (if v
+                                           (unchecked-inc (long v))
+                                           1))]
+    ;;Loop through dataset and append results columnwise.
+    (dotimes [row-idx n-rows]
+      (let [^LocalDate start (starts row-idx)
+            ^LocalDate end (ends row-idx)
+            nd (.until start end java.time.temporal.ChronoUnit/DAYS)
+            tally (jvm-map/hash-map)]
+        (dotimes [day-idx nd]
+          (let [ym (YearMonth/from (.plusDays start day-idx))]
+            (jvm-map/compute! tally ym incrementor)))
+        (pfor/doiter
+         kv (.entrySet tally)
+         (let [^java.util.Map$Entry kv kv]
+           (.addLong indexes row-idx)
+           (.add year-months (.getKey kv))
+           (.add counts (.getValue kv))))))
+    (-> (ds/select-rows ds indexes)
+        (assoc :year-month year-months
+               :count counts))))
+
+
+(defn- otfrom-columnwise-pathway
+  [ds]
+  (->> (ds/pmap-ds ds tally-days-columnwise
+                      ;;generate a sequence of datasets
+                      {:result-type :as-seq})
+       ;;sequence of datasets
+       (ds-reduce/group-by-column-agg
+        [:simulation :placement :year-month]
+        {:count (ds-reduce/sum :count)})
+       ;;single dataset - do joins and such here
+       (#(let [ds %
+               count (ds :count)]
+           ;;return a sequence of datasets for next step
+           [(assoc ds :count2 (dfn/sq count))]))
+       (ds-reduce/group-by-column-agg
+        [:placement :year-month]
+        {:min-count        (ds-reduce/prob-quantile :count 0.0)
+         :low-95-count     (ds-reduce/prob-quantile :count 0.05)
+         :q1-count         (ds-reduce/prob-quantile :count 0.25)
+         :median-count     (ds-reduce/prob-quantile :count 0.50)
+         :q3-count         (ds-reduce/prob-quantile :count 0.75)
+         :high-95-count    (ds-reduce/prob-quantile :count 0.95)
+         :max-count        (ds-reduce/prob-quantile :count 1.0)
+         :count            (ds-reduce/sum :count)})))
+
 
 (deftest otfrom-pathway-test
   (let [ds (create-otfrom-init-dataset)
@@ -238,10 +296,17 @@
         end (ds :end)
         total-count (->> (dtype/emap #(dtype-dt/between %1 %2 :days) :int64 start end)
                          (dfn/sum))
+        ;;warmup
+        _ (do (otfrom-pathway ds)
+              (otfrom-columnwise-pathway ds))
         _ (println "otfrom pathway timing")
         ofds (time (otfrom-pathway ds))
-        ofsum (dfn/sum (ofds :count))]
-    (is (= ofsum total-count))))
+        _ (println "otfrom columnwise pathway timing")
+        of-cwise-ds (time (otfrom-columnwise-pathway ds))
+        ofsum (dfn/sum (ofds :count))
+        of-cwise-sum (dfn/sum (of-cwise-ds :count))]
+    (is (= ofsum total-count))
+    (is (= of-cwise-sum total-count))))
 
 
 (comment
