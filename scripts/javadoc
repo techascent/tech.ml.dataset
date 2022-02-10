@@ -9,4 +9,8 @@ fi
 
 javadoc -sourcepath java_public_api -d docs/javadoc -Xdoclint:none -classpath "$(lein classpath):$(pwd)/target/classes" \
 	-doclet ch.raffael.mddoclet.MarkdownDoclet -docletpath markdown-doclet/markdown-doclet-1.4-all.jar \
+	-doctitle "tech.ml.dataset Documentation"\
+	-windowtitle "tech.ml.dataset Documentation"\
+	--allow-script-in-comments\
+	-header "<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-RGTB4J7LGP\"</script><script>window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', 'G-RGTB4J7LGP');"\
 	tech.v3 tech.v3.dataset tech.v3.libs
