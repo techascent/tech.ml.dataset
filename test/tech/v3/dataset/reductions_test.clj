@@ -236,20 +236,22 @@
   [ds]
   (let [starts (dtype/->buffer (ds :start))
         ends (dtype/->buffer (ds :end))
-        indexes (dtype/make-list :int64)
-        year-months (dtype/make-list :object) ;;ArrayList works fine here also.
-        counts (dtype/make-list :int32)
         n-rows (.lsize starts)
+        indexes (dtype/prealloc-list :int64 n-rows)
+        year-months (dtype/prealloc-list :object n-rows) ;;ArrayList works fine here also.
+        counts (dtype/prealloc-list :int32 n-rows)
         incrementor (jvm-map/bi-function k v
                                          (if v
                                            (unchecked-inc (long v))
-                                           1))]
+                                           1))
+        tally (jvm-map/hash-map)]
     ;;Loop through dataset and append results columnwise.
     (dotimes [row-idx n-rows]
+      ;;minimize hashtable resize operations
+      (.clear tally)
       (let [^LocalDate start (starts row-idx)
             ^LocalDate end (ends row-idx)
-            nd (.until start end java.time.temporal.ChronoUnit/DAYS)
-            tally (jvm-map/hash-map)]
+            nd (.until start end java.time.temporal.ChronoUnit/DAYS)]
         (dotimes [day-idx nd]
           (let [ym (YearMonth/from (.plusDays start day-idx))]
             (jvm-map/compute! tally ym incrementor)))
