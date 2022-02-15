@@ -291,36 +291,13 @@ https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5
 ;;There is much more.  Please checkout the walkthough and try it out!
 ```
 
-### Arrow Dependencies
+### Arrow Support
 
-```clojure
-;; project-clj -
-
-;;Unsafe works with graal native
-[org.apache.arrow/arrow-memory-unsafe "2.0.0"]
-[org.apache.arrow/arrow-memory-core "2.0.0"]
-[org.apache.arrow/arrow-vector "2.0.0" :exclusions [commons-codec]]
-
-;;require -
-(require '[tech.v3.libs.arrow])
-```
+JDK-17, compression and memory mapping are supported - [Arrow api](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).
 
 ### Parquet Support
 
-Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.
-That means we should be able to load most Parquet files and support their full range of datatypes.
-
-
-#### Parquet Dependencies
-
-```clojure
-;;namespace needs to be required for parquet support
-(require '[tech.v3.libs.parquet])
-
-;;Also works with 1.10.X
-org.apache.parquet/parquet-hadoop {:mvn/version "1.11.0"}
-org.apache.hadoop/hadoop-common {:mvn/version "3.1.1"}
-```
+Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.  That means we should be able to load most Parquet files and support their full range of datatypes.
 
 
 ## More Documentation
