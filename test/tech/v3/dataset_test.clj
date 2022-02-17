@@ -1428,6 +1428,24 @@
                                                :column-name :a}
                                           {:b-mean (ds-roll/mean :b)}))]
     (is (dfn/equals [4.5 5.5 6.5 7.5 8.5] (vec (small-win :b-mean))))
+    (is (dfn/equals [0.0 0.5 1.0 1.5 2.0]
+                    (-> (ds-roll/rolling ds {:window-type :variable
+                                             :window-size 10
+                                             :column-name :a
+                                             :relative-window-position :left}
+                                         {:b-mean (ds-roll/mean :b)})
+                        (ds/head)
+                        (ds/column :b-mean)
+                        (vec))))
+    (is (dfn/equals [2.0 2.5 3.0 3.5 4.0]
+                    (-> (ds-roll/rolling ds {:window-type :variable
+                                             :window-size 10
+                                             :column-name :a
+                                             :relative-window-position :center}
+                                         {:b-mean (ds-roll/mean :b)})
+                        (ds/head)
+                        (ds/column :b-mean)
+                        (vec))))
     (is (dfn/equals [9.5 10.5 11.5 12.5 13.5] (vec (big-win :b-mean))))))
 
 

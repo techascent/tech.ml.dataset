@@ -124,9 +124,9 @@
     - `:window-size` - for fixed window operation must be a positive integer.  For
        variable window operations must be a double value which is produced via a
        comparison function.
-    - `:relative-window-position` - for fixed windows describes where the window is
+    - `:relative-window-position` - describes where the window is
        positioned.  Operations are `:left`, `:center`, `:right` and defaults to
-       `:center`.
+       `:center` for fixed and `:right` for relative window types.
     - `:edge-mode` - for fixed windows describes what values to fill in at the edges
        of the source column.  Options are `:zero` which is 0 for numeric types and `nil`
        for object types and `:clamp` which fills in the first,last values of the column
@@ -297,7 +297,8 @@ test/data/stocks.csv [5 6]:
                         (dtype-dt-ops/between-op
                          (dtype/elemwise-datatype src-col)
                          (:units window-data :milliseconds)
-                         true)))}))))]
+                         true)))
+                    :relative-window-position (get window-data :relative-window-position)}))))]
      (apply-window-ranges ds windows reducer-map (:edge-mode window-data :clamp))))
   ([ds window reducer-map]
    (rolling ds window reducer-map nil)))

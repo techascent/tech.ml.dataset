@@ -1,4 +1,10 @@
 # Changelog
+# 6.064
+ * upgrade dtype-next to eliminate some superfluous logging and to enable
+   window positioning on variable rolling windows.
+ * Removed neanderthal as a required dependency.  IT is now lazily loaded upon call
+   of PCA.
+
 # 6.062
  * Upgrade dtype-next which removed an experimental fast list creation pathway.
 
