@@ -6,6 +6,7 @@
             [tech.v3.dataset.math :as ds-math]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
+            [taoensso.nippy :as nippy]
             [clojure.set :as c-set]
             [clojure.pprint :as pp]
             [clojure.data :as data]
@@ -412,3 +413,12 @@
                 first
                 second
                 count)))))
+
+
+(deftest nippyfreezethaw
+  (let [ds (ds/select-columns src-ds ["LotFrontage"])
+        col (ds "LotFrontage")
+        data (ds/dataset->data ds)
+        thawed (ds/data->dataset data)]
+    (is (= (ds/row-count ds)
+           (count (mapv #(into [] %) (ds/rowvecs thawed)))))))

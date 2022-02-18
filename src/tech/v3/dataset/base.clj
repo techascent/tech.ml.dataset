@@ -944,9 +944,9 @@
   The reverse operation is data->column."
   [col]
   (let [metadata (meta col)
-        col (packing/pack col)
-        dtype (dtype/elemwise-datatype col)]
-    {:metadata metadata
+        coldata (packing/pack (.buffer ^Column col))
+        dtype (dtype/elemwise-datatype coldata)]
+    {:metadata (assoc metadata :datatype dtype)
      :missing (dtype/->array
                (bitmap/bitmap->efficient-random-access-reader
                 (ds-col/missing col)))
@@ -963,7 +963,7 @@
              (vec col)
              ;;Store the data as a jvm-native array
              :else
-             (dtype-cmc/->array dtype col))}))
+             (dtype-cmc/->array dtype coldata))}))
 
 
 (defn dataset->data
