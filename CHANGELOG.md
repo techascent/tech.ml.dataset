@@ -1,4 +1,8 @@
 # Changelog
+# 6.065
+ * Fixing [issue 287](https://github.com/techascent/tech.ml.dataset/issues/287) - dataset corrupt after
+   nippy serialization.  This had of course nothing to do with nippy but was caused by a bug in
+   dataset->data pathway.
 # 6.064
  * upgrade dtype-next to eliminate some superfluous logging and to enable
    window positioning on variable rolling windows.

@@ -416,8 +416,7 @@
 
 
 (deftest nippyfreezethaw
-  (let [ds (ds/select-columns src-ds ["LotFrontage"])
-        col (ds "LotFrontage")
+  (let [ds src-ds
         data (ds/dataset->data ds)
         thawed (ds/data->dataset data)]
     (is (= (ds/row-count ds)
