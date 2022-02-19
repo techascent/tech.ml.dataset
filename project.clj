@@ -64,7 +64,7 @@
                              [http-kit "2.3.0"]
                              [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
               :source-paths ["src"]
-              :resource-paths ["dev-resources"]
+              :resource-paths ["dev-resources" "libs"]
               :test-paths ["test" "neanderthal"]}
              :jdk-17 {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
                                  "--enable-native-access=ALL-UNNAMED"]}

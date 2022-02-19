@@ -14,27 +14,40 @@
 
 (tech.v3.dataset.utils/set-slf4j-log-level :info)
 
+
 (defn supported-datatype-ds
-  []
-  (-> (ds/->dataset {:boolean [true false true true false false true false false true]
-                     :bytes (byte-array (range 10))
-                     :ubytes (dtype/make-container :uint8 (range 10))
-                     :shorts (short-array (range 10))
-                     :ushorts (dtype/make-container :uint16 (range 10))
-                     :ints (int-array (range 10))
-                     :uints (dtype/make-container :uint32 (range 10))
-                     :longs (long-array (range 10))
-                     :floats (float-array (range 10))
-                     :doubles (double-array (range 10))
-                     :strings (map str (range 10))
-                     :text (map (comp #(Text. %) str) (range 10))
-                     :instants (repeatedly 10 dtype-dt/instant)
-                     ;;external formats often don't support dash-case
-                     :local_dates (repeatedly 10 dtype-dt/local-date)
-                     :local_times (repeatedly 10 dtype-dt/local-time)})
-      (vary-meta assoc
-                 :primary-key :longs
-                 :name :testtable)))
+  ([n]
+   (-> (ds/->dataset {:boolean [true false true true false false true false false true]
+                      :bytes (byte-array (range n))
+                      :ubytes (dtype/make-container :uint8 (dfn/rem (range n) 256))
+                      :shorts (short-array (range n))
+                      :ushorts (dtype/make-container :uint16 (range n))
+                      :ints (int-array (range n))
+                      :uints (dtype/make-container :uint32 (range n))
+                      :longs (long-array (range n))
+                      :floats (float-array (range n))
+                      :doubles (double-array (range n))
+                      :strings (map str (range n))
+                      :text (map (comp #(Text. %) str) (range n))
+                      :instants (repeatedly n dtype-dt/instant)
+                      ;;external formats often don't support dash-case
+                      :local_dates (repeatedly n dtype-dt/local-date)
+                      :local_times (repeatedly n dtype-dt/local-time)
+                      })
+       (vary-meta assoc :name :testtable)))
+  ([]
+   (supported-datatype-ds 10)))
+
+
+
+(comment
+  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc")
+
+  (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc"))
+
+  )
+
+
 
 
 (deftest base-datatype-test
