@@ -92,7 +92,8 @@
             FramedLZ4CompressorOutputStream]
            [net.jpountz.lz4 LZ4Factory]
            ;;feather support
-           [java.io RandomAccessFile]
+           [java.io RandomAccessFile BufferedInputStream ByteArrayInputStream
+            ByteArrayOutputStream]
            [uk.ac.bristol.star.feather FeatherTable BufUtils
             FeatherType]
            [uk.ac.bristol.star.fbs.feather Type]
@@ -744,9 +745,12 @@
                                (.method compression)))))
   (let [decompressor (create-decompressor (.codec compression))
         buffers (mapv (fn [buffer]
-                        (let [orig-len (native-buffer/read-long buffer)]
-                          {:orig-len orig-len
-                           :buffer (dtype/sub-buffer buffer 8)}))
+                        (if (> (dtype/ecount buffer) 8)
+                          (let [orig-len (native-buffer/read-long buffer)]
+                            {:orig-len orig-len
+                             :buffer (dtype/sub-buffer buffer 8)})
+                          {:orig-len (dtype/ecount buffer)
+                           :buffer buffer}))
                       buffers)
         decomp-buf-len (->> (map :orig-len buffers)
                             (remove #(== -1 (long %)))
@@ -756,7 +760,13 @@
     (->> buffers
          (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
                    ;;-1 indicates the buffer isn't actually compressed.
-                   (if (== -1 (long orig-len))
+                   ;;And some buffers are just empty with size of 0
+                   (println orig-len (dtype/ecount buffer)
+                            (when (> (dtype/ecount buffer) 32)
+                              (-> (native-buffer/set-native-datatype buffer :int32)
+                                  (dtype/sub-buffer 0 8)
+                                  (vec))))
+                   (if (<= (long orig-len) 0)
                      [(conj res buffer) decomp-buf]
                      [(conj res (decompressor buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
                       (dtype/sub-buffer decomp-buf orig-len)]))
@@ -767,10 +777,18 @@
 (defn- read-record-batch
   ([^RecordBatch record-batch ^NativeBuffer data]
    (let [compression (.compression record-batch)
+         _ (println (->> (range (.buffersLength record-batch))
+                         (mapv #(let [buffer (.buffers record-batch %)]
+                                  (hash-map :offset (.offset buffer)
+                                            :length (.length buffer))))))
          buffers (->> (range (.buffersLength record-batch))
                       (mapv #(let [buffer (.buffers record-batch (int %))]
                                (dtype/sub-buffer data (.offset buffer)
                                                  (.length buffer)))))
+         _ (println (->> (range (.nodesLength record-batch))
+                         (mapv #(let [node (.nodes record-batch (int %))]
+                                  {:n-elems (.length node)
+                                   :n-null-entries (.nullCount node)}))))
          buffers (if compression
                    (decompress-buffers compression buffers)
                    buffers)]
@@ -1311,6 +1329,242 @@
          (ds-impl/new-dataset options))))
 
 
+(defn- bytes->short-array
+  ^shorts [^bytes data nrows]
+  (let [retval (short-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asShortBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->int-array
+  ^ints [^bytes data nrows]
+  (let [retval (int-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asIntBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->long-array
+  ^longs [^bytes data nrows]
+  (let [retval (long-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asLongBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->float-array
+  ^floats [^bytes data nrows]
+  (let [retval (float-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asFloatBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->double-array
+  ^doubles [^bytes data nrows]
+  (let [retval (double-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asDoubleBuffer)
+        (.get retval))
+    retval))
+
+
+(defn- stream->nbuf
+  ^NativeBuffer [input]
+  (if (instance? InputStream input)
+    (let [^InputStream input input
+          dlist (ArrayList.)
+          total (long (loop [data-buf (byte-array 4096)
+                             n-read (.read input data-buf (int 0) (int 4096))
+                             total 0]
+                        (if (> n-read 0)
+                          (let [new-dbuf (byte-array 4096)]
+                            (.add dlist (dtype/sub-buffer data-buf 0 n-read))
+                            (recur new-dbuf (.read input new-dbuf (int 0)
+                                                   (int 4096))
+                                   (+ total n-read)))
+                          total)))
+          nbuf (dtype/make-container :native-heap :int8 total)]
+      (.close input)
+      (dtype/coalesce! nbuf dlist)
+      nbuf)
+    (do
+      (assert (instance? NativeBuffer input))
+      input)))
+
+
+(defn feather->ds
+  [input options]
+  (let [nbuf (stream->nbuf input)]
+    (let [leng (dtype/ecount nbuf)
+          m1 (native-buffer/read-int nbuf)
+          _ (when-not (== m1 FeatherTable/MAGIC)
+              (throw (Exception. "Initial magic number not found")))
+          m2 (native-buffer/read-int nbuf (- leng 4))
+          _ (when-not (== m2 FeatherTable/MAGIC)
+              (throw (Exception. "End magic number not found")))
+          meta-len (native-buffer/read-int nbuf (- leng 8))
+          metabytes (dtype/sub-buffer nbuf (- leng 8 meta-len) meta-len)
+          ctable (CTable/getRootAsCTable (nio-buffer/as-nio-buffer metabytes))
+          ncols (.columnsLength ctable)
+          nrows (.numRows ctable)
+          version (.version ctable)
+          int-dt-types? (get options :integer-datetime-types?)]
+      (->> (range ncols)
+           (map (fn [cidx]
+                  (let [col (.columns ctable cidx)
+                        cname (.name col)
+                        primitive-ary (.values col)
+                        fea-dt (.type primitive-ary)
+                        n-missing (.nullCount primitive-ary)
+                        usermeta (.userMetadata col)
+                        data-off (.offset primitive-ary)
+                        data-len (.totalBytes primitive-ary)
+                        missing-len (if (== 0 n-missing)
+                                      0
+                                      (pad (quot (+ nrows 7) 8)))
+                        missing
+                        (if-not (== 0 n-missing)
+                          (int8-buf->missing (dtype/sub-buffer nbuf data-off missing-len)
+                                             nrows)
+                          (bitmap/->bitmap))
+                        buffers-len (- data-len missing-len)
+                        data (dtype/sub-buffer nbuf (+ data-off missing-len) buffers-len)
+                        as-native (fn ([dtype]
+                                       (-> (native-buffer/set-native-datatype data dtype)
+                                           (dtype/sub-buffer 0 nrows)))
+                                    ([dtype nrows]
+                                       (-> (native-buffer/set-native-datatype data dtype)
+                                           (dtype/sub-buffer 0 nrows))))
+                        buffer
+                        (condp = fea-dt
+                          Type/BOOL
+                          (byte-buffer->bitwise-boolean-buffer data nrows)
+                          Type/INT8
+                          (as-native :int8)
+                          Type/UINT8
+                          (as-native :uint8)
+                          Type/INT16
+                          (as-native :int16)
+                          Type/UINT16
+                          (as-native :uint16)
+                          Type/INT32
+                          (as-native :int32)
+                          Type/UINT32
+                          (as-native :uint32)
+                          Type/DATE
+                          (if int-dt-types?
+                            (as-native :epoch-days)
+                            (as-native :packed-local-date))
+                          Type/INT64
+                          (as-native :int64)
+                          Type/UINT64
+                          (as-native :uint64)
+                          Type/TIMESTAMP
+                          (as-native :epoch-milliseconds)
+                          Type/TIME
+                          (as-native :milliseconds)
+                          Type/FLOAT
+                          (as-native :float32)
+                          Type/DOUBLE
+                          (as-native :float64)
+                          Type/UTF8
+                          (offsets-data->string-reader
+                           (as-native :int32 (inc nrows))
+                           (dtype/sub-buffer data (pad (* (inc nrows) 4)))
+                           nrows)
+                          Type/LARGE_UTF8
+                          (offsets-data->string-reader
+                           (as-native :int64 (inc nrows))
+                           (dtype/sub-buffer data (* (inc nrows) 8))
+                           data nrows)
+                          Type/BINARY
+                          (offsets-data->bytedata-reader
+                           (as-native :int32 (inc nrows))
+                           (dtype/sub-buffer data (pad (* (inc nrows) 4)))
+                           nrows)
+                          Type/LARGE_BINARY
+                          (offsets-data->bytedata-reader
+                           (as-native :int64 (inc nrows))
+                           (dtype/sub-buffer data (* (inc nrows) 8))
+                           data nrows))]
+                    #:tech.v3.dataset{:name cname
+                                      :missing missing
+                                      :data buffer
+                                      :force-datatype? true})))
+           (ds-impl/new-dataset options)))))
+
+(defn- file-tags
+  "Returns {:file-type :input} where input may be the original input
+  or a wrapper."
+  [input]
+  (if (instance? InputStream input)
+    (let [^InputStream input (if (.markSupported ^InputStream input)
+                               input
+                               (BufferedInputStream. input))
+          n-bytes 16
+          _ (.mark input n-bytes)
+          tagbuf (byte-array n-bytes)
+          _ (.read input tagbuf 0 n-bytes)
+          buf (int-array (quot n-bytes 4))
+          _ (-> (ByteBuffer/wrap tagbuf)
+                (.order ByteOrder/LITTLE_ENDIAN)
+                (.asIntBuffer)
+                (.get buf))]
+      (.reset input)
+      {:file-tags (vec buf)
+       :input input})
+    ;;else native buffer
+    {:file-tags (-> (native-buffer/set-native-datatype input :int32)
+                    (dtype/sub-buffer 0 4)
+                    (vec))
+     :input input}))
+
+
+(defn- file-type
+  [input]
+  (let [{:keys [file-tags input]} (file-tags input)]
+    {:file-type
+     (case (unchecked-int (file-tags 0))
+       1330795073 :arrow-file
+       826361158 :feather-v1
+       -1 :arrow-ipc)
+     :input input}))
+
+(comment
+  (def files ["test/data/alldtypes.arrow-feather-v1"
+              "test/data/alldtypes.arrow-feather-compressed"
+              "test/data/alldtypes.arrow-ipc"
+              "test/data/alldtypes.arrow-feather"])
+
+  (doseq [file files]
+    (with-open [is (io/input-stream file)]
+      (println (str "file: " file " - type: " (:file-type (file-type is))))))
+  )
+
+
+(defn- input->messages
+  [input]
+  (if (instance? InputStream input)
+    (stream-message-seq input)
+    (message-seq input)))
+
+
+(defn- discard
+  [input n-bytes]
+  (if (instance? InputStream input)
+    (do
+      (.read ^InputStream input (byte-array n-bytes) 0 n-bytes)
+      input)
+    (dtype/sub-buffer input 8)))
+
+
 (defn- parse-next-dataset
   [schema messages fname idx dict-map options]
   (when (seq messages)
@@ -1356,17 +1610,27 @@
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
   [fname & [options]]
-  (->> (let [messages (case (get options :open-type :input-stream)
-                        :mmap (->> (mmap/mmap-file fname options)
-                                   (message-seq))
-                        :input-stream (->> (apply io/input-stream fname
-                                                  (apply concat (seq options)))
-                                           (stream-message-seq)))
-             messages (sequence (map parse-message) messages)
-             schema (first messages)
-             _ (when-not (= :schema (:message-type schema))
-                 (throw (Exception. "Initial message is not a schema message.")))]
-         (parse-next-dataset schema (rest messages) fname 0 nil options))))
+  (->> (let [input (case (get options :open-type :input-stream)
+                     :mmap (mmap/mmap-file fname options)
+                     :input-stream (apply io/input-stream fname (apply concat (seq options))))
+             {:keys [file-type input]} (file-type input)
+
+             ipc-parse-fn
+             (fn [input]
+               (let [messages (->> (input->messages input)
+                                   (sequence (map parse-message)))
+                     schema (first messages)]
+                 (when-not (= :schema (:message-type schema))
+                   (throw (Exception. "Initial message is not a schema message.")))
+                 (parse-next-dataset schema (rest messages) fname 0 nil options)))]
+
+         (case file-type
+           :arrow-file
+           (ipc-parse-fn (discard input 8))
+           :arrow-ipc
+           (ipc-parse-fn input)
+           :feather-v1
+           [(feather->ds input options)]))))
 
 
 (defn- message-seq->dataset
@@ -1581,162 +1845,6 @@ Please use stream->dataset-seq-inplace.")))
   "This method has been deprecated.  Please use dataset->stream!"
   [ds path & [options]]
   (dataset->stream! ds path options))
-
-
-(defn- bytes->short-array
-  ^shorts [^bytes data nrows]
-  (let [retval (short-array nrows)]
-    (-> (ByteBuffer/wrap data)
-        (.order ByteOrder/LITTLE_ENDIAN)
-        (.asShortBuffer)
-        (.get retval))
-    retval))
-
-(defn- bytes->int-array
-  ^ints [^bytes data nrows]
-  (let [retval (int-array nrows)]
-    (-> (ByteBuffer/wrap data)
-        (.order ByteOrder/LITTLE_ENDIAN)
-        (.asIntBuffer)
-        (.get retval))
-    retval))
-
-(defn- bytes->long-array
-  ^longs [^bytes data nrows]
-  (let [retval (long-array nrows)]
-    (-> (ByteBuffer/wrap data)
-        (.order ByteOrder/LITTLE_ENDIAN)
-        (.asLongBuffer)
-        (.get retval))
-    retval))
-
-(defn- bytes->float-array
-  ^floats [^bytes data nrows]
-  (let [retval (float-array nrows)]
-    (-> (ByteBuffer/wrap data)
-        (.order ByteOrder/LITTLE_ENDIAN)
-        (.asFloatBuffer)
-        (.get retval))
-    retval))
-
-(defn- bytes->double-array
-  ^doubles [^bytes data nrows]
-  (let [retval (double-array nrows)]
-    (-> (ByteBuffer/wrap data)
-        (.order ByteOrder/LITTLE_ENDIAN)
-        (.asDoubleBuffer)
-        (.get retval))
-    retval))
-
-
-(defn feather->ds
-  [fpath options]
-  (let [fpath (str fpath)]
-    (when-not (.exists (java.io.File. fpath))
-      (throw (Exception. (str "File not found: " fpath))))
-    (with-open [if (RandomAccessFile. fpath "r")]
-      (let [leng (.length if)
-            m1 (BufUtils/readLittleEndianInt if)
-            _ (when-not (== m1 FeatherTable/MAGIC)
-                (throw (Exception. "Initial magic number not found")))
-            _ (.seek if (- leng 8))
-            meta-len (BufUtils/readLittleEndianInt if)
-            m2 (BufUtils/readLittleEndianInt if)
-            _ (when-not (== m2 FeatherTable/MAGIC)
-                (throw (Exception. "End magic number not found")))
-            metabytes (byte-array meta-len)
-            _ (.seek if (- leng 8 meta-len))
-            _ (.readFully if metabytes)
-            ctable (CTable/getRootAsCTable (java.nio.ByteBuffer/wrap metabytes))
-            ncols (.columnsLength ctable)
-            nrows (.numRows ctable)
-            version (.version ctable)
-            int-dt-types? (get options :integer-datetime-types?)]
-        (->> (range ncols)
-             (map (fn [cidx]
-                    (let [col (.columns ctable cidx)
-                          cname (.name col)
-                          primitive-ary (.values col)
-                          fea-dt (.type primitive-ary)
-                          n-missing (.nullCount primitive-ary)
-                          usermeta (.userMetadata col)
-                          data-off (.offset primitive-ary)
-                          data-len (.totalBytes primitive-ary)
-                          missing-len (if (== 0 n-missing)
-                                        0
-                                        (pad (quot (+ nrows 7) 8)))
-                          _ (.seek if data-off)
-                          missing (if-not (== 0 n-missing)
-                                    (let [mask-bytes (byte-array missing-len)]
-                                      (.readFully if mask-bytes)
-                                      (int8-buf->missing mask-bytes nrows))
-                                    (bitmap/->bitmap))
-                          data (byte-array (- data-len missing-len))
-                          _ (.readFully if data)
-                          buffer
-                          (condp = fea-dt
-                            Type/BOOL
-                            (byte-buffer->bitwise-boolean-buffer data nrows)
-                            Type/INT8
-                            (dtype/sub-buffer data nrows)
-                            Type/UINT8
-                            (-> (array-buffer/array-buffer data :uint8)
-                                (dtype/sub-buffer data nrows))
-                            Type/INT16
-                            (bytes->short-array data nrows)
-                            Type/UINT16
-                            (-> (bytes->short-array data nrows)
-                                (array-buffer/array-buffer :uint16))
-                            Type/INT32
-                            (bytes->int-array data nrows)
-                            Type/UINT32
-                            (-> (bytes->int-array data nrows)
-                                (array-buffer/array-buffer :uint32))
-                            Type/DATE
-                            (let [data (bytes->int-array data nrows)]
-                              (if int-dt-types?
-                                (array-buffer/array-buffer :epoch-days)
-                                (array-buffer/array-buffer :packed-local-date)))
-                            Type/INT64
-                            (bytes->long-array data nrows)
-                            Type/UINT64
-                            (-> (bytes->long-array data nrows)
-                                (array-buffer/array-buffer :uint64))
-                            Type/TIMESTAMP
-                            (array-buffer/array-buffer (bytes->long-array data nrows)
-                                                       :epoch-milliseconds)
-                            Type/TIME
-                            (array-buffer/array-buffer (bytes->long-array data nrows)
-                                                       :milliseconds)
-                            Type/FLOAT
-                            (bytes->float-array data nrows)
-                            Type/DOUBLE
-                            (bytes->double-array data nrows)
-                            Type/UTF8
-                            (offsets-data->string-reader
-                             (bytes->int-array data (inc nrows))
-                             (dtype/sub-buffer data (pad (* (inc nrows) 4)))
-                             nrows)
-                            Type/LARGE_UTF8
-                            (offsets-data->string-reader
-                             (bytes->long-array data (inc nrows))
-                             (dtype/sub-buffer data (* (inc nrows) 8))
-                             data nrows)
-                            Type/BINARY
-                            (offsets-data->bytedata-reader
-                             (bytes->int-array data (inc nrows))
-                             (dtype/sub-buffer data (pad (* (inc nrows) 4)))
-                             nrows)
-                            Type/LARGE_BINARY
-                            (offsets-data->bytedata-reader
-                             (bytes->long-array data (inc nrows))
-                             (dtype/sub-buffer data (* (inc nrows) 8))
-                             data nrows))]
-                      #:tech.v3.dataset{:name cname
-                                        :missing missing
-                                        :data buffer
-                                        :force-datatype? true})))
-             (ds-impl/new-dataset options))))))
 
 
 (comment

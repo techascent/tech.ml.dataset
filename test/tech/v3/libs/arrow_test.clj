@@ -41,9 +41,11 @@
 
 
 (comment
-  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc")
+  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc-compressed"
+                          {:compression :lz4})
 
-  (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc"))
+  (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc-compressed"
+                                      {:compression :lz4}))
 
   )
 
