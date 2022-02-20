@@ -43,6 +43,7 @@
                                org.slf4j/slf4j-api]
                   :scope "provided"]
                  [org.lz4/lz4-java "1.8.0" :scope "provided"]
+                 [com.cnuernber/jarrow "1.000"]
 
                  [uncomplicate/neanderthal "0.43.3" :scope "provided"]
                  ;;Geni dependencies
