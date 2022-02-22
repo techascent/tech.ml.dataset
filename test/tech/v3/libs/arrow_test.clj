@@ -48,11 +48,15 @@
                           {:compression :zstd})
 
 
-  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-file-zstd"
-                          {:compression :zstd
-                           :format :file})
+  (let [sds (supported-datatype-ds 1000)]
+    (arrow/dataset-seq->stream! "test/data/alldtypes.arrow-file-zstd"
+                                {:compression :zstd
+                                 :format :file}
+                                [(dtype/clone (ds/select-rows sds (range 500)))
+                                 ;;test when you have to add more dictionaries
+                                 (dtype/clone (ds/select-rows sds (range 500 1000)))]))
 
-  (arrow/stream->dataset "test/data/alldtypes.arrow-file-zstd")
+  (println (arrow/stream->dataset-seq "test/data/alldtypes.arrow-file-zstd"))
 
   (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc-zstd"))
 
@@ -93,7 +97,7 @@
 (deftest base-ds-seq-test
   (try
     (let [ds (supported-datatype-ds)
-          _ (arrow/dataset-seq->stream! "alldtypes-seq.arrow" [ds ds ds])
+          _ (arrow/dataset-seq->stream! "alldtypes-seq.arrow" {:strings-as-text? false} [ds ds ds])
           mmap-ds-seq (arrow/stream->dataset-seq "alldtypes-seq.arrow" {:key-fn keyword
                                                                         :open-type :mmap})
           copy-ds-seq (arrow/stream->dataset-seq "alldtypes-seq.arrow" {:key-fn keyword})]

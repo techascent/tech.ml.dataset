@@ -1671,7 +1671,6 @@
             (when-not (= :schema (:message-type schema))
               (throw (Exception. "Initial message is not a schema message.")))
             (parse-next-dataset schema (rest messages) fname 0 nil options)))]
-
     (case file-type
       :arrow-file
       (ipc-parse-fn (discard input 8))
@@ -1786,10 +1785,11 @@ Please use stream->dataset-seq.")))
 
   Options:
 
-  * `:strings-as-text?` - defaults to false - Save out strings into arrow files without
+  * `:strings-as-text?` - defaults to true - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
-     string tables.
+     string tables.  **Setting to false will make loading multiple dataset arrow files
+     fail for python or R as they do not yet support dictionary deltas nor replacement**.
 
   * `:format` - either `:ipc` for the default streaming format or `:file` for feather v2
      format.  `:file` matches the output of python's `write_feather`.
@@ -1804,10 +1804,17 @@ Please use stream->dataset-seq.")))
    ;;We use the first dataset to setup schema information the rest of the datasets
    ;;must follow.  So the serialization of the first dataset differs from the serialization
    ;;of the subsequent datasets
+   (when (empty? ds-seq)
+     (throw (Exception. "Empty dataset sequence")))
    (let [ds (first ds-seq)
          ds-schema (map meta (ds-base/columns ds))
          cnames (map :name ds-schema)
-         options (update options :compression validate-compression-for-write)
+         options (-> options
+                     (update :compression validate-compression-for-write)
+                     (update :strings-as-text? (fn [data]
+                                                 (if (nil? data)
+                                                   true
+                                                   data))))
          ds-map-fn
          (fn [ds]
            ;;Ensure they have at least the same columns, in order, as the first dataset
@@ -1833,7 +1840,9 @@ Please use stream->dataset-seq.")))
                       ds
                       ds-schema)
               (prepare-dataset-for-write options))))
-         ds-seq (sequence (map ds-map-fn) (rest ds-seq))
+         ds-seq (sequence (map ds-map-fn) ds-seq)
+         ds (first ds-seq)
+         ds-seq (rest ds-seq)
          file-tag? (= :file (get options :format :ipc))]
      ;;Any native mem allocated in this context will be released
      (with-open [ostream (io/output-stream! path)]
@@ -1873,7 +1882,7 @@ Please use stream->dataset-seq.")))
   Options:
 
   * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
-     dictionaries.  This works well if you want to load an arrow file in-place or if
+     dictionaries.  Set this to true if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
      string tables.
 
@@ -1887,7 +1896,13 @@ Please use stream->dataset-seq.")))
      compression mmap probably doesn't make sense on load and most likely will
      result on slower loading times."
   ([ds path options]
-   (dataset-seq->stream! path options [ds]))
+   (dataset-seq->stream! path (update options
+                                      :strings-as-text?
+                                      (fn [data]
+                                        (if (nil? data)
+                                          false
+                                          data)))
+                         [ds]))
   ([ds path]
    (dataset->stream! ds path {})))
 
