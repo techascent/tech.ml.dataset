@@ -41,15 +41,22 @@
 
 
 (comment
-  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc-compressed"
+  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc-lz4"
                           {:compression :lz4})
 
-  (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc-compressed"
-                                      {:compression :lz4}))
+  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-ipc-zstd"
+                          {:compression :zstd})
+
+
+  (arrow/dataset->stream! (supported-datatype-ds 1000) "test/data/alldtypes.arrow-file-zstd"
+                          {:compression :zstd
+                           :format :file})
+
+  (arrow/stream->dataset "test/data/alldtypes.arrow-file-zstd")
+
+  (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc-zstd"))
 
   )
-
-
 
 
 (deftest base-datatype-test
@@ -71,6 +78,16 @@
            (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
     (finally
       (.delete (java.io.File. "alldtypes.arrow")))))
+
+
+(deftest arrow-file-types
+  ;;lz4 compression
+  (let [all-files ["test/data/alldtypes.arrow-feather" ;lz4
+                   "test/data/alldtypes.arrow-feather-compressed" ;zstd
+                   "test/data/alldtypes.arrow-feather-v1" ;v1
+                   ]]
+    (doseq [file all-files]
+      (is (= 1000 (ds/row-count (arrow/stream->dataset file)))))))
 
 
 (deftest base-ds-seq-test
