@@ -51,10 +51,11 @@
   (let [sds (supported-datatype-ds 1000)]
     (arrow/dataset-seq->stream! "test/data/alldtypes.arrow-file-zstd"
                                 {:compression :zstd
-                                 :format :file}
-                                [(dtype/clone (ds/select-rows sds (range 500)))
-                                 ;;test when you have to add more dictionaries
-                                 (dtype/clone (ds/select-rows sds (range 500 1000)))]))
+                                 :format :file
+                                 :strings-as-text? false}
+                                [(ds/select-rows sds (range 500))
+                                 ;;test when you have to add more string dictionary values
+                                 (ds/select-rows sds (range 500 1000))]))
 
   (println (arrow/stream->dataset-seq "test/data/alldtypes.arrow-file-zstd"))
 

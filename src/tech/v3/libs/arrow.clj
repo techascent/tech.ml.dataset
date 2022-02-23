@@ -54,13 +54,15 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.utils :as ml-utils]
+            [tech.v3.dataset.io :as ds-io]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.resource :as resource]
             [tech.v3.io :as io]
             [clojure.tools.logging :as log]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.core.protocols :as clj-proto]
-            [clojure.datafy :refer [datafy]])
+            [clojure.datafy :refer [datafy]]
+            [clojure.data.json :as json])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -83,7 +85,7 @@
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
            [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
             FloatBuffer]
-           [java.util List ArrayList Map]
+           [java.util List ArrayList Map HashMap Map$Entry]
            [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
@@ -474,43 +476,56 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- string-column->dict
-  [col hash-salt]
-  (let [str-t (ds-base/ensure-column-string-table col)
+  [col]
+  (let [metadata (meta col)
+        colname (:name metadata)
+        dict-id (.hashCode ^Object colname)
+        str-t (ds-base/ensure-column-string-table col)
+        ^StringTable prev-str-t (::previous-string-table metadata)
         int->str (str-table/int->string str-t)
         indices (dtype-proto/->array-buffer (str-table/indices str-t))
         n-elems (.size int->str)
         bit-width (casting/int-width (dtype/elemwise-datatype indices))
-        metadata (meta col)
-        colname (:name metadata)
-        dict-id (.hashCode ^Object colname)
-        dict-id (unchecked-int (if hash-salt
-                                 (bit-xor (unchecked-int hash-salt) dict-id)
-                                 dict-id))
         arrow-indices-type (ArrowType$Int. bit-width true)
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
         byte-data (dtype/make-list :int8)
         ;;offsets are int32 apparently
         offsets (dtype/make-list :int32)]
-    (dotimes [str-idx (count int->str)]
-      (let [strdata (int->str str-idx)
-            _ (when (= strdata :failure)
-                (throw (Exception. "Invalid string table - missing entries.")))
-            str-bytes (.getBytes (str strdata))
-            soff (dtype/ecount byte-data)]
-        (.addAll byte-data (dtype/->reader str-bytes))
-        (.add offsets soff)))
+    (if (nil? prev-str-t)
+      (dotimes [str-idx (count int->str)]
+        (let [strdata (int->str str-idx)
+              _ (when (= strdata :failure)
+                  (throw (Exception. "Invalid string table - missing entries.")))
+              str-bytes (.getBytes (str strdata))
+              soff (dtype/ecount byte-data)]
+          (.addAll byte-data (dtype/->reader str-bytes))
+          (.add offsets soff)))
+      (let [prev-int->str (str-table/int->string prev-str-t)
+            start-offset (dtype/ecount prev-int->str)
+            n-extra (- (dtype/ecount int->str) (dtype/ecount prev-int->str))
+            _ (assert (>= n-extra 0) "Later string tables should only be larger")]
+      (dotimes [str-idx n-extra]
+        (let [strdata (int->str (+ str-idx start-offset))
+              _ (when (= strdata :failure)
+                  (throw (Exception. "Invalid string table - missing entries.")))
+              str-bytes (.getBytes (str strdata))
+              soff (dtype/ecount byte-data)]
+          (.addAll byte-data (dtype/->reader str-bytes))
+          (.add offsets soff)))))
     ;;Make everyone's life easier by adding an extra offset.
     (.add offsets (dtype/ecount byte-data))
     {:encoding encoding
+     :string-table str-t
      :byte-data byte-data
-     :offsets (dtype-proto/->array-buffer offsets)}))
+     :offsets (dtype-proto/->array-buffer offsets)
+     :is-delta? (boolean prev-str-t)}))
 
 
 (defn- string-col->encoding
   "Given a string column return a map of :dict-id :table-width.  The dictionary
   id is the hashcode of the column mame."
-  [^List dictionaries col hash-salt]
-  (let [dict (string-column->dict col hash-salt)]
+  [^List dictionaries col]
+  (let [dict (string-column->dict col)]
     (.add dictionaries dict)
     {:encoding (:encoding dict)}))
 
@@ -533,7 +548,7 @@
 (defn- ->str-str-meta
   [metadata]
   (->> metadata
-       (map (fn [[k v]] [(pr-str k) (pr-str v)]))
+       (map (fn [[k v]] [(json/json-str k) (json/json-str v)]))
        (into {})))
 
 
@@ -543,7 +558,9 @@
 (defn- datatype->field-type
   (^FieldType [datatype & [nullable? metadata extra-data]]
    (let [nullable? (or nullable? (= :object (casting/flatten-datatype datatype)))
-         metadata (->str-str-meta (dissoc metadata :name :datatype :categorical?) )
+         metadata (->str-str-meta (dissoc metadata
+                                          :name :datatype :categorical?
+                                          ::previous-string-table) )
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
          datatype (packing/unpack-datatype datatype)]
@@ -592,8 +609,7 @@
 
 
 (defn- col->field
-  ^Field [dictionaries {:keys [strings-as-text?
-                               ::hash-salt]}
+  ^Field [dictionaries {strings-as-text? :strings-as-text}
           col]
   (let [colmeta (meta col)
         nullable? (boolean
@@ -605,7 +621,7 @@
         extra-data (merge (select-keys (meta col) [:timezone])
                           (when (and (not strings-as-text?)
                                      (= :string col-dtype))
-                            (string-col->encoding dictionaries col hash-salt)))]
+                            (string-col->encoding dictionaries col)))]
     (try
       (make-field
        (ml-utils/column-safe-name colname)
@@ -626,61 +642,12 @@
      (dtype-dt/utc-zone-id))))
 
 
-(defn ^:no-doc prepare-dataset-for-write
-  "Convert dataset column datatypes to datatypes appropriate for arrow
-  serialization.
-
-  Options:
-
-  * `:strings-as-text` - Serialize strings as text.  This leads to the most efficient
-  format for mmap operations."
-  ([ds options]
-   (reduce
-    (fn [ds col]
-      (cond
-        (= :uuid (dtype/elemwise-datatype col))
-        (let [missing (col-proto/missing col)
-              metadata (meta col)]
-          (assoc ds (metadata :name)
-                 #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
-                                   :missing missing
-                                   :metadata metadata
-                                   :name (metadata :name)}))
-        (and (= :string (dtype/elemwise-datatype col))
-             (not (:strings-as-text? options)))
-        (if (instance? StringTable (.data ^Column col))
-          ds
-          (let [missing (col-proto/missing col)
-                metadata (meta col)]
-            (assoc ds (metadata :name)
-                   #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
-                                     :missing missing
-                                     :metadata metadata
-                                     :name (metadata :name)})))
-        :else
-        ds))
-    ds
-    (ds-base/columns ds)))
-  ([ds]
-   (prepare-dataset-for-write ds nil)))
-
-
-(defn ^:no-doc ds->schema
-  "Return a map of :schema, :dictionaries where :schema is an Arrow schema
-  and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
-  - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
-  ([ds options]
-   (let [dictionaries (ArrayList.)
-         hash-salt (get options ::hash-salt)
-         hash-salt (when hash-salt (.hashCode ^Object hash-salt))
-         options (assoc options ::hash-salt hash-salt)]
-     {:schema
-      (Schema. ^Iterable
-               (->> (ds-base/columns ds)
-                    (map (partial col->field dictionaries options))))
-      :dictionaries dictionaries}))
-  ([ds]
-   (ds->schema ds {})))
+(defn try-json-parse
+  [val]
+  (when val
+    (try (json/read-str val :key-fn keyword)
+         (catch Exception e
+           val))))
 
 
 (defn- read-schema
@@ -701,7 +668,11 @@
                         {:name (.getName field)
                          :nullable? (.isNullable field)
                          :field-type datafied-data
-                         :metadata (.getMetadata field)}
+                         :metadata (->> (.getMetadata field)
+                                        (fn [^Map$Entry entry]
+                                          [(try-json-parse (.getKey entry))
+                                           (try-json-parse (.getValue entry))])
+                                        (into {}))}
                         (when-let [encoding (.getDictionary field)]
                           {:dictionary-encoding (datafy encoding)}))))))]
     {:fields fields
@@ -988,7 +959,7 @@
 (defn- write-dictionary
   "Write a dictionary to a dictionary batch.  Returns enough information to construct
   a Block entry in the footer."
-  [^WriteChannel writer {:keys [byte-data offsets encoding]} options]
+  [^WriteChannel writer {:keys [byte-data offsets encoding is-delta?]} options]
   (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
         {:keys [compression-type buffers]}
@@ -1011,7 +982,7 @@
         bbuf (finish-builder builder
                              (message-type->message-id :dictionary-batch)
                              (DictionaryBatch/createDictionaryBatch
-                              builder enc-id rbatch-off false)
+                              builder enc-id rbatch-off (boolean is-delta?))
                              body-len)
         msg-start (.getCurrentPosition writer)
         _ (write-message-header writer bbuf)
@@ -1235,7 +1206,7 @@
 
 (defn- dictionary->strings
   "Returns a map of {:id :strings}"
-  [{:keys [id _delta? records]}]
+  [{:keys [id delta? records]}]
   (let [nodes (:nodes records)
         buffers (:buffers records)
         _ (assert (== 1 (count nodes)))
@@ -1250,6 +1221,7 @@
                                   (-> (offsets-data->string-reader offsets data n-elems)
                                       (dtype/clone)))]
     {:id id
+     :delta? delta?
      :strings str-data}))
 
 
@@ -1616,14 +1588,22 @@
 (defn- parse-next-dataset
   [schema messages fname idx dict-map options]
   (when (seq messages)
-    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
-                                    messages)
+    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch) messages)
           rest-messages (drop (count dict-messages) messages)
-          dict-map (merge dict-map
-                          (->> dict-messages
-                               (map dictionary->strings)
-                               (map (juxt :id identity))
-                               (into {})))
+          dict-map (merge-with
+                    (fn [older newer]
+                      (if (newer :delta?)
+                        (update newer :strings
+                                (fn [new-strings]
+                                  (let [old-strings (dtype/clone (older :strings))]
+                                    (.addAll ^List old-strings new-strings)
+                                    old-strings)))
+                        newer))
+                    dict-map
+                    (->> dict-messages
+                         (map dictionary->strings)
+                         (map (juxt :id identity))
+                         (into {})))
           data-record (first rest-messages)]
       (cons
        (-> (records->ds schema dict-map data-record options)
@@ -1634,11 +1614,11 @@
 
 (defn stream->dataset-seq
   "Loads data up to and including the first data record.  Returns the a lazy
-  sequence of datasets.  Datasets use mmapped data, however, so realizing the
-  entire sequence is usually safe, even for datasets that are larger than
+  sequence of datasets.  Datasets can be loaded using mmapped data and when that is true
+  realizing the entire sequence is usually safe, even for datasets that are larger than
   available RAM.
-  This method is expected to be called from within a stack resource context
-  unless options include {:resource-type :gc}.  See documentation for
+  The default resourc management pathway for this is :auto but you can override this
+  by explicity setting the option `:resource-type`.  See documentation for
   tech.v3.datatype.mmap/mmap-file.
 
   Options:
@@ -1710,6 +1690,120 @@ Please use stream->dataset-seq.")))
    (stream->dataset fname nil)))
 
 
+(defn- simplify-datatype
+  [datatype options]
+  (let [datatype (packing/unpack-datatype datatype)]
+    (if (and (= :string datatype) (get options :strings-as-text?))
+      :text
+      datatype)))
+
+
+(defn ^:no-doc prepare-dataset-for-write
+  "Normalize schemas and convert datatypes to datatypes appropriate for arrow
+  serialization."
+  ;;prev ds was the dataset immediately previous to this one.  We can assume its
+  ;;schema is normalized already.
+  [ds prev-ds ds-schema options]
+  (let [ds (ds-base/select-columns ds (map :name ds-schema))
+        ds-meta (map meta (ds-base/columns ds))
+        ;;Step one is normalize our schema
+        ;;meaning upcast types when possible or error out.
+        ds (if prev-ds
+             (reduce (fn [ds col-meta]
+                       (ds-base/update-column
+                        ds (:name col-meta)
+                        (fn [col]
+                          (let [col-dt (simplify-datatype (dtype/elemwise-datatype col)
+                                                          options)
+                                src-dt (simplify-datatype (:datatype col-meta) options)
+                                merged-dt (casting/widest-datatype src-dt col-dt)]
+                            ;;Do a datatype check to see if things match
+                            (when-not (= src-dt merged-dt)
+                              (throw (Exception.
+                                      (format "Datatypes differ in a downstream dataset.  Expected '%s' got '%s'" src-dt col-dt))))
+                            (if (= col-dt src-dt)
+                              col
+                              (dtype/elemwise-cast col src-dt))))))
+                     ds
+                     ds-schema)
+             ds)]
+    ;;Second step, once the datatypes are set is to cast the types to arrow compatible
+    ;;datatypes
+    (reduce
+     (fn [ds col]
+       (cond
+         (= :uuid (dtype/elemwise-datatype col))
+         (let [missing (col-proto/missing col)
+               metadata (meta col)]
+           (assoc ds (metadata :name)
+                  #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
+                                    :missing missing
+                                    :metadata metadata
+                                    :name (metadata :name)}))
+         (and (= :string (dtype/elemwise-datatype col))
+              (not (:strings-as-text? options)))
+         (if (and (nil? prev-ds)
+                  (instance? StringTable (.data ^Column col)))
+           ds
+           (let [missing (col-proto/missing col)
+                 metadata (meta col)]
+             (if (nil? prev-ds)
+               (assoc ds (metadata :name)
+                      #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
+                                        :missing missing
+                                        :metadata metadata
+                                        :name (metadata :name)})
+               (let [prev-col (ds-base/column prev-ds (:name metadata))
+                     prev-str-t (ds-base/ensure-column-string-table prev-col)
+                     int->str (ArrayList. ^List (.int->str prev-str-t))
+                     str->int (HashMap. ^Map (.str->int prev-str-t))
+                     n-rows (dtype/ecount col)
+                     data (StringTable. int->str str->int
+                                        (dyn-int-list/dynamic-int-list 0))]
+                 (dotimes [idx n-rows]
+                   (.add data (or (col idx) "")))
+                 (assoc ds (metadata :name)
+                        #:tech.v3.dataset{:data data
+                                          :missing missing
+                                          :metadata (assoc metadata
+                                                           ::previous-string-table prev-str-t)
+                                          :name (metadata :name)})))))
+         :else
+         ds))
+     ds
+     (ds-base/columns ds))))
+
+
+(defn- do-prep-ds-seq
+  [prev-ds ds-schema options ds-seq]
+  (when-let [ds (first ds-seq)]
+    (cons (prepare-dataset-for-write ds prev-ds ds-schema options)
+          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+
+
+(defn- prepare-ds-seq-for-write
+  [options ds-seq]
+  (let [ds (first ds-seq)
+        ds-schema (map meta (vals ds))]
+    (cons (prepare-dataset-for-write ds nil ds-schema options)
+          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+
+
+(defn ^:no-doc ds->schema
+  "Return a map of :schema, :dictionaries where :schema is an Arrow schema
+  and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
+  - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
+  ([ds options]
+   (let [dictionaries (ArrayList.)]
+     {:schema
+      (Schema. ^Iterable
+               (->> (ds-base/columns ds)
+                    (map (partial col->field dictionaries options))))
+      :dictionaries dictionaries}))
+  ([ds]
+   (ds->schema ds {})))
+
+
 (def ^:private compression-type
   {:zstd CompressionType/ZSTD
    :lz4 CompressionType/LZ4_FRAME})
@@ -1769,15 +1863,6 @@ Please use stream->dataset-seq.")))
     (.write writer (ByteBuffer/wrap arrow-file-end-tag))))
 
 
-
-(defn- simplify-datatype
-  [datatype options]
-  (let [datatype (packing/unpack-datatype datatype)]
-    (if (and (= :string datatype) (get options :strings-as-text?))
-      :text
-      datatype)))
-
-
 (defn dataset-seq->stream!
   "Write a sequence of datasets as an arrow stream file.  File will contain one record set
   per dataset.  Datasets in the sequence must have matching schemas or downstream schema
@@ -1785,14 +1870,16 @@ Please use stream->dataset-seq.")))
 
   Options:
 
-  * `:strings-as-text?` - defaults to true - Save out strings into arrow files without
+  * `:strings-as-text?` - defaults to false - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
-     string tables.  **Setting to false will make loading multiple dataset arrow files
-     fail for python or R as they do not yet support dictionary deltas nor replacement**.
+     string tables.
 
-  * `:format` - either `:ipc` for the default streaming format or `:file` for feather v2
-     format.  `:file` matches the output of python's `write_feather`.
+  * `:format` - one of `[:file :ipc]`,  defaults to `:file`.
+    - `:file` - arrow file format, compatible with pyarrow's [open_file](https://arrow.apache.org/docs/python/generated/pyarrow.ipc.open_file.html#pyarrow.ipc.open_file).  The suggested
+       suffix is `.arrow`.
+    - `:ipc` - arrow streaming format, compatible with pyarrow's [open_ipc](https://arrow.apache.org/docs/python/generated/pyarrow.ipc.open_file.html#pyarrow.ipc.open_ipc) pathway.  The
+       suggested suffix is `.arrows`.
 
   * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
      Per-column compression of the data can result in some significant size savings
@@ -1806,50 +1893,17 @@ Please use stream->dataset-seq.")))
    ;;of the subsequent datasets
    (when (empty? ds-seq)
      (throw (Exception. "Empty dataset sequence")))
-   (let [ds (first ds-seq)
-         ds-schema (map meta (ds-base/columns ds))
-         cnames (map :name ds-schema)
-         options (-> options
-                     (update :compression validate-compression-for-write)
-                     (update :strings-as-text? (fn [data]
-                                                 (if (nil? data)
-                                                   true
-                                                   data))))
-         ds-map-fn
-         (fn [ds]
-           ;;Ensure they have at least the same columns, in order, as the first dataset
-           ;;and do a quick datatype check.
-           (let [ds (ds-base/select-columns ds cnames)
-                 ds-meta (map meta (ds-base/columns ds))]
-             (->
-              (reduce (fn [ds col-meta]
-                        (ds-base/update-column
-                         ds (:name col-meta)
-                         (fn [col]
-                           (let [col-dt (simplify-datatype (dtype/elemwise-datatype col)
-                                                           options)
-                                 src-dt (simplify-datatype (:datatype col-meta) options)
-                                 merged-dt (casting/widest-datatype src-dt col-dt)]
-                             ;;Do a datatype check to see if things match
-                             (when-not (= src-dt merged-dt)
-                               (throw (Exception.
-                                       (format "Datatypes differ in a downstream dataset.  Expected '%s' got '%s'" src-dt col-dt))))
-                             (if (= col-dt src-dt)
-                               col
-                               (dtype/elemwise-cast col src-dt))))))
-                      ds
-                      ds-schema)
-              (prepare-dataset-for-write options))))
-         ds-seq (sequence (map ds-map-fn) ds-seq)
+   (let [options (update options :compression validate-compression-for-write)
+         ds-seq (prepare-ds-seq-for-write options ds-seq)
          ds (first ds-seq)
          ds-seq (rest ds-seq)
-         file-tag? (= :file (get options :format :ipc))]
+         file-tag? (= :file (get options :format :file))]
      ;;Any native mem allocated in this context will be released
      (with-open [ostream (io/output-stream! path)]
        (let [writer (arrow-output-stream-writer ostream)
              _ (when file-tag?
                  (.write writer (ByteBuffer/wrap arrow-file-begin-tag)))
-             {:keys [schema dictionaries]} (ds->schema ds (assoc options ::hash-salt -1))
+             {:keys [schema dictionaries]} (ds->schema ds options)
              _ (write-schema writer schema)
              dict-blocks (mapv #(write-dictionary writer % options) dictionaries)
              ;;Release any native mem created during this step just after step completes
@@ -1858,16 +1912,16 @@ Please use stream->dataset-seq.")))
 
              [dict-blocks record-blocks]
              (reduce
-              (fn [[dict-blocks record-blocks] ds]
-                (let [{:keys [dictionaries]} (ds->schema ds options)
+              (fn [[dict-blocks record-blocks dictionaries] ds]
+                (let [{:keys [dictionaries]} (ds->schema ds (assoc options :dictionaries dictionaries))
                       dict-blocks (concat
                                    dict-blocks
                                    (mapv #(write-dictionary writer % options) dictionaries))
                       record-blocks (concat record-blocks
                                             [(resource/stack-resource-context
                                               (write-dataset writer ds options))])]
-                  [dict-blocks record-blocks]))
-              [dict-blocks record-blocks]
+                  [dict-blocks record-blocks dictionaries]))
+              [dict-blocks record-blocks dictionaries]
               ds-seq)]
          (when file-tag?
            (write-footer writer schema dict-blocks record-blocks))
@@ -1877,32 +1931,10 @@ Please use stream->dataset-seq.")))
 
 
 (defn dataset->stream!
-  "Write a dataset as an arrow stream file.  File will contain one record set.
-
-  Options:
-
-  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
-     dictionaries.  Set this to true if you want to load an arrow file in-place or if
-     you know the strings in your dataset are either really large or should not be in
-     string tables.
-
-  * `:format` - either `:ipc` for the default streaming format or `:file` for feather v2
-     format.  `:file` matches the output of python's `write_feather`.
-
-  * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
-     Per-column compression of the data can result in some significant size savings
-     (2x+) and thus some significant time savings when loading over the network.
-     Using compression makes loading via mmap non-lazy - If you are going to use
-     compression mmap probably doesn't make sense on load and most likely will
-     result on slower loading times."
+  "Write a dataset as an arrow file.  File will contain one record set.
+  See documentation for [[dataset-seq->stream!]]."
   ([ds path options]
-   (dataset-seq->stream! path (update options
-                                      :strings-as-text?
-                                      (fn [data]
-                                        (if (nil? data)
-                                          false
-                                          data)))
-                         [ds]))
+   (dataset-seq->stream! path options [ds]))
   ([ds path]
    (dataset->stream! ds path {})))
 
@@ -1923,3 +1955,23 @@ Please use stream->dataset-seq.")))
   "This method has been deprecated.  Please use dataset->stream!"
   [ds path & [options]]
   (dataset->stream! ds path options))
+
+
+(defmethod ds-io/data->dataset :arrow
+  [data options]
+  (stream->dataset data options))
+
+
+(defmethod ds-io/dataset->data! :arrow
+  [ds output options]
+  (dataset->stream! ds output options))
+
+
+(defmethod ds-io/data->dataset :arrows
+  [data options]
+  (stream->dataset data options))
+
+
+(defmethod ds-io/dataset->data! :arrows
+  [ds output options]
+  (dataset->stream! ds output options))

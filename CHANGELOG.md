@@ -1,4 +1,8 @@
 # Changelog
+# 6.066
+ * Major rework of arrow support to include support for all known arrow file formats
+   and tested files in various formats across latest (7.0.0) pyarrow.
+
 # 6.065
  * Fixing [issue 287](https://github.com/techascent/tech.ml.dataset/issues/287) - dataset corrupt after
    nippy serialization.  This had of course nothing to do with nippy but was caused by a bug in
