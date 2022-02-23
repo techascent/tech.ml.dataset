@@ -46,6 +46,7 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -53,16 +54,18 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.utils :as ml-utils]
+            [tech.v3.dataset.io :as ds-io]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.resource :as resource]
             [tech.v3.io :as io]
             [clojure.tools.logging :as log]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.core.protocols :as clj-proto]
-            [clojure.datafy :refer [datafy]])
+            [clojure.datafy :refer [datafy]]
+            [clojure.data.json :as json])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
-            FieldNode Buffer BodyCompression BodyCompressionMethod]
+            FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
            [org.roaringbitmap RoaringBitmap]
            [com.google.flatbuffers FlatBufferBuilder]
            [org.apache.arrow.vector.types TimeUnit FloatingPointPrecision DateUnit]
@@ -80,15 +83,24 @@
            [tech.v3.datatype ObjectReader ArrayHelpers ByteConversions BooleanBuffer]
            [tech.v3.datatype.array_buffer ArrayBuffer]
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
-           [java.nio ByteBuffer]
-           [java.util List ArrayList Map]
+           [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
+            FloatBuffer]
+           [java.util List ArrayList Map HashMap Map$Entry]
+           [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
            ;;Compression codecs
            [com.github.luben.zstd Zstd]
            [org.apache.commons.compress.compressors.lz4 FramedLZ4CompressorInputStream
             FramedLZ4CompressorOutputStream]
-           [net.jpountz.lz4 LZ4Factory]))
+           [net.jpountz.lz4 LZ4Factory]
+           ;;feather support
+           [java.io RandomAccessFile BufferedInputStream ByteArrayInputStream
+            ByteArrayOutputStream]
+           [uk.ac.bristol.star.feather FeatherTable BufUtils
+            FeatherType]
+           [uk.ac.bristol.star.fbs.feather Type]
+           [uk.ac.bristol.star.fbs.feather CTable]))
 
 
 (set! *warn-on-reflection* true)
@@ -182,7 +194,7 @@
     resbuf))
 
 
-(defn- create-apache-lz4-frame-compressor
+#_(defn- create-apache-lz4-frame-compressor
   [comp-map]
   (assert (= :lz4 (get comp-map :compression-type)))
   (fn [compbuf dstbuf]
@@ -198,43 +210,36 @@
          :dst-buffer final-bytes}))))
 
 
-(defn- create-lz4-frame-compressor
+(defn- create-jpnz-lz4-frame-compressor
   [comp-map]
   (assert (= :lz4 (get comp-map :compression-type)))
-  (let [fact (LZ4Factory/fastestInstance)
-        compressor (.fastCompressor fact)]
-    (fn [srcbuf dstbuf]
-      (let [maxlen (.maxCompressedLength compressor (dtype/ecount srcbuf))
-            ^bytes dstbuf (-> (if (< (dtype/ecount dstbuf) maxlen)
-                                (byte-array maxlen)
-                                dstbuf))
-            srcbuf (ensure-bytes-array-buffer srcbuf)
-            ^bytes src-data (.ary-data srcbuf)
-            n-written
-            (.compress compressor
-                       src-data
-                       (unchecked-int (.offset srcbuf))
-                       (unchecked-int (.n-elems srcbuf))
-                       dstbuf 0 maxlen)]
+  (fn [compbuf dstbuf]
+    (let [^ByteArrayOutputStream dstbuf (or dstbuf (ByteArrayOutputStream.))
+          os (net.jpountz.lz4.LZ4FrameOutputStream. dstbuf)
+          srcbuf (ensure-bytes-array-buffer compbuf)
+          ^bytes src-data (.ary-data srcbuf)]
+      (.write os src-data (unchecked-int (.offset srcbuf)) (unchecked-int (.n-elems srcbuf)))
+      (.close os)
+      (let [final-bytes (.toByteArray dstbuf)]
+        (.reset dstbuf)
         {:writer-cache dstbuf
-         :dst-buffer (dtype/sub-buffer dstbuf 0 n-written)}))))
+         :dst-buffer final-bytes}))))
 
-
-(defn- create-lz4-decompressor
+(defn create-jpnz-lz4-frame-decompressor
   []
-  (let [fact (LZ4Factory/fastestInstance)
-        decompressor (.fastDecompressor fact)]
-    (fn [compbuf dstbuf]
-      (.decompress decompressor
-                   ^ByteBuffer (nio-buffer/as-nio-buffer compbuf)
-                   ^ByteBuffer (nio-buffer/as-nio-buffer dstbuf))
-      dstbuf)))
+  (fn [srcbuf dstbuf]
+    (let [src-byte-data (dtype/->byte-array srcbuf)
+          bis (ByteArrayInputStream. src-byte-data)
+          is (net.jpountz.lz4.LZ4FrameInputStream. bis)
+          temp-dstbuf (byte-array (dtype/ecount dstbuf))]
+      (.read is temp-dstbuf)
+      (dtype/copy! temp-dstbuf dstbuf))))
 
 
 (def ^:private compression-info
   {:lz4 {:file-type CompressionType/LZ4_FRAME
-         :compressor-fn create-lz4-frame-compressor
-         :decompressor-fn create-lz4-decompressor}
+         :compressor-fn create-jpnz-lz4-frame-compressor
+         :decompressor-fn create-jpnz-lz4-frame-decompressor}
    :zstd {:file-type CompressionType/ZSTD
           :compressor-fn create-zstd-compressor
           :decompressor-fn create-zstd-decompressor}})
@@ -315,7 +320,7 @@
        TimeUnit/MILLISECOND {:datatype :epoch-milliseconds}
        TimeUnit/MICROSECOND {:datatype :epoch-microseconds}
        TimeUnit/SECOND {:datatype :epoch-second}
-       TimeUnit/NANOSECOND {:datatype :int64 :time-unit :epoch-nanoseconds})
+       TimeUnit/NANOSECOND {:datatype :epoch-nanoseconds})
      (when (and (.getTimezone this)
                 (not= 0 (count (.getTimezone this))))
        {:timezone (.getTimezone this)})))
@@ -471,43 +476,56 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- string-column->dict
-  [col hash-salt]
-  (let [str-t (ds-base/ensure-column-string-table col)
+  [col]
+  (let [metadata (meta col)
+        colname (:name metadata)
+        dict-id (.hashCode ^Object colname)
+        str-t (ds-base/ensure-column-string-table col)
+        ^StringTable prev-str-t (::previous-string-table metadata)
         int->str (str-table/int->string str-t)
         indices (dtype-proto/->array-buffer (str-table/indices str-t))
         n-elems (.size int->str)
         bit-width (casting/int-width (dtype/elemwise-datatype indices))
-        metadata (meta col)
-        colname (:name metadata)
-        dict-id (.hashCode ^Object colname)
-        dict-id (unchecked-int (if hash-salt
-                                 (bit-xor (unchecked-int hash-salt) dict-id)
-                                 dict-id))
         arrow-indices-type (ArrowType$Int. bit-width true)
         encoding (DictionaryEncoding. dict-id false arrow-indices-type)
         byte-data (dtype/make-list :int8)
         ;;offsets are int32 apparently
         offsets (dtype/make-list :int32)]
-    (dotimes [str-idx (count int->str)]
-      (let [strdata (int->str str-idx)
-            _ (when (= strdata :failure)
-                (throw (Exception. "Invalid string table - missing entries.")))
-            str-bytes (.getBytes (str strdata))
-            soff (dtype/ecount byte-data)]
-        (.addAll byte-data (dtype/->reader str-bytes))
-        (.add offsets soff)))
+    (if (nil? prev-str-t)
+      (dotimes [str-idx (count int->str)]
+        (let [strdata (int->str str-idx)
+              _ (when (= strdata :failure)
+                  (throw (Exception. "Invalid string table - missing entries.")))
+              str-bytes (.getBytes (str strdata))
+              soff (dtype/ecount byte-data)]
+          (.addAll byte-data (dtype/->reader str-bytes))
+          (.add offsets soff)))
+      (let [prev-int->str (str-table/int->string prev-str-t)
+            start-offset (dtype/ecount prev-int->str)
+            n-extra (- (dtype/ecount int->str) (dtype/ecount prev-int->str))
+            _ (assert (>= n-extra 0) "Later string tables should only be larger")]
+      (dotimes [str-idx n-extra]
+        (let [strdata (int->str (+ str-idx start-offset))
+              _ (when (= strdata :failure)
+                  (throw (Exception. "Invalid string table - missing entries.")))
+              str-bytes (.getBytes (str strdata))
+              soff (dtype/ecount byte-data)]
+          (.addAll byte-data (dtype/->reader str-bytes))
+          (.add offsets soff)))))
     ;;Make everyone's life easier by adding an extra offset.
     (.add offsets (dtype/ecount byte-data))
     {:encoding encoding
+     :string-table str-t
      :byte-data byte-data
-     :offsets (dtype-proto/->array-buffer offsets)}))
+     :offsets (dtype-proto/->array-buffer offsets)
+     :is-delta? (boolean prev-str-t)}))
 
 
 (defn- string-col->encoding
   "Given a string column return a map of :dict-id :table-width.  The dictionary
   id is the hashcode of the column mame."
-  [^List dictionaries col hash-salt]
-  (let [dict (string-column->dict col hash-salt)]
+  [^List dictionaries col]
+  (let [dict (string-column->dict col)]
     (.add dictionaries dict)
     {:encoding (:encoding dict)}))
 
@@ -530,7 +548,7 @@
 (defn- ->str-str-meta
   [metadata]
   (->> metadata
-       (map (fn [[k v]] [(pr-str k) (pr-str v)]))
+       (map (fn [[k v]] [(json/json-str k) (json/json-str v)]))
        (into {})))
 
 
@@ -540,7 +558,9 @@
 (defn- datatype->field-type
   (^FieldType [datatype & [nullable? metadata extra-data]]
    (let [nullable? (or nullable? (= :object (casting/flatten-datatype datatype)))
-         metadata (->str-str-meta (dissoc metadata :name :datatype :categorical?) )
+         metadata (->str-str-meta (dissoc metadata
+                                          :name :datatype :categorical?
+                                          ::previous-string-table) )
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
          datatype (packing/unpack-datatype datatype)]
@@ -563,16 +583,18 @@
                                                         (str (:timezone extra-data))))
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
                                              (str (:timezone extra-data))))
-       :epoch-microsecond (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
-                                                        (str (:timezone extra-data))))
+       :epoch-microseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
+                                                       (str (:timezone extra-data))))
+       :epoch-nanoseconds (ft-fn (ArrowType$Timestamp. TimeUnit/NANOSECOND
+                                                       (str (:timezone extra-data))))
        :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
        :local-date (ft-fn (ArrowType$Date. DateUnit/DAY))
        ;;packed local time is 64bit microseconds since midnight
-       :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
-       :time-nanosecond (ft-fn (ArrowType$Time. TimeUnit/NANOSECOND (int 8)))
-       :time-microsecond (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 8)))
-       :time-millisecond (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 4)))
-       :time-second (ft-fn (ArrowType$Time. TimeUnit/SECOND (int 4)))
+       :local-time (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 64)))
+       :time-nanoseconds (ft-fn (ArrowType$Time. TimeUnit/NANOSECOND (int 64)))
+       :time-microseconds (ft-fn (ArrowType$Time. TimeUnit/MICROSECOND (int 64)))
+       :time-milliseconds (ft-fn (ArrowType$Time. TimeUnit/MILLISECOND (int 32)))
+       :time-seconds (ft-fn (ArrowType$Time. TimeUnit/SECOND (int 32)))
        :duration (ft-fn (ArrowType$Duration. TimeUnit/MICROSECOND))
        :string (if-let [^DictionaryEncoding encoding (:encoding extra-data)]
                  (ft-fn (ArrowType$Utf8.) encoding)
@@ -587,8 +609,7 @@
 
 
 (defn- col->field
-  ^Field [dictionaries {:keys [strings-as-text?
-                               ::hash-salt]}
+  ^Field [dictionaries {strings-as-text? :strings-as-text}
           col]
   (let [colmeta (meta col)
         nullable? (boolean
@@ -600,7 +621,7 @@
         extra-data (merge (select-keys (meta col) [:timezone])
                           (when (and (not strings-as-text?)
                                      (= :string col-dtype))
-                            (string-col->encoding dictionaries col hash-salt)))]
+                            (string-col->encoding dictionaries col)))]
     (try
       (make-field
        (ml-utils/column-safe-name colname)
@@ -621,67 +642,19 @@
      (dtype-dt/utc-zone-id))))
 
 
-(defn ^:no-doc prepare-dataset-for-write
-  "Convert dataset column datatypes to datatypes appropriate for arrow
-  serialization.
-
-  Options:
-
-  * `:strings-as-text` - Serialize strings as text.  This leads to the most efficient
-  format for mmap operations."
-  ([ds options]
-   (reduce
-    (fn [ds col]
-      (cond
-        (= :uuid (dtype/elemwise-datatype col))
-        (let [missing (col-proto/missing col)
-              metadata (meta col)]
-          (assoc ds (metadata :name)
-                 #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
-                                   :missing missing
-                                   :metadata metadata
-                                   :name (metadata :name)}))
-        (and (= :string (dtype/elemwise-datatype col))
-             (not (:strings-as-text? options)))
-        (if (instance? StringTable (.data ^Column col))
-          ds
-          (let [missing (col-proto/missing col)
-                metadata (meta col)]
-            (assoc ds (metadata :name)
-                   #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
-                                     :missing missing
-                                     :metadata metadata
-                                     :name (metadata :name)})))
-        :else
-        ds))
-    ds
-    (ds-base/columns ds)))
-  ([ds]
-   (prepare-dataset-for-write ds nil)))
-
-
-(defn ^:no-doc ds->schema
-  "Return a map of :schema, :dictionaries where :schema is an Arrow schema
-  and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
-  - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
-  ([ds options]
-   (let [dictionaries (ArrayList.)
-         hash-salt (get options ::hash-salt)
-         hash-salt (when hash-salt (.hashCode ^Object hash-salt))
-         options (assoc options ::hash-salt hash-salt)]
-     {:schema
-      (Schema. ^Iterable
-               (->> (ds-base/columns ds)
-                    (map (partial col->field dictionaries options))))
-      :dictionaries dictionaries}))
-  ([ds]
-   (ds->schema ds {})))
+(defn try-json-parse
+  [val]
+  (when val
+    (try (json/read-str val :key-fn keyword)
+         (catch Exception e
+           val))))
 
 
 (defn- read-schema
   "returns a pair of offset-data and schema"
   [{:keys [message _body _message-type]}]
   (let [schema (MessageSerializer/deserializeSchema ^Message message)
+        ;;_ (println schema)
         fields
         (->> (.getFields schema)
              (mapv (fn [^Field field]
@@ -695,7 +668,11 @@
                         {:name (.getName field)
                          :nullable? (.isNullable field)
                          :field-type datafied-data
-                         :metadata (.getMetadata field)}
+                         :metadata (->> (.getMetadata field)
+                                        (map (fn [^Map$Entry entry]
+                                               [(try-json-parse (.getKey entry))
+                                                (try-json-parse (.getValue entry))]))
+                                        (into {}))}
                         (when-let [encoding (.getDictionary field)]
                           {:dictionary-encoding (datafy encoding)}))))))]
     {:fields fields
@@ -728,40 +705,82 @@
   (write-message-header writer (MessageSerializer/serializeMetadata ^Schema schema)))
 
 
+(defn- parallelize-buffer-process
+  "map-fn must be a fn from buffer-seq->buffer-seq.  Then we can parallelize it
+  by handing map-fn sub sequences of buffers."
+  [buffers map-fn]
+  (if (ForkJoinTask/inForkJoinPool)
+    (map-fn buffers)
+    (let [buffers (vec buffers)
+          n-buffers (count buffers)
+          parallelism (pfor/common-pool-parallelism)
+          buffers-per-thread (quot (+ n-buffers (dec parallelism)) parallelism)]
+      (pfor/cpu-pool-map-reduce
+       (fn [^long thread-idx]
+         (let [buf-start (* thread-idx buffers-per-thread)
+               buf-end (min n-buffers (+ buf-start buffers-per-thread))]
+           (when (< buf-start n-buffers)
+             (map-fn (subvec buffers buf-start buf-end)))))
+       #(vec (apply concat %))
+       nil))))
+
+
 (defn- decompress-buffers
   [^BodyCompression compression buffers]
   (when-not (== 0 (.method compression))
     (throw (Exception. (format "Only buffer batch compression supported - got %d"
                                (.method compression)))))
-  (let [decompressor (create-decompressor (.codec compression))
-        buffers (mapv (fn [buffer]
-                        (let [orig-len (native-buffer/read-long buffer)]
-                          {:orig-len orig-len
-                           :buffer (dtype/sub-buffer buffer 8)}))
-                      buffers)
-        decomp-buf-len (->> (map :orig-len buffers)
-                            (remove #(== -1 (long %)))
-                            (apply +)
-                            (long))
-        decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
-    (->> buffers
-         (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
-                   ;;-1 indicates the buffer isn't actually compressed.
-                   (if (== -1 (long orig-len))
-                     [(conj res buffer) decomp-buf]
-                     [(conj res (decompressor buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
-                      (dtype/sub-buffer decomp-buf orig-len)]))
-                 [[] decomp-buf])
-         (first))))
+  (parallelize-buffer-process
+   buffers
+   (fn [buffers]
+     (let [decompressor (create-decompressor (.codec compression))
+           buffers (mapv (fn [buffer]
+                           (if (> (dtype/ecount buffer) 8)
+                             (let [orig-len (native-buffer/read-long buffer)]
+                               {:orig-len orig-len
+                                :buffer (dtype/sub-buffer buffer 8)})
+                             {:orig-len (dtype/ecount buffer)
+                              :buffer buffer}))
+                         buffers)
+           ;;All results get decompressed into one final buffer
+           decomp-buf-len (->> (map :orig-len buffers)
+                               (remove #(== -1 (long %)))
+                               (apply +)
+                               (long))
+           decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
+       (->> buffers
+            (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
+                      ;;-1 indicates the buffer isn't actually compressed.
+                      ;;And some buffers are just empty with size of 0
+                      #_(println orig-len (dtype/ecount buffer)
+                                 (when (> (dtype/ecount buffer) 32)
+                                   (-> (native-buffer/set-native-datatype buffer :int32)
+                                       (dtype/sub-buffer 0 8)
+                                       (vec))))
+                      (if (<= (long orig-len) 0)
+                        [(conj res buffer) decomp-buf]
+                        [(conj res (decompressor
+                                    buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
+                         (dtype/sub-buffer decomp-buf orig-len)]))
+                    [[] decomp-buf])
+            (first))))))
 
 
 (defn- read-record-batch
   ([^RecordBatch record-batch ^NativeBuffer data]
    (let [compression (.compression record-batch)
+         ;; _ (println (->> (range (.buffersLength record-batch))
+         ;;                 (mapv #(let [buffer (.buffers record-batch %)]
+         ;;                          (hash-map :offset (.offset buffer)
+         ;;                                    :length (.length buffer))))))
          buffers (->> (range (.buffersLength record-batch))
                       (mapv #(let [buffer (.buffers record-batch (int %))]
                                (dtype/sub-buffer data (.offset buffer)
                                                  (.length buffer)))))
+         ;; _ (println (->> (range (.nodesLength record-batch))
+         ;;                 (mapv #(let [node (.nodes record-batch (int %))]
+         ;;                          {:n-elems (.length node)
+         ;;                           :n-null-entries (.nullCount node)}))))
          buffers (if compression
                    (decompress-buffers compression buffers)
                    buffers)]
@@ -823,7 +842,7 @@
 
 
 (defn- serialize-to-bytes
-  "Serialize a numeric buffer to a write channel."
+  "Serialize a numeric buffer to a byte buffer."
   ^java.nio.Buffer [num-data]
   (let [data-dt (casting/un-alias-datatype (dtype/elemwise-datatype num-data))
         n-bytes (byte-length num-data)
@@ -879,33 +898,37 @@
 (defn- compress-record-batch-buffers
   [buffers options]
   (if-let [comp-map (get options :compression)]
-    (let [comp-fn (create-compressor comp-map)
-          os (ByteArrayOutputStream.)
-          data-len (byte-array 8)
-          ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
-          data-len-buf (dtype/->buffer data-len)]
-      {:compression-type (compression-kwd->file-type (comp-map :compression-type))
-       :buffers
-       (first
-        (reduce (fn [[res writer-cache] buffer]
-                  (let [buffer (serialize-to-bytes buffer)
-                        uncomp-len (dtype/ecount buffer)
-                        _ (ByteConversions/longToWriterLE uncomp-len data-len-buf 0)
-                        {:keys [writer-cache dst-buffer]} (comp-fn buffer writer-cache)
-                        dst-bytes (dtype/as-array-buffer dst-buffer)
-                        _ (.write os data-len)
-                        _ (.write os ^bytes (.ary-data dst-bytes)
-                                  (unchecked-int (.offset dst-bytes))
-                                  (unchecked-int (.n-elems dst-bytes)))
-                        dst-buffer (.toByteArray os)]
-                    (.reset os)
-                    [(conj res (nio-buffer/as-nio-buffer dst-buffer))
-                     writer-cache]))
-                [[] nil]
-                buffers))})
-    {:buffers (mapv #(-> (serialize-to-bytes %)
-                         (nio-buffer/as-nio-buffer))
-                    buffers)}))
+    {:compression-type (compression-kwd->file-type (comp-map :compression-type))
+     ;;parallelize buffer compression
+     :buffers
+     (parallelize-buffer-process
+      buffers
+      (fn [buffers]
+        (let [comp-fn (create-compressor comp-map)
+              os (ByteArrayOutputStream.)
+              data-len (byte-array 8)
+              ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
+              data-len-buf (dtype/->buffer data-len)]
+          (first
+           (reduce (fn [[res writer-cache] buffer]
+                     (let [buffer (serialize-to-bytes buffer)
+                           uncomp-len (dtype/ecount buffer)
+                           _ (ByteConversions/longToWriterLE uncomp-len data-len-buf 0)
+                           {:keys [writer-cache dst-buffer]} (comp-fn buffer writer-cache)
+                           dst-bytes (dtype/as-array-buffer dst-buffer)
+                           _ (.write os data-len)
+                           _ (.write os ^bytes (.ary-data dst-bytes)
+                                     (unchecked-int (.offset dst-bytes))
+                                     (unchecked-int (.n-elems dst-bytes)))
+                           dst-buffer (.toByteArray os)]
+                       (.reset os)
+                       [(conj res (nio-buffer/as-nio-buffer dst-buffer))
+                        writer-cache]))
+                   [[] nil]
+                   buffers)))))}
+    {:buffers (vec (pmap #(-> (serialize-to-bytes %)
+                              (nio-buffer/as-nio-buffer))
+                         buffers))}))
 
 (defn- buffers->buf-entries
   [buffers]
@@ -919,9 +942,24 @@
    (first)))
 
 
+(defn- block-data
+  [^long msg-start ^long data-start ^long data-end]
+  {:offset msg-start
+   :metadata-len (- data-start msg-start)
+   :data-len (- data-end data-start)})
+
+
+(defn- write-block-data
+  [^FlatBufferBuilder builder block-data]
+  (Block/createBlock builder (long (block-data :offset))
+                     (int (block-data :metadata-len))
+                     (long (block-data :data-len))))
+
+
 (defn- write-dictionary
-  "Write a dictionary to a dictionary batch"
-  [^WriteChannel writer {:keys [byte-data offsets encoding]} options]
+  "Write a dictionary to a dictionary batch.  Returns enough information to construct
+  a Block entry in the footer."
+  [^WriteChannel writer {:keys [byte-data offsets encoding is-delta?]} options]
   (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
         {:keys [compression-type buffers]}
@@ -940,16 +978,20 @@
                     compression-type)
         last-entry (last buffer-entries)
         body-len (pad (+ (long (last-entry :offset))
-                         (long (last-entry :length))))]
-    (write-message-header writer
-                          (finish-builder builder
-                                          (message-type->message-id :dictionary-batch)
-                                          (DictionaryBatch/createDictionaryBatch
-                                           builder enc-id rbatch-off false)
-                                          body-len))
-    (doseq [buf buffers]
-      (.write writer ^ByteBuffer buf)
-      (.align writer))))
+                         (long (last-entry :length))))
+        bbuf (finish-builder builder
+                             (message-type->message-id :dictionary-batch)
+                             (DictionaryBatch/createDictionaryBatch
+                              builder enc-id rbatch-off (boolean is-delta?))
+                             body-len)
+        msg-start (.getCurrentPosition writer)
+        _ (write-message-header writer bbuf)
+        data-start (.getCurrentPosition writer)
+        _ (doseq [buf buffers]
+            (.write writer ^ByteBuffer buf)
+            (.align writer))
+        data-end (.getCurrentPosition writer)]
+    (block-data msg-start data-start data-end)))
 
 
 (defn- toggle-bit
@@ -1060,17 +1102,21 @@
         buf-entries (buffers->buf-entries buffers)
         last-entry (last buf-entries)
         body-len (pad (+ (long (last-entry :offset)) (long (last-entry :length))))
-        builder (FlatBufferBuilder.)]
-    (write-message-header writer
-                          (finish-builder
-                           ;;record-batch message type
-                           builder (message-type->message-id :record-batch)
-                           (write-record-batch-header builder n-rows nodes buf-entries
-                                                      compression-type)
-                           body-len))
-    (doseq [buf buffers]
-      (.write writer ^ByteBuffer buf)
-      (.align writer))))
+        builder (FlatBufferBuilder.)
+        msg-start (.getCurrentPosition writer)
+        _ (write-message-header writer
+                                (finish-builder
+                                 ;;record-batch message type
+                                 builder (message-type->message-id :record-batch)
+                                 (write-record-batch-header builder n-rows nodes buf-entries
+                                                            compression-type)
+                                 body-len))
+        data-start (.getCurrentPosition writer)
+        _ (doseq [buf buffers]
+            (.write writer ^ByteBuffer buf)
+            (.align writer))
+        data-end (.getCurrentPosition writer)]
+    (block-data msg-start data-start data-end)))
 
 
 (defn- check-message-type
@@ -1143,10 +1189,24 @@
               (dtype/->byte-array)
               (String.)))))))
 
+(defn- offsets-data->bytedata-reader
+  ^List [offsets data n-elems]
+  (let [n-elems (long n-elems)
+        offsets (dtype/->reader offsets)]
+    (reify ObjectReader
+      (elemwiseDatatype [rdr] :object)
+      (lsize [rdr] n-elems)
+      (readObject [rdr idx]
+        (let [start-off (long (offsets idx))
+              end-off (long (offsets (inc idx)))]
+          (-> (dtype/sub-buffer data start-off
+                                (- end-off start-off))
+              (dtype/->byte-array)))))))
+
 
 (defn- dictionary->strings
   "Returns a map of {:id :strings}"
-  [{:keys [id _delta? records]}]
+  [{:keys [id delta? records]}]
   (let [nodes (:nodes records)
         buffers (:buffers records)
         _ (assert (== 1 (count nodes)))
@@ -1161,6 +1221,7 @@
                                   (-> (offsets-data->string-reader offsets data n-elems)
                                       (dtype/clone)))]
     {:id id
+     :delta? delta?
      :strings str-data}))
 
 
@@ -1288,17 +1349,261 @@
          (ds-impl/new-dataset options))))
 
 
+(defn- bytes->short-array
+  ^shorts [^bytes data nrows]
+  (let [retval (short-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asShortBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->int-array
+  ^ints [^bytes data nrows]
+  (let [retval (int-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asIntBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->long-array
+  ^longs [^bytes data nrows]
+  (let [retval (long-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asLongBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->float-array
+  ^floats [^bytes data nrows]
+  (let [retval (float-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asFloatBuffer)
+        (.get retval))
+    retval))
+
+(defn- bytes->double-array
+  ^doubles [^bytes data nrows]
+  (let [retval (double-array nrows)]
+    (-> (ByteBuffer/wrap data)
+        (.order ByteOrder/LITTLE_ENDIAN)
+        (.asDoubleBuffer)
+        (.get retval))
+    retval))
+
+
+(defn- stream->nbuf
+  ^NativeBuffer [input]
+  (if (instance? InputStream input)
+    (let [^InputStream input input
+          dlist (ArrayList.)
+          total (long (loop [data-buf (byte-array 4096)
+                             n-read (.read input data-buf (int 0) (int 4096))
+                             total 0]
+                        (if (> n-read 0)
+                          (let [new-dbuf (byte-array 4096)]
+                            (.add dlist (dtype/sub-buffer data-buf 0 n-read))
+                            (recur new-dbuf (.read input new-dbuf (int 0)
+                                                   (int 4096))
+                                   (+ total n-read)))
+                          total)))
+          nbuf (dtype/make-container :native-heap :int8 total)]
+      (.close input)
+      (dtype/coalesce! nbuf dlist)
+      nbuf)
+    (do
+      (assert (instance? NativeBuffer input))
+      input)))
+
+
+(defn feather->ds
+  [input options]
+  (let [nbuf (stream->nbuf input)]
+    (let [leng (dtype/ecount nbuf)
+          m1 (native-buffer/read-int nbuf)
+          _ (when-not (== m1 FeatherTable/MAGIC)
+              (throw (Exception. "Initial magic number not found")))
+          m2 (native-buffer/read-int nbuf (- leng 4))
+          _ (when-not (== m2 FeatherTable/MAGIC)
+              (throw (Exception. "End magic number not found")))
+          meta-len (native-buffer/read-int nbuf (- leng 8))
+          metabytes (dtype/sub-buffer nbuf (- leng 8 meta-len) meta-len)
+          ctable (CTable/getRootAsCTable (nio-buffer/as-nio-buffer metabytes))
+          ncols (.columnsLength ctable)
+          nrows (.numRows ctable)
+          version (.version ctable)
+          int-dt-types? (get options :integer-datetime-types?)]
+      (->> (range ncols)
+           (map (fn [cidx]
+                  (let [col (.columns ctable cidx)
+                        cname (.name col)
+                        primitive-ary (.values col)
+                        fea-dt (.type primitive-ary)
+                        n-missing (.nullCount primitive-ary)
+                        usermeta (.userMetadata col)
+                        data-off (.offset primitive-ary)
+                        data-len (.totalBytes primitive-ary)
+                        missing-len (if (== 0 n-missing)
+                                      0
+                                      (pad (quot (+ nrows 7) 8)))
+                        missing
+                        (if-not (== 0 n-missing)
+                          (int8-buf->missing (dtype/sub-buffer nbuf data-off missing-len)
+                                             nrows)
+                          (bitmap/->bitmap))
+                        buffers-len (- data-len missing-len)
+                        data (dtype/sub-buffer nbuf (+ data-off missing-len) buffers-len)
+                        as-native (fn ([dtype]
+                                       (-> (native-buffer/set-native-datatype data dtype)
+                                           (dtype/sub-buffer 0 nrows)))
+                                    ([dtype nrows]
+                                       (-> (native-buffer/set-native-datatype data dtype)
+                                           (dtype/sub-buffer 0 nrows))))
+                        buffer
+                        (condp = fea-dt
+                          Type/BOOL
+                          (byte-buffer->bitwise-boolean-buffer data nrows)
+                          Type/INT8
+                          (as-native :int8)
+                          Type/UINT8
+                          (as-native :uint8)
+                          Type/INT16
+                          (as-native :int16)
+                          Type/UINT16
+                          (as-native :uint16)
+                          Type/INT32
+                          (as-native :int32)
+                          Type/UINT32
+                          (as-native :uint32)
+                          Type/DATE
+                          (if int-dt-types?
+                            (as-native :epoch-days)
+                            (as-native :packed-local-date))
+                          Type/INT64
+                          (as-native :int64)
+                          Type/UINT64
+                          (as-native :uint64)
+                          Type/TIMESTAMP
+                          (as-native :epoch-milliseconds)
+                          Type/TIME
+                          (as-native :milliseconds)
+                          Type/FLOAT
+                          (as-native :float32)
+                          Type/DOUBLE
+                          (as-native :float64)
+                          Type/UTF8
+                          (offsets-data->string-reader
+                           (as-native :int32 (inc nrows))
+                           (dtype/sub-buffer data (pad (* (inc nrows) 4)))
+                           nrows)
+                          Type/LARGE_UTF8
+                          (offsets-data->string-reader
+                           (as-native :int64 (inc nrows))
+                           (dtype/sub-buffer data (* (inc nrows) 8))
+                           data nrows)
+                          Type/BINARY
+                          (offsets-data->bytedata-reader
+                           (as-native :int32 (inc nrows))
+                           (dtype/sub-buffer data (pad (* (inc nrows) 4)))
+                           nrows)
+                          Type/LARGE_BINARY
+                          (offsets-data->bytedata-reader
+                           (as-native :int64 (inc nrows))
+                           (dtype/sub-buffer data (* (inc nrows) 8))
+                           data nrows))]
+                    #:tech.v3.dataset{:name cname
+                                      :missing missing
+                                      :data buffer
+                                      :force-datatype? true})))
+           (ds-impl/new-dataset options)))))
+
+(defn- file-tags
+  "Returns {:file-type :input} where input may be the original input
+  or a wrapper."
+  [input]
+  (if (instance? InputStream input)
+    (let [^InputStream input (if (.markSupported ^InputStream input)
+                               input
+                               (BufferedInputStream. input))
+          n-bytes 16
+          _ (.mark input n-bytes)
+          tagbuf (byte-array n-bytes)
+          _ (.read input tagbuf 0 n-bytes)
+          buf (int-array (quot n-bytes 4))
+          _ (-> (ByteBuffer/wrap tagbuf)
+                (.order ByteOrder/LITTLE_ENDIAN)
+                (.asIntBuffer)
+                (.get buf))]
+      (.reset input)
+      {:file-tags (vec buf)
+       :input input})
+    ;;else native buffer
+    {:file-tags (-> (native-buffer/set-native-datatype input :int32)
+                    (dtype/sub-buffer 0 4)
+                    (vec))
+     :input input}))
+
+
+(defn- file-type
+  [input]
+  (let [{:keys [file-tags input]} (file-tags input)]
+    {:file-type
+     (case (unchecked-int (file-tags 0))
+       1330795073 :arrow-file
+       826361158 :feather-v1
+       -1 :arrow-ipc)
+     :input input}))
+
+(comment
+  (def files ["test/data/alldtypes.arrow-feather-v1"
+              "test/data/alldtypes.arrow-feather-compressed"
+              "test/data/alldtypes.arrow-ipc"
+              "test/data/alldtypes.arrow-feather"])
+
+  (doseq [file files]
+    (with-open [is (io/input-stream file)]
+      (println (str "file: " file " - type: " (:file-type (file-type is))))))
+  )
+
+
+(defn- input->messages
+  [input]
+  (if (instance? InputStream input)
+    (stream-message-seq input)
+    (message-seq input)))
+
+
+(defn- discard
+  [input n-bytes]
+  (if (instance? InputStream input)
+    (do
+      (.read ^InputStream input (byte-array n-bytes) 0 n-bytes)
+      input)
+    (dtype/sub-buffer input 8)))
+
+
 (defn- parse-next-dataset
   [schema messages fname idx dict-map options]
   (when (seq messages)
-    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch)
-                                    messages)
+    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch) messages)
           rest-messages (drop (count dict-messages) messages)
-          dict-map (merge dict-map
-                          (->> dict-messages
-                               (map dictionary->strings)
-                               (map (juxt :id identity))
-                               (into {})))
+          dict-map (merge-with
+                    (fn [older newer]
+                      (if (newer :delta?)
+                        (update newer :strings
+                                (fn [new-strings]
+                                  (let [old-strings (dtype/clone (older :strings))]
+                                    (.addAll ^List old-strings new-strings)
+                                    old-strings)))
+                        newer))
+                    dict-map
+                    (->> dict-messages
+                         (map dictionary->strings)
+                         (map (juxt :id identity))
+                         (into {})))
           data-record (first rest-messages)]
       (cons
        (-> (records->ds schema dict-map data-record options)
@@ -1309,11 +1614,11 @@
 
 (defn stream->dataset-seq
   "Loads data up to and including the first data record.  Returns the a lazy
-  sequence of datasets.  Datasets use mmapped data, however, so realizing the
-  entire sequence is usually safe, even for datasets that are larger than
+  sequence of datasets.  Datasets can be loaded using mmapped data and when that is true
+  realizing the entire sequence is usually safe, even for datasets that are larger than
   available RAM.
-  This method is expected to be called from within a stack resource context
-  unless options include {:resource-type :gc}.  See documentation for
+  The default resourc management pathway for this is :auto but you can override this
+  by explicity setting the option `:resource-type`.  See documentation for
   tech.v3.datatype.mmap/mmap-file.
 
   Options:
@@ -1333,41 +1638,26 @@
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
   [fname & [options]]
-  (->> (let [messages (case (get options :open-type :input-stream)
-                        :mmap (->> (mmap/mmap-file fname options)
-                                   (message-seq))
-                        :input-stream (->> (apply io/input-stream fname
-                                                  (apply concat (seq options)))
-                                           (stream-message-seq)))
-             messages (sequence (map parse-message) messages)
-             schema (first messages)
-             _ (when-not (= :schema (:message-type schema))
-                 (throw (Exception. "Initial message is not a schema message.")))]
-         (parse-next-dataset schema (rest messages) fname 0 nil options))))
+  (let [input (case (get options :open-type :input-stream)
+                :mmap (mmap/mmap-file fname options)
+                :input-stream (apply io/input-stream fname (apply concat (seq options))))
+        {:keys [file-type input]} (file-type input)
 
-
-(defn- message-seq->dataset
-  [fname options message-seq]
-  (let [messages (mapv parse-message message-seq)
-        schema (first messages)
-        _ (when-not (= :schema (:message-type schema))
-            (throw (Exception. "Initial message is not a schema message.")))
-        messages (rest messages)
-        dict-messages (take-while #(= (:message-type %) :dictionary-batch)
-                                  messages)
-        rest-messages (drop (count dict-messages) messages)
-        dict-map (->> dict-messages
-                      (map dictionary->strings)
-                      (map (juxt :id identity))
-                      (into {}))
-        data-record (first rest-messages)]
-    (when-not (= :record-batch (:message-type data-record))
-      (throw (Exception. "No data records detected")))
-    (when (seq (rest rest-messages))
-      (throw (Exception. "File contains multiple record batches.
-Please use stream->dataset-seq-inplace.")))
-    (-> (records->ds schema dict-map data-record options)
-        (ds-base/set-dataset-name fname))))
+        ipc-parse-fn
+        (fn [input]
+          (let [messages (->> (input->messages input)
+                              (sequence (map parse-message)))
+                schema (first messages)]
+            (when-not (= :schema (:message-type schema))
+              (throw (Exception. "Initial message is not a schema message.")))
+            (parse-next-dataset schema (rest messages) fname 0 nil options)))]
+    (case file-type
+      :arrow-file
+      (ipc-parse-fn (discard input 8))
+      :arrow-ipc
+      (ipc-parse-fn input)
+      :feather-v1
+      [(feather->ds input options)])))
 
 
 (defn stream->dataset
@@ -1389,15 +1679,129 @@ Please use stream->dataset-seq-inplace.")))
   packed types.  For example columns of type `:epoch-days` will be returned to the user
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
-  [fname & [options]]
-  (->> (case (get options :open-type :input-stream)
-         :mmap
-         (->> (mmap/mmap-file fname options)
-              (message-seq))
-         :input-stream
-         (->> (apply io/input-stream fname (apply concat (seq options)))
-              (stream-message-seq)))
-       (message-seq->dataset fname options)))
+  ([fname options]
+   (let [ds-seq (stream->dataset-seq fname options)
+         ds (first ds-seq)]
+     (when-not (nil? (seq (rest ds-seq)))
+       (throw (Exception. "File contains multiple record batches.
+Please use stream->dataset-seq.")))
+     (vary-meta ds assoc :name fname)))
+  ([fname]
+   (stream->dataset fname nil)))
+
+
+(defn- simplify-datatype
+  [datatype options]
+  (let [datatype (packing/unpack-datatype datatype)]
+    (if (and (= :string datatype) (get options :strings-as-text?))
+      :text
+      datatype)))
+
+
+(defn ^:no-doc prepare-dataset-for-write
+  "Normalize schemas and convert datatypes to datatypes appropriate for arrow
+  serialization."
+  ;;prev ds was the dataset immediately previous to this one.  We can assume its
+  ;;schema is normalized already.
+  [ds prev-ds ds-schema options]
+  (let [ds (ds-base/select-columns ds (map :name ds-schema))
+        ds-meta (map meta (ds-base/columns ds))
+        ;;Step one is normalize our schema
+        ;;meaning upcast types when possible or error out.
+        ds (if prev-ds
+             (reduce (fn [ds col-meta]
+                       (ds-base/update-column
+                        ds (:name col-meta)
+                        (fn [col]
+                          (let [col-dt (simplify-datatype (dtype/elemwise-datatype col)
+                                                          options)
+                                src-dt (simplify-datatype (:datatype col-meta) options)
+                                merged-dt (casting/widest-datatype src-dt col-dt)]
+                            ;;Do a datatype check to see if things match
+                            (when-not (= src-dt merged-dt)
+                              (throw (Exception.
+                                      (format "Datatypes differ in a downstream dataset.  Expected '%s' got '%s'" src-dt col-dt))))
+                            (if (= col-dt src-dt)
+                              col
+                              (dtype/elemwise-cast col src-dt))))))
+                     ds
+                     ds-schema)
+             ds)]
+    ;;Second step, once the datatypes are set is to cast the types to arrow compatible
+    ;;datatypes
+    (reduce
+     (fn [ds col]
+       (cond
+         (= :uuid (dtype/elemwise-datatype col))
+         (let [missing (col-proto/missing col)
+               metadata (meta col)]
+           (assoc ds (metadata :name)
+                  #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
+                                    :missing missing
+                                    :metadata metadata
+                                    :name (metadata :name)}))
+         (and (= :string (dtype/elemwise-datatype col))
+              (not (:strings-as-text? options)))
+         (if (and (nil? prev-ds)
+                  (instance? StringTable (.data ^Column col)))
+           ds
+           (let [missing (col-proto/missing col)
+                 metadata (meta col)]
+             (if (nil? prev-ds)
+               (assoc ds (metadata :name)
+                      #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
+                                        :missing missing
+                                        :metadata metadata
+                                        :name (metadata :name)})
+               (let [prev-col (ds-base/column prev-ds (:name metadata))
+                     prev-str-t (ds-base/ensure-column-string-table prev-col)
+                     int->str (ArrayList. ^List (.int->str prev-str-t))
+                     str->int (HashMap. ^Map (.str->int prev-str-t))
+                     n-rows (dtype/ecount col)
+                     data (StringTable. int->str str->int
+                                        (dyn-int-list/dynamic-int-list 0))]
+                 (dotimes [idx n-rows]
+                   (.add data (or (col idx) "")))
+                 (assoc ds (metadata :name)
+                        #:tech.v3.dataset{:data data
+                                          :missing missing
+                                          :metadata (assoc metadata
+                                                           ::previous-string-table prev-str-t)
+                                          :name (metadata :name)})))))
+         :else
+         ds))
+     ds
+     (ds-base/columns ds))))
+
+
+(defn- do-prep-ds-seq
+  [prev-ds ds-schema options ds-seq]
+  (when-let [ds (first ds-seq)]
+    (cons (prepare-dataset-for-write ds prev-ds ds-schema options)
+          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+
+
+(defn- prepare-ds-seq-for-write
+  [options ds-seq]
+  (let [ds (first ds-seq)
+        ds-schema (map meta (vals ds))]
+    (cons (prepare-dataset-for-write ds nil ds-schema options)
+          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+
+
+(defn ^:no-doc ds->schema
+  "Return a map of :schema, :dictionaries where :schema is an Arrow schema
+  and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
+  - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
+  ([ds options]
+   (let [dictionaries (ArrayList.)]
+     {:schema
+      (Schema. ^Iterable
+               (->> (ds-base/columns ds)
+                    (map (partial col->field dictionaries options))))
+      :dictionaries dictionaries}))
+  ([ds]
+   (ds->schema ds {})))
 
 
 (def ^:private compression-type
@@ -1429,43 +1833,34 @@ Please use stream->dataset-seq-inplace.")))
      #_(create-compressor))))
 
 
-(defn dataset->stream!
-  "Write a dataset as an arrow stream file.  File will contain one record set.
-
-  Options:
-
-  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
-     dictionaries.  This works well if you want to load an arrow file in-place or if
-     you know the strings in your dataset are either really large or should not be in
-     string tables.
-
-  * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
-     Per-column compression of the data can result in some significant size savings
-     (2x+) and thus some significant time savings when loading over the network.
-     Using compression makes loading via mmap non-lazy - If you are going to use
-     compression mmap probably doesn't make sense on load and most likely will
-     result on slower loading times."
-  ([ds path options]
-   (let [ds (prepare-dataset-for-write ds options)
-         options (update options :compression validate-compression-for-write)
-         {:keys [schema dictionaries]} (ds->schema ds options)]
-     ;;Any native mem allocated in this context will be released
-     (resource/stack-resource-context
-      (with-open [ostream (io/output-stream! path)]
-        (let [writer (arrow-output-stream-writer ostream)]
-          (write-schema writer schema)
-          (doseq [dict dictionaries] (write-dictionary writer dict options))
-          (write-dataset writer ds options))))))
-  ([ds path]
-   (dataset->stream! ds path {})))
+(def ^{:tag 'bytes} arrow-file-begin-tag (byte-array [65 82 82 79 87 49 0 0]))
+(def ^{:tag 'bytes} arrow-file-end-tag (byte-array [65 82 82 79 87 49]))
 
 
-(defn- simplify-datatype
-  [datatype options]
-  (let [datatype (packing/unpack-datatype datatype)]
-    (if (and (= :string datatype) (get options :strings-as-text?))
-      :text
-      datatype)))
+(defn- write-footer
+  [^WriteChannel writer ^Schema schema dict-blocks record-blocks]
+  ;;IPC continuation
+  (.writeIntLittleEndian writer -1)
+  ;;Empty integer for padding
+  (.writeIntLittleEndian writer 0)
+  (let [builder (FlatBufferBuilder.)
+        schema-offset (.getSchema schema builder)
+        _ (Footer/startDictionariesVector builder (count dict-blocks))
+        _ (doseq [dict (reverse dict-blocks)]
+            (write-block-data builder dict))
+        dict-offset (.endVector builder)
+        _ (Footer/startRecordBatchesVector builder (count record-blocks))
+        _ (doseq [rb (reverse record-blocks)]
+            (write-block-data builder rb))
+        rb-offset (.endVector builder)
+        _ (.finish builder (Footer/createFooter builder 4 schema-offset dict-offset rb-offset 0))
+        footer-data (.dataBuffer builder)
+        start (.getCurrentPosition writer)
+        _ (.write writer footer-data)
+        end (.getCurrentPosition writer)
+        metalen (- end start)]
+    (.writeIntLittleEndian writer metalen)
+    (.write writer (ByteBuffer/wrap arrow-file-end-tag))))
 
 
 (defn dataset-seq->stream!
@@ -1475,10 +1870,16 @@ Please use stream->dataset-seq-inplace.")))
 
   Options:
 
-  * `strings-as-text?`: - defaults to false - Save out strings into arrow files without
+  * `:strings-as-text?` - defaults to false - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
      string tables.
+
+  * `:format` - one of `[:file :ipc]`,  defaults to `:file`.
+    - `:file` - arrow file format, compatible with pyarrow's [open_file](https://arrow.apache.org/docs/python/generated/pyarrow.ipc.open_file.html#pyarrow.ipc.open_file).  The suggested
+       suffix is `.arrow`.
+    - `:ipc` - arrow streaming format, compatible with pyarrow's [open_ipc](https://arrow.apache.org/docs/python/generated/pyarrow.ipc.open_file.html#pyarrow.ipc.open_ipc) pathway.  The
+       suggested suffix is `.arrows`.
 
   * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
      Per-column compression of the data can result in some significant size savings
@@ -1490,56 +1891,52 @@ Please use stream->dataset-seq-inplace.")))
    ;;We use the first dataset to setup schema information the rest of the datasets
    ;;must follow.  So the serialization of the first dataset differs from the serialization
    ;;of the subsequent datasets
-   (let [ds (first ds-seq)
-         ds-schema (map meta (ds-base/columns ds))
-         cnames (map :name ds-schema)
-         ds-map-fn
-         (fn [ds]
-           ;;Ensure they have at least the same columns, in order, as the first dataset
-           ;;and do a quick datatype check.
-           (let [ds (ds-base/select-columns ds cnames)
-                 ds-meta (map meta (ds-base/columns ds))]
-             (->
-              (reduce (fn [ds col-meta]
-                        (ds-base/update-column
-                         ds (:name col-meta)
-                         (fn [col]
-                           (let [col-dt (simplify-datatype (dtype/elemwise-datatype col)
-                                                           options)
-                                 src-dt (simplify-datatype (:datatype col-meta) options)
-                                 merged-dt (casting/widest-datatype src-dt col-dt)]
-                             ;;Do a datatype check to see if things match
-                             (when-not (= src-dt merged-dt)
-                               (throw (Exception.
-                                       (format "Datatypes differ in a downstream dataset.  Expected '%s' got '%s'" src-dt col-dt))))
-                             (if (= col-dt src-dt)
-                               col
-                               (dtype/elemwise-cast col src-dt))))))
-                      ds
-                      ds-schema)
-              (prepare-dataset-for-write options))))
-         ds-seq (sequence (map ds-map-fn) (rest ds-seq))]
+   (when (empty? ds-seq)
+     (throw (Exception. "Empty dataset sequence")))
+   (let [options (update options :compression validate-compression-for-write)
+         ds-seq (prepare-ds-seq-for-write options ds-seq)
+         ds (first ds-seq)
+         ds-seq (rest ds-seq)
+         file-tag? (= :file (get options :format :file))]
      ;;Any native mem allocated in this context will be released
      (with-open [ostream (io/output-stream! path)]
        (let [writer (arrow-output-stream-writer ostream)
-             {:keys [schema dictionaries]} (ds->schema ds (assoc options ::hash-salt -1))]
-         (write-schema writer schema)
-         (doseq [dict dictionaries] (write-dictionary writer dict options))
-         ;;Release any native mem created during this step just after step completes
-         (resource/stack-resource-context
-          (write-dataset writer ds options))
-         (doseq [[idx ds] (map-indexed vector ds-seq)]
-           ;;Have to use different hashing of dictionaries else we get overwriting of
-           ;;dictionaries which may not be ideal for other engines without adding meaningful
-           ;;support for isDelta.
-           (let [{:keys [dictionaries]} (ds->schema ds (assoc options ::hash-salt idx))]
-             (doseq [dict dictionaries] (write-dictionary writer dict options))
-             ;;Release any native mem created during this step just after this step
-             ;;completes.
-             (resource/stack-resource-context
-              (write-dataset writer ds options))))))))
+             _ (when file-tag?
+                 (.write writer (ByteBuffer/wrap arrow-file-begin-tag)))
+             {:keys [schema dictionaries]} (ds->schema ds options)
+             _ (write-schema writer schema)
+             dict-blocks (mapv #(write-dictionary writer % options) dictionaries)
+             ;;Release any native mem created during this step just after step completes
+             record-blocks [(resource/stack-resource-context
+                         (write-dataset writer ds options))]
+
+             [dict-blocks record-blocks]
+             (reduce
+              (fn [[dict-blocks record-blocks dictionaries] ds]
+                (let [{:keys [dictionaries]} (ds->schema ds (assoc options :dictionaries dictionaries))
+                      dict-blocks (concat
+                                   dict-blocks
+                                   (mapv #(write-dictionary writer % options) dictionaries))
+                      record-blocks (concat record-blocks
+                                            [(resource/stack-resource-context
+                                              (write-dataset writer ds options))])]
+                  [dict-blocks record-blocks dictionaries]))
+              [dict-blocks record-blocks dictionaries]
+              ds-seq)]
+         (when file-tag?
+           (write-footer writer schema dict-blocks record-blocks))
+         (.getCurrentPosition writer)))))
   ([path ds-seq]
    (dataset-seq->stream! path nil ds-seq)))
+
+
+(defn dataset->stream!
+  "Write a dataset as an arrow file.  File will contain one record set.
+  See documentation for [[dataset-seq->stream!]]."
+  ([ds path options]
+   (dataset-seq->stream! path options [ds]))
+  ([ds path]
+   (dataset->stream! ds path {})))
 
 
 (defn ^:no-doc read-stream-dataset-copying
@@ -1560,33 +1957,21 @@ Please use stream->dataset-seq-inplace.")))
   (dataset->stream! ds path options))
 
 
-(comment
-  (require '[tech.v3.dataset :as ds])
-  (def test-ds (ds/->dataset {:a ["one" "two" "three"]}))
-  (def schema-data (ds->schema test-ds))
-  (defn write-to-bytes
-    ^bytes [write-fn]
-    (let [{:keys [channel storage]} (arrow-in-memory-writer)]
-      (write-fn channel)
-      (-> (dtype/->buffer storage)
-          (dtype/->byte-array))))
-  (def data-bytes (write-to-bytes
-                   (fn [writer]
-                     (write-schema writer (:schema schema-data)))))
-  (def dict (first (:dictionaries schema-data)))
-  (def dict-bytes (write-to-bytes
-                   (fn [writer]
-                     (write-dictionary-batch writer dict))))
-  (def dict-msg (-> (dtype/make-container :native-heap :int8 dict-bytes)
-                    (read-message)
-                    (read-dictionary-batch)))
-  (def rehydrated-dict (dictionary->strings dict-msg))
+(defmethod ds-io/data->dataset :arrow
+  [data options]
+  (stream->dataset data options))
 
-  (def ds-bytes (write-to-bytes
-                 (fn [writer]
-                   (write-dataset-record-batch writer test-ds))))
 
-  (write-dataset-to-stream! test-ds "testa.arrow" {:strings-as-text? true})
-  (def read-data (read-stream-dataset-inplace "testa.arrow"))
+(defmethod ds-io/dataset->data! :arrow
+  [ds output options]
+  (dataset->stream! ds output options))
 
-  )
+
+(defmethod ds-io/data->dataset :arrows
+  [data options]
+  (stream->dataset data options))
+
+
+(defmethod ds-io/dataset->data! :arrows
+  [ds output options]
+  (dataset->stream! ds output options))
