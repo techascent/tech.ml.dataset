@@ -669,9 +669,9 @@
                          :nullable? (.isNullable field)
                          :field-type datafied-data
                          :metadata (->> (.getMetadata field)
-                                        (fn [^Map$Entry entry]
-                                          [(try-json-parse (.getKey entry))
-                                           (try-json-parse (.getValue entry))])
+                                        (map (fn [^Map$Entry entry]
+                                               [(try-json-parse (.getKey entry))
+                                                (try-json-parse (.getValue entry))]))
                                         (into {}))}
                         (when-let [encoding (.getDictionary field)]
                           {:dictionary-encoding (datafy encoding)}))))))]
