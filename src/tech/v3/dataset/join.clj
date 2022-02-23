@@ -415,14 +415,11 @@ outer-join [8 4]:
                right-rc (ds-base/row-count right-ds)
                n-result (* left-rc right-rc)
                [lhs-indexes rhs-indexes]
-               (mapv (fn [rc]
-                       (let [rc (long rc)]
-                         (-> (if (< n-result Integer/MAX_VALUE)
-                               (dtype/make-reader :int32 n-result (rem idx rc))
-                               (dtype/make-reader :int64 n-result (rem idx rc)))
-                             ;;clone to reduce indexing costs later
-                             (dtype/clone))))
-                     [left-rc right-rc])
+               (if (< n-result Integer/MAX_VALUE)
+                 [(dtype/make-reader :int32 n-result (quot idx right-rc))
+                  (dtype/make-reader :int32 n-result (rem idx right-rc))]
+                 [(dtype/make-reader :int64 n-result (quot idx right-rc))
+                  (dtype/make-reader :int64 n-result (rem idx right-rc))])
                lhs-columns (map #(ds-col/select % lhs-indexes) (ds-base/columns left-ds))
                rhs-columns (map #(ds-col/select % rhs-indexes) (ds-base/columns right-ds))]
            (-> (ds-impl/new-dataset

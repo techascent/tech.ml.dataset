@@ -283,6 +283,17 @@
     (ds-join/left-join :name a b)))
 
 
+(deftest cross-join
+  (let [res (ds-join/pd-merge
+             (ds/->dataset {:a [1 2 3] :b [4 5 6]})
+             (ds/->dataset {:c [:a :b :c] :d [:x :y :z]})
+             {:how :cross})]
+    (is (= [1 1 1 2 2 2 3 3 3]
+           (res :a)))
+    (is (= [:a :b :c :a :b :c :a :b :c]
+           (res :c)))))
+
+
 (comment
 
   (def lhs-fields

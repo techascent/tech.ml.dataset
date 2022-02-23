@@ -225,7 +225,7 @@
         {:writer-cache dstbuf
          :dst-buffer final-bytes}))))
 
-(defn create-jpnz-lz4-frame-decompressor
+(defn- create-jpnz-lz4-frame-decompressor
   []
   (fn [srcbuf dstbuf]
     (let [src-byte-data (dtype/->byte-array srcbuf)
@@ -642,7 +642,7 @@
      (dtype-dt/utc-zone-id))))
 
 
-(defn try-json-parse
+(defn- try-json-parse
   [val]
   (when val
     (try (json/read-str val :key-fn keyword)
@@ -1419,7 +1419,7 @@
       input)))
 
 
-(defn feather->ds
+(defn- feather->ds
   [input options]
   (let [nbuf (stream->nbuf input)]
     (let [leng (dtype/ecount nbuf)
@@ -1833,8 +1833,10 @@ Please use stream->dataset-seq.")))
      #_(create-compressor))))
 
 
-(def ^{:tag 'bytes} arrow-file-begin-tag (byte-array [65 82 82 79 87 49 0 0]))
-(def ^{:tag 'bytes} arrow-file-end-tag (byte-array [65 82 82 79 87 49]))
+(def ^{:tag 'bytes
+       :private true} arrow-file-begin-tag (byte-array [65 82 82 79 87 49 0 0]))
+(def ^{:tag 'bytes
+       :private true} arrow-file-end-tag (byte-array [65 82 82 79 87 49]))
 
 
 (defn- write-footer
@@ -1882,11 +1884,15 @@ Please use stream->dataset-seq.")))
        suggested suffix is `.arrows`.
 
   * `:compression` - Either `:zstd` or `:lz4`,  defaults to no compression (nil).
-     Per-column compression of the data can result in some significant size savings
-     (2x+) and thus some significant time savings when loading over the network.
-     Using compression makes loading via mmap non-lazy - If you are going to use
-     compression mmap probably doesn't make sense and most likely will result in
-     slower loading times."
+  Per-column compression of the data can result in some significant size savings
+  (2x+) and thus some significant time savings when loading over the network.
+  Using compression makes loading via mmap non-lazy - If you are going to use
+  compression mmap probably doesn't make sense and most likely will result in
+  slower loading times.
+     - `:lz4` - Decent and very fast compression.
+     - `:zstd` - Good compression, somewhat slower than `:lz4`.  Can also have a
+       level parameter that ranges from 1-12 in which case compression is specified
+       in map form: `{:compression-type :zstd :level 5}`."
   ([path options ds-seq]
    ;;We use the first dataset to setup schema information the rest of the datasets
    ;;must follow.  So the serialization of the first dataset differs from the serialization

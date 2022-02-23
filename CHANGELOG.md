@@ -2,6 +2,8 @@
 # 6.066
  * Major rework of arrow support to include support for all known arrow file formats
    and tested files in various formats across latest (7.0.0) pyarrow.
+ * Fix for [issue 289](https://github.com/techascent/tech.ml.dataset/issues/289) - cross
+   pd-merge produced incorrect result.
 
 # 6.065
  * Fixing [issue 287](https://github.com/techascent/tech.ml.dataset/issues/287) - dataset corrupt after
