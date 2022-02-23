@@ -504,14 +504,14 @@
             start-offset (dtype/ecount prev-int->str)
             n-extra (- (dtype/ecount int->str) (dtype/ecount prev-int->str))
             _ (assert (>= n-extra 0) "Later string tables should only be larger")]
-      (dotimes [str-idx n-extra]
-        (let [strdata (int->str (+ str-idx start-offset))
-              _ (when (= strdata :failure)
-                  (throw (Exception. "Invalid string table - missing entries.")))
-              str-bytes (.getBytes (str strdata))
-              soff (dtype/ecount byte-data)]
-          (.addAll byte-data (dtype/->reader str-bytes))
-          (.add offsets soff)))))
+        (dotimes [str-idx n-extra]
+          (let [strdata (int->str (+ str-idx start-offset))
+                _ (when (= strdata :failure)
+                    (throw (Exception. "Invalid string table - missing entries.")))
+                str-bytes (.getBytes (str strdata))
+                soff (dtype/ecount byte-data)]
+            (.addAll byte-data (dtype/->reader str-bytes))
+            (.add offsets soff)))))
     ;;Make everyone's life easier by adding an extra offset.
     (.add offsets (dtype/ecount byte-data))
     {:encoding encoding
@@ -609,7 +609,7 @@
 
 
 (defn- col->field
-  ^Field [dictionaries {strings-as-text? :strings-as-text}
+  ^Field [dictionaries {strings-as-text? :strings-as-text?}
           col]
   (let [colmeta (meta col)
         nullable? (boolean
@@ -1872,10 +1872,13 @@ Please use stream->dataset-seq.")))
 
   Options:
 
-  * `:strings-as-text?` - defaults to false - Save out strings into arrow files without
+  * `:strings-as-text?` - defaults to true - Save out strings into arrow files without
      dictionaries.  This works well if you want to load an arrow file in-place or if
      you know the strings in your dataset are either really large or should not be in
-     string tables.
+     string tables.  **Saving multiple datasets with `{:strings-as-text false}` requires arrow
+     7.0.0+ support from your python or R code due to
+     [Arrow issue 13467](https://issues.apache.org/jira/browse/ARROW-13467).  - the conservative
+     pathway for now is to set `:strings-as-text?` to true and only save text!!**.
 
   * `:format` - one of `[:file :ipc]`,  defaults to `:file`.
     - `:file` - arrow file format, compatible with pyarrow's [open_file](https://arrow.apache.org/docs/python/generated/pyarrow.ipc.open_file.html#pyarrow.ipc.open_file).  The suggested
@@ -1899,7 +1902,12 @@ Please use stream->dataset-seq.")))
    ;;of the subsequent datasets
    (when (empty? ds-seq)
      (throw (Exception. "Empty dataset sequence")))
-   (let [options (update options :compression validate-compression-for-write)
+   (let [options (-> options
+                     (update :compression validate-compression-for-write)
+                     (update :strings-as-text? (fn [val]
+                                                 (if (nil? val)
+                                                   true
+                                                   val))))
          ds-seq (prepare-ds-seq-for-write options ds-seq)
          ds (first ds-seq)
          ds-seq (rest ds-seq)
@@ -1938,9 +1946,15 @@ Please use stream->dataset-seq.")))
 
 (defn dataset->stream!
   "Write a dataset as an arrow file.  File will contain one record set.
-  See documentation for [[dataset-seq->stream!]]."
+  See documentation for [[dataset-seq->stream!]].
+
+  * `:strings-as-text?` defaults to false."
   ([ds path options]
-   (dataset-seq->stream! path options [ds]))
+   (dataset-seq->stream! path (update options :strings-as-text?
+                                      (fn [val]
+                                        (if (nil? val)
+                                          false
+                                          val))) [ds]))
   ([ds path]
    (dataset->stream! ds path {})))
 
@@ -1970,7 +1984,11 @@ Please use stream->dataset-seq.")))
 
 (defmethod ds-io/dataset->data! :arrow
   [ds output options]
-  (dataset->stream! ds output options))
+  (dataset->stream! ds output (update options :format
+                                      (fn [item]
+                                        (if (nil? item)
+                                          :file
+                                          item)))))
 
 
 (defmethod ds-io/data->dataset :arrows
@@ -1980,4 +1998,8 @@ Please use stream->dataset-seq.")))
 
 (defmethod ds-io/dataset->data! :arrows
   [ds output options]
-  (dataset->stream! ds output options))
+  (dataset->stream! ds output (update options :format
+                                      (fn [item]
+                                        (if (nil? item)
+                                          :ipc
+                                          item)))))

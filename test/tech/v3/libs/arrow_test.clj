@@ -52,12 +52,12 @@
     (arrow/dataset-seq->stream! "test/data/alldtypes.arrow-file-zstd"
                                 {:compression :zstd
                                  :format :file
-                                 :strings-as-text? false}
+                                 :strings-as-text? true}
                                 [(ds/select-rows sds (range 500))
                                  ;;test when you have to add more string dictionary values
                                  (ds/select-rows sds (range 500 1000))]))
 
-  (println (arrow/stream->dataset-seq "test/data/alldtypes.arrow-file-zstd"))
+  (def ignored (arrow/stream->dataset-seq "test/data/alldtypes.arrow-file-zstd"))
 
   (def ignored (arrow/stream->dataset "test/data/alldtypes.arrow-ipc-zstd"))
 

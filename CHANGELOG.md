@@ -1,4 +1,9 @@
 # Changelog
+# 6.067
+ * Defaulting `:strings-as-text?` to false for the multiple dataset pathway as
+   support for delta dictionaries was only recently solidified in the [Arrow SDK
+   itself](https://issues.apache.org/jira/browse/ARROW-13467).
+
 # 6.066
  * Major rework of arrow support to include support for all known arrow file formats
    and tested files in various formats across latest (7.0.0) pyarrow.
