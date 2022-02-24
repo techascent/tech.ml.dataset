@@ -30,3 +30,4 @@ __pycache__
 repro
 java_test/test.parquet
 java_test/test.arrow
+java_test/simulation*

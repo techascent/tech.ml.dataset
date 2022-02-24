@@ -602,8 +602,11 @@ public class TMDDemo {
 			   "simulation", makeContainer(kw("uint8"), srcds.get("simulation")),
 			   "placement", makeContainer(kw("uint8"), srcds.get("placement")));
     writeDataset(simds, "simulation.csv.gz");
-    Arrow.datasetToStream(simds, "simulation.arrow-ipc", null);
-    Arrow.datasetToStream(simds, "simulation-compressed.arrow-ipc", hashmap(kw("compression"), kw("zstd")));
+    writeDataset(simds, "simulation.nippy");
+    Arrow.datasetToStream(simds, "simulation.arrow", null);
+    Arrow.datasetToStream(simds, "simulation-compressed.arrow", hashmap(kw("compression"),
+									hashmap(kw("compression-type"), kw("zstd"),
+										kw("level"), 8)));
     Parquet.datasetToParquet(simds, "simulation.parquet", null);
 
 
@@ -614,20 +617,23 @@ public class TMDDemo {
       };
     println(makeDataset(vector(hashmap("file-type", "gzipped csv",
 				       "length", fileLen.invoke("simulation.csv.gz")),
-			       hashmap("file-type", "arrow ipc",
-				       "length", fileLen.invoke("simulation.arrow-ipc")),
-			       hashmap("file-type", "arrow ipc-compressed",
-				       "length", fileLen.invoke("simulation-compressed.arrow-ipc")),
+			       hashmap("file-type", "nippy",
+				       "length", fileLen.invoke("simulation.nippy")),
+			       hashmap("file-type", "arrow file",
+				       "length", fileLen.invoke("simulation.arrow")),
+			       hashmap("file-type", "arrow file compressed",
+				       "length", fileLen.invoke("simulation-compressed.arrow")),
 			       hashmap("file-type", "parquet",
 				       "length", fileLen.invoke("simulation.parquet")))));
-    //_unnamed [4 2]:
+    // _unnamed [5 2]:
 
-    //|            file-type |   length |
-    //|----------------------|---------:|
-    //|          gzipped csv |  5748193 |
-    //|            arrow ipc | 10500800 |
-    //| arrow ipc-compressed |  3900904 |
-    //|              parquet |  3396375 |
+    //|             file-type |   length |
+    //|-----------------------|---------:|
+    //|           gzipped csv |  5903963 |
+    //|                 nippy |  5688556 |
+    //|            arrow file | 10501378 |
+    //| arrow file compressed |  3869554 |
+    //|               parquet |  3396383 |
 
 
     // If we load clojure.core.async - which neanderthal does - or we use
