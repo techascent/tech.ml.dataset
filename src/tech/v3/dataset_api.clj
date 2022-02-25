@@ -534,7 +534,8 @@ test/data/stocks.csv [10 3]:
 
 
 (defn column-map
-  "Produce a new (or updated) column as the result of mapping a fn over columns.
+  "Produce a new (or updated) column as the result of mapping a fn over columns.  This
+  function is never lazy - all results are immediately calculated.
 
   * `dataset` - dataset.
   * `result-colname` - Name of new (or existing) column.
