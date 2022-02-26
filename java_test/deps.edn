@@ -1,7 +1,7 @@
 {:paths ["classes"
          ;;Parquet logging is just over the top.  We eliminate a lot of noise here.
          "logback"]
- :deps {techascent/tech.ml.dataset {:mvn/version "6.067"
+ :deps {techascent/tech.ml.dataset {:mvn/version "6.069"
 
                                     ;;smile has bindings to slf4j that error out with an
                                     ;;exception if there is no logging backend so I

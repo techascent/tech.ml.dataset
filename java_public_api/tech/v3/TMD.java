@@ -417,6 +417,15 @@ public class TMD {
    * return a new map for each row.  Result is generated in parallel so, when used with a map
    * factory, this is a suprisingly efficient strategy to create multiple columns at once from
    * each row.
+   */
+  public static Map rowMap(Object ds, IFn mapFn) {
+    return (Map)call(rowMapFn, ds, mapFn);
+  }
+  /**
+   * Map a function across the rows of the dataset with each row in map form.  Function must
+   * return a new map for each row.  Result is generated in parallel so, when used with a map
+   * factory, this is a suprisingly efficient strategy to create multiple columns at once from
+   * each row.
    *
    * See options for pmapDs. Especially note `:max-batch-size` and `:result-type`. In
    * order to conserve memory it may be much more efficient to return a sequence of
@@ -424,18 +433,15 @@ public class TMD {
    * perhaps consider a transducing pathway across them or the
    * tech.v3.dataset.reductions namespace.
    */
-  public static Map rowMap(Object ds, IFn mapFn) {
-    return (Map)call(rowMapFn, ds, mapFn);
+  public static Object rowMap(Object ds, IFn mapFn, Object options) {
+    return call(rowMapFn, ds, mapFn, options);
   }
   /**
    * Map a function across the rows of the dataset with each row in map form.  Function must
    * return either null or a sequence of maps and thus can produce many new rows for
-   * each input row.  Function is called in a parallelized context.
-   *
-   * Most of the functions of the dataset (filter, sort, groupBy) will auto-parallelize but
-   * but there are many times where the most efficient use of machine resources is to
-   * parallelize a the outermost level.  The parallelization primitives check and run in
-   * serial mode of the current thread is already in a parallelization pathway.
+   * each input row.  Function is called in a parallelized context.  Maps returned
+   * must be an implementation of clojure's IPersistentMap.  See [tech.v3.Clj.mapFactory](https://cnuernber.github.io/dtype-next/javadoc/tech/v3/DType.html#mapFactory-java.util.List-)
+   * for an efficient way to create those in bulk.
    *
    * See options for pmapDs. Especially note `:max-batch-size` and `:result-type`. In
    * order to conserve memory it may be much more efficient to return a sequence of
@@ -451,6 +457,11 @@ public class TMD {
    * return null.  The original dataset is simply sliced into n-core results and
    * map-fn is called n-core times with the results either concatenated into a new dataset or
    * returned as an Iterable.
+   *
+   * Most of the functions of the dataset (filter, sort, groupBy) will auto-parallelize but
+   * but there are many times where the most efficient use of machine resources is to
+   * parallelize a the outermost level.  The parallelization primitives check and run in
+   * serial mode of the current thread is already in a parallelization pathway.
    *
    * @param mapFn a function from dataset->dataset although it may return null.
    *

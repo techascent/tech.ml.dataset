@@ -1,4 +1,13 @@
 # Changelog
+# 6.069
+ * The public java api docs are updated and it has a rowMap overload that supports
+   options to pass to pmapDs.
+
+# 6.068
+ * `column-map` is no longer lazy when an explicit datatype is provided.  The result
+   is now generated immediately in parallel.  Laziness can be achieved via the
+   dtype-next emap api along with `assoc`.
+
 # 6.067
  * Defaulting `:strings-as-text?` to false for the multiple dataset pathway as
    support for delta dictionaries was only recently solidified in the [Arrow SDK

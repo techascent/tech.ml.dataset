@@ -20,7 +20,8 @@
             [taoensso.nippy :as nippy]
             [clojure.test :refer [deftest is]])
   (:import [java.util List HashSet UUID]
-           [java.io File ByteArrayInputStream]))
+           [java.io File ByteArrayInputStream]
+           [tech.v3 TMD]))
 
 (deftest datatype-parser
   (let [ds (ds/->dataset "test/data/datatype_parser.csv")]
