@@ -1,4 +1,4 @@
-# Quick Reference - Core API
+# TMD Quick Reference - Core API
 
 Functions are linked to their source but if no namespace is specified they are
 also accessible via the `tech.ml.dataset` namespace.

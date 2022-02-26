@@ -213,30 +213,33 @@ public class TMD {
     return call(columnFn, ds, cname);
   }
   /**
-   * Efficiently create a column definition explicitly specifying name, data, missing, and
-   * metadata.   The result can be `assoc`d back into the dataset.
+   * Efficiently create a column definition explicitly specifying name and data.
+   * Typed data will be scanned for missing values and untyped data will be read
+   * element by element to discern datatype and missing information.
+   * The result can be `assoc`d back into the dataset.
    */
-  public static Map columnDef(Object name, Object data, Object missing, Object metadata) {
+  public static Map columnDef(Object name, Object data) {
     return hashmap(keyword("tech.v3.dataset", "name"), name,
-		   keyword("tech.v3.dataset", "data"), data,
-		   keyword("tech.v3.dataset", "missing"), missing,
-		   keyword("tech.v3.dataset", "metadata"), metadata);
+		   keyword("tech.v3.dataset", "data"), data);
   }
   /**
-   * Efficiently create a column definition explicitly specifying name, data, missing, and
-   * metadata.   The result can be `assoc`d back into the dataset.
+   * Efficiently create a column definition explicitly specifying name, data, and missing.
+   * The result can be `assoc`d back into the dataset.  Missing will be converted to a RoaringBitmap
+   * but can additionally be an integer array, a java set, or a sequence of integers.
    */
-  public static Map columnDef(Object data, Object missing) {
-    return hashmap(keyword("tech.v3.dataset", "name"), "_unnamed",
+  public static Map columnDef(Object name, Object data, Object missing) {
+    return hashmap(keyword("tech.v3.dataset", "name"), name,
 		   keyword("tech.v3.dataset", "data"), data,
 		   keyword("tech.v3.dataset", "missing"), missing);
   }
   /**
    * Efficiently create a column definition explicitly specifying name, data, missing, and
-   * metadata.   The result can be `assoc`d back into the dataset.
+   * metadata.   The result can be `assoc`d back into the dataset and saves the system the
+   * time required to scan for missing elements.  Missing will be converted to a RoaringBitmap
+   * but can additionally be an integer array, a java set, or a sequence of integers.
    */
-  public static Map columnDef(Object data, Object missing, Object metadata) {
-    return hashmap(keyword("tech.v3.dataset", "name"), "_unnamed",
+  public static Map columnDef(Object name, Object data, Object missing, Object metadata) {
+    return hashmap(keyword("tech.v3.dataset", "name"), name,
 		   keyword("tech.v3.dataset", "data"), data,
 		   keyword("tech.v3.dataset", "missing"), missing,
 		   keyword("tech.v3.dataset", "metadata"), metadata);
@@ -411,7 +414,15 @@ public class TMD {
   }
   /**
    * Map a function across the rows of the dataset with each row in map form.  Function must
-   * return a new map for each row.
+   * return a new map for each row.  Result is generated in parallel so, when used with a map
+   * factory, this is a suprisingly efficient strategy to create multiple columns at once from
+   * each row.
+   *
+   * See options for pmapDs. Especially note `:max-batch-size` and `:result-type`. In
+   * order to conserve memory it may be much more efficient to return a sequence of
+   * datasets rather than one large dataset. If returning sequences of datasets
+   * perhaps consider a transducing pathway across them or the
+   * tech.v3.dataset.reductions namespace.
    */
   public static Map rowMap(Object ds, IFn mapFn) {
     return (Map)call(rowMapFn, ds, mapFn);
@@ -800,7 +811,7 @@ public class TMD {
    * Convert a dataset to a neanderthal 2D matrix such that the columns of the dataset
    * become the columns of the matrix.  This function dynamically loads the neanderthal
    * MKL bindings so there may be some pause when first called.  If you would like to have
-   * the pause somewhere else call `require("tech.v3.dataset.neanderthal"); at some
+   * the pause somewhere else call `require("tech.v3.dataset.neanderthal");` at some
    * previous point of the program.  You must have an update-to-date version of
    * neanderthal in your classpath such as `[uncomplicate/neanderthal "0.43.3"]`.
    *
