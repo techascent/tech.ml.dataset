@@ -1,4 +1,4 @@
-# Columns, Readers, and Datatypes
+# tech.ml.dataset Columns, Readers, and Datatypes
 
 
 In `tech.ml.dataset`, columns are composed of three things:

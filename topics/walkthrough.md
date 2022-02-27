@@ -68,6 +68,7 @@ _unnamed [2 3]:
 ```
 
 #### CSV/TSV/MAPSEQ/XLS/XLSX Parsing Options
+
 It is important to note that there are many options for parsing files.
 A few important ones are column whitelist/blacklists, num records,
 and ways to specify exactly how to parse the string data:
@@ -342,9 +343,9 @@ any mapping to or from labelled values so as such represented the dataset as it 
 stored in memory:
 
 ```clojure
-user> (ds/value-reader nameage)
+user> (ds/rowvecs nameage)
 [[1 "a"] [2 "b"] [3 "c"] [4 "d"] [5 "e"]]
-user> (ds/mapseq-reader nameage)
+user> (ds/rows nameage)
 [{:name "a", :age 1} {:name "b", :age 2} {:name "c", :age 3} {:name "d", :age 4} {:name "e", :age 5}]
 ```
 
@@ -557,6 +558,23 @@ user> (as-> (ds/select-columns ames-ds ["SalePrice" "KitchenQual" "BsmtFinSF1" "
 )
 ```
 
+
+#### Rowwise Operations
+
+Datasets have efficient parallelized mechanisms of presenting data for rowwise map and mapcat
+operations.  The maps passed into the mapping functions are maps that lazily read
+only the required data from the underlying dataset.  The returned maps will be
+scanned to gather datatype and missing information.  Columns derived from the mapping
+operation will overwrite columns in the original dataset.
+
+The mapping operations are run in parallel using a primitive named `pmap-ds` and the resulting
+datasets can either be returned in a sequence or combined into a single larger dataset.
+
+* [rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rows)
+* [rowvecs](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rowvecs)
+* [row-map](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-map)
+* [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat)
+
 #### Descriptive Stats And GroupBy And DateTime Types
 
 This is best illustrated by an example:
@@ -763,6 +781,7 @@ _unnamed [10 3]:
 ## Writing A Dataset Out
 
 These forms are supported for writing out a dataset:
+
 ```clojure
 (ds/write! test-ds "test.csv")
 (ds/write! test-ds "test.tsv")
@@ -773,7 +792,7 @@ These forms are supported for writing out a dataset:
 
 We have good support for [nippy](nippy-serialization-rocks.md) in which case
 datasets work just like any other datastructure.  This format allows some level of
-compression but about 10X-100X the loading performance of anything else.  In addition,
+compression but about 10X-100X the loading performance of gzipped csv/tsv.  In addition,
 you can write out heterogeneous datastructures that contain datasets and other things
 such as the result of a group-by:
 
@@ -798,3 +817,9 @@ user> (first (nippy/thaw byte-data))
 |    MSFT | 2000-04-01 |  28.37 |
 |    MSFT | 2000-05-01 |  25.45 |
 ```
+
+Also see the [tech.v3.libs.arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html) and 
+[tech.v3.libs.parquet](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) namespaces.
+
+
+If you made it this far, check out the [quick reference](https://techascent.github.io/tech.ml.dataset/quick-reference.html).

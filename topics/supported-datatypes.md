@@ -1,4 +1,4 @@
-# Supported Datatypes
+# tech.ml.dataset Supported Datatypes
 
 
 `tech.ml.dataset` supports a wide range of datatypes and has a system for expanding
