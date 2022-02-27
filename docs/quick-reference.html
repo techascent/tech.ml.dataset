@@ -49,7 +49,7 @@ to packed datetime columns may be surprising; call <code>tech.v3.datatype.dateti
 on the column prior to calling <code>tech.v3.datatype/-&gt;reader</code> to get to the unpacked
 datatype.  Using negative values as indexes will index from the end similar to numpy and pandas.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-count">row-count</a> - works on datasets and columns.</li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-count">column-count</a>.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-count">column-count</a> - number of columns.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rows">rows</a> - get the rows of the
 dataset as a <code>java.util.List</code> of persistent-map-like maps.  Implemented as a flyweight
 implementation of <code>clojure.lang.APersistentMap</code> where data is read out of the underlying dataset on demand.  This keeps the
@@ -77,10 +77,10 @@ Often it is useful to print the entire table:  <code>(vary-meta ds assoc :print-
 </ul>
 <h2>Dataset Exploration</h2>
 <ul>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-head">head</a></li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-tail">tail</a></li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-sample">sample</a></li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rand-nth">rand-nth</a></li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-head">head</a> - Return dataset consisting of first N rows.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-tail">tail</a> - Return dataset consisting of last N rows.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-sample">sample</a> - Randomly sample N rows of the dataset.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rand-nth">rand-nth</a> - Randomly sample a row of the dataset.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-descriptive-stats">descriptive-stats</a> - return a dataset of
 columnwise descriptive statistics.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-brief">brief</a> - Return a sequence of maps of  descriptive statistics.</li>
@@ -91,10 +91,10 @@ pathways that are useful for subrect selection.</p>
 <ul>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select">select</a> - can be used for renaming.
 Anything iterable can be used for the rows.</li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-columns">select-columns</a>.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-columns">select-columns</a> - Select a subset of columns.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-rows">select-rows</a> - works on datasets and columns.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-rows">drop-rows</a> - works on datasets and columns.</li>
-<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-missing">drop-missing</a></li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-missing">drop-missing</a> - Drop rows with missing values from the dataset.</li>
 </ul>
 <h2>Dataset Manipulation</h2>
 <p>Several of the functions below come in <code>-&gt;column</code> variants and some come additional
@@ -120,6 +120,8 @@ final dataset.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat">row-mapcat</a> - In parallel, map a function from map-&gt;sequence-of-maps over the dataset potentially
 expanding or shrinking the result.  When multiple maps are returned, row information not included in the original map is efficiently duplicated.  Note there are options to
 return a sequence of datasets as opposed to a single potentially very large final dataset.</li>
+<li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-pmap-ds">pmap-ds</a> - Split dataset into batches and in parallel map a function from ds-&gt;ds across the dataset.
+Can return either a new dataset via concat-copying or a sequence of datasets.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.join.html#var-pd-merge">pd-merge</a> - Generalized left,right,inner,outer, and cross joins.</li>
 <li><a href="https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.join.html#var-left-join-asof">left-join-asof</a> - Join-nearest type functionality useful for doing things like finding
 the 3, 6, and 12 month prices from a dataset daily prices where you what the nearest price as things don't trade on the weekends.</li>

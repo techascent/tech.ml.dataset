@@ -48,7 +48,7 @@ functions that are we find most useful.
   on the column prior to calling `tech.v3.datatype/->reader` to get to the unpacked
   datatype.  Using negative values as indexes will index from the end similar to numpy and pandas.
 * [row-count](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-count) - works on datasets and columns.
-* [column-count](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-count).
+* [column-count](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-count) - number of columns.
 * [rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rows) - get the rows of the
  dataset as a `java.util.List` of persistent-map-like maps.  Implemented as a flyweight
  implementation of `clojure.lang.APersistentMap` where data is read out of the underlying dataset on demand.  This keeps the 
@@ -81,10 +81,10 @@ Often it is useful to print the entire table:  `(vary-meta ds assoc :print-index
 ## Dataset Exploration
 
 
-* [head](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-head)
-* [tail](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-tail)
-* [sample](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-sample)
-* [rand-nth](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rand-nth)
+* [head](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-head) - Return dataset consisting of first N rows.
+* [tail](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-tail) - Return dataset consisting of last N rows.
+* [sample](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-sample) - Randomly sample N rows of the dataset.
+* [rand-nth](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rand-nth) - Randomly sample a row of the dataset.
 * [descriptive-stats](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-descriptive-stats) - return a dataset of
  columnwise descriptive statistics.
 * [brief](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-brief) - Return a sequence of maps of  descriptive statistics.
@@ -98,10 +98,10 @@ pathways that are useful for subrect selection.
 
 * [select](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select) - can be used for renaming.
  Anything iterable can be used for the rows.
-* [select-columns](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-columns).
+* [select-columns](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-columns) - Select a subset of columns.
 * [select-rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-select-rows) - works on datasets and columns.
 * [drop-rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-rows) - works on datasets and columns.
-* [drop-missing](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-missing)
+* [drop-missing](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-drop-missing) - Drop rows with missing values from the dataset.
 
 
 ## Dataset Manipulation
@@ -129,6 +129,8 @@ values.  For `unique-by`, `identity` will work just fine.
 * [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat) - In parallel, map a function from map->sequence-of-maps over the dataset potentially
   expanding or shrinking the result.  When multiple maps are returned, row information not included in the original map is efficiently duplicated.  Note there are options to
   return a sequence of datasets as opposed to a single potentially very large final dataset.
+* [pmap-ds](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-pmap-ds) - Split dataset into batches and in parallel map a function from ds->ds across the dataset.
+  Can return either a new dataset via concat-copying or a sequence of datasets.
 * [pd-merge](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.join.html#var-pd-merge) - Generalized left,right,inner,outer, and cross joins.
 * [left-join-asof](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.join.html#var-left-join-asof) - Join-nearest type functionality useful for doing things like finding
   the 3, 6, and 12 month prices from a dataset daily prices where you what the nearest price as things don't trade on the weekends.
