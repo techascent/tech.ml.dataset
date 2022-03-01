@@ -6,7 +6,7 @@
 
 * [API Documentation](https://techascent.github.io/tech.ml.dataset/)
 * Java API [Documentation](https://techascent.github.io/tech.ml.dataset/javadoc/index.html) and [Sample](java_test/java/jtest/TMDDemo.java).
-* [Get Started Now](https://github.com/cnuernber/simpledata)
+* Code-oriented [Walkthrough](https://techascent.github.io/tech.ml.dataset/walkthrough.html) and [Quick Reference](https://techascent.github.io/tech.ml.dataset/quick-reference.html).
 
 
 `tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
@@ -302,7 +302,6 @@ Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.
 
 ## More Documentation
 
-* Code-oriented [walkthrough](topics/walkthrough.md) and [quick reference](topics/quick-reference.md).
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of `tech.v3.dataset`
 * [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 
