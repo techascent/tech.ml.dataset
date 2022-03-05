@@ -58,7 +58,8 @@
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]]
+                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]
+                 [org.tribuo/tribuo-all "4.2.0" :extension "pom" :scope "provided"]]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
