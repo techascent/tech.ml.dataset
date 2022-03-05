@@ -45,7 +45,7 @@
       (dotimes [idx ndata] (ArrayHelpers/aset ddata idx (.readDouble data idx)))
       ddata)))
 
-(defn ds->regression-outputs
+(defn- ds->regression-outputs
   [ds]
   (let [fact (RegressionFactory.)]
     (with-meta
@@ -116,6 +116,43 @@
       (getOutputFactory [this] output-factory))))
 
 
+(defn- label-score
+  ^double [^Label label]
+  (.getScore label))
+
+(defn- label-label
+  ^String [^Label label]
+  (.getLabel label))
+
+(defn- prediction-label
+  ^String [^Prediction pred]
+  (-> (.getOutput pred)
+      (label-label)))
+
+(defn- has-probabilities?
+  [^Prediction pred]
+  (.hasProbabilities pred))
+
+(defn- prediction-scores
+  ^Map [^Prediction pred]
+  (.getOutputScores pred))
+
+
+(defn- regressor-value
+  ^double [^Regressor reg]
+  (aget (.getValues reg) 0))
+
+
+(defn- prediction-regval
+  [^Prediction pred]
+  (regressor-value (.getOutput pred)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Begin public API
+
+
+;; Classification
+
 (defn make-classification-datasource
   (^DataSource [ds]
    (make-classification-datasource ds nil))
@@ -126,48 +163,10 @@
      (ds->datasource ds ds->single-label-outputs))))
 
 
-(defn make-regression-datasource
-  (^DataSource [ds]
-   (make-regression-datasource ds nil))
-  (^DataSource [ds inf-col-name]
-   (if inf-col-name
-     (-> (modelling/set-inference-target ds inf-col-name)
-         (ds->datasource ds->regression-outputs))
-     (ds->datasource ds ds->regression-outputs))))
-
-
 (defn train-classification
   ^Model [^Trainer trainer ds & [inf-col-name]]
   (.train trainer (-> (make-classification-datasource ds inf-col-name)
                       (MutableDataset.))))
-
-
-(defn train-regression
-  ^Model [^Trainer trainer ds & [inf-col-name]]
-  (.train trainer (-> (make-regression-datasource ds inf-col-name)
-                      (MutableDataset.))))
-
-
-(defn label-score
-  ^double [^Label label]
-  (.getScore label))
-
-(defn label-label
-  ^String [^Label label]
-  (.getLabel label))
-
-(defn prediction-label
-  ^String [^Prediction pred]
-  (-> (.getOutput pred)
-      (label-label)))
-
-(defn has-probabilities?
-  [^Prediction pred]
-  (.hasProbabilities pred))
-
-(defn prediction-scores
-  ^Map [^Prediction pred]
-  (.getOutputScores pred))
 
 
 (defn classification-predictions->dataset
@@ -198,14 +197,22 @@
          (classification-predictions->dataset))))
 
 
-(defn regressor-value
-  ^double [^Regressor reg]
-  (aget (.getValues reg) 0))
+;; Regression
+
+(defn make-regression-datasource
+  (^DataSource [ds]
+   (make-regression-datasource ds nil))
+  (^DataSource [ds inf-col-name]
+   (if inf-col-name
+     (-> (modelling/set-inference-target ds inf-col-name)
+         (ds->datasource ds->regression-outputs))
+     (ds->datasource ds ds->regression-outputs))))
 
 
-(defn prediction-regval
-  [^Prediction pred]
-  (regressor-value (.getOutput pred)))
+(defn train-regression
+  ^Model [^Trainer trainer ds & [inf-col-name]]
+  (.train trainer (-> (make-regression-datasource ds inf-col-name)
+                      (MutableDataset.))))
 
 
 (defn predict-regression
