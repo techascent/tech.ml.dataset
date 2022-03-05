@@ -1,15 +1,13 @@
 (ns tech.v3.dataset.tribuo-test
-  (:require [tech.v3.dataset :as ds]
-            [tech.v3.datatype :as dtype]
+  (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
-            [tech.v3.libs.tribuo :as tribuo]
+            [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as ds-model]
             [tech.v3.dataset.categorical :as ds-cat]
+            [tech.v3.libs.tribuo :as tribuo]
             [clojure.test :refer [deftest is]])
-  (:import [org.tribuo.classification.sgd.linear LogisticRegressionTrainer]
-           [org.tribuo.classification.xgboost XGBoostClassificationTrainer]
-           [org.tribuo.regression.xgboost XGBoostRegressionTrainer]
-           [org.tribuo DataSource MutableDataset]))
+  (:import [org.tribuo.classification.xgboost XGBoostClassificationTrainer]
+           [org.tribuo.regression.xgboost XGBoostRegressionTrainer]))
 
 
 
