@@ -38,19 +38,15 @@
         {:keys [test-ds train-ds]} (ds-model/train-test-split ds)
         ;;You can pull in many different classification trainers
         model (tribuo/train-classification (XGBoostClassificationTrainer. 6) train-ds :label)
-        infer-ds (ds/remove-columns test-ds [:label])
-        predict-ds (tribuo/predict-classification model infer-ds)
-        n-rows (ds/row-count predict-ds)
-        predictions (predict-ds :prediction)
-        prob-ds (ds/drop-columns predict-ds [:prediction])
-        num-correct (dfn/sum (dfn/eq predictions
+        predict-ds (tribuo/predict-classification model (ds/remove-columns test-ds [:label]))
+        num-correct (dfn/sum (dfn/eq (predict-ds :prediction)
                                      ;;reverse map the categorical mapping to get back string
                                      ;;labels
                                      (-> (ds-cat/invert-categorical-map test-ds cat-data)
                                          (ds/column :label))))
-        accuracy (/ num-correct n-rows)]
+        accuracy (/ num-correct (ds/row-count test-ds))]
     (is (not (nil? (ds/column predict-ds :prediction))))
-    (is (== 2 (ds/column-count prob-ds)))
+    (is (== 2 (ds/column-count (ds/drop-columns predict-ds [:prediction]))))
     (is (> accuracy 0.9))))
 
 
