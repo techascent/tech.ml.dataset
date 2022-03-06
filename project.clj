@@ -114,7 +114,8 @@
                                    tech.v3.libs.parquet
                                    tech.v3.libs.fastexcel
                                    tech.v3.libs.arrow
-                                   tech.v3.libs.guava.cache]}}
+                                   tech.v3.libs.guava.cache
+                                   tech.v3.libs.tribuo]}}
              ;;No neanderthal on travis
              :uberjar {:aot [tech.v3.dataset.main]
                        :main tech.v3.dataset.main

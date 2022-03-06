@@ -1,4 +1,42 @@
 (ns tech.v3.libs.tribuo
+  "Bindings to make working with tribuo more straight forward when using datasets.
+
+```clojure
+  ;; Classification
+
+tech.v3.dataset.tribuo-test> (def ds (classification-example-ds 10000))
+#'tech.v3.dataset.tribuo-test/ds
+tech.v3.dataset.tribuo-test> (def model (tribuo/train-classification (org.tribuo.classification.xgboost.XGBoostClassificationTrainer. 6) ds :label))
+#'tech.v3.dataset.tribuo-test/model
+tech.v3.dataset.tribuo-test> (ds/head (tribuo/predict-classification model (ds/remove-columns ds [:label])))
+_unnamed [5 3]:
+
+| :prediction |        red |      green |
+|-------------|-----------:|-----------:|
+|         red | 0.92524981 | 0.07475022 |
+|       green | 0.07464883 | 0.92535114 |
+|       green | 0.07464883 | 0.92535114 |
+|         red | 0.92525917 | 0.07474083 |
+|       green | 0.07464883 | 0.92535114 |
+
+
+  ;; Regression
+tech.v3.dataset.tribuo-test> (def ds (ds/->dataset \"test/data/winequality-red.csv\" {:separator \;}))
+#'tech.v3.dataset.tribuo-test/ds
+tech.v3.dataset.tribuo-test> (def model (tribuo/train-regression (org.tribuo.regression.xgboost.XGBoostRegressionTrainer. 50) ds \"quality\"))
+#'tech.v3.dataset.tribuo-test/model
+tech.v3.dataset.tribuo-test> (ds/head (tribuo/predict-regression model (ds/remove-columns ds [\"quality\"])))
+_unnamed [5 1]:
+
+| :prediction |
+|------------:|
+|  5.01974726 |
+|  5.02164841 |
+|  5.22696543 |
+|  5.79519272 |
+|  5.01974726 |
+```
+  "
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as modelling]
             [tech.v3.datatype :as dtype]
@@ -154,6 +192,7 @@
 ;; Classification
 
 (defn make-classification-datasource
+  "Make a single label classification datasource."
   (^DataSource [ds]
    (make-classification-datasource ds nil))
   (^DataSource [ds inf-col-name]
@@ -164,12 +203,16 @@
 
 
 (defn train-classification
+  "Train a single label classification model.  Returns the model."
   ^Model [^Trainer trainer ds & [inf-col-name]]
   (.train trainer (-> (make-classification-datasource ds inf-col-name)
                       (MutableDataset.))))
 
 
 (defn classification-predictions->dataset
+  "Given the list of predictions from a classification model return a dataset
+  that will include probability distributions when possible.  The actual prediction
+  will be in the `:prediction` column."
   [^List predictions]
   (let [labels (dtype/emap prediction-label :string predictions)
         pred (.get predictions 0)]
@@ -191,6 +234,9 @@
 
 
 (defn predict-classification
+  "Use this model to predict every row of this dataset returning a new dataset containing
+  at least a `:prediction` column.  If this classifier is capable of predicting probability
+  distributions those will be returned as per-label as separate columns."
   [^Model model ds]
   (when-not (== 0 (ds/row-count ds))
     (->> (.predict model (make-classification-datasource ds))
@@ -198,8 +244,8 @@
 
 
 ;; Regression
-
 (defn make-regression-datasource
+  "Make a regression datasource from a dataset."
   (^DataSource [ds]
    (make-regression-datasource ds nil))
   (^DataSource [ds inf-col-name]
@@ -210,12 +256,15 @@
 
 
 (defn train-regression
+  "Train a regression model on a dataset returning the model."
   ^Model [^Trainer trainer ds & [inf-col-name]]
   (.train trainer (-> (make-regression-datasource ds inf-col-name)
                       (MutableDataset.))))
 
 
 (defn predict-regression
+  "Use a regression model to predict each column of the dataset returning a dataset with
+  at least one column named `:prediction`."
   [^Model model ds]
   (when-not (== 0 (ds/row-count ds))
     (ds/->dataset {:prediction (->> (.predict model (make-regression-datasource ds))
