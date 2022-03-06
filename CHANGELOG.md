@@ -1,4 +1,8 @@
 # Changelog
+# 6.070
+ * Initial tribuo support - see docs for tech.v3.libs.tribuo.
+ * Upgrade dtype-next - claypoole now comes by default.
+ 
 # 6.069
  * The public java api docs are updated and it has a rowMap overload that supports
    options to pass to pmapDs.
