@@ -2,7 +2,7 @@
   "Bindings to make working with tribuo more straight forward when using datasets.
 
 ```clojure
-  ;; Classification
+;; Classification
 
 tech.v3.dataset.tribuo-test> (def ds (classification-example-ds 10000))
 #'tech.v3.dataset.tribuo-test/ds
@@ -21,7 +21,7 @@ _unnamed [5 3]:
 
 
   ;; Regression
-tech.v3.dataset.tribuo-test> (def ds (ds/->dataset \"test/data/winequality-red.csv\" {:separator \;}))
+tech.v3.dataset.tribuo-test> (def ds (ds/->dataset \"test/data/winequality-red.csv\" {:separator \\;}))
 #'tech.v3.dataset.tribuo-test/ds
 tech.v3.dataset.tribuo-test> (def model (tribuo/train-regression (org.tribuo.regression.xgboost.XGBoostRegressionTrainer. 50) ds \"quality\"))
 #'tech.v3.dataset.tribuo-test/model
