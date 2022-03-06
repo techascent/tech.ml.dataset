@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
-                 [cnuernber/dtype-next             "9.013"]
+                 [cnuernber/dtype-next             "9.015"]
                  [techascent/tech.io               "4.09"
                   :exclusions [org.apache.commons/commons-compress]]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -58,7 +58,8 @@
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
-                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]]
+                 [org.apache.spark/spark-streaming_2.12 "3.0.1" :scope "provided"]
+                 [org.tribuo/tribuo-all "4.2.0" :extension "pom" :scope "provided"]]
   :test-selectors {:travis (complement :travis-broken)}
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
@@ -113,7 +114,8 @@
                                    tech.v3.libs.parquet
                                    tech.v3.libs.fastexcel
                                    tech.v3.libs.arrow
-                                   tech.v3.libs.guava.cache]}}
+                                   tech.v3.libs.guava.cache
+                                   tech.v3.libs.tribuo]}}
              ;;No neanderthal on travis
              :uberjar {:aot [tech.v3.dataset.main]
                        :main tech.v3.dataset.main
