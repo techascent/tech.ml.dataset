@@ -41,6 +41,7 @@ _unnamed [5 1]:
             [tech.v3.dataset.modelling :as modelling]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.jvm-map :as jvm-map]
+            [tech.v3.datatype.casting :as casting]
             [clojure.set :as set])
   (:import [tech.v3.datatype Buffer ArrayHelpers]
            [java.util HashMap Map List]
@@ -49,7 +50,8 @@ _unnamed [5 1]:
             Prediction]
            [org.tribuo.impl ArrayExample]
            [org.tribuo.provenance SimpleDataSourceProvenance]
-           [org.tribuo.regression RegressionFactory Regressor]))
+           [org.tribuo.regression RegressionFactory Regressor]
+           [org.tribuo.regression.evaluation RegressionEvaluator RegressionEvaluation]))
 
 (set! *warn-on-reflection* true)
 
@@ -118,12 +120,22 @@ _unnamed [5 1]:
             (dtype/make-reader :object n-rows (Label. (->string (data idx))))
             {:output-factory label-fact}))))))
 
+(defn- ensure-numeric-columns
+  [ds]
+  (when-not (every? casting/numeric-type? (map (comp :datatype meta) (vals ds)))
+    (throw (Exception.
+            (str "All columns must be numeric at this point.  Non numeric columns:\n"
+                 (->> (map meta (vals ds))
+                      (filter #(not (casting/numeric-type? (get % :datatype))))
+                      (mapv :name))))))
+  ds)
 
 (defn- ds->examples
   ^Buffer [ds ds->outputs]
   (let [inf-columns (modelling/inference-target-column-names ds)
         inf-ds (when inf-columns (ds/select-columns ds inf-columns))
-        feat-ds (ds/remove-columns ds inf-columns)
+        feat-ds (-> (ds/remove-columns ds inf-columns)
+                    (ensure-numeric-columns))
         feat-data (ds/rowvecs feat-ds)
         n-rows (ds/row-count ds)
         ;;column names have to be strings.
@@ -270,3 +282,16 @@ _unnamed [5 1]:
     (ds/->dataset {:prediction (->> (.predict model (make-regression-datasource ds))
                                     (dtype/emap prediction-regval :float64)
                                     (dtype/clone))})))
+
+
+(defn evaluate-regression
+  "Evaluate a regression model against this model.  Returns map of
+  `{:rmse :mae :r2}`"
+  [^Model model ds inf-col-name]
+  (let [inf-col-name (->string inf-col-name)
+        ^RegressionEvaluation eval (.evaluate (RegressionEvaluator.) model
+                                              (MutableDataset. (make-regression-datasource ds inf-col-name)))
+        dim (Regressor. inf-col-name Double/NaN)]
+    {:rmse (.rmse eval dim)
+     :mae (.mae eval dim)
+     :r2 (.r2 eval dim)}))
