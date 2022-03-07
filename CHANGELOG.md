@@ -1,4 +1,9 @@
 # Changelog
+# 6.071
+ * Support for reading/writing csv, tsv, edn, json bzip2 and zip files.  Zip files
+   are only read when there is a single zipentry in them.  bzip2 requires the user
+   to require `tech.v3.dataset.bzip2` in order to work.  See namespace documentation.
+
 # 6.070
  * Initial tribuo support - see docs for tech.v3.libs.tribuo.
  * Upgrade dtype-next - claypoole now comes by default.
