@@ -8,7 +8,13 @@
 
   If you have an `xlsx` or `xls` file that contains multiple sheets and you want a
   dataset out of each sheet you have to use `workbook->datasets` as opposed to the
-  higher level `->dataset` operator."
+  higher level `->dataset` operator.
+
+  For serializing datasets to xlsx or xls formats please see
+  [kixi.large](https://github.com/MastodonC/kixi.large).
+
+  Note that poi has many versions and many version conflicts and for instance the
+  docjure library relies on a much older version of poi."
   (:require [tech.v3.io :as io]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
