@@ -8,6 +8,7 @@ addons:
     packages:
     - libopenblas-dev
     - intel-mkl
+    - lz4
 before_script:
  - ./scripts/get-data.sh
 script:

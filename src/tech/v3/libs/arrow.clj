@@ -38,6 +38,13 @@
   ;;Required for decompressing lz4 streams with dependent blocks.
   [net.java.dev.jna/jna \"5.10.0\" :scope \"provided\"]
   [com.github.luben/zstd-jni \"1.5.1-1\"]
+```
+  The lz4 decompression system will fallback to jpoinz if liblz4 isn't installed or if
+  jna isn't loaded.  The jpoinz java library fail for arrow files that have dependent block compression.
+  On current ubuntu, in order to install the lz4 library you need to do:
+
+```console
+  sudo apt install liblz4-1
 ```"
   (:require [tech.v3.datatype.mmap :as mmap]
             [tech.v3.datatype.datetime :as dtype-dt]

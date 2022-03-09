@@ -1,10 +1,17 @@
 # Changelog
-# 6.071
+# 6.074
+ * [issue 295](https://github.com/techascent/tech.ml.dataset/issues/295) - new-column exported from api had
+   incorrect signature.
+ * [issue 294](https://github.com/techascent/tech.ml.dataset/issues/294) - arrow files with lz4 dependent-block
+   encoding fail for the jpoinz decoder.  The only sane resolution here is to use the C lz4 library decoding system
+   while we work through these issues upstream.
+   
+# 6.072
  * Support for reading/writing csv, tsv, edn, json bzip2 and zip files.  Zip files
    are only read when there is a single zipentry in them.  bzip2 requires the user
    to require `tech.v3.dataset.bzip2` in order to work.  See namespace documentation.
 
-# 6.070
+# 6.071
  * Initial tribuo support - see docs for tech.v3.libs.tribuo.
  * Upgrade dtype-next - claypoole now comes by default.
  
