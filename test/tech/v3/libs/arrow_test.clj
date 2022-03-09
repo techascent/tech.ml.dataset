@@ -92,7 +92,9 @@
                    "test/data/alldtypes.arrow-feather-v1" ;v1
                    ]]
     (doseq [file all-files]
-      (is (= 1000 (ds/row-count (arrow/stream->dataset file)))))))
+      (is (= 1000 (ds/row-count (arrow/stream->dataset file)))))
+    ;; lz4 with dependent frames))))))
+    (is (= 31962 (ds/row-count (arrow/stream->dataset "test/data/tweets_sentiment.feather"))))))
 
 
 (deftest base-ds-seq-test
