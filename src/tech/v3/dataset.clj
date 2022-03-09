@@ -4,6 +4,7 @@
   in memory datasets."
   (:require [tech.v3.dataset-api]
             [tech.v3.dataset.base]
+            [tech.v3.dataset.column]
             [tech.v3.dataset.impl.dataset]
             [tech.v3.dataset.io]
             [tech.v3.dataset.missing]
@@ -769,9 +770,16 @@ test/data/stocks.csv [10 3]:
 
 
 (defn new-column
-  "Create a new column from some values"
-  ([dataset column-name values]
-  (tech.v3.dataset.base/new-column dataset column-name values)))
+  "Create a new column.  Data will scanned for missing values
+  unless the full 4-argument pathway is used."
+  ([name data]
+  (tech.v3.dataset.column/new-column name data))
+  ([name data metadata]
+  (tech.v3.dataset.column/new-column name data metadata))
+  ([name data metadata missing]
+  (tech.v3.dataset.column/new-column name data metadata missing))
+  ([data-or-data-map]
+  (tech.v3.dataset.column/new-column data-or-data-map)))
 
 
 (defn new-dataset

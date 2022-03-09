@@ -692,9 +692,16 @@ test/data/stocks.csv [10 3]:
 
 
 (defn new-column
-  "Create a new column from some values"
-  ([column-name values]
-  (tech.v3.dataset.metamorph-api/new-column column-name values)))
+  "Create a new column.  Data will scanned for missing values
+  unless the full 4-argument pathway is used."
+  ([data]
+  (tech.v3.dataset.metamorph-api/new-column data))
+  ([data metadata]
+  (tech.v3.dataset.metamorph-api/new-column data metadata))
+  ([data metadata missing]
+  (tech.v3.dataset.metamorph-api/new-column data metadata missing))
+  ([]
+  (tech.v3.dataset.metamorph-api/new-column )))
 
 
 (defn new-dataset

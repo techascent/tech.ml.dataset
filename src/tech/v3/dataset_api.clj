@@ -54,7 +54,6 @@
                 has-column?
                 columns-with-missing-seq
                 add-column
-                new-column
                 remove-column
                 remove-columns
                 drop-columns
@@ -104,6 +103,9 @@
 (export-symbols tech.v3.dataset.impl.dataset
                 dataset?
                 empty-dataset)
+
+(export-symbols tech.v3.dataset.column
+                new-column)
 
 
 (defn rows
