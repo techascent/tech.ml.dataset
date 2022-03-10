@@ -205,7 +205,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                      :first
                                      [(range (min index-range n-rows)) false]
                                      :last
-                                     [(range (max 0 (- n-rows (long index-range))) n-rows) false]))
+                                     [(range (max 0 (- n-rows (long index-range))) n-rows) false])
+                                   [index-range false])
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)

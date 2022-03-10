@@ -1,4 +1,9 @@
 # Changelog
+# 6.076
+ * New print options and bug fix for [issue 266](https://github.com/techascent/tech.ml.dataset/issues/266) - printing
+   first style of `first ... last` is the default as I think it is generally more useful than just first or last.
+   Skipped a version due to bug in this system.
+ 
 # 6.074
  * [issue 295](https://github.com/techascent/tech.ml.dataset/issues/295) - new-column exported from api had
    incorrect signature.
