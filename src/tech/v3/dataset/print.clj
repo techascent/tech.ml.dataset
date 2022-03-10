@@ -21,7 +21,7 @@
 (set! *warn-on-reflection* true)
 
 ;;The default number of rows to print
-(def ^:dynamic ^:no-doc *default-table-row-print-length* 25)
+(def ^:dynamic ^:no-doc *default-table-row-print-length* 20)
 ;;The default line policy - see dataset-data->str
 (def ^:dynamic ^:no-doc *default-print-line-policy* :repl)
 ;;The default max width with 'nil' indicating no limit.
@@ -98,8 +98,12 @@ Options may be provided in the dataset metadata or may be provided
 as an options map.  The options map overrides the dataset metadata.
 
 
-  * `:print-index-range` - The set of indexes to print.  Defaults to:
-    (range *default-table-row-print-length*)
+  * `:print-index-range` - The set of indexes to print.  If an integer then
+     is interpreted according to `:print-style`.  Defaults to the integer
+     `*default-table-row-print-length*`.
+  * `:print-style` - Defaults to :first-last.  Options are #{:first-last :first :last}.  In
+     the case `:print-index-range` is an integer and the dataset has more than that number of
+     rows prints the first N/2 and last N/2 rows or the first N or last N rows.
   * `:print-line-policy` - defaults to `:repl` - one of:
      - `:repl` - multiline table - default nice printing for repl
      - `:markdown` - lines delimited by <br>
@@ -119,13 +123,27 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
   ([dataset]
    (dataset-data->str dataset {}))
   ([dataset options]
-   (let [{:keys [print-index-range print-line-policy
-                 print-column-max-width print-column-types?]}
-         (merge (meta dataset) options)
+   (let [options (merge (meta dataset) options)
+         {:keys [print-index-range print-line-policy
+                 print-column-max-width print-column-types?]} options
+         n-rows (long (second (dtype/shape dataset)))
          index-range (or print-index-range
-                         (range
-                          (min (second (dtype/shape dataset))
-                               *default-table-row-print-length*)))
+                         (min n-rows *default-table-row-print-length*))
+         print-style (when (number? index-range) (get options :print-style :first-last))
+         [index-range ellipses?] (if (number? index-range)
+                                   (case print-style
+                                     :first-last
+                                     (if (> n-rows (long index-range))
+                                       (let [start-n (quot (long index-range) 2)
+                                             end-start (dec (- n-rows start-n))]
+                                         [(vec (concat (range start-n)
+                                                       (range end-start n-rows)))
+                                          true])
+                                       [(range n-rows) false])
+                                     :first
+                                     [(range (min index-range n-rows)) false]
+                                     :last
+                                     [(range (max 0 (- n-rows (long index-range))) n-rows) false]))
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)
@@ -143,8 +161,18 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   (dtype/clone)
                                   (dtype/->reader))
                              (vals print-ds))
-
+         string-columns (if ellipses?
+                          (let [insert-pos (quot (dtype/ecount index-range) 2)]
+                            (->> string-columns
+                                 (map (fn [str-col]
+                                        (vec (concat (take insert-pos str-col)
+                                                     [["..."]]
+                                                     (drop insert-pos str-col)))))))
+                          string-columns)
          n-rows (long (second (dtype/shape print-ds)))
+         n-rows (long (if ellipses?
+                        (inc n-rows)
+                        n-rows))
          row-heights (ArrayList.)
          _ (.addAll row-heights (repeat n-rows 1))
          column-widths
