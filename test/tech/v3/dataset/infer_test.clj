@@ -15,11 +15,11 @@
                      (dtype/elemwise-datatype rhs)))
               (is (every? identity (dfn/eq test-col rhs)))))]
     (inferred-equals [true false true false] (boolean-array [true false true false]))
-    (inferred-equals (list 0 Double/NaN 1) (double-array [0.0 Double/NaN 1.0]))
+    (inferred-equals (list 0 Double/NaN 1.0) (double-array [0.0 Double/NaN 1.0]))
     (inferred-equals #:tech.v3.dataset{:data [1 2 3 nil 4]
                                        :force-datatype? true}
                      [1 2 3 nil 4])
-    (inferred-equals (list 0 Double/NaN 1 nil nil)
+    (inferred-equals (list 0 Double/NaN 1.0 nil nil)
                      (double-array [0.0 Double/NaN 1.0 Double/NaN Double/NaN]))
     (is (= #{2 4}
            (set (ds/missing (-> (ds/->dataset [])

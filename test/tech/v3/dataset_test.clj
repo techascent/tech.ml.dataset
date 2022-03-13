@@ -1480,6 +1480,24 @@
            (vec (ds :a))))))
 
 
+(deftest double-nan-missing
+  (let [ds (ds/->dataset {:a [0.0 Double/NaN 2.0]
+                          :b [0 nil 2]
+                          :c [:a nil :b]})]
+    (is (= [2.0]
+           (-> (ds/filter-column ds :a identity)
+               (ds/column :a)
+               (vec))))
+    (is (= [2.0]
+           (-> (ds/filter-column ds :b identity)
+               (ds/column :a)
+               (vec))))
+    (is (= [0.0 2.0]
+           (-> (ds/filter-column ds :c identity)
+               (ds/column :a)
+               (vec))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset

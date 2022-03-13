@@ -558,9 +558,11 @@ null [6 3]:
 
 
 (defn drop-missing
-  "Remove missing entries by simply selecting out the missing indexes"
+  "Remove missing entries by simply selecting out the missing indexes."
   ([dataset-or-col]
-  (tech.v3.dataset.base/drop-missing dataset-or-col)))
+  (tech.v3.dataset.base/drop-missing dataset-or-col))
+  ([ds colname]
+  (tech.v3.dataset.base/drop-missing ds colname)))
 
 
 (defn drop-rows
@@ -606,9 +608,16 @@ null [6 3]:
   "Filter a given column by a predicate.  Predicate is passed column values.
   If predicate is *not* an instance of Ifn it is treated as a value and will
   be used as if the predicate is #(= value %).
+
+  The 2-arity form of this function reads the column as a boolean reader so for
+  instance numeric 0 values are false in that case as are Double/NaN, Float/NaN.  Objects are
+  only false if nil?.
+
   Returns a dataset."
   ([dataset colname predicate]
-  (tech.v3.dataset.base/filter-column dataset colname predicate)))
+  (tech.v3.dataset.base/filter-column dataset colname predicate))
+  ([dataset colname]
+  (tech.v3.dataset.base/filter-column dataset colname)))
 
 
 (defn filter-dataset

@@ -62,7 +62,7 @@
                   :else
                   1)]
      (->> column-map
-          (pmap
+          (pfor/pmap
            (fn [^Map$Entry mapentry]
              (let [colname (.getKey mapentry)
                    coldata (.getValue mapentry)
@@ -78,12 +78,15 @@
                    #:tech.v3.dataset{:name colname
                                      :data coldata}
                    ;;Actually attempt to parse the data
-                   (let [parser (parse-context colname)]
-                     (pfor/consume!
-                      #(column-parsers/add-value! parser (first %) (second %))
-                      (map-indexed vector coldata))
-                     (assoc (column-parsers/finalize! parser (dtype/ecount parser))
-                            :tech.v3.dataset/name colname)))))))
+                   (let [parser (parse-context colname)
+                         retval
+                         (do
+                           (pfor/consume!
+                            #(column-parsers/add-value! parser (first %) (second %))
+                            (map-indexed vector coldata))
+                           (assoc (column-parsers/finalize! parser (dtype/ecount parser))
+                                  :tech.v3.dataset/name colname))]
+                     retval))))))
           (ds-impl/new-dataset options))))
   ([column-map]
    (column-map->dataset nil column-map)))

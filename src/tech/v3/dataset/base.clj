@@ -5,6 +5,7 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.argops :as argops]
+            [tech.v3.datatype.unary-pred :as unary-pred]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
@@ -425,9 +426,11 @@
 
 
 (defn drop-missing
-  "Remove missing entries by simply selecting out the missing indexes"
-  [dataset-or-col]
-  (drop-rows dataset-or-col (missing dataset-or-col)))
+  "Remove missing entries by simply selecting out the missing indexes."
+  ([dataset-or-col]
+   (drop-rows dataset-or-col (missing dataset-or-col)))
+  ([ds colname]
+   (drop-rows ds (missing (column ds colname)))))
 
 
 (defn select-missing
@@ -467,25 +470,36 @@
   "Filter a given column by a predicate.  Predicate is passed column values.
   If predicate is *not* an instance of Ifn it is treated as a value and will
   be used as if the predicate is #(= value %).
+
+  The 2-arity form of this function reads the column as a boolean reader so for
+  instance numeric 0 values are false in that case as are Double/NaN, Float/NaN.  Objects are
+  only false if nil?.
+
   Returns a dataset."
-  [dataset colname predicate]
-  (when dataset
-    (let [predicate (if (instance? IFn predicate)
-                      predicate
-                      (let [pred-dtype (dtype/get-datatype predicate)]
-                        (cond
-                          (casting/integer-type? pred-dtype)
-                          (let [predicate (long predicate)]
-                            (fn [^long arg] (== arg predicate)))
-                          (casting/float-type? pred-dtype)
-                          (let [predicate (double predicate)]
-                            (fn [^double arg] (== arg predicate)))
-                          :else
-                          #(= predicate %))))]
-      (->> (get dataset colname)
-           (packing/unpack)
-           (argops/argfilter predicate)
-           (select dataset :all)))))
+  ([dataset colname predicate]
+   (when dataset
+     (let [predicate (if (instance? IFn predicate)
+                       predicate
+                       (let [pred-dtype (dtype/get-datatype predicate)]
+                         (cond
+                           (casting/integer-type? pred-dtype)
+                           (let [predicate (long predicate)]
+                             (fn [^long arg] (== arg predicate)))
+                           (casting/float-type? pred-dtype)
+                           (let [predicate (double predicate)]
+                             (fn [^double arg] (== arg predicate)))
+                           :else
+                           #(= predicate %))))]
+       (->> (column dataset colname)
+            (packing/unpack)
+            (argops/argfilter predicate)
+            (select dataset :all)))))
+  ([dataset colname]
+   (when dataset
+     (let [cdata (-> (column dataset colname)
+                     (packing/unpack)
+                     (unary-pred/bool-reader->indexes))]
+       (select-rows dataset cdata)))))
 
 
 (defn group-by->indexes

@@ -174,7 +174,7 @@
   [value]
   ;;fastpath for numbers
   (if (instance? Number value)
-    false
+    (Double/isNaN (unchecked-double value))
     (or (nil? value)
         (.equals "" value)
         (identical? value :tech.v3.dataset/missing)
