@@ -109,6 +109,7 @@
                                    tech.v3.dataset.io.datetime
                                    tech.v3.dataset.io.univocity
                                    tech.v3.dataset.io.string-row-parser
+                                   tech.v3.dataset.io.csv
                                    tech.v3.dataset.print
                                    tech.v3.dataset.zip
                                    tech.v3.libs.smile.data
