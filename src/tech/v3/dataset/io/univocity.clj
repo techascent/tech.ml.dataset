@@ -225,17 +225,17 @@
   )
 
 
-(defmethod ds-io/data->dataset :csv
+#_(defmethod ds-io/data->dataset :csv
   [data options]
   (load-csv data options))
 
 
-(defmethod ds-io/data->dataset :tsv
+#_(defmethod ds-io/data->dataset :tsv
   [data options]
   (load-csv data (merge {:separator \tab} options)))
 
 
-(defmethod ds-io/data->dataset :txt
+#_(defmethod ds-io/data->dataset :txt
   [data options]
   (load-csv data options))
 

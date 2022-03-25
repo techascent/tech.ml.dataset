@@ -36,8 +36,7 @@
          (map-indexed vector)
          (pfor/consume!
           (fn [[^long row-idx ^"[Ljava.lang.String;" row]]
-            (when-not (and skip-bad-rows?
-                           (not= (alength row) n-header-cols))
+            (when-not (and skip-bad-rows? (not= (alength row) n-header-cols))
               (dotimes [col-idx (alength row)]
                 (let [parser (col-idx->parser col-idx)]
                   (column-parsers/add-value! parser row-idx (aget row col-idx))))))))

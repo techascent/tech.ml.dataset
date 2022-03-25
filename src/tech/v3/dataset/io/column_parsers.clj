@@ -353,6 +353,13 @@
           [:string (default-coercers :string)])))))
 
 
+(defn- fast-dtype
+  [value]
+  (if (string? value)
+    :string
+    (dtype/datatype value)))
+
+
 (deftype PromotionalStringParser [^{:unsynchronized-mutable true
                                     :tag PrimitiveList} container
                                   ^{:unsynchronized-mutable true} container-dtype
@@ -374,7 +381,8 @@
             (missing-value? value)
             :tech.v3.dataset/missing
 
-            (identical? (dtype/datatype value) container-dtype)
+
+            (identical? (fast-dtype value) container-dtype)
             value
 
             ;;If we have a function to parse the data
