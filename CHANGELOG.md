@@ -1,4 +1,14 @@
 # Changelog
+# 6.078
+ * Switched to the new csv processing system in dtype-next for parsing csv's.  This eliminates
+   a source of more or less unfixable issues regarding univocity and it should be nearly
+   identical in performance while using less memory.
+ * Additionally there is a new interface for csv - `tech.v3.dataset.io.csv` - processing that 
+   efficiently allows you to load a CSV into a sequence of datasets based on row-counts.
+ * The univocity-based processing system will still be kept around as there may be files
+   that load significantly faster or that load correctly with the univocity processing
+   system.
+
 # 6.077
  * Upgrade to dtype-next to make `(ds/filter-column ds col identity)` consistent w/r/t missing
    values across numeric and object datatypes.

@@ -159,10 +159,6 @@
                  :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
     (is (= 3 (count result)))
     ;;Header row accounts for one.
-    (is (= 100 (ds/row-count result))))
-  (let [result (ds/->dataset test-file {:n-records 100
-                                        :column-blacklist (range 70)})]
-    (is (= 11 (count result)))
     (is (= 100 (ds/row-count result)))))
 
 
@@ -172,13 +168,6 @@
                              {:n-records 100
                               :column-whitelist ["Id" "SalePrice" "YearBuilt"]})]
     (is (= 3 (ds/column-count result)))
-    ;;Header row accounts for one.
-    (is (= 100 (ds/row-count result))))
-
-
-  (let [result (ds/->dataset test-file {:n-records 100
-                                        :column-blacklist (range 70)})]
-    (is (= 11 (ds/column-count result)))
     ;;Header row accounts for one.
     (is (= 100 (ds/row-count result)))))
 

@@ -24,6 +24,7 @@
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
+            [tech.v3.dataset.io.csv]
             [tech.v3.dataset.zip]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList Random Arrays

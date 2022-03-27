@@ -23,7 +23,7 @@
   (when (.hasNext row-iter)
     (let [n-header-cols (count header-row)
           num-rows (long (get options :batch-size
-                              (get options :num-rows Long/MAX_VALUE)))
+                              (get options :n-records Long/MAX_VALUE)))
           {:keys [parsers col-idx->parser]}
           (parse-context/options->col-idx-parse-context
            options :string (fn [^long col-idx]
@@ -70,8 +70,7 @@
 (defn csv->dataset
   "Read a csv into a dataset.  Same options as [[tech.v3.dataset/->dataset]]."
   [input & [options]]
-  (let [options (assoc options :batch-size Long/MAX_VALUE)
-        iter (char-input/read-csv (io/input-stream input) options)
+  (let [iter (char-input/read-csv (io/input-stream input) options)
         retval (->> (rows->dataset-seq options iter)
                     (first))]
     (when (instance? AutoCloseable iter)
