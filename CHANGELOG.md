@@ -3,8 +3,10 @@
  * Switched to the new csv processing system in dtype-next for parsing csv's.  This eliminates
    a source of more or less unfixable issues regarding univocity and it should be nearly
    identical in performance while using less memory.
- * Additionally there is a new interface for csv - `tech.v3.dataset.io.csv` - processing that 
-   efficiently allows you to load a CSV into a sequence of datasets based on row-counts.
+ * Additionally there is a new interface for csv - 
+   [tech.v3.dataset.io.csv](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.io.csv.html) 
+   - processing that efficiently allows you to load a CSV into a sequence of datasets based 
+   on row-counts.
  * The univocity-based processing system will still be kept around as there may be files
    that load significantly faster or that load correctly with the univocity processing
    system.
