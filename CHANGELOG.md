@@ -1,4 +1,7 @@
 # Changelog
+# 6.079
+ * Optimized new csv processing system.  Slightly faster and uses less memory.
+
 # 6.078
  * Switched to the new csv processing system in dtype-next for parsing csv's.  This eliminates
    a source of more or less unfixable issues regarding univocity and it should be nearly
