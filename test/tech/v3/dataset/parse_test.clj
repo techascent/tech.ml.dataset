@@ -447,3 +447,15 @@
 (deftest issue-292
   (let [ds (ds/->dataset "test/data/issue-292.csv")]
     (is (== 3 (ds/column-count ds)))))
+
+
+(deftest json-test
+  (try
+    (let [ds (-> (ds/->dataset "test/data/stocks.csv")
+                 (ds/column-map "date" str ["date"]))
+          _ (ds/write! ds "stocks.json")
+          jds (ds/->dataset "stocks.json")]
+      (is (= (vec (ds "date")) (vec (jds "date"))))
+      (is (dfn/equals (ds "price") (jds "price"))))
+    (finally
+      (.delete (java.io.File. "stocks.json")))))

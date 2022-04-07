@@ -1,4 +1,7 @@
 # Changelog
+# 6.080
+ * Update json parsing to dtype-next's json parser.
+ 
 # 6.079
  * Optimized new csv processing system.  Slightly faster and uses less memory.
 

@@ -3,6 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.datatype.char-input :as char-input]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers])
   (:import [java.io InputStream File]
@@ -52,8 +53,11 @@
   (with-open [is (if (get options :gzipped?)
                    (io/gzip-input-stream data)
                    (io/input-stream data))]
-    (->> (apply io/get-json is (apply concat (seq options)))
-         (parse-mapseq-colmap/mapseq->dataset options))))
+    ;;Use mixed json parse profile as we don't care if the input is immutable or mutable and
+    ;;mixed has the best performance.
+    (let [options (assoc options :profile :mixed)]
+      (->> (char-input/read-json is (apply concat (seq options)))
+           (parse-mapseq-colmap/mapseq->dataset options)))))
 
 
 (defmethod data->dataset :edn
