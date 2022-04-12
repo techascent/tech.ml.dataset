@@ -1,6 +1,6 @@
 (ns ^:no-doc tech.v3.libs.nettoolkit
   (:require [org.httpkit.client :as http]
-            [clojure.data.json :as json]
+            [charred.api :as json]
             [clojure.pprint :as pp])
   (:import [java.nio.file Paths]
            [java.net URLEncoder]))
@@ -30,7 +30,7 @@
 (defn- json-body
   [result]
   (if (= (:status result) 200)
-    (json/read-str (:body result) :key-fn keyword)
+    (json/read-json (:body result) :key-fn keyword)
     (throw (Exception. (format "Request failed\n%s"
                                (with-out-str
                                  (pp/pprint result)))))))

@@ -3,7 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.datatype.char-input :as char-input]
+            [charred.api :as charred]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers])
   (:import [java.io InputStream File]
@@ -56,7 +56,7 @@
     ;;Use mixed json parse profile as we don't care if the input is immutable or mutable and
     ;;mixed has the best performance.
     (let [options (assoc options :profile :mixed)]
-      (->> (char-input/read-json is (apply concat (seq options)))
+      (->> (charred/read-json is (apply concat (seq options)))
            (parse-mapseq-colmap/mapseq->dataset options)))))
 
 
@@ -79,7 +79,7 @@
   (with-open [os (if (get options :gzipped?)
                    (io/gzip-output-stream! output)
                    (io/output-stream! output))]
-    (apply io/put-json! os
+    (apply charred/write-json os
            (readers/mapseq-reader data)
            (apply concat (seq options)))))
 

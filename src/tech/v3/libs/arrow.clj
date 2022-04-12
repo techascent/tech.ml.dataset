@@ -36,11 +36,12 @@
   ;;Compression codecs
   [org.lz4/lz4-java \"1.8.0\"]
   ;;Required for decompressing lz4 streams with dependent blocks.
-  [net.java.dev.jna/jna \"5.10.0\" :scope \"provided\"]
+  [net.java.dev.jna/jna \"5.10.0\"]
   [com.github.luben/zstd-jni \"1.5.1-1\"]
 ```
-  The lz4 decompression system will fallback to jpoinz if liblz4 isn't installed or if
-  jna isn't loaded.  The jpoinz java library fail for arrow files that have dependent block compression.
+  The lz4 decompression system will fallback to lz4-java if liblz4 isn't installed or if
+  jna isn't loaded.  The lz4-java java library fail for arrow files that have dependent
+  block compression which are sometimes saved by python or R arrow implementations.
   On current ubuntu, in order to install the lz4 library you need to do:
 
 ```console
@@ -72,7 +73,7 @@
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]]
-            [clojure.data.json :as json])
+            [charred.api :as json])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -236,7 +237,7 @@
          :dst-buffer final-bytes}))))
 
 
-(defonce init-liblz4* (delay ((requiring-resolve 'tech.v3.libs.arrow.liblz4/initialize!))))
+(defonce ^:private init-liblz4* (delay ((requiring-resolve 'tech.v3.libs.arrow.liblz4/initialize!))))
 
 
 (defn- ensure-native-buffer
@@ -270,7 +271,7 @@
              (dtype/copy! n-dstbuf dstbuf))
            dstbuf))))
     (catch Exception e
-      (log/warn "Unable to load native lz4 library, falling back to jpounz.
+      (log/warn "Unable to load native lz4 library, falling back to jpountz.
 Dependent block frames are not supported!!")
       (fn [srcbuf dstbuf]
         (let [src-byte-data (dtype/->byte-array srcbuf)
@@ -593,7 +594,7 @@ Dependent block frames are not supported!!")
 (defn- ->str-str-meta
   [metadata]
   (->> metadata
-       (map (fn [[k v]] [(json/json-str k) (json/json-str v)]))
+       (map (fn [[k v]] [(json/write-json-str k) (json/write-json-str v)]))
        (into {})))
 
 
@@ -690,7 +691,7 @@ Dependent block frames are not supported!!")
 (defn- try-json-parse
   [val]
   (when val
-    (try (json/read-str val :key-fn keyword)
+    (try (json/read-json val :key-fn keyword)
          (catch Exception e
            val))))
 

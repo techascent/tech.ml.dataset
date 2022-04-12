@@ -1,7 +1,7 @@
 (ns tech.v3.dataset.io.csv
-  "CSV parsing based on
-  [tech.v3.datatype.char-input/read-csv](https://cnuernber.github.io/dtype-next/tech.v3.datatype.char-input.html#var-read-csv)."
-  (:require [tech.v3.datatype.char-input :as char-input]
+  "CSV parsing based on [charred.api/read-csv](https://cnuernber.github.io/charred/)."
+  (:require [charred.api :as charred]
+            [charred.coerce :as coerce]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.parallel.queue-iter :as queue-iter]
@@ -63,14 +63,16 @@
   The input will only be closed once the entire sequence is realized."
   [input & [options]]
   (let [options (update options :batch-size #(or % 128000))]
-    (->> (char-input/read-csv (io/input-stream input) options)
+    (->> (charred/read-csv-supplier (io/input-stream input) options)
+         (coerce/->iterator)
          (rows->dataset-seq options))))
 
 
 (defn csv->dataset
   "Read a csv into a dataset.  Same options as [[tech.v3.dataset/->dataset]]."
   [input & [options]]
-  (let [iter (char-input/read-csv (io/input-stream input) options)
+  (let [iter (-> (charred/read-csv-supplier (io/input-stream input) options)
+                 (coerce/->iterator))
         retval (->> (rows->dataset-seq options iter)
                     (first))]
     (when (instance? AutoCloseable iter)
