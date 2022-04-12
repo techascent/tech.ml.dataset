@@ -1,4 +1,7 @@
 # Changelog
+# 8.081
+ * json/csv read/write is going through the [charred library](https://github.com/cnuernber/charred).
+
 # 6.080
  * Update json parsing to dtype-next's json parser.
  
