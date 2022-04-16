@@ -74,8 +74,10 @@
         key-fn (:key-fn options identity)
         colparser-compute-fn (reify Function
                                (apply [this col-idx]
-                                 (let [colname (or (col-idx->colname col-idx)
-                                                   (make-colname col-idx))]
+                                 (let [colname (col-idx->colname col-idx)
+                                       colname (if (empty? colname)
+                                                 (make-colname col-idx)
+                                                 colname)]
                                    {:column-idx col-idx
                                     :column-name (key-fn colname)
                                     :column-parser (parse-context colname)})))
