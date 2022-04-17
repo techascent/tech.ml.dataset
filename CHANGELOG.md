@@ -1,10 +1,14 @@
 # Changelog
+# 8.084
+ * Various updates to the charred library.
+ * column whitelist/blacklists can be column indexes again.
+
 # 8.081
  * json/csv read/write is going through the [charred library](https://github.com/cnuernber/charred).
 
 # 6.080
  * Update json parsing to dtype-next's json parser.
- 
+
 # 6.079
  * Optimized new csv processing system.  Slightly faster and uses less memory.
 
@@ -12,9 +16,9 @@
  * Switched to the new csv processing system in dtype-next for parsing csv's.  This eliminates
    a source of more or less unfixable issues regarding univocity and it should be nearly
    identical in performance while using less memory.
- * Additionally there is a new interface for csv - 
-   [tech.v3.dataset.io.csv](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.io.csv.html) 
-   - processing that efficiently allows you to load a CSV into a sequence of datasets based 
+ * Additionally there is a new interface for csv -
+   [tech.v3.dataset.io.csv](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.io.csv.html)
+   - processing that efficiently allows you to load a CSV into a sequence of datasets based
    on row-counts.
  * The univocity-based processing system will still be kept around as there may be files
    that load significantly faster or that load correctly with the univocity processing

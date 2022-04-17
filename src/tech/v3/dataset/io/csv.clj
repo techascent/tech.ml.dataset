@@ -23,7 +23,8 @@
   (when (.hasNext row-iter)
     (let [n-header-cols (count header-row)
           num-rows (long (get options :batch-size
-                              (get options :n-records Long/MAX_VALUE)))
+                              (get options :n-records
+                                   (get options :num-rows Long/MAX_VALUE))))
           {:keys [parsers col-idx->parser]}
           (parse-context/options->col-idx-parse-context
            options :string (fn [^long col-idx]

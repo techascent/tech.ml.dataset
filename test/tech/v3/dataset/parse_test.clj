@@ -227,7 +227,7 @@
 (deftest simple-write-test
   (let [initial-ds (ds/->dataset
                     test-file
-                    {:n-records 20
+                    {:num-rows 20
                      :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]})
         _ (ds/write! initial-ds "test.tsv")
         new-ds (ds/->dataset "test.tsv")]
@@ -238,7 +238,7 @@
   (let [missing-ds (-> (ds/->dataset
                         test-file
                         {:n-records 20
-                         :column-whitelist ["1stFlrSF" "2ndFlrSF" "3SsnPorch"]})
+                         :column-whitelist [43 44 69]})
                        (ds/update-column
                         "1stFlrSF"
                         #(ds-col/set-missing % [2 4 7 9])))
