@@ -1,4 +1,9 @@
 # Changelog
+
+# 8.085
+ * Update to dtype-next.
+ * Support for decimal types from parquet - thanks to chrysophylax.
+ 
 # 8.084
  * Various updates to the charred library.
  * column whitelist/blacklists can be column indexes again.

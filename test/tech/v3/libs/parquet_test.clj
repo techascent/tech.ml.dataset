@@ -113,3 +113,9 @@
              (vec (pds :b)))))
     (finally
       (.delete (java.io.File. "test.parquet")))))
+
+
+(deftest decimaltable
+  (let [table (ds/->dataset "test/data/decimaltable.parquet")
+        decimals (table "decimals")]
+    (is (dfn/equals [3.420 1.246] decimals))))
