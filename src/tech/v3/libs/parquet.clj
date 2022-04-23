@@ -188,6 +188,10 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
   ^double [^ColumnReader rdr]
   (.getDouble rdr))
 
+(defn- read-decimal
+  [scale ^ColumnReader rdr]
+  (java.math.BigDecimal. (java.math.BigInteger. (read-byte-array rdr)) (int scale)))
+
 (defn- byte-range?
   [^long cmin ^long cmax]
   (and (>= cmin Byte/MIN_VALUE)
@@ -228,6 +232,10 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
              (get-in metadata [:statistics :max]))
     [(get-in metadata [:statistics :min]) (get-in metadata [:statistics :max])]))
 
+(defn- col-metadata->scale
+  [metadata]
+  (when (get-in metadata [:decimal-metadata :scale])
+    (get-in metadata [:decimal-metadata :scale])))
 
 (defn- make-column-iterator
   [^ColumnReader col-rdr ^ColumnDescriptor col-def read-fn]
@@ -262,11 +270,20 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BINARY
   [col-rdr col-def _metadata]
-  (let [org-type (col-def->col-orig-type col-def)]
-    (if (= org-type OriginalType/UTF8)
-      (make-column-iterable col-rdr col-def :string read-str)
-      (make-column-iterable col-rdr col-def :object read-byte-array))))
+  (let [org-type (col-def->col-orig-type col-def)
+        scale (col-metadata->scale _metadata)]
+    (cond
+      (= org-type OriginalType/UTF8) (make-column-iterable col-rdr col-def :string read-str)
+      (= org-type OriginalType/DECIMAL) (make-column-iterable col-rdr col-def :decimal (partial read-decimal scale))
+      :else (make-column-iterable col-rdr col-def :object read-byte-array))))
 
+(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/FIXED_LEN_BYTE_ARRAY
+  [col-rdr col-def _metadata]
+  (let [org-type (col-def->col-orig-type col-def)
+        scale (col-metadata->scale _metadata)]
+    (if  (= org-type OriginalType/DECIMAL)
+      (make-column-iterable col-rdr col-def :decimal (partial read-decimal scale))
+      (make-column-iterable col-rdr col-def :object read-byte-array))))
 
 (defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT96
   [col-rdr col-def _metadata]
@@ -682,6 +699,9 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
                                :num-values (.getValueCount metadata)
                                :uncompressed-size (.getTotalUncompressedSize metadata)
                                :total-size (.getTotalSize metadata)
+                               :decimal-metadata (when-let [decimal-data (.getDecimalMetadata ptype)]
+                                                   {:precision (.getPrecision decimal-data)
+                                                    :scale (.getScale decimal-data)})
                                :statistics (let [stats (.getStatistics metadata)]
                                              {:min (.genericGetMin stats)
                                               :max (.genericGetMax stats)
