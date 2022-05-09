@@ -1026,7 +1026,7 @@
                          (dtype/clone))
                      (dtype/elemwise-cast data datatype)))))}))
   ([coldata]
-   (data->column (:version coldata) coldata)))
+   (data->column-data (:version coldata) coldata)))
 
 
 (defn data->column
