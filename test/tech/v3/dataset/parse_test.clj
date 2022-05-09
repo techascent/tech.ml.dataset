@@ -5,7 +5,10 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.protocols.column :as col-proto]
             [tech.v3.libs.arrow :as arrow]
+
+            [taoensso.nippy :as nippy]
             [clojure.set :as set]
             [clojure.java.io :as io])
   (:import  [com.univocity.parsers.csv CsvFormat CsvParserSettings CsvParser]
@@ -459,3 +462,11 @@
       (is (dfn/equals (ds "price") (jds "price"))))
     (finally
       (.delete (java.io.File. "stocks.json")))))
+
+
+(deftest nippy-column
+  (let [ds (ds/->dataset {:a [1 2 3] :b [4 5 6]})
+        frozen (nippy/freeze (ds :a))
+        thawed (nippy/thaw frozen)]
+    (is (dfn/equals (ds :a) thawed))
+    (is (col-proto/is-column? thawed))))

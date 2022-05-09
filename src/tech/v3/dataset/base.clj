@@ -996,7 +996,7 @@
     (vec))})
 
 
-(defn data->column
+(defn- data->column-data
   "Given the result of column->data, produce a new column data description.  This
   description can be added via `add-column` - to produce a new column."
   ([version {:keys [metadata missing data]}]
@@ -1029,6 +1029,15 @@
    (data->column (:version coldata) coldata)))
 
 
+(defn data->column
+  "Convert a data-ized dataset created via dataset->data back into a
+  full dataset"
+  ([version data]
+   (col-impl/new-column (data->column-data version data)))
+  ([data]
+   (col-impl/new-column (data->column-data data))))
+
+
 (defn data->dataset
   "Convert a data-ized dataset created via dataset->data back into a
   full dataset"
@@ -1036,7 +1045,7 @@
     :or {version 1}
     :as _input}]
   (->> columns
-       (map (partial data->column version))
+       (map (partial data->column-data version))
        (ds-impl/new-dataset {:dataset-name (:name metadata)} metadata)))
 
 
