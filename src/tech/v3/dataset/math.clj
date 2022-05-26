@@ -1,7 +1,7 @@
 (ns tech.v3.dataset.math
   "Various mathematic transformations of datasets such as building correlation tables,
   pca, and normalizing columns to have mean of 0 and variance of 1. In order to use pca
-  you need to add preferrablye neanderthal or either latest javacpp openblas support or
+  you need to add preferrably neanderthal or either latest javacpp openblas support or
   smile mkl support to your project:
 
 ```clojure
