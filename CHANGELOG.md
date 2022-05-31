@@ -1,4 +1,8 @@
 # Changelog
+
+# 8.087
+ * Fix pd-merge `:outer` conditional - [issue 302](https://github.com/techascent/tech.ml.dataset/issues/302/)
+
 # 8.086
  * Update dtype-next as [issue 57](https://github.com/cnuernber/dtype-next/issues/57) was blocking tmd deployment on some macs.
  * Fix for [issue 298](https://github.com/techascent/tech.ml.dataset/issues/298) - nippy'd columns fail thaw.
