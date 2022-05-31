@@ -294,6 +294,15 @@
            (res :c)))))
 
 
+(deftest pd-merge-issue-302
+  (let [res (ds-join/pd-merge (ds/->dataset {:id ["a" "b"]
+                                             :x  [1 2]})
+                              (ds/->dataset {:id ["c"]
+                                             :y  [3]})
+                              {:on [:id] :how :outer})]
+    ))
+
+
 (comment
 
   (def lhs-fields

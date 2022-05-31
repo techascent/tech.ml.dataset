@@ -511,9 +511,9 @@ outer-join [8 4]:
                                      (ds-base/concat-copying (ds-base/select-columns
                                                               right-missing on-int)))
                  left-full (-> (ds-base/remove-columns left-valid on-int)
-                               (ds-base/extend-with-empty n-right-empty))
+                               (ds-base/extend-with-empty n-left-empty))
                  right-full (-> (ds-base/remove-columns right-valid on-int)
-                                (ds-base/extend-with-empty n-left-empty)
+                                (ds-base/extend-with-empty n-right-empty)
                                 (ds-base/concat-copying (ds-base/remove-columns
                                                          right-missing on-int)))]
              (-> (ds-impl/new-dataset
