@@ -82,15 +82,15 @@
 (defn column-names
   "In-order sequence of column names"
   [dataset]
-  (when dataset
-    (->> (ds-proto/columns dataset)
-         (map ds-col/column-name))))
+  (some->> dataset
+           ds-proto/columns
+           (map ds-col/column-name)))
 
 
 (defn has-column?
   [dataset column-name]
-  (when dataset
-    (contains? dataset column-name)))
+  (some-> dataset
+          (contains? column-name)))
 
 
 (defn columns-with-missing-seq
@@ -399,14 +399,10 @@
   "Drop rows from dataset or column"
   [dataset-or-col row-indexes]
   (let [n-rows (row-count dataset-or-col)
-        row-indexes (if (dtype/reader? row-indexes)
-                      row-indexes
-                      (take n-rows row-indexes))]
-    (if (== 0 (dtype/ecount row-indexes))
-      dataset-or-col
-      (select-rows dataset-or-col (dtype-proto/set-and-not
-                                   (bitmap/->bitmap (range n-rows))
-                                   row-indexes)))))
+        row-indexes (cond->> row-indexes
+                      (dtype/reader? row-indexes) (take n-rows))]
+    (cond-> dataset-or-col
+      (not (zero? (dtype/ecount row-indexes))) (select-rows (dtype-proto/set-and-not (bitmap/->bitmap (range n-rows)) row-indexes)))))
 
 
 (defn remove-rows
@@ -442,11 +438,8 @@
 (defn reverse-rows
   "Reverse the rows in the dataset or column."
   [dataset-or-col]
-  (if (empty? dataset-or-col)
-    dataset-or-col
-    (let [rc (row-count dataset-or-col)
-          rev-range (dtype/reverse (range rc))]
-      (select-rows dataset-or-col rev-range))))
+  (cond-> dataset-or-col
+    (not-empty dataset-or-col) (select-rows (-> dataset-or-col row-count range dtype/reverse))))
 
 
 (defn supported-column-stats
@@ -459,11 +452,11 @@
 (defn filter
   "dataset->dataset transformation.  Predicate is passed a map of
   colname->column-value."
-  ([dataset predicate]
-   (when dataset
-     (->> (ds-readers/mapseq-reader dataset)
-          (argops/argfilter predicate)
-          (select dataset :all)))))
+  [dataset predicate]
+  (some->> dataset
+           ds-readers/mapseq-reader
+           (argops/argfilter predicate)
+           (select dataset :all)))
 
 
 (defn filter-column
@@ -495,20 +488,19 @@
             (argops/argfilter predicate)
             (select dataset :all)))))
   ([dataset colname]
-   (when dataset
-     (let [cdata (-> (column dataset colname)
-                     (packing/unpack)
-                     (unary-pred/bool-reader->indexes))]
-       (select-rows dataset cdata)))))
+   (some->> (column dataset colname)
+            packing/unpack
+            unary-pred/bool-reader->indexes
+            (select-rows dataset))))
 
 
 (defn group-by->indexes
   "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
   is an in-order contiguous group of indexes."
-  ([dataset key-fn]
-   (when dataset
-     (->> (ds-readers/mapseq-reader dataset)
-          (argops/arggroup-by key-fn {:unordered? false})))))
+  [dataset key-fn]
+  (some->> dataset
+           ds-readers/mapseq-reader
+           (argops/arggroup-by key-fn {:unordered? false})))
 
 
 (defn group-by
@@ -664,8 +656,7 @@
 
 (defn check-empty
   [dataset]
-  (if (== 0 (column-count dataset))
-    nil
+  (when (not (zero? (column-count dataset)))
     dataset))
 
 
@@ -1000,10 +991,10 @@
   "Given the result of column->data, produce a new column data description.  This
   description can be added via `add-column` - to produce a new column."
   ([version {:keys [metadata missing data]}]
-   (let [datatype (:datatype metadata)
+   (let [{:keys [datatype name]} metadata
          missing (bitmap/->bitmap missing)]
      #:tech.v3.dataset
-      {:name (:name metadata)
+      {:name name
        :missing missing
        :force-datatype? true
        :data (case datatype
