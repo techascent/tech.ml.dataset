@@ -703,17 +703,16 @@ _unnamed [3 3]:
      - `:as-seq` - Return a sequence of datasets, one for each batch.
      - `:as-ds` - Return a single datasets with all results in memory (default option)."
   ([ds ds-map-fn options]
-   (if (nil? ds)
-     ds
-     (pfor/indexed-map-reduce
-      (row-count ds)
-      (fn [^long start-idx ^long group-len]
-        (-> (select-rows ds (range start-idx (+ start-idx group-len)))
-            (ds-map-fn)))
-      (case (get options :result-type :as-ds)
-        :as-ds #(apply concat-copying %)
-        :as-seq identity)
-      options)))
+   (some-> ds
+           row-count
+           (pfor/indexed-map-reduce (fn [^long start-idx ^long group-len]
+                                      (-> ds
+                                          (select-rows (range start-idx (+ start-idx group-len)))
+                                          (ds-map-fn)))
+                                    (case (get options :result-type :as-ds)
+                                      :as-ds #(apply concat-copying %)
+                                      :as-seq identity)
+                                    options)))
   ([ds ds-map-fn]
    (pmap-ds ds ds-map-fn nil)))
 
