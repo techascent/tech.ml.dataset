@@ -470,3 +470,11 @@
         thawed (nippy/thaw frozen)]
     (is (dfn/equals (ds :a) thawed))
     (is (col-proto/is-column? thawed))))
+
+
+(deftest empty-csv
+  (let [ds (ds/->dataset "test/data/empty-csv-header.csv")]
+    (is (= 7 (ds/column-count ds))))
+  (let [ds (ds/->dataset "test/data/empty-csv.csv")]
+    (is (= 0 (ds/column-count ds)))
+    (is (ds/dataset? ds))))

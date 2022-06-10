@@ -8,7 +8,8 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.io :as io]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
-            [tech.v3.dataset.io.context :as parse-context])
+            [tech.v3.dataset.io.context :as parse-context]
+            [tech.v3.dataset.impl.dataset :as ds-impl])
   (:import [tech.v3.datatype ArrayHelpers]
            [java.lang AutoCloseable]
            [java.util Iterator]))
@@ -54,7 +55,19 @@
         header-row (if (and header-row? (.hasNext row-iter))
                      (vec (.next row-iter))
                      [])]
-    (parse-next-batch row-iter header-row options)))
+    (if (not (.hasNext row-iter))
+      [(if header-row
+         (let [n-header-cols (count header-row)
+               {:keys [parsers col-idx->parser]}
+               (parse-context/options->col-idx-parse-context
+                options :string (fn [^long col-idx]
+                                  (when (< col-idx n-header-cols)
+                                    (header-row col-idx))))]
+           (dotimes [idx n-header-cols]
+             (col-idx->parser idx))
+           (parse-context/parsers->dataset options parsers))
+         (ds-impl/empty-dataset))]
+      (parse-next-batch row-iter header-row options))))
 
 
 (defn csv->dataset-seq
