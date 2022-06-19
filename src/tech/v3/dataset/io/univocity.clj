@@ -240,12 +240,6 @@
     (load-csv data options))
 
 
-(defn csv->dataset
-  "Load a csv file into a dataset."
-  [data options]
-  (load-csv data options))
-
-
 (defprotocol PApplyWriteOptions
   (apply-write-options! [settings options]))
 

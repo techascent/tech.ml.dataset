@@ -478,3 +478,14 @@
   (let [ds (ds/->dataset "test/data/empty-csv.csv")]
     (is (= 0 (ds/column-count ds)))
     (is (ds/dataset? ds))))
+
+
+(deftest comment-char
+  (let [ds (ds/->dataset "test/data/csv-comment.csv")
+        rows (ds/rows ds)]
+    (is (= 5 (ds/row-count ds)))
+    (is (= (rows -1) (rows -2)))))
+
+(deftest issue-304
+  (let [ds (ds/->dataset "test/data/issue-292.csv" {:n-initial-skip-rows 10})]
+    (is (= 11 (-> (ds "10") (first))))))

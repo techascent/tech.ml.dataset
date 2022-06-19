@@ -52,6 +52,9 @@
     :as options}
    row-seq]
   (let [row-iter (pfor/->iterator row-seq)
+        n-initial-skip-rows (long (get options :n-initial-skip-rows 0))
+        _ (dotimes [idx n-initial-skip-rows]
+            (when (.hasNext row-iter) (.next row-iter)))
         header-row (if (and header-row? (.hasNext row-iter))
                      (vec (.next row-iter))
                      [])]

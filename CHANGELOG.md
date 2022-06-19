@@ -1,4 +1,7 @@
 # Changelog
+# 8.089
+ * CSV parsing now supports `:comment-char` that defaults to #.  Lines that begin with this character are ignored.
+ * Fix for 
 
 # 8.087
  * Fix pd-merge `:outer` conditional - [issue 302](https://github.com/techascent/tech.ml.dataset/issues/302/)
