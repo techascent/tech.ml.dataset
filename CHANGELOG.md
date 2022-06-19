@@ -1,4 +1,9 @@
 # Changelog
+# 8.090
+ * replace-missing when provided both a direction and a default value will fill in missing items
+   after the direction is applied with the missing value.
+ * Added `:updown` and `:downup` options to replace previous behavior when desired.
+
 # 8.089
  * CSV parsing now supports `:comment-char` that defaults to #.  Lines that begin with this character are ignored.
  * Fix for [issue 304](https://github.com/techascent/tech.ml.dataset/issues/304/) - n-initial-skip-rows not respected when parsing a csv file.

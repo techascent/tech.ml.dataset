@@ -827,10 +827,10 @@ test/data/stocks.csv [10 3]:
 
   Strategies may be:
 
-  - `:down` - take value from previous non-missing row if possible else use next
-    non-missing row.
-  - `:up` - take value from next non-missing row if possible else use previous
-     non-missing row.
+  - `:down` - take value from previous non-missing row if possible else use provided value.
+  - `:up` - take value from next non-missing row if possible else use provided value.
+  - `:downup` - take value from previous if possible else use next.
+  - `:updown` - take value from next if possible else use previous.
   - `:nearest` - Use nearest of next or previous values.  `:mid` is an alias for `:nearest`.
   - `:midpoint` - Use midpoint of averaged values between previous and next nonmissing
      rows.

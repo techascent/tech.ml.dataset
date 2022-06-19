@@ -62,13 +62,16 @@
                       (remove-from-rbitmap missing (keys value))
                       (RoaringBitmap.)))))
 
+
 (defn- missing-direction-prev
   ^long [^RoaringBitmap rb ^long idx]
   (.previousAbsentValue rb idx))
 
+
 (defn- missing-direction-next
   ^long [^RoaringBitmap rb ^long idx]
   (.nextAbsentValue rb idx))
+
 
 (defn- replace-missing-with-direction
   [[primary-f secondary-f] col missing value]
@@ -79,19 +82,18 @@
                                  (assoc m v (dtype/get-value col vv))
                                  m)))
         missing-map-fn #(reduce (partial missing-map-pre-fn %1) {} %2)
-        ;; step1 (replace-missing-with-value col missing (missing-map-fn primary-f missing))
+        col (replace-missing-with-value col missing (missing-map-fn primary-f missing))
+        missing (col/missing col)]
+    (cond
+      (empty? missing)
+      col
+      (not (nil? value))
+      (replace-missing-with-value col missing value)
+      secondary-f
+      (replace-missing-with-value col missing (missing-map-fn secondary-f missing))
+      :else
+      col)))
 
-        ;; missing2 (col/missing step1)
-        ]
-
-
-    #_(if (empty? missing2)
-      step1
-      (if (nil? value)
-        (replace-missing-with-value step1 missing2
-                                    (missing-map-fn secondary-f missing2))
-        (replace-missing-with-value step1 missing2 value)))
-    (replace-missing-with-value col missing (missing-map-fn primary-f missing))))
 
 (defn- replace-missing-with-abb
   [col ^RoaringBitmap missing]
@@ -221,9 +223,13 @@
                    strategy)]
     (condp = strategy
       :down (replace-missing-with-direction
-             [missing-direction-prev missing-direction-next] col missing value)
+             [missing-direction-prev nil] col missing value)
       :up (replace-missing-with-direction
-           [missing-direction-next missing-direction-prev] col missing value)
+           [missing-direction-next nil] col missing value)
+      :downup (replace-missing-with-direction
+               [missing-direction-prev missing-direction-next] col missing value)
+      :updown (replace-missing-with-direction
+               [missing-direction-next missing-direction-prev] col missing value)
       :abb (replace-missing-with-abb col missing)
       :lerp (replace-missing-with-lerp :lerp col missing)
       :nearest (replace-missing-with-nearest col missing)
@@ -241,10 +247,10 @@
 
   Strategies may be:
 
-  - `:down` - take value from previous non-missing row if possible else use next
-    non-missing row.
-  - `:up` - take value from next non-missing row if possible else use previous
-     non-missing row.
+  - `:down` - take value from previous non-missing row if possible else use provided value.
+  - `:up` - take value from next non-missing row if possible else use provided value.
+  - `:downup` - take value from previous if possible else use next.
+  - `:updown` - take value from next if possible else use previous.
   - `:nearest` - Use nearest of next or previous values.  `:mid` is an alias for `:nearest`.
   - `:midpoint` - Use midpoint of averaged values between previous and next nonmissing
      rows.
