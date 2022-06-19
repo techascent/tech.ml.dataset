@@ -79,15 +79,19 @@
                                  (assoc m v (dtype/get-value col vv))
                                  m)))
         missing-map-fn #(reduce (partial missing-map-pre-fn %1) {} %2)
-        step1 (replace-missing-with-value col missing
-                                          (missing-map-fn primary-f missing))
-        missing2 (col/missing step1)]
-    (if (empty? missing2)
+        ;; step1 (replace-missing-with-value col missing (missing-map-fn primary-f missing))
+
+        ;; missing2 (col/missing step1)
+        ]
+
+
+    #_(if (empty? missing2)
       step1
       (if (nil? value)
         (replace-missing-with-value step1 missing2
                                     (missing-map-fn secondary-f missing2))
-        (replace-missing-with-value step1 missing2 value)))))
+        (replace-missing-with-value step1 missing2 value)))
+    (replace-missing-with-value col missing (missing-map-fn primary-f missing))))
 
 (defn- replace-missing-with-abb
   [col ^RoaringBitmap missing]

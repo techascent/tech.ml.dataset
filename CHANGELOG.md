@@ -1,7 +1,8 @@
 # Changelog
 # 8.089
  * CSV parsing now supports `:comment-char` that defaults to #.  Lines that begin with this character are ignored.
- * Fix for 
+ * Fix for [issue 304](https://github.com/techascent/tech.ml.dataset/issues/304/) - n-initial-skip-rows not respected when parsing a csv file.
+ * Experimental fix for [issue 305](https://github.com/techascent/tech.ml.dataset/issues/305/) - replace-missing with `:down` or `:up` should leave values missing when the initial replacement fails instead of trying the opposite direction.  This may leave datasets with some missing values.
 
 # 8.087
  * Fix pd-merge `:outer` conditional - [issue 302](https://github.com/techascent/tech.ml.dataset/issues/302/)
