@@ -1,4 +1,4 @@
-(ns tech.v3.dataset.column-tests
+(ns tech.v3.dataset.column-test
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as col]
@@ -58,3 +58,9 @@
                           :B [2 3]})
            (ds/select ds :all (dfn/< (:A ds) 3))))))
 
+(deftest test-tostring
+  (is (= "#tech.v3.dataset.column<float64>[3]\n:A\n[2.000, 1.000, 0.000]\n{:categorical? true,\n :name :A,\n :datatype :float64,\n :n-elems 3,\n :categorical-map\n {:lookup-table {:c 0, :b 1, :a 2},\n  :src-column :A,\n  :result-datatype :float64}}\n"
+         (-> (ds/->dataset {:A [:a :b :c]})
+             (ds/categorical->number [:A])
+             :A
+           str))))

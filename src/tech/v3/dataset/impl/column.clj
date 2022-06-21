@@ -153,296 +153,298 @@
      ^:unsynchronized-mutable ^ListPersistentVector cached-vector
      *index-structure]
 
-  col-proto/PHasIndexStructure
-  ;; This index-structure returned by this function can be invalid if
-  ;; the column's reader is based on a non-deterministic computation.
-  ;; For now, we think this may be okay because it's a unique edge-case.
-  ;; What value could an index have on data that is random and changing?
-  ;; We think it is reasonable to expect the user of tech.ml.dataset, which
-  ;; is a somewhat low-level library, to know that it wouldn't make sense
-  ;; to request the index structure on a column consisting of such data.
-  ;; For more, see this discussion on Clojurians Zulip: https://bit.ly/3dRa9MY
-  ;;
-  ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
-  (index-structure [this]
-    (if (empty? missing)
-      @*index-structure
-      (throw (Exception.
-              (str "Cannot obtain an index for column `"
-                   (col-proto/column-name this)
-                   "` because it contains missing values.")))))
-  (index-structure-realized? [_this]
-    (realized? *index-structure))
-  (with-index-structure [_this make-index-structure-fn]
-    (Column. missing
-             data
-             metadata
-             cached-vector
-             (delay (make-index-structure-fn data metadata))))
-
-  dtype-proto/PToArrayBuffer
-  (convertible-to-array-buffer? [_this]
-    (and (.isEmpty missing)
-         (dtype-proto/convertible-to-array-buffer? data)))
-  (->array-buffer [_this]
-    (dtype-proto/->array-buffer data))
-
-  dtype-proto/PToNativeBuffer
-  (convertible-to-native-buffer? [_this]
-    (and (.isEmpty missing)
-         (dtype-proto/convertible-to-native-buffer? data)))
-  (->native-buffer [_this]
-    (dtype-proto/->native-buffer data))
-  dtype-proto/PElemwiseDatatype
-  (elemwise-datatype [_this] (dtype-proto/elemwise-datatype data))
-  dtype-proto/POperationalElemwiseDatatype
-  (operational-elemwise-datatype [this]
-    (if (.isEmpty missing)
-      (dtype-proto/elemwise-datatype this)
-      (let [ewise-dt (dtype-proto/elemwise-datatype data)]
-        (cond
-          (packing/packed-datatype? ewise-dt)
-          (packing/unpack-datatype ewise-dt)
-          (casting/numeric-type? ewise-dt)
-          (casting/widest-datatype ewise-dt :float64)
-          (identical? :boolean ewise-dt)
-          :object
-          :else
-          ewise-dt))))
-  dtype-proto/PElemwiseCast
-  (elemwise-cast [_this new-dtype]
-    (let [new-data (dtype-proto/elemwise-cast data new-dtype)]
+    col-proto/PHasIndexStructure
+    ;; This index-structure returned by this function can be invalid if
+    ;; the column's reader is based on a non-deterministic computation.
+    ;; For now, we think this may be okay because it's a unique edge-case.
+    ;; What value could an index have on data that is random and changing?
+    ;; We think it is reasonable to expect the user of tech.ml.dataset, which
+    ;; is a somewhat low-level library, to know that it wouldn't make sense
+    ;; to request the index structure on a column consisting of such data.
+    ;; For more, see this discussion on Clojurians Zulip: https://bit.ly/3dRa9MY
+    ;;
+    ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
+    (index-structure [this]
+      (if (empty? missing)
+        @*index-structure
+        (throw (Exception.
+                (str "Cannot obtain an index for column `"
+                     (col-proto/column-name this)
+                     "` because it contains missing values.")))))
+    (index-structure-realized? [_this]
+      (realized? *index-structure))
+    (with-index-structure [_this make-index-structure-fn]
       (Column. missing
-               new-data
-               metadata
-               nil
-               (delay (make-index-structure new-data metadata)))))
-  dtype-proto/PElemwiseReaderCast
-  (elemwise-reader-cast [_this new-dtype]
-    (if (= new-dtype (dtype-proto/elemwise-datatype data))
-      (do
-        (cached-vector!)
-        (.data cached-vector))
-      (make-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
-                   new-dtype)))
-  dtype-proto/PToBuffer
-  (convertible-to-buffer? [_this] true)
-  (->buffer [_this]
-    (cached-vector!)
-    (.data cached-vector))
-  dtype-proto/PToReader
-  (convertible-to-reader? [_this]
-    (dtype-proto/convertible-to-reader? data))
-  (->reader [this]
-    (dtype-proto/->buffer this))
-  dtype-proto/PToWriter
-  (convertible-to-writer? [_this]
-    (dtype-proto/convertible-to-writer? data))
-  (->writer [this]
-    (dtype-proto/->buffer this))
-  dtype-proto/PSubBuffer
-  (sub-buffer [this offset len]
-    (let [offset (long offset)
-          len (long len)]
-      (if (and (== offset 0)
-               (== len (dtype/ecount this)))
-        this
-        ;;TODO - use bitmap operations to perform this calculation
-        (let [new-missing (dtype-proto/set-and
-                           missing
-                           (bitmap/->bitmap (range offset (+ offset len))))
-              new-data    (dtype-proto/sub-buffer data offset len)]
-          (Column. new-missing
-                   new-data
-                   metadata
-                   nil
-                   (delay (make-index-structure new-data metadata)))))))
-  dtype-proto/PClone
-  (clone [_col]
-    (let [new-data (if (or (dtype/writer? data)
-                           (= :string (dtype/get-datatype data))
-                           (= :encoded-text (dtype/get-datatype data)))
-                     (dtype/clone data)
-                     ;;It is important that the result of this operation be writeable.
-                     (dtype/make-container :jvm-heap
-                                           (dtype/get-datatype data) data))
-          cloned-missing (dtype/clone missing)]
-      (Column. cloned-missing
-               new-data
-               metadata
-               nil
-               (delay (make-index-structure new-data metadata)))))
-  Iterable
-  (iterator [this]
-    (.iterator (dtype-proto/->buffer this)))
-  col-proto/PIsColumn
-  (is-column? [_this] true)
-  col-proto/PColumn
-  (column-name [_col] (:name metadata))
-  (set-name [_col name] (Column. missing
-                                data
-                                (assoc metadata :name name)
-                                cached-vector
-                                *index-structure))
-  (supported-stats [_col] stats/all-descriptive-stats-names)
-  (missing [_col] missing)
-  (is-missing? [_col idx] (.contains missing (long idx)))
-  (set-missing [col long-rdr]
-    (let [long-rdr (if (dtype/reader? long-rdr)
-                     long-rdr
-                     ;;handle infinite seq's
-                     (take (dtype/ecount data) long-rdr))
-          bitmap (->bitmap long-rdr)]
-      (let [max-value (long (if-not (.isEmpty bitmap)
-                              (dtype-proto/constant-time-max bitmap)
-                              0))]
-        ;;trim the bitmap to fit the column
-        (when (>= max-value (dtype/ecount col))
-          (.andNot bitmap (bitmap/->bitmap (range (dtype/ecount col)
-                                                  (unchecked-inc max-value))))
-          (assert (< (long (dtype-proto/constant-time-max bitmap))
-                     (dtype/ecount col)))))
-      (.runOptimize bitmap)
-      (Column. bitmap
                data
                metadata
-               nil
-               (delay (make-index-structure data metadata)))))
-  (buffer [_this] data)
-  (as-map [_this] #:tech.v3.dataset{:name (:name metadata)
-                                   :data data
-                                   :missing missing
-                                   :metadata metadata
-                                   :force-datatype? true})
-  (unique [this]
-    (->> (parallel-unique this)
-         (into #{})))
-  (stats [col stats-set]
-    (when-not (casting/numeric-type? (dtype-proto/elemwise-datatype col))
-      (throw (ex-info "Stats aren't available on non-numeric columns"
-                      {:column-type (dtype/get-datatype col)
-                       :column-name (:name metadata)})))
-    (dfn/descriptive-statistics stats-set col))
-  (correlation [col other-column correlation-type]
-    (case correlation-type
-      :pearson (dfn/pearsons-correlation col other-column)
-      :spearman (dfn/spearmans-correlation col other-column)
-      :kendall (dfn/kendalls-correlation col other-column)))
-  (select [_col selection]
-    (let [selection (if (= (dtype/elemwise-datatype selection) :boolean)
-                    (->efficient-reader (un-pred/bool-reader->indexes
-                                         (dtype/ensure-reader selection)))
-                    (->efficient-reader selection))]
-      (if (== 0 (dtype/ecount missing))
-        ;;common case
-        (let [bitmap (->bitmap)
-              new-data (dtype/indexed-buffer selection data)]
-          (Column. bitmap
-                   new-data
-                   metadata
-                   nil
-                   (delay (make-index-structure data metadata))))
-        ;;Uggh.  Construct a new missing set
-        (let [idx-rrdr (dtype/->reader selection)
-              n-idx-elems (.lsize idx-rrdr)
-              ^RoaringBitmap result-set (->bitmap)]
-          (dotimes [idx n-idx-elems]
-            (when (.contains missing (.readLong idx-rrdr idx))
-              (.add result-set idx)))
-          (let [new-data (dtype/indexed-buffer selection data)]
-            (Column. result-set
+               cached-vector
+               (delay (make-index-structure-fn data metadata))))
+
+    dtype-proto/PToArrayBuffer
+    (convertible-to-array-buffer? [_this]
+      (and (.isEmpty missing)
+           (dtype-proto/convertible-to-array-buffer? data)))
+    (->array-buffer [_this]
+      (dtype-proto/->array-buffer data))
+
+    dtype-proto/PToNativeBuffer
+    (convertible-to-native-buffer? [_this]
+      (and (.isEmpty missing)
+           (dtype-proto/convertible-to-native-buffer? data)))
+    (->native-buffer [_this]
+      (dtype-proto/->native-buffer data))
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [_this] (dtype-proto/elemwise-datatype data))
+    dtype-proto/POperationalElemwiseDatatype
+    (operational-elemwise-datatype [this]
+      (if (.isEmpty missing)
+        (dtype-proto/elemwise-datatype this)
+        (let [ewise-dt (dtype-proto/elemwise-datatype data)]
+          (cond
+            (packing/packed-datatype? ewise-dt)
+            (packing/unpack-datatype ewise-dt)
+            (casting/numeric-type? ewise-dt)
+            (casting/widest-datatype ewise-dt :float64)
+            (identical? :boolean ewise-dt)
+            :object
+            :else
+            ewise-dt))))
+    dtype-proto/PElemwiseCast
+    (elemwise-cast [_this new-dtype]
+      (let [new-data (dtype-proto/elemwise-cast data new-dtype)]
+        (Column. missing
+                 new-data
+                 metadata
+                 nil
+                 (delay (make-index-structure new-data metadata)))))
+    dtype-proto/PElemwiseReaderCast
+    (elemwise-reader-cast [_this new-dtype]
+      (if (= new-dtype (dtype-proto/elemwise-datatype data))
+        (do
+          (cached-vector!)
+          (.data cached-vector))
+        (make-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
+                     new-dtype)))
+    dtype-proto/PToBuffer
+    (convertible-to-buffer? [_this] true)
+    (->buffer [_this]
+      (cached-vector!)
+      (.data cached-vector))
+    dtype-proto/PToReader
+    (convertible-to-reader? [_this]
+      (dtype-proto/convertible-to-reader? data))
+    (->reader [this]
+      (dtype-proto/->buffer this))
+    dtype-proto/PToWriter
+    (convertible-to-writer? [_this]
+      (dtype-proto/convertible-to-writer? data))
+    (->writer [this]
+      (dtype-proto/->buffer this))
+    dtype-proto/PSubBuffer
+    (sub-buffer [this offset len]
+      (let [offset (long offset)
+            len (long len)]
+        (if (and (== offset 0)
+                 (== len (dtype/ecount this)))
+          this
+          ;;TODO - use bitmap operations to perform this calculation
+          (let [new-missing (dtype-proto/set-and
+                             missing
+                             (bitmap/->bitmap (range offset (+ offset len))))
+                new-data    (dtype-proto/sub-buffer data offset len)]
+            (Column. new-missing
                      new-data
                      metadata
                      nil
-                     (delay (make-index-structure new-data metadata))))))))
-  (to-double-array [col error-on-missing?]
-    (let [n-missing (dtype/ecount missing)
-          any-missing? (not= 0 n-missing)
-          col-dtype (dtype/get-datatype col)]
-      (when (and any-missing? error-on-missing?)
-        (throw (Exception. "Missing values detected and error-on-missing? set")))
-      (when-not (or (= :boolean col-dtype)
-                    (= :object col-dtype)
-                    (casting/numeric-type? (dtype/get-datatype col)))
-        (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
-  IObj
-  (meta [this]
-    (assoc metadata
-           :datatype (dtype-proto/elemwise-datatype this)
-           :n-elems (dtype-proto/ecount this)))
-  (withMeta [_this new-meta] (Column. missing
+                     (delay (make-index-structure new-data metadata)))))))
+    dtype-proto/PClone
+    (clone [_col]
+      (let [new-data (if (or (dtype/writer? data)
+                             (= :string (dtype/get-datatype data))
+                             (= :encoded-text (dtype/get-datatype data)))
+                       (dtype/clone data)
+                       ;;It is important that the result of this operation be writeable.
+                       (dtype/make-container :jvm-heap
+                                             (dtype/get-datatype data) data))
+            cloned-missing (dtype/clone missing)]
+        (Column. cloned-missing
+                 new-data
+                 metadata
+                 nil
+                 (delay (make-index-structure new-data metadata)))))
+    Iterable
+    (iterator [this]
+      (.iterator (dtype-proto/->buffer this)))
+    col-proto/PIsColumn
+    (is-column? [_this] true)
+    col-proto/PColumn
+    (column-name [_col] (:name metadata))
+    (set-name [_col name] (Column. missing
                                      data
-                                     new-meta
+                                     (assoc metadata :name name)
                                      cached-vector
-                                     (delay (make-index-structure data new-meta))))
-  Counted
-  (count [_this] (int (dtype/ecount data)))
-  Indexed
-  (nth [_this idx]
-    (let [idx (long idx)
-          orig-idx idx
-          n-elems (dtype/ecount data)
-          idx (if (< idx 0) (+ n-elems idx) idx)]
-      (if (and (>= idx 0)
-               (< idx n-elems))
-        ((cached-vector!) idx)
-        (throw (Exception. (format "Index %d is out of range [%d, %d]"
-                                   orig-idx (- n-elems) (dec n-elems))))))
-    ((cached-vector!) idx))
-  (nth [_this idx def-val]
-    (let [idx (long idx)
-          n-elems (dtype/ecount data)
-          idx (if (< idx 0) (+ n-elems idx) idx)]
-      (if (and (>= idx 0)
-               (< idx n-elems))
-        ((cached-vector!) idx)
-        def-val)))
-  IFn
-  (invoke [_this idx]
-    ((cached-vector!) idx))
-  (applyTo [this args]
-    (when-not (= 1 (count args))
-      (throw (Exception. "Too many arguments to column")))
-    (.invoke this (first args)))
-  Object
-  (toString [item]
-    (let [n-elems (dtype/ecount data)
-          format-str (if (> n-elems 20)
-                       "#tech.v3.dataset.column<%s>%s\n%s\n[%s...]"
-                       "#tech.v3.dataset.column<%s>%s\n%s\n[%s]")]
-      (format format-str
-              (name (dtype/elemwise-datatype item))
-              [n-elems]
-              (col-proto/column-name item)
-              (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
-                  (dtype-pp/print-reader-data)))))
+                                     *index-structure))
+    (supported-stats [_col] stats/all-descriptive-stats-names)
+    (missing [_col] missing)
+    (is-missing? [_col idx] (.contains missing (long idx)))
+    (set-missing [col long-rdr]
+      (let [long-rdr (if (dtype/reader? long-rdr)
+                       long-rdr
+                       ;;handle infinite seq's
+                       (take (dtype/ecount data) long-rdr))
+            bitmap (->bitmap long-rdr)]
+        (let [max-value (long (if-not (.isEmpty bitmap)
+                                (dtype-proto/constant-time-max bitmap)
+                                0))]
+          ;;trim the bitmap to fit the column
+          (when (>= max-value (dtype/ecount col))
+            (.andNot bitmap (bitmap/->bitmap (range (dtype/ecount col)
+                                                    (unchecked-inc max-value))))
+            (assert (< (long (dtype-proto/constant-time-max bitmap))
+                       (dtype/ecount col)))))
+        (.runOptimize bitmap)
+        (Column. bitmap
+                 data
+                 metadata
+                 nil
+                 (delay (make-index-structure data metadata)))))
+    (buffer [_this] data)
+    (as-map [_this] #:tech.v3.dataset{:name (:name metadata)
+                                      :data data
+                                      :missing missing
+                                      :metadata metadata
+                                      :force-datatype? true})
+    (unique [this]
+      (->> (parallel-unique this)
+           (into #{})))
+    (stats [col stats-set]
+      (when-not (casting/numeric-type? (dtype-proto/elemwise-datatype col))
+        (throw (ex-info "Stats aren't available on non-numeric columns"
+                        {:column-type (dtype/get-datatype col)
+                         :column-name (:name metadata)})))
+      (dfn/descriptive-statistics stats-set col))
+    (correlation [col other-column correlation-type]
+      (case correlation-type
+        :pearson (dfn/pearsons-correlation col other-column)
+        :spearman (dfn/spearmans-correlation col other-column)
+        :kendall (dfn/kendalls-correlation col other-column)))
+    (select [_col selection]
+      (let [selection (if (= (dtype/elemwise-datatype selection) :boolean)
+                          (->efficient-reader (un-pred/bool-reader->indexes
+                                                  (dtype/ensure-reader selection)))
+                          (->efficient-reader selection))]
+        (if (== 0 (dtype/ecount missing))
+          ;;common case
+          (let [bitmap (->bitmap)
+                new-data (dtype/indexed-buffer selection data)]
+            (Column. bitmap
+                     new-data
+                     metadata
+                     nil
+                     (delay (make-index-structure data metadata))))
+          ;;Uggh.  Construct a new missing set
+          (let [idx-rrdr (dtype/->reader selection)
+                n-idx-elems (.lsize idx-rrdr)
+                ^RoaringBitmap result-set (->bitmap)]
+            (dotimes [idx n-idx-elems]
+              (when (.contains missing (.readLong idx-rrdr idx))
+                (.add result-set idx)))
+            (let [new-data (dtype/indexed-buffer selection data)]
+              (Column. result-set
+                       new-data
+                       metadata
+                       nil
+                       (delay (make-index-structure new-data metadata))))))))
+    (to-double-array [col error-on-missing?]
+      (let [n-missing (dtype/ecount missing)
+            any-missing? (not= 0 n-missing)
+            col-dtype (dtype/get-datatype col)]
+        (when (and any-missing? error-on-missing?)
+          (throw (Exception. "Missing values detected and error-on-missing? set")))
+        (when-not (or (= :boolean col-dtype)
+                      (= :object col-dtype)
+                      (casting/numeric-type? (dtype/get-datatype col)))
+          (throw (Exception. "Non-numeric columns do not convert to doubles.")))
+        (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
+    IObj
+    (meta [this]
+      (assoc metadata
+             :datatype (dtype-proto/elemwise-datatype this)
+             :n-elems (dtype-proto/ecount this)))
+    (withMeta [_this new-meta] (Column. missing
+                                          data
+                                          new-meta
+                                          cached-vector
+                                          (delay (make-index-structure data new-meta))))
+    Counted
+    (count [_this] (int (dtype/ecount data)))
+    Indexed
+    (nth [_this idx]
+      (let [idx (long idx)
+            orig-idx idx
+            n-elems (dtype/ecount data)
+            idx (if (< idx 0) (+ n-elems idx) idx)]
+        (if (and (>= idx 0)
+                 (< idx n-elems))
+          ((cached-vector!) idx)
+          (throw (Exception. (format "Index %d is out of range [%d, %d]"
+                                     orig-idx (- n-elems) (dec n-elems))))))
+      ((cached-vector!) idx))
+    (nth [_this idx def-val]
+      (let [idx (long idx)
+            n-elems (dtype/ecount data)
+            idx (if (< idx 0) (+ n-elems idx) idx)]
+        (if (and (>= idx 0)
+                 (< idx n-elems))
+          ((cached-vector!) idx)
+          def-val)))
+    IFn
+    (invoke [_this idx]
+      ((cached-vector!) idx))
+    (applyTo [this args]
+      (when-not (= 1 (count args))
+        (throw (Exception. "Too many arguments to column")))
+      (.invoke this (first args)))
+    Object
+    (toString [item]
+      (let [n-elems (dtype/ecount data)
+            format-str (if (> n-elems 20)
+                         "#tech.v3.dataset.column<%s>%s\n%s\n[%s...]"
+                         "#tech.v3.dataset.column<%s>%s\n%s\n[%s]")]
+        (format (str format-str "\n%s")
+                (name (dtype/elemwise-datatype item))
+                [n-elems]
+                (col-proto/column-name item)
+                (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
+                    (dtype-pp/print-reader-data))
+                (-> item meta ((fn [o] (with-out-str (clojure.pprint/pprint o))))))))
 
-  ;;Delegates to ListPersistentVector, which caches results for us.
-  (hashCode [_this] (.hashCode (cached-vector!)))
 
-  clojure.lang.IHashEq
-  ;;should be the same as using hash-unorded-coll, effectively.
-  (hasheq [_this]   (.hasheq (cached-vector!)))
+    ;;Delegates to ListPersistentVector, which caches results for us.
+    (hashCode [_this] (.hashCode (cached-vector!)))
 
-  (equals [this o] (or (identical? this o)
-                       (.equals (cached-vector!) o)))
+    clojure.lang.IHashEq
+    ;;should be the same as using hash-unorded-coll, effectively.
+    (hasheq [_this]   (.hasheq (cached-vector!)))
 
-  clojure.lang.Sequential
-  clojure.lang.IPersistentCollection
-  (seq   [_this]
-    (.seq (cached-vector!)))
-  (cons  [_this _o]
-    ;;can revisit this later if it makes sense.  For now, read only.
-    (throw (ex-info "conj/.cons is not supported on columns" {})))
-  (empty [this]
-    (Column. (->bitmap)
-             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
-             {}
-             nil
-             (delay nil)))
-  (equiv [this o] (or (identical? this o)
-                      (.equiv (cached-vector!) o))))
+    (equals [this o] (or (identical? this o)
+                         (.equals (cached-vector!) o)))
+
+    clojure.lang.Sequential
+    clojure.lang.IPersistentCollection
+    (seq   [_this]
+      (.seq (cached-vector!)))
+    (cons  [_this _o]
+      ;;can revisit this later if it makes sense.  For now, read only.
+      (throw (ex-info "conj/.cons is not supported on columns" {})))
+    (empty [this]
+      (Column. (->bitmap)
+               (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
+               {}
+               nil
+               (delay nil)))
+    (equiv [this o] (or (identical? this o)
+                        (.equiv (cached-vector!) o))))
 
 
 (dtype-pp/implement-tostring-print Column)
