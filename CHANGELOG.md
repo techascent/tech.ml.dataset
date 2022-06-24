@@ -1,4 +1,7 @@
 # Changelog
+# 8.091
+ * Upgrade to latest charred - no user visible change expected.
+
 # 8.090
  * replace-missing when provided both a direction and a default value will fill in missing items
    after the direction is applied with the missing value.

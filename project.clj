@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.091-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.091"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -7,7 +7,7 @@
                  [cnuernber/dtype-next             "9.028"]
                  [techascent/tech.io               "4.15"
                   :exclusions [org.apache.commons/commons-compress]]
-                 ;;[com.cnuernber/charred            "1.010"]
+                 ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "5.1.0"
                   :exclusions [commons-codec]]
