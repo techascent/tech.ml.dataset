@@ -5,7 +5,9 @@
   Further a few set operations (union, intersection, difference) are provided
   to further manipulate subsets of columns.
 
-  All functions are transformations from dataset to dataset."
+  All functions are transformations from dataset to dataset.
+
+  The functions in this namespace use the metadata on the columns of the dataset, wich can be inspected  via `clojure.core/meta`"
   (:require [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
