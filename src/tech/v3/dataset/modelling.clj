@@ -1,7 +1,9 @@
 (ns tech.v3.dataset.modelling
   "Methods related specifically to machine learning such as setting the inference
   target.  This file integrates tightly with tech.v3.dataset.categorical which provides
-  categorical -> number and one-hot transformation pathways"
+  categorical -> number and one-hot transformation pathways.
+
+  The functions in this namespace manipulate the metadata on the columns of the dataset, wich can be inspected  via `clojure.core/meta`"
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]

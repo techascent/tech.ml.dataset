@@ -1,6 +1,9 @@
 (ns tech.v3.dataset.categorical
   "Conversions of categorical values into numbers and back.  Two forms of conversions
-  are supported, a straight value->integer map and one-hot encoding."
+  are supported, a straight value->integer map and one-hot encoding.
+
+  The functions in this namespace manipulate the metadata on the columns of the dataset, wich can be inspected  via `clojure.core/meta`"
+
   (:require [tech.v3.dataset.base :as ds-base]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.protocols.dataset :as ds-proto]
