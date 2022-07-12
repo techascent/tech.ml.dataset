@@ -311,6 +311,24 @@
     (is (= of-cwise-sum total-count))))
 
 
+(deftest issue-314
+  (let [dstds (->
+               (ds-reduce/group-by-column-agg
+                :foo
+                {:foos (ds-reduce/distinct :value)}
+                (ds/->dataset (into [] (map (fn [i] {:foo 'foo :value (str i)})) (range 3))))
+               (ds/column-map :foos-2 (fn [values] values) [:foos]))]
+    (is (= ["0" "1" "2"]
+           (vec (first (dstds :foos-2)))))))
+
+
+(deftest issue-312
+  (let [ds (ds-reduce/aggregate
+            {:n-elems (ds-reduce/row-count)}
+            [(ds/->dataset "test/data/example-genres.nippy")])]))
+
+
+
 (comment
   (require '[tech.v3.datatype.jvm-map :as jvm-map])
   (import '[java.time LocalDate YearMonth]
