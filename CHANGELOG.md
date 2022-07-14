@@ -1,4 +1,7 @@
 # Changelog
+# 8.092
+ * Fixes for issues [312](https://github.com/techascent/tech.ml.dataset/issues/312/), [315](https://github.com/techascent/tech.ml.dataset/issues/315/), [316](https://github.com/techascent/tech.ml.dataset/issues/316/)
+ 
 # 8.091
  * Upgrade to latest charred - no user visible change expected.
 
