@@ -1501,9 +1501,15 @@
                (ds/column :a)
                (vec))))
     (is (= [0.0 2.0]
-           (-> (ds/filter-column ds :c identity)
+           (-> ds
+               (ds/filter-column :c identity)
                (ds/column :a)
                (vec))))))
+
+
+(deftest issue-315
+  (is (not (nil? (ds/concat (ds/drop-rows (ds/->dataset [{:a 1 :b 2}]) [0])
+                            (ds/drop-rows (ds/->dataset [{:a 1 :c3 2}]) [0]))))))
 
 
 (comment

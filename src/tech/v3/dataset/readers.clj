@@ -3,7 +3,7 @@
             [tech.v3.protocols.dataset :as ds-proto])
   (:import [tech.v3.datatype ObjectReader Buffer ListPersistentVector]
            [tech.v3.dataset FastStruct]
-           [java.util List HashMap Collections ArrayList]))
+           [java.util List HashMap Collections ArrayList LinkedHashMap]))
 
 
 (defn dataset->column-readers
@@ -103,7 +103,7 @@
   "Return a reader that produces a map of column-name->column-value
   upon read."
   (^Buffer [dataset options]
-   (let [colnamemap (HashMap.)
+   (let [colnamemap (LinkedHashMap.)
          _ (doseq [[c-name c-idx] (->> (ds-proto/columns dataset)
                                        (map (comp :name meta))
                                        (map-indexed #(vector %2 (int %1))))]

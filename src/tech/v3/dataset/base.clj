@@ -584,7 +584,7 @@
 (defn- do-concat
   [reader-concat-fn dataset other-datasets]
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
-                      (remove #(= 0 (row-count %)))
+                      (remove nil?)
                       seq)]
 
     (cond

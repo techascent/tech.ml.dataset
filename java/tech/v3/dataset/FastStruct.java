@@ -20,7 +20,7 @@ import java.io.Serializable;
 import java.util.NoSuchElementException;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -113,7 +113,7 @@ public class FastStruct extends APersistentMap implements IObj{
 
   public IPersistentMap without(Object key) {
     if(slots.containsKey(key)) {
-      HashMap newSlots = new HashMap(slots);
+      LinkedHashMap newSlots = new LinkedHashMap(slots);
       newSlots.remove(key);
       return new FastStruct(meta, Collections.unmodifiableMap(newSlots), vals, ext);
     }
@@ -184,7 +184,7 @@ public class FastStruct extends APersistentMap implements IObj{
     if( nEntries == 0 ) {
       throw new RuntimeException("No column names provided");
     }
-    HashMap slots = new HashMap(nEntries);
+    LinkedHashMap slots = new LinkedHashMap(nEntries);
     for (int idx = 0; idx < nEntries; ++idx ) {
       slots.put(colnames.get(idx), idx);
     }
