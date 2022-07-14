@@ -114,10 +114,10 @@ user> (ds-reduce/group-by-column-agg
   (accept [_this lval]
     (.add bitmap (unchecked-int lval)))
   Consumers$StagedConsumer
-  (combine [_this other]
+  (combine [this other]
     (let [^BitmapConsumer other other]
-      (-> (RoaringBitmap/or bitmap (.bitmap other))
-          (BitmapConsumer.))))
+      (.or bitmap (.bitmap other))
+      this))
   (value [_this]
     bitmap))
 
@@ -139,9 +139,10 @@ user> (ds-reduce/group-by-column-agg
   (accept [_this objdata]
     (.add data objdata))
   Consumers$StagedConsumer
-  (combine [_this other]
+  (combine [this other]
     (let [^SetConsumer other other]
-      (.addAll ^HashSet (.clone data) (.data other))))
+      (.addAll ^HashSet data (.data other))
+      this))
   (value [_this] data))
 
 

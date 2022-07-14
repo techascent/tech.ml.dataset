@@ -324,9 +324,9 @@
 
 (deftest issue-312
   (let [ds (ds-reduce/aggregate
-            {:n-elems (ds-reduce/row-count)}
-            [(ds/->dataset "test/data/example-genres.nippy")])]))
-
+            {:n-elems (ds-reduce/count-distinct :genre)}
+            [(ds/->dataset "test/data/example-genres.nippy")])]
+    (is (pos? (first (ds :n-elems))))))
 
 
 (comment
