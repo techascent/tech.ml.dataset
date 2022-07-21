@@ -1,4 +1,8 @@
 # Changelog
+# 8.093
+ * Fixes for issue [259](https://github.com/techascent/tech.ml.dataset/issues/259/), which is same as new issue 311.  `:key-fn` should only be applied once per column and does not have to
+   be idemptotent.
+   
 # 8.092
  * Fixes for issues [312](https://github.com/techascent/tech.ml.dataset/issues/312/), [315](https://github.com/techascent/tech.ml.dataset/issues/315/), [316](https://github.com/techascent/tech.ml.dataset/issues/316/)
  

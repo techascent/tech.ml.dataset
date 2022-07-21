@@ -104,7 +104,8 @@
           (mapv (fn [{:keys [column-name column-parser]}]
                   (assoc (column-parsers/finalize! column-parser row-count)
                          :tech.v3.dataset/name column-name)))
-          (ds-impl/new-dataset options))))
+          ;;key-fn has already been applied
+          (ds-impl/new-dataset (assoc options :key-fn nil)))))
   ([options parsers]
    (parsers->dataset options parsers
                      (apply max 0 (map (comp dtype/ecount :column-parser)

@@ -1512,6 +1512,24 @@
                             (ds/drop-rows (ds/->dataset [{:a 1 :c3 2}]) [0]))))))
 
 
+(deftest issue-259
+  (let [ds (ds/->dataset [{"a o" 1 "b o" 2} {"a o" 5 "b o" 3}]
+                         {:key-fn #(keyword (clojure.string/replace % " " "-"))})]
+    (is (= #{:b-o :a-o} (set (map (comp :name meta) (vals ds))))))
+  (let [ds (ds/->dataset {"a o" [1 5] "b o" [2 3]}
+                         {:key-fn #(keyword (clojure.string/replace % " " "-"))})]
+    (is (= #{:b-o :a-o} (set (map (comp :name meta) (vals ds))))))
+  (let [ds (ds/->dataset [{"Foo" 1 , "Bar" 2}]
+                         {:key-fn #(keyword (.toLowerCase %))})]
+    (is (= #{:foo :bar}
+           (set (map (comp :name meta) (vals ds))))))
+  (let [ds (ds/->dataset (java.io.ByteArrayInputStream. (.getBytes "Foo,Bar\n1,2"))
+                         {:key-fn #(keyword (.toLowerCase %))
+                          :file-type :csv})]
+    (is (= #{:foo :bar}
+           (set (map (comp :name meta) (vals ds)))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
