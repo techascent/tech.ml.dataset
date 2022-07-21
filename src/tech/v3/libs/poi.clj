@@ -136,8 +136,8 @@
 
 
 (defn workbook->datasets
-  "Given a workbook, an string filename or an input stream return a sequence of
-  dataset named after the sheets.
+  "Given a workbook, a string filename or an input stream return a sequence of
+  datasets named after the sheets.
 
   Options are a subset of the arguments for tech.v3.dataset/->dataset:
 
