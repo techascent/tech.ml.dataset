@@ -9,7 +9,8 @@
             [tech.v3.resource :as resource]
             [clojure.test :refer [deftest is]])
   (:import [java.time LocalTime]
-           [tech.v3.dataset Text]))
+           [tech.v3.dataset Text]
+           [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
 
 (tech.v3.dataset.utils/set-slf4j-log-level :info)
@@ -272,3 +273,18 @@
                (vec (copying-ds "b")))))
       (finally
         (.delete (java.io.File. "test-local-time.arrow")))))
+
+
+(deftest string-arrow
+  (let [dataset (ds/->dataset [{"col1" "a"}] {:parser-fn :string})
+        baos (ByteArrayOutputStream.)]
+    (resource/stack-resource-context
+     (arrow/dataset->stream! dataset baos {:compression :lz4})
+     (let [written-bytes (.toByteArray baos)
+           arrow-ds-rtt (arrow/stream->dataset written-bytes)
+           _ (.reset baos)
+           _ (arrow/dataset->stream! arrow-ds-rtt baos {:compression :lz4})
+           b2 (.toByteArray baos)
+           final-ds (arrow/stream->dataset b2)]
+       (is (= (vec (dataset "col1"))
+              (vec (final-ds "col1"))))))))

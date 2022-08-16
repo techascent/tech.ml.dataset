@@ -529,7 +529,7 @@ Dependent block frames are not supported!!")
         str-t (ds-base/ensure-column-string-table col)
         ^StringTable prev-str-t (::previous-string-table metadata)
         int->str (str-table/int->string str-t)
-        indices (dtype-proto/->array-buffer (str-table/indices str-t))
+        indices (dtype/as-concrete-buffer (str-table/indices str-t))
         n-elems (.size int->str)
         bit-width (casting/int-width (dtype/elemwise-datatype indices))
         arrow-indices-type (ArrowType$Int. bit-width true)
@@ -1099,7 +1099,7 @@ Dependent block frames are not supported!!")
       (case col-dt
         :boolean [(boolean-bytes cbuf)]
         :string (let [str-t (ds-base/ensure-column-string-table col)
-                      indices (dtype-proto/->array-buffer (str-table/indices str-t))]
+                      indices (dtype/as-concrete-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
         :text
         (let [byte-data (dtype/make-list :int8)

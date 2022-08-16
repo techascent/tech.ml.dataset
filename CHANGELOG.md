@@ -1,4 +1,8 @@
 # Changelog
+# 8.094
+ * dtype-next upgrade.
+ * Fix for round-tripping arrow files with compression.
+ 
 # 8.093
  * Fixes for issue [259](https://github.com/techascent/tech.ml.dataset/issues/259/), which is same as new issue 311.  `:key-fn` should only be applied once per column and does not have to
    be idemptotent.
