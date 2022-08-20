@@ -573,7 +573,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
   * `:merge-fn` - For reductions are done with per-thread contexts, the final step is to merge
     the per-thread contexts back into one final context.  This is **not** currently used for
     `group-by-agg` but it is used for `aggregate`.
-  * `:finalize` - Optional argument to perform a final pass on the result of the reduction
+  * `:finalize-fn` - Optional argument to perform a final pass on the result of the reduction
     before it is set as the row value for the column.
 
   Example:
