@@ -141,7 +141,7 @@ as the first argument to <code>per-idx-fn</code>.</li>
 <li><code>:merge-fn</code> - For reductions are done with per-thread contexts, the final step is to merge
 the per-thread contexts back into one final context.  This is <strong>not</strong> currently used for
 <code>group-by-agg</code> but it is used for <code>aggregate</code>.</li>
-<li><code>:finalize</code> - Optional argument to perform a final pass on the result of the reduction
+<li><code>:finalize-fn</code> - Optional argument to perform a final pass on the result of the reduction
 before it is set as the row value for the column.</li>
 </ul>
 <p>Example:</p>
