@@ -44,7 +44,7 @@
     ;;;  just to be sure
     (assert (= (clojure.set/map-invert (clojure.set/map-invert cat-map))
                cat-map)
-            "The categorical mapping calculated is not bijective")
+            (str  "The categorical mapping calculated is not bijective: " cat-map))
     cat-map))
 
 

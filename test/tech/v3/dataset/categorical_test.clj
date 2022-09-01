@@ -64,3 +64,13 @@
   (t/is (=
          (cat->num [[:a 1 :b 1]])
          {1 :a, 0 :c, 2 :b, 3 :d})))
+
+(comment
+  (cat->num [[:a 3.1 :b 3.2]])
+
+  (->
+   (ds/->dataset {:y [ :a :b :c :d]})
+   (ds/categorical->number  [:y] [[:a 3.1 :b 3.2]])
+   ((fn [ds] (hash-map :ds ds
+                      :y-lookup-table (-> ds :y meta :categorical-map :lookup-table))))))
+ ;; (ds-cat/reverse-map-categorical-xforms)
