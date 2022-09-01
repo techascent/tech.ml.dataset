@@ -70,6 +70,11 @@
               :source-paths ["src"]
               :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}
+
+             :neanderthal {:jvm-opts [
+                                      "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+
              :jdk-17 {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
                                  "--enable-native-access=ALL-UNNAMED"]}
              :codegen
