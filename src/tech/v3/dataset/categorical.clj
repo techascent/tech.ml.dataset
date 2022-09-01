@@ -33,14 +33,19 @@
                      value-list]
                     [str-table (conj value-list item)]))
                 [{} []]
-                table-value-list)]
-    ;;Finally, auto-generate values for anything not mapped yet.
-    (->> value-list
-         (reduce (fn [str-table item]
-                   (assoc str-table item
-                          (first (remove (set (vals str-table))
-                                         (range)))))
-                 str-table))))
+                table-value-list)
+        ;;Finally, auto-generate values for anything not mapped yet.
+        cat-map (->> value-list
+                     (reduce (fn [str-table item]
+                               (assoc str-table item
+                                      (first (remove (set (vals str-table))
+                                                     (range)))))
+                             str-table))]
+    ;;;  just to be sure
+    (assert (= (clojure.set/map-invert (clojure.set/map-invert cat-map))
+               cat-map)
+            "The categorical mapping calculated is not bijective")
+    cat-map))
 
 
 (defrecord ^:private CategoricalMap [lookup-table src-column result-datatype])
@@ -48,7 +53,7 @@
 
 (defn ^:no-doc create-categorical-map
   [lookup-table src-colname result-datatype]
-    (map->CategoricalMap
+  (map->CategoricalMap
    {:lookup-table lookup-table
     :src-column src-colname
     :result-datatype result-datatype}))
@@ -63,17 +68,28 @@
 
   'table-args` allows to specify the precise mapping as a sequence of pairs of [val idx] or as a sorted seq of values.
 "
-  ^CategoricalMap [dataset colname & [table-args res-dtype]]
-  (create-categorical-map
-   (reduce (fn [categorical-map col-val]
-             (if (get categorical-map col-val)
-               categorical-map
-               (assoc categorical-map col-val
-                      (long (count categorical-map)))))
-           (make-categorical-map-from-table-args table-args)
-           (col-proto/unique (ds-base/column dataset colname)))
-   colname
-   (or res-dtype :float64)))
+
+    ^CategoricalMap [dataset colname & [table-args res-dtype]]
+    (let [m      (make-categorical-map-from-table-args table-args)
+          closed (atom (set (vals m)))
+          idx    (atom 0)
+          nxt    (fn ^long [n]
+                   (if (@closed n)
+                     (do (swap! closed disj n)
+                         (recur (swap! idx inc)))
+                     (let [res @idx
+                           _ (swap! idx inc)]
+                       (long res))))]
+      (create-categorical-map
+       (reduce (fn [categorical-map col-val]
+                 (if (get categorical-map col-val)
+                   categorical-map
+                   (assoc categorical-map col-val (nxt @idx))))
+               m
+               (col-proto/unique (ds-base/column dataset colname)))
+       colname
+       (or res-dtype :float64))))
+
 
 
 (defn transform-categorical-map
