@@ -120,19 +120,32 @@
                                 "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
             (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
                                :categorical? true)
-            (ds/categorical->number ["MasVnrType"] {"BrkCmn" 1
-                                                "BrkFace" 1
-                                                "CBlock" 1
-                                                "Stone" 1
-                                                "None" 0
-                                                "NA" -1})
-            (ds/categorical->number ["SaleCondition"] {"Abnorml" 0
-                                                   "Alloca" 0
-                                                   "AdjLand" 0
-                                                   "Family" 0
-                                                   "Normal" 0
-                                                   "Partial" 1
-                                                   "NA" -1})
+            (ds/update-column "MasVnrType"
+                              (fn [col] (map
+                                         #(case % ("BrkCmn" "BrkFace" "CBlock" "Stone" ) "Brk"
+                                                %)
+                                         col)))
+
+
+            (ds/update-column "SaleCondition"
+                              (fn [col] (map
+                                         #(case % ("Abnorml" "Alloca" "AdjLand" "Family" "Normal" ) "sale-1"
+                                               %)
+                                         col)))
+
+
+
+            (ds/categorical->number ["MasVnrType"] {
+                                                    "Brk"  1
+                                                    "None" 0
+                                                    "NA" -1})
+
+
+
+            (ds/categorical->number ["SaleCondition"] {"sale-1" 0
+                                                       "Partial" 1
+                                                       "NA" -1})
+
             ;; ;;Auto convert the rest that are still string columns
             (ds/categorical->number cf/string))]
     (if (ds/has-column? initial-ds "SalePrice")
@@ -223,74 +236,87 @@
 (defn full-ames-pt-1
   [dataset]
   (ds/bind-> (missing-pipeline dataset) ds
-    (ds/categorical->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
-    (ds/categorical->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
-    (ds/categorical->number ["ExterQual"
-                             "ExterCond"
-                             "BsmtQual"
-                             "BsmtCond"
-                             "HeatingQC"
-                             "KitchenQual"
-                             "FireplaceQu"
-                             "GarageQual"
-                             "GarageCond"
-                             "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
-    (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
-                       :categorical? true)
-    (ds/categorical->number ["MasVnrType"] {"BrkCmn" 1
-                                            "BrkFace" 1
-                                            "CBlock" 1
-                                            "Stone" 1
-                                            "None" 0
-                                            "NA" -1})
-    (ds/categorical->number ["SaleCondition"] {"Abnorml" 0
-                                               "Alloca" 0
-                                               "AdjLand" 0
-                                               "Family" 0
-                                               "Normal" 0
-                                               "Partial" 1
-                                               "NA" -1})
-    ;; ;;Auto convert the rest that are still string columns
-    (ds/categorical->number cf/string)
-    (ds/update-column "SalePrice" dfn/log1p)
-    (ds-mod/set-inference-target "SalePrice")
-    (assoc "OverallGrade" (dfn/* (ds "OverallQual") (ds "OverallCond")))
-    ;; Overall quality of the garage
-    (assoc "GarageGrade"  (dfn/* (ds "GarageQual") (ds "GarageCond")))
-    ;; Overall quality of the exterior
-    (assoc "ExterGrade" (dfn/* (ds "ExterQual") (ds "ExterCond")))
-    ;; Overall kitchen score
-    (assoc  "KitchenScore" (dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
-    ;; Overall fireplace score
-    (assoc "FireplaceScore" (dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
-    ;; Overall garage score
-    (assoc "GarageScore" (dfn/* (ds "GarageArea") (ds "GarageQual")))
-    ;; Overall pool score
-    (assoc "PoolScore" (dfn/* (ds "PoolArea") (ds "PoolQC")))
-    ;; Simplified overall quality of the house
-    (assoc "SimplOverallGrade" (dfn/* (ds "OverallQual") (ds "OverallCond")))
-    ;; Simplified overall quality of the exterior
-    (assoc "SimplExterGrade" (dfn/* (ds "ExterQual") (ds "ExterCond")))
-    ;; Simplified overall pool score
-    (assoc "SimplPoolScore" (dfn/* (ds "PoolArea") (ds "PoolQC")))
-    ;; Simplified overall garage score
-    (assoc "SimplGarageScore" (dfn/* (ds "GarageArea") (ds "GarageQual")))
-    ;; Simplified overall fireplace score
-    (assoc "SimplFireplaceScore" (dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
-    ;; Simplified overall kitchen score
-    (assoc "SimplKitchenScore" (dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
-    ;; Total number of bathrooms
-    (assoc "TotalBath" (dfn/+ (ds "BsmtFullBath")
-                              (dfn/* 0.5 (ds "BsmtHalfBath"))
-                              (ds "FullBath")
-                              (dfn/* 0.5 (ds "HalfBath"))))
-    ;; Total SF for house (incl. basement)
-    (assoc "AllSF" (dfn/+ (ds "GrLivArea") (ds "TotalBsmtSF")))
-    ;; Total SF for 1st + 2nd floors
-    (assoc "AllFlrsSF" (dfn/+ (ds "1stFlrSF") (ds "2ndFlrSF")))
-    ;; Total SF for porch
-    (assoc "AllPorchSF" (dfn/+ (ds "OpenPorchSF") (ds "EnclosedPorch")
-                               (ds "3SsnPorch") (ds "ScreenPorch")))))
+             (ds/categorical->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa" "NoSewr" "AllPub"])
+             (ds/categorical->number ["LandSlope"] ["Gtl" "Mod" "Sev" "NA"])
+             (ds/categorical->number ["ExterQual"
+                                      "ExterCond"
+                                      "BsmtQual"
+                                      "BsmtCond"
+                                      "HeatingQC"
+                                      "KitchenQual"
+                                      "FireplaceQu"
+                                      "GarageQual"
+                                      "GarageCond"
+                                      "PoolQC"]   ["Ex" "Gd" "TA" "Fa" "Po" "NA"])
+             (ds/assoc-metadata ["MSSubClass" "OverallQual" "OverallCond"]
+                                :categorical? true)
+
+             (ds/update-column "MasVnrType"
+                               (fn [col] (map
+                                          #(case % ("BrkCmn" "BrkFace" "CBlock" "Stone" ) "Brk"
+                                                 %)
+                                          col)))
+
+                                 
+             (ds/update-column "SaleCondition"
+                               (fn [col] (map
+                                          #(case % ("Abnorml" "Alloca" "AdjLand" "Family" "Normal" ) "sale-1"
+                                                %)
+                                          col)))
+
+
+
+             (ds/categorical->number ["MasVnrType"] {
+                                                     "Brk"  1
+                                                     "None" 0
+                                                     "NA" -1})
+
+
+
+             (ds/categorical->number ["SaleCondition"] {"sale-1" 0
+                                                        "Partial" 1
+                                                        "NA" -1})
+             ;; ;;Auto convert the rest that are still string columns
+             (ds/categorical->number cf/string)
+             (ds/update-column "SalePrice" dfn/log1p)
+             (ds-mod/set-inference-target "SalePrice")
+             (assoc "OverallGrade" (dfn/* (ds "OverallQual") (ds "OverallCond")))
+             ;; Overall quality of the garage
+             (assoc "GarageGrade"  (dfn/* (ds "GarageQual") (ds "GarageCond")))
+             ;; Overall quality of the exterior
+             (assoc "ExterGrade" (dfn/* (ds "ExterQual") (ds "ExterCond")))
+             ;; Overall kitchen score
+             (assoc  "KitchenScore" (dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
+             ;; Overall fireplace score
+             (assoc "FireplaceScore" (dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
+             ;; Overall garage score
+             (assoc "GarageScore" (dfn/* (ds "GarageArea") (ds "GarageQual")))
+             ;; Overall pool score
+             (assoc "PoolScore" (dfn/* (ds "PoolArea") (ds "PoolQC")))
+             ;; Simplified overall quality of the house
+             (assoc "SimplOverallGrade" (dfn/* (ds "OverallQual") (ds "OverallCond")))
+             ;; Simplified overall quality of the exterior
+             (assoc "SimplExterGrade" (dfn/* (ds "ExterQual") (ds "ExterCond")))
+             ;; Simplified overall pool score
+             (assoc "SimplPoolScore" (dfn/* (ds "PoolArea") (ds "PoolQC")))
+             ;; Simplified overall garage score
+             (assoc "SimplGarageScore" (dfn/* (ds "GarageArea") (ds "GarageQual")))
+             ;; Simplified overall fireplace score
+             (assoc "SimplFireplaceScore" (dfn/* (ds "Fireplaces") (ds "FireplaceQu")))
+             ;; Simplified overall kitchen score
+             (assoc "SimplKitchenScore" (dfn/* (ds "KitchenAbvGr") (ds "KitchenQual")))
+             ;; Total number of bathrooms
+             (assoc "TotalBath" (dfn/+ (ds "BsmtFullBath")
+                                       (dfn/* 0.5 (ds "BsmtHalfBath"))
+                                       (ds "FullBath")
+                                       (dfn/* 0.5 (ds "HalfBath"))))
+             ;; Total SF for house (incl. basement)
+             (assoc "AllSF" (dfn/+ (ds "GrLivArea") (ds "TotalBsmtSF")))
+             ;; Total SF for 1st + 2nd floors
+             (assoc "AllFlrsSF" (dfn/+ (ds "1stFlrSF") (ds "2ndFlrSF")))
+             ;; Total SF for porch
+             (assoc "AllPorchSF" (dfn/+ (ds "OpenPorchSF") (ds "EnclosedPorch")
+                                        (ds "3SsnPorch") (ds "ScreenPorch")))))
 
 
 (def ames-top-columns

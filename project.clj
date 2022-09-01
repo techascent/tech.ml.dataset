@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.095-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.096-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -70,6 +70,11 @@
               :source-paths ["src"]
               :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}
+
+             :neanderthal {:jvm-opts [
+                                      "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+
              :jdk-17 {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
                                  "--enable-native-access=ALL-UNNAMED"]}
              :codegen
