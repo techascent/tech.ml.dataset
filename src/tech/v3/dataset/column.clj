@@ -10,7 +10,9 @@
             [tech.v3.datatype.bitmap :as bitmap])
   (:import [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype Buffer LongReader DoubleReader ObjectReader]))
+           [tech.v3.datatype Buffer LongReader DoubleReader ObjectReader]
+           [clojure.lang IFn$LL IFn$LLL IFn$LLLL
+            IFn$DD IFn$DDD IFn$DDDD]))
 
 
 (declare new-column)
@@ -201,6 +203,27 @@ Implementations should check their metadata before doing calculations."
   (col-proto/to-double-array col error-on-missing?))
 
 
+(defn- derive-dtype
+  [map-fn arg-count]
+  (case arg-count
+    1 (cond (instance? IFn$DD map-fn)
+            :float64
+            (instance? IFn$LL map-fn)
+            :int64
+            :else :object)
+    2 (cond (instance? IFn$DDD map-fn)
+            :float64
+            (instance? IFn$LLL map-fn)
+            :int64
+            :else :object)
+    3 (cond (instance? IFn$DDDD map-fn)
+            :float64
+            (instance? IFn$LLLL map-fn)
+            :int64
+            :else :object)
+    :object))
+
+
 (defn column-map
   "Map a scalar function across one or more columns.
   This is the semi-missing-set aware version of tech.v3.datatype/emap.  This function
@@ -223,45 +246,47 @@ Implementations should check their metadata before doing calculations."
                       {:datatype res-dtype}
                       (or res-dtype {}))
         ;;object readers get scanned to infer datatype
-        res-dtype (res-opt-map :datatype :object)
+        res-dtype (res-opt-map :datatype)
+        res-dtype (if (nil? res-dtype)
+                    (derive-dtype map-fn (count args))
+                    res-dtype)
         missing-fn (res-opt-map :missing-fn)
         ^RoaringBitmap missing (if missing-fn
                                  (bitmap/->bitmap (missing-fn args))
                                  nil)
-        ^Buffer data (apply dtype/emap map-fn res-dtype args)
+        ^Buffer data (-> (apply dtype/emap map-fn res-dtype args)
+                         (dtype/clone))
         data (if (or (nil? res-dtype)
-                     (identical? :object res-dtype))
-               ;;data will be scanned by the dataset to ascertain datatype
+                     (identical? :object res-dtype)
+                     (nil? missing))
+               ;;data will be scanned by the dataset to ascertain datatype and/or missing
                data
                ;;Force data to be realized
-               (if missing
-                 (let [missing-val (get col-base/dtype->missing-val-map res-dtype nil)]
-                   (-> (case (casting/simple-operation-space res-dtype)
-                         :int64
-                         (reify LongReader
-                           (elemwiseDatatype [this] (.elemwiseDatatype data))
-                           (lsize [this] (.lsize data))
-                           (readLong [this idx]
-                             (if-not (.contains missing idx)
-                               (.readLong data idx)
-                               (unchecked-long missing-val))))
-                         :float64
-                         (reify DoubleReader
-                           (elemwiseDatatype [this] (.elemwiseDatatype data))
-                           (lsize [this] (.lsize data))
-                           (readDouble [this idx]
-                             (if-not (.contains missing idx)
-                               (.readDouble data idx)
-                               (double missing-val))))
-                         (reify ObjectReader
-                           (elemwiseDatatype [this] (.elemwiseDatatype data))
-                           (lsize [this] (.lsize data))
-                           (readObject [this idx]
-                             (if-not (.contains missing idx)
-                               (.readObject data idx)
-                               missing-val))))
-                       (dtype/clone)))
-                 (dtype/clone data)))]
+               (let [missing-val (get col-base/dtype->missing-val-map res-dtype nil)]
+                 (-> (case (casting/simple-operation-space res-dtype)
+                       :int64
+                       (reify LongReader
+                         (elemwiseDatatype [this] (.elemwiseDatatype data))
+                         (lsize [this] (.lsize data))
+                         (readLong [this idx]
+                           (if-not (.contains missing idx)
+                             (.readLong data idx)
+                             (unchecked-long missing-val))))
+                       :float64
+                       (reify DoubleReader
+                         (elemwiseDatatype [this] (.elemwiseDatatype data))
+                         (lsize [this] (.lsize data))
+                         (readDouble [this idx]
+                           (if-not (.contains missing idx)
+                             (.readDouble data idx)
+                             (double missing-val))))
+                       (reify ObjectReader
+                         (elemwiseDatatype [this] (.elemwiseDatatype data))
+                         (lsize [this] (.lsize data))
+                         (readObject [this idx]
+                           (if-not (.contains missing idx)
+                             (.readObject data idx)
+                             missing-val)))))))]
     (col-impl/new-column :_unnamed
                          data
                          nil

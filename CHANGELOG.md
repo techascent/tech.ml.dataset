@@ -1,15 +1,21 @@
 # Changelog
+
+# 8.095
+ * Better parallelization for column-map.
+ * Fix for [issue 307](https://github.com/techascent/tech.ml.dataset/issues/307) - Bugs in categorical mapping.
+
+
 # 8.094
  * dtype-next upgrade.
  * Fix for round-tripping arrow files with compression.
- 
+
 # 8.093
  * Fixes for issue [259](https://github.com/techascent/tech.ml.dataset/issues/259/), which is same as new issue 311.  `:key-fn` should only be applied once per column and does not have to
    be idemptotent.
-   
+
 # 8.092
  * Fixes for issues [312](https://github.com/techascent/tech.ml.dataset/issues/312/), [315](https://github.com/techascent/tech.ml.dataset/issues/315/), [316](https://github.com/techascent/tech.ml.dataset/issues/316/)
- 
+
 # 8.091
  * Upgrade to latest charred - no user visible change expected.
 
