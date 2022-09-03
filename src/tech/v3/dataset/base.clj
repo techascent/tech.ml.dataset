@@ -13,6 +13,7 @@
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.array-buffer :as array-buffer]
+            [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
@@ -374,12 +375,37 @@
          (ds-impl/new-dataset (dataset-name dataset) (meta dataset)))))
 
 
-(defn select-rows
-  "Select rows from the dataset or column."
+(defn- preprocess-row-indexes
+  [row-indexes ^long n-rows]
+  (let [row-indexes (-> (cond
+                          (instance? RoaringBitmap row-indexes)
+                          (bitmap/bitmap->efficient-random-access-reader row-indexes)
+                          (nil? row-indexes) []
+                          :else
+                          (case (argtypes/arg-type row-indexes)
+                            :scalar [row-indexes]
+                            :reader row-indexes
+                            (dtype/make-container :int64 (take n-rows row-indexes))))
+                        (dtype/->buffer))]
+    (dtype/make-reader :int64 (dtype/ecount row-indexes)
+                       (let [val (.readLong row-indexes idx)]
+                         (if (< val 0)
+                           (+ val n-rows)
+                           val)))))
+
+
+(defn- do-select-rows
   [dataset-or-col row-indexes]
   (if (ds-impl/dataset? dataset-or-col)
     (select dataset-or-col :all row-indexes)
     (ds-col/select dataset-or-col row-indexes)))
+
+
+(defn select-rows
+  "Select rows from the dataset or column."
+  [dataset-or-col row-indexes]
+  (let [row-indexes (preprocess-row-indexes row-indexes (row-count dataset-or-col))]
+    (do-select-rows dataset-or-col row-indexes)))
 
 (defn select-rows-by-index
   "Select rows from the dataset or column by seq of index(includes negative) or :all.
@@ -390,7 +416,8 @@
     (select-by-index dataset-or-col :all row-index)
     (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
           row-index (if (sequential? row-index)
-                      (dtype/emap (partial make-pos (row-count dataset-or-col)) :int64 row-index)
+                      (dtype/emap (partial make-pos (row-count dataset-or-col))
+                                  :int64 row-index)
                       row-index)]
       (ds-col/select dataset-or-col row-index))))
 
@@ -398,11 +425,14 @@
 (defn drop-rows
   "Drop rows from dataset or column"
   [dataset-or-col row-indexes]
-  (let [n-rows (row-count dataset-or-col)
-        row-indexes (cond->> row-indexes
-                      (dtype/reader? row-indexes) (take n-rows))]
-    (cond-> dataset-or-col
-      (not (zero? (dtype/ecount row-indexes))) (select-rows (dtype-proto/set-and-not (bitmap/->bitmap (range n-rows)) row-indexes)))))
+  (cond-> dataset-or-col
+    (not (zero? (dtype/ecount row-indexes)))
+    (do-select-rows (dtype-proto/set-and-not
+                     (bitmap/->bitmap
+                      (range (row-count dataset-or-col)))
+                     (if (instance? RoaringBitmap row-indexes)
+                       row-indexes
+                       (preprocess-row-indexes row-indexes (row-count dataset-or-col)))))))
 
 
 (defn remove-rows

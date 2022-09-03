@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.10.3" :scope "provided"]
                  [cnuernber/dtype-next             "9.030"]
-                 [techascent/tech.io               "4.15"
+                 [techascent/tech.io               "4.17"
                   :exclusions [org.apache.commons/commons-compress]]
                  ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]

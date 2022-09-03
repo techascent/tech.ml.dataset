@@ -1,5 +1,10 @@
 # Changelog
 
+# 8.096
+ * Latest tech.io - pulls in important charred csv fix.
+ * [issue 320](https://github.com/techascent/tech.ml.dataset/issues/320) - specify encoding for files.
+ * drop-rows, select-rows can take negative indexes.
+
 # 8.095
  * Better parallelization for column-map.
  * Fix for [issue 307](https://github.com/techascent/tech.ml.dataset/issues/307) - Bugs in categorical mapping.
