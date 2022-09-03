@@ -6,7 +6,7 @@
             [charred.api :as charred]
             [tech.v3.dataset.io.mapseq-colmap :as parse-mapseq-colmap]
             [tech.v3.dataset.readers :as readers])
-  (:import [java.io InputStream File]
+  (:import [java.io InputStream File Reader]
            [java.util Map]))
 
 
@@ -25,15 +25,22 @@
      :file-type file-type}))
 
 
+(defn input-stream-or-reader
+  [input-data]
+  (if (instance? Reader input-data)
+    input-data
+    (io/input-stream input-data)))
+
+
 (defn wrap-stream-fn
   [dataset gzipped? open-fn]
-  (with-open [^InputStream istream (if (instance? InputStream dataset)
-                                     (if gzipped?
-                                       (io/gzip-input-stream dataset)
-                                       dataset)
-                                     (if gzipped?
-                                       (io/gzip-input-stream dataset)
-                                       (io/input-stream dataset)))]
+  (with-open [^java.lang.AutoCloseable istream (if (instance? InputStream dataset)
+                                                 (if gzipped?
+                                                   (io/gzip-input-stream dataset)
+                                                   dataset)
+                                                 (if gzipped?
+                                                   (io/gzip-input-stream dataset)
+                                                   (input-stream-or-reader dataset)))]
     (open-fn istream)))
 
 
@@ -52,7 +59,7 @@
   [data options]
   (with-open [is (if (get options :gzipped?)
                    (io/gzip-input-stream data)
-                   (io/input-stream data))]
+                   (input-stream-or-reader data))]
     ;;Use mixed json parse profile as we don't care if the input is immutable or mutable and
     ;;mixed has the best performance.
     (let [options (assoc options :profile :mixed)]
@@ -222,7 +229,9 @@
          (cond
            (satisfies? ds-proto/PColumnarDataset dataset)
            dataset
-           (or (string? dataset) (instance? InputStream dataset))
+           (or (string? dataset)
+               (instance? InputStream dataset)
+               (instance? Reader dataset))
            (let [options (if (string? dataset)
                            (merge (str->file-info dataset)
                                   options)

@@ -80,7 +80,7 @@
   The input will only be closed once the entire sequence is realized."
   [input & [options]]
   (let [options (update options :batch-size #(or % 128000))]
-    (->> (charred/read-csv-supplier (io/input-stream input) options)
+    (->> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
          (coerce/->iterator)
          (rows->dataset-seq options))))
 
@@ -88,7 +88,7 @@
 (defn csv->dataset
   "Read a csv into a dataset.  Same options as [[tech.v3.dataset/->dataset]]."
   [input & [options]]
-  (let [iter (-> (charred/read-csv-supplier (io/input-stream input) options)
+  (let [iter (-> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
                  (coerce/->iterator))
         retval (->> (rows->dataset-seq options iter)
                     (first))]

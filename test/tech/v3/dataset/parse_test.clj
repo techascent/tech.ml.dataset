@@ -264,6 +264,11 @@
     (is (= :local-date (dtype/get-datatype (stock-ds "date"))))))
 
 
+(deftest custom-reader
+  (is (= 560 (ds/row-count (ds/->dataset (io/reader "test/data/stocks.csv")
+                                         {:file-type :csv})))))
+
+
 (defn verify-relaxed-parse
   [ds]
   (let [date-col (ds "date")
