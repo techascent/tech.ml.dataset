@@ -254,13 +254,11 @@ Implementations should check their metadata before doing calculations."
         ^RoaringBitmap missing (if missing-fn
                                  (bitmap/->bitmap (missing-fn args))
                                  nil)
-        ^Buffer data (-> (apply dtype/emap map-fn res-dtype args)
-                         (dtype/clone))
-        data (if (or (nil? res-dtype)
-                     (identical? :object res-dtype)
-                     (nil? missing))
+
+        ^Buffer data (apply dtype/emap map-fn res-dtype args)
+        data (if (or (nil? missing) (.isEmpty missing))
                ;;data will be scanned by the dataset to ascertain datatype and/or missing
-               data
+               (dtype/clone data)
                ;;Force data to be realized
                (let [missing-val (get col-base/dtype->missing-val-map res-dtype nil)]
                  (-> (case (casting/simple-operation-space res-dtype)
@@ -286,7 +284,8 @@ Implementations should check their metadata before doing calculations."
                          (readObject [this idx]
                            (if-not (.contains missing idx)
                              (.readObject data idx)
-                             missing-val)))))))]
+                             missing-val))))
+                     (dtype/clone))))]
     (col-impl/new-column :_unnamed
                          data
                          nil
