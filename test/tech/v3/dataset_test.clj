@@ -468,16 +468,15 @@
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [false false true]
            (vec (dfn/finite? (ds :a))))))
-
-  ;;Disabling test as *not* scanning all values with column-map can hurt performance in
-  ;;the worst case much more than lazy noncaching helps in the best case.
-  #_(let [ds (ds/bind-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]) ds
-                        (assoc :a (ds-col/column-map (fn [^double lhs ^double rhs]
-                                                       (+ (double lhs)
-                                                          (double rhs)))
-                                                     {:missing-fn ds-col/union-missing-sets
-                                                      :datatype :float64}
-                                                     (ds :a) (ds :b))))]
+  ;; Never remove these tests.  Actual users are relying on this behavior to simplify
+  ;; their processing chains.
+  (let [ds (ds/bind-> (ds/->dataset [{:a 1} {:b 2.0} {:a 2 :b 3.0}]) ds
+                      (assoc :a (ds-col/column-map (fn [^double lhs ^double rhs]
+                                                     (+ (double lhs)
+                                                        (double rhs)))
+                                                   {:missing-fn ds-col/union-missing-sets
+                                                    :datatype :float64}
+                                                   (ds :a) (ds :b))))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [false false true]
            (vec (dfn/finite? (ds :a))))))
@@ -1173,13 +1172,11 @@
     (is (= (vec [3.0 6.0 nil])
            (:b2 (ds/column-map testds :b2 #(when % (inc %))
                                {:datatype :float64} [:b]))))
-    ;;Disabling test as *not* scanning all values with column-map can hurt performance in
-    ;;the worst case much more than lazy noncaching helps in the best case.
     ;;Nothing scanned at all.
-    #_(is (= (vec [3.0 6.0 nil])
-             (:b2 (ds/column-map testds :b2 #(inc %)
-                                 {:datatype :float64
-                                  :missing-fn ds-col/union-missing-sets} [:b]))))
+    (is (= (vec [3.0 6.0 nil])
+           (:b2 (ds/column-map testds :b2 #(inc %)
+                               {:datatype :float64
+                                :missing-fn ds-col/union-missing-sets} [:b]))))
     ;;Missing set scanning causes NPE at inc.
     (is (thrown? Throwable
                  (ds/column-map testds :b2 #(inc %)
