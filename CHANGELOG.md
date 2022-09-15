@@ -1,55 +1,60 @@
 # Changelog
 
-# 8.096
+# 6.098
+ * Update to clojure 1.11 for development.
+ * Upgrade to dtype-next for unary min,max and to get rid of 1.11 warnings.
+ * Upgrade tech.io for updated nippy again to get rid of 1.11 warnings.
+
+# 6.096
  * Latest tech.io - pulls in important charred csv fix.
  * [issue 320](https://github.com/techascent/tech.ml.dataset/issues/320) - specify encoding for files.
  * drop-rows, select-rows can take negative indexes.
 
-# 8.095
+# 6.095
  * Better parallelization for column-map.
  * Fix for [issue 307](https://github.com/techascent/tech.ml.dataset/issues/307) - Bugs in categorical mapping.
 
 
-# 8.094
+# 6.094
  * dtype-next upgrade.
  * Fix for round-tripping arrow files with compression.
 
-# 8.093
+# 6.093
  * Fixes for issue [259](https://github.com/techascent/tech.ml.dataset/issues/259/), which is same as new issue 311.  `:key-fn` should only be applied once per column and does not have to
    be idemptotent.
 
-# 8.092
+# 6.092
  * Fixes for issues [312](https://github.com/techascent/tech.ml.dataset/issues/312/), [315](https://github.com/techascent/tech.ml.dataset/issues/315/), [316](https://github.com/techascent/tech.ml.dataset/issues/316/)
 
-# 8.091
+# 6.091
  * Upgrade to latest charred - no user visible change expected.
 
-# 8.090
+# 6.090
  * replace-missing when provided both a direction and a default value will fill in missing items
    after the direction is applied with the missing value.
  * Added `:updown` and `:downup` options to replace previous behavior when desired.
 
-# 8.089
+# 6.089
  * CSV parsing now supports `:comment-char` that defaults to #.  Lines that begin with this character are ignored.
  * Fix for [issue 304](https://github.com/techascent/tech.ml.dataset/issues/304/) - n-initial-skip-rows not respected when parsing a csv file.
  * Experimental fix for [issue 305](https://github.com/techascent/tech.ml.dataset/issues/305/) - replace-missing with `:down` or `:up` should leave values missing when the initial replacement fails instead of trying the opposite direction.  This may leave datasets with some missing values.
 
-# 8.087
+# 6.087
  * Fix pd-merge `:outer` conditional - [issue 302](https://github.com/techascent/tech.ml.dataset/issues/302/)
 
-# 8.086
+# 6.086
  * Update dtype-next as [issue 57](https://github.com/cnuernber/dtype-next/issues/57) was blocking tmd deployment on some macs.
  * Fix for [issue 298](https://github.com/techascent/tech.ml.dataset/issues/298) - nippy'd columns fail thaw.
 
-# 8.085
+# 6.085
  * Update to dtype-next.
  * Support for decimal types from parquet - thanks to chrysophylax.
 
-# 8.084
+# 6.084
  * Various updates to the charred library.
  * column whitelist/blacklists can be column indexes again.
 
-# 8.081
+# 6.081
  * json/csv read/write is going through the [charred library](https://github.com/cnuernber/charred).
 
 # 6.080
