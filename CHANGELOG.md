@@ -1,5 +1,8 @@
 # Changelog
 
+# 6.099
+ * [issue 322](https://github.com/techascent/tech.ml.dataset/issues/320) - Categorical maps must be integers.
+
 # 6.098
  * Update to clojure 1.11 for development.
  * Upgrade to dtype-next for unary min,max and to get rid of 1.11 warnings.
