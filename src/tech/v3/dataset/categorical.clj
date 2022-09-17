@@ -16,6 +16,13 @@
             [clojure.set :as set]))
 
 
+(defn- indiscrete-mapping
+  [[k v]]
+  (let [v (double v)
+        vv (double (Math/round (double v)))]
+    (not (== v vv))))
+
+
 ;;This file uses categorical-map loosely.  Really they are lookup tables
 ;;from categorical object value to integer.
 (defn- make-categorical-map-from-table-args
@@ -40,11 +47,18 @@
                                (assoc str-table item
                                       (first (remove (set (vals str-table))
                                                      (range)))))
-                             str-table))]
+                             str-table))
+        bad-mappings (->> cat-map
+                          (filter indiscrete-mapping)
+                          seq)]
     ;;;  just to be sure
     (assert (= (clojure.set/map-invert (clojure.set/map-invert cat-map))
                cat-map)
             "The categorical mapping calculated is not bijective")
+
+    (when-not (nil? bad-mappings)
+      (throw (Exception. (str "Categorical map values must be integers.
+Non integers found: " (vec bad-mappings)))))
     cat-map))
 
 

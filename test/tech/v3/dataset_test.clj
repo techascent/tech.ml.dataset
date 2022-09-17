@@ -1531,6 +1531,24 @@
            (set (map (comp :name meta) (vals ds)))))))
 
 
+(deftest discrete-categorical-issue-322
+  (let [ds (ds/->dataset "test/data/stocks.csv")]
+    (is (thrown? Exception (ds/categorical->number ds ["symbol"] {"AAPL" 1
+                                                                  "MSFT" 2.2
+                                                                  "AMZN" 3
+                                                                  "IBM" 4
+                                                                  "GOOG" 5})))
+    (is (= (set (range 1 6))
+           (->> (-> (ds/categorical->number ds ["symbol"] {"AAPL" 1
+                                                           "MSFT" 2
+                                                           "AMZN" 3
+                                                           "IBM" 4
+                                                           "GOOG" 5})
+                    (ds/column "symbol"))
+                (map long)
+                (set))))))
+
+
 (comment
 
   (def test-ds (ds/->dataset
