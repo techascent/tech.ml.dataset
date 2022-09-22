@@ -288,3 +288,9 @@
            final-ds (arrow/stream->dataset b2)]
        (is (= (vec (dataset "col1"))
               (vec (final-ds "col1"))))))))
+
+
+(deftest nullcol
+  (let [ds (arrow/stream->dataset "test/data/withnullcol.arrow")]
+    (is (= (vec (range (ds/row-count ds)))
+           (vec (ds/missing (ds "nullcol")))))))

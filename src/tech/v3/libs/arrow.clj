@@ -83,7 +83,7 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8]
+            ArrowType$LargeUtf8 ArrowType$Null]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
@@ -343,6 +343,10 @@ Dependent block frames are not supported!!")
                      16 :uint16
                      32 :uint32
                      64 :uint64))}))
+  ArrowType$Null
+  (datafy [this]
+    {:datatype :boolean
+     :subtype :null})
   ArrowType$Utf8
   (datafy [this]
     {:datatype :string
@@ -1356,16 +1360,28 @@ Dependent block frames are not supported!!")
                                   :epoch-days :packed-local-date
                                   field-dtype)
                                 field-dtype)
+                  field-subtype (get-in field [:field-type :subtype])
                   col-metadata (dissoc (:field-type field) :datatype)
                   encoding (get field :dictionary-encoding)
-                  n-buffers (long (if (and (= :string field-dtype)
-                                           (not encoding))
+                  nullcol? (and (= :boolean field-dtype)
+                                (= :null field-subtype))
+                  n-buffers (long (cond
+                                    (and (= :string field-dtype)
+                                         (not encoding))
                                     3
+                                    nullcol?
+                                    0
+                                    :else
                                     2))
+                  n-elems (long (:n-elems node))
                   specific-bufs (subvec buffers buf-idx (+ buf-idx n-buffers))
                   n-elems (long (:n-elems node))
-                  missing (if (== 0 (long (:n-null-entries node)))
+                  missing (cond
+                            nullcol?
+                            (bitmap/->bitmap (range n-elems))
+                            (== 0 (long (:n-null-entries node)))
                             (bitmap/->bitmap)
+                            :else
                             (int8-buf->missing
                              (first specific-bufs)
                              n-elems))
@@ -1380,6 +1396,8 @@ Dependent block frames are not supported!!")
                          (get-in field [:field-type :offset-buffer-datatype])
                          (drop 1 specific-bufs)
                          n-elems)
+                        nullcol?
+                        (dtype/const-reader false n-elems)
                         (= field-dtype :boolean)
                         (byte-buffer->bitwise-boolean-buffer
                          (second specific-bufs) n-elems)
