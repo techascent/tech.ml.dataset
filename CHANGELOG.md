@@ -1,7 +1,10 @@
 # Changelog
 
+# 6.100
+ * [issue 323](https://github.com/techascent/tech.ml.dataset/issues/323) - Null schema type in arrow files.
+
 # 6.099
- * [issue 322](https://github.com/techascent/tech.ml.dataset/issues/320) - Categorical maps must be integers.
+ * [issue 322](https://github.com/techascent/tech.ml.dataset/issues/322) - Categorical maps must be integers.
 
 # 6.098
  * Update to clojure 1.11 for development.
