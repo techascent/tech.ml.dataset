@@ -19,16 +19,73 @@
 
 
   Please include these dependencies in your project and be sure to read the notes
-  later in this document:
+  later in this document.  Note that these exclusions are carefully chosen
+  to avoid the myriad of [serious CVE issues](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev/topic/Arrow.3A.20dataset-.3Estream!.20.26.20metadata/near/300962808)
+  associated with hadoop:
 
 ```clojure
 org.apache.parquet/parquet-hadoop {:mvn/version \"1.12.0\"
                                    :exclusions [org.slf4j/slf4j-log4j12]}
-org.apache.hadoop/hadoop-common {:mvn/version \"3.3.0\"
-                                 :exclusions [org.slf4j/slf4j-log4j12]}
+  org.apache.hadoop/hadoop-common              {:mvn/version \"3.3.0\"
+                                                :exclusions  [com.sun.jersey/jersey-core
+                                                              com.sun.jersey/jersey-json
+                                                              com.sun.jersey/jersey-server
+                                                              com.sun.jersey/jersey-servlet
+
+                                                              dnsjava/dnsjava
+
+                                                              org.eclipse.jetty/jetty-server
+                                                              org.eclipse.jetty/jetty-servlet
+                                                              org.eclipse.jetty/jetty-util
+                                                              org.eclipse.jetty/jetty-webapp
+
+                                                              javax.activation/javax.activation-api
+                                                              javax.servlet.jsp/jsp-api
+                                                              javax.servlet/javax.servlet-api
+
+                                                              io.netty/netty-codec
+                                                              io.netty/netty-handler
+                                                              io.netty/netty-transport
+                                                              io.netty/netty-transport-native-epoll
+
+                                                              org.codehaus.jettison/jettison
+
+                                                              org.apache.zookeeper/zookeeper
+
+                                                              org.apache.curator/curator-recipes
+                                                              org.apache.curator/curator-client
+                                                              org.apache.htrace/htrace-core4
+
+                                                              org.apache.hadoop.thirdparty/hadoop-shaded-protobuf_3_7
+                                                              org.apache.hadoop/hadoop-auth
+
+
+                                                              org.apache.kerby/kerb-core
+
+                                                              commons-cli/commons-cli
+                                                              commons-net/commons-net
+                                                              org.apache.commons/commons-lang3
+                                                              org.apache.commons/commons-text
+                                                              org.apache.commons/commons-configuration2
+
+                                                              com.google.re2j/re2j
+                                                              com.google.code.findbugs/jsr305
+
+                                                              com.jcraft/jsch
+
+                                                              log4j/log4j
+                                                              org.slf4j/slf4j-log4j12]
+                                                }
 ;; We literally need this for 1 POJO formatting object.
 org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
-                                                :exclusions [org.slf4j/slf4j-log4j12]}
+                                                :exclusions  [org.slf4j/slf4j-log4j12
+                                                              org.apache.avro/avro
+                                                              org.apache.hadoop/hadoop-yarn-client
+                                                              org.apache.hadoop/hadoop-yarn-common
+                                                              org.apache.hadoop/hadoop-annotations
+                                                              org.apache.hadoop/hadoop-hdfs-client
+                                                              io.netty/netty
+                                                              com.google.inject.extensions/guice-servlet]}
 ```
 
 #### Logging
