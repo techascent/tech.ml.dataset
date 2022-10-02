@@ -1,5 +1,9 @@
 # Changelog
 
+# 6.101
+ * [issue 324](https://github.com/techascent/tech.ml.dataset/issues/324) - ILookup for columns
+ * update to charred to fix `unread too far` issues.
+
 # 6.100
  * [issue 323](https://github.com/techascent/tech.ml.dataset/issues/323) - Null schema type in arrow files.
 
