@@ -16,7 +16,7 @@
             [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]])
   (:import [java.util Arrays]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap Counted IFn IObj Indexed]
+           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup]
            [tech.v3.datatype Buffer ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
@@ -366,6 +366,12 @@
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
       (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
+  ILookup
+  (valAt [this idx]
+    (.valAt this idx nil))
+  (valAt [this idx def-val]
+    (if (integer? idx)
+      (.nth this (int idx) def-val)))
   IObj
   (meta [this]
     (assoc metadata
