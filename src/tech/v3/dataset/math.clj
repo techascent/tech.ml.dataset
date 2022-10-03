@@ -17,6 +17,7 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.statistics :as statistics]
+            [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.bitmap :as bitmap]
@@ -199,7 +200,7 @@
                   result)]
 
      (->> (ds-base/columns ds)
-          (pmap
+          (pfor/pmap
            (fn [col]
              (if (= colname (ds-col/column-name col))
                (ds-col/new-column colname result)

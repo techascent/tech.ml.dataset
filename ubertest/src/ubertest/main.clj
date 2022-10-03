@@ -7,8 +7,8 @@
 
 (defn -main
   [& args]
-  (let [ds (ds/->dataset {:a (range 10)
-                          :b (mapv double (range 10))})]
+  (let [ds (ds/->dataset [{:a 1 :b 2}])]
     ;;(arrow/dataset->stream! ds "test.arrow")
+    (println ds)
     )
   (println "exiting main"))

@@ -12,7 +12,8 @@
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.datatype :as dtype]
-            [tech.v3.tensor :as dtt]))
+            [tech.v3.tensor :as dtt]
+            [tech.v3.parallel.for :as pfor]))
 
 
 (defn dataset->dense
@@ -33,10 +34,10 @@
          tens (dtt/ensure-tensor retval)
          tens-cols (dtt/columns tens)]
      ;;If possible, these will be accelerated copies
-     (->> (pmap (fn [tens-col ds-col]
-                  (dtype/copy! ds-col tens-col))
-                tens-cols
-                (vals dataset))
+     (->> (pfor/pmap (fn [tens-col ds-col]
+                       (dtype/copy! ds-col tens-col))
+                     tens-cols
+                     (vals dataset))
           (dorun))
      retval))
   ([dataset neanderthal-layout]

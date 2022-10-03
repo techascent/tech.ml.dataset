@@ -413,6 +413,7 @@
              sizes (->> (map dtype/ecount column-seq)
                         distinct
                         vec)
+
              column-seq (if (== (count sizes) 1)
                           column-seq
                           (let [max-size (long (apply max 0 sizes))]
@@ -426,7 +427,9 @@
                                  (map #(ds-col-proto/set-name
                                         %
                                         (key-fn (ds-col-proto/column-name %))))))
-                          column-seq)]
+                          column-seq)
+             ]
+
          (Dataset. (vec column-seq)
                    (->> column-seq
                         (map-indexed
@@ -436,7 +439,8 @@
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
                           dataset-name)
-                   -1 -1)))))
+                   -1 -1)
+         ))))
   ([options column-seq]
    (new-dataset options {} column-seq))
   ([column-seq]

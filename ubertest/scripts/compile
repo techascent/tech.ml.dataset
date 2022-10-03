@@ -2,3 +2,4 @@
 
 rm -rf target
 clj -T:build ubertest
+java -jar target/ubertest.jar

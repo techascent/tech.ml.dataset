@@ -493,7 +493,8 @@
 
 (defn ensure-column-seq
   [coldata-seq]
-  (->> (column-data-process/prepare-column-data-seq coldata-seq)
+  (->> coldata-seq
+       (column-data-process/prepare-column-data-seq)
        ;;mapv so we get a real stacktrace when things go south.
        (mapv new-column)))
 

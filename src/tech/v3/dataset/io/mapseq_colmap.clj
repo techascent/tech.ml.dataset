@@ -45,7 +45,8 @@
                              (unchecked-inc row-idx)))
                     row-idx))]
      ;;key-fn has already been applied
-     (parse-context/parsers->dataset (assoc options :key-fn nil) parsers n-rows)))
+     (parse-context/parsers->dataset (assoc options :key-fn nil) parsers n-rows)
+     ))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

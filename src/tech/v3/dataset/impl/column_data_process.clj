@@ -4,7 +4,7 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.parallel.for :as parallel-for]
+            [tech.v3.parallel.for :as pfor]
             [tech.v3.protocols.column :as col-proto]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.impl.column-base :as column-base])
@@ -32,7 +32,7 @@
   ^RoaringBitmap [rdr]
   (let [rdr (dtype/->reader rdr)
         missing (column-base/datatype->missing-value (dtype/elemwise-datatype rdr))]
-    (parallel-for/indexed-map-reduce
+    (pfor/indexed-map-reduce
      (.lsize rdr)
      (fn [^long start-idx ^long group-len]
        (let [bmp (bitmap/->bitmap)]
@@ -76,7 +76,7 @@
                                        (when-not (.contains missing idx)
                                          (.readObject rdr idx))))
           ;;serially consume the data promoting the container when necessary.
-          (parallel-for/indexed-consume!
+          (pfor/indexed-consume!
            ;;Do not read from a missing entry if missing is provided
            #(column-parsers/add-value! parser %1
                                        (when-not (.contains missing (unchecked-int %1))
@@ -119,11 +119,12 @@
 
 (defn prepare-column-data-seq
   [column-seq]
-  (pmap (fn [idx item]
-          (-> (if (map? item)
-                (update item :tech.v3.dataset/name
-                        #(if (nil? %)
-                           idx %))
-                item)
-              (prepare-column-data)))
-        (range) column-seq))
+  (pfor/pmap (fn [idx item]
+               (-> (if (map? item)
+                     (update item :tech.v3.dataset/name
+                             #(if (nil? %)
+                                idx %))
+                     item)
+                   (prepare-column-data)
+                   ))
+             (range) column-seq))

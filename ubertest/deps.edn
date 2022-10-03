@@ -1,5 +1,5 @@
 {:paths ["src"]
- :deps {techascent/tech.ml.dataset {:mvn/version "6.101"}
+ :deps {techascent/tech.ml.dataset {:mvn/version "6.102-SNAPSHOT"}
         org.apache.arrow/arrow-vector {:mvn/version "6.0.0"}
 
         ;;Compression codecs

@@ -14,7 +14,7 @@
             [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.argtypes :as argtypes]
-            [tech.v3.parallel.for :as pfor]
+            [tech.v3.parallel.for :refer [pmap] :as pfor]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
@@ -35,7 +35,7 @@
             ArrayList LinkedHashSet]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
-  (:refer-clojure :exclude [filter group-by sort-by concat take-nth reverse]))
+  (:refer-clojure :exclude [filter group-by sort-by concat take-nth reverse pmap]))
 
 
 (set! *warn-on-reflection* true)
