@@ -1,0 +1,14 @@
+{:paths ["src"]
+ :deps {techascent/tech.ml.dataset {:mvn/version "6.101"}
+        org.apache.arrow/arrow-vector {:mvn/version "6.0.0"}
+
+        ;;Compression codecs
+        org.lz4/lz4-java {:mvn/version "1.8.0"}
+        ;;Required for decompressing lz4 streams with dependent blocks.
+        net.java.dev.jna/jna {:mvn/version "5.10.0"}
+        com.github.luben/zstd-jni {:mvn/version "1.5.1-1"}}
+ :aliases
+ {
+  :build
+  {:deps {io.github.clojure/tools.build {:git/tag "v0.8.1" :git/sha "7d40500"}}
+   :ns-default build}}}
