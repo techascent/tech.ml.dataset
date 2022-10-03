@@ -1,5 +1,8 @@
 # Changelog
 
+# 6.102
+ * [issue 325](https://github.com/techascent/tech.ml.dataset/issues/325) - Usage of tmd delays shutdown requiring `shutdown-agents`.
+
 # 6.101
  * [issue 324](https://github.com/techascent/tech.ml.dataset/issues/324) - ILookup for columns
  * update to charred to fix `unread too far` issues.
