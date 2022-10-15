@@ -16,12 +16,6 @@
                   :scope "provided"]
                  [com.github.haifengl/smile-core   "2.6.0"
                   :exclusions [org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-io     "2.6.0"
-                  :exclusions [com.github.haifengl/smile-core
-                               org.slf4j/slf4j-api]]
-                 [com.github.haifengl/smile-nlp    "2.6.0"
-                  :exclusions [com.github.haifengl/smile-core
-                               org.slf4j/slf4j-api]]
                  ;;In your projects you may want to use exclusions.
                  [ch.qos.logback/logback-classic "1.2.3"
                   :exclusions [org.slf4j/slf4j-api]]
