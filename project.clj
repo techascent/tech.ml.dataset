@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.103-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.104-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -10,8 +10,7 @@
                  ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]
                  [org.apache.poi/poi-ooxml         "5.2.3"
-                  :exclusions [commons-codec
-                               org.apache.logging.log4j/log4j-api]]
+                  :exclusions [commons-codec]]
                  [org.dhatim/fastexcel-reader      "0.12.8"
                   :exclusions [org.apache.poi/poi-ooxml]
                   :scope "provided"]
@@ -58,8 +57,7 @@
                  ;;slf4j anyway.
                  [org.apache.spark/spark-core_2.12 "3.0.1"
                   :scope "provided"
-                  :exclusions [org.slf4j/slf4j-log4j12
-                               log4j]]
+                  :exclusions [org.slf4j/slf4j-log4j12]]
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
