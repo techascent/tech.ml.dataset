@@ -1,4 +1,6 @@
 # Changelog
+# 6.103
+ * issues [329](https://github.com/techascent/tech.ml.dataset/issues/329) and [328](https://github.com/techascent/tech.ml.dataset/issues/328) - CVE related dependency upgrades.
 
 # 6.102
  * [issue 325](https://github.com/techascent/tech.ml.dataset/issues/325) - Usage of tmd delays shutdown requiring `shutdown-agents`.

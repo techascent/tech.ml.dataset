@@ -9,8 +9,9 @@
                   :exclusions [org.apache.commons/commons-compress]]
                  ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]
-                 [org.apache.poi/poi-ooxml         "5.1.0"
-                  :exclusions [commons-codec]]
+                 [org.apache.poi/poi-ooxml         "5.2.3"
+                  :exclusions [commons-codec
+                               org.apache.logging.log4j/log4j-api]]
                  [org.dhatim/fastexcel-reader      "0.12.8"
                   :exclusions [org.apache.poi/poi-ooxml]
                   :scope "provided"]
@@ -22,8 +23,9 @@
                  [com.github.haifengl/smile-nlp    "2.6.0"
                   :exclusions [com.github.haifengl/smile-core
                                org.slf4j/slf4j-api]]
-                 ;;In your projects you may want to use exclusions.
-                 [ch.qos.logback/logback-classic "1.2.3"
+                 ;;In your projects you may want to use exclude this if you have code
+                 ;;that already relies on log4j2.
+                 [ch.qos.logback/logback-classic "1.4.4"
                   :exclusions [org.slf4j/slf4j-api]]
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
@@ -56,7 +58,8 @@
                  ;;slf4j anyway.
                  [org.apache.spark/spark-core_2.12 "3.0.1"
                   :scope "provided"
-                  :exclusions [org.slf4j/slf4j-log4j12]]
+                  :exclusions [org.slf4j/slf4j-log4j12
+                               log4j]]
                  [org.apache.spark/spark-hive_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-mllib_2.12 "3.0.1" :scope "provided"]
                  [org.apache.spark/spark-sql_2.12 "3.0.1" :scope "provided"]
