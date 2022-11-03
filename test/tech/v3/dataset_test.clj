@@ -1548,6 +1548,14 @@
                 (map long)
                 (set))))))
 
+(deftest column-meta-roundtrip
+  (is (= :v
+         (->
+          (ds-base/column->data (ds-col/new-column :a [0] {:k :v}))
+          (ds-base/data->column)
+          meta
+          :k
+          ))))
 
 (comment
 

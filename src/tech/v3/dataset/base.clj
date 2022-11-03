@@ -1027,6 +1027,7 @@
       {:name name
        :missing missing
        :force-datatype? true
+       :metadata metadata
        :data (case datatype
                :string
                (string-data->column-data data)
