@@ -19,10 +19,13 @@
             [tech.v3.libs.fastexcel]
             [tech.v3.io :as tech-io]
             [taoensso.nippy :as nippy]
-            [clojure.test :refer [deftest is]])
-  (:import [java.util List HashSet UUID]
+            [clojure.test :refer [deftest is]]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc])
+  (:import [java.util List HashSet UUID Random]
            [java.io File ByteArrayInputStream]
-           [tech.v3 TMD]))
+           [tech.v3 TMD]
+           [ham_fisted IFnDef$OD]))
 
 (deftest datatype-parser
   (let [ds (ds/->dataset "test/data/datatype_parser.csv")]
@@ -1575,19 +1578,24 @@
 
 (defn- select-sum-obtain-ds
   []
-  (-> (for [_ (range 1000)]
+  (-> (for [idx (range 1000)]
         (->> (for [i (range 10)]
                [(keyword (str "x" i)) (rand)])
-             (into {})))
+             (into {:row idx})))
       (ds/->dataset)))
+
+
+(def random ^{:tag 'Random} (Random.))
 
 (defn- select-sum-obtain-ten-indexes
   []
-  (loop []
-    (let [a (vec (repeatedly 10 #(rand-int 1000)))]
-      (if (= 10 (count (set a)))
-        a
-        (recur)))))
+  ;;Changed to just return the set of indexes
+  (let [a (HashSet.)]
+    (loop []
+      (if (< (.size a) 10)
+        (do (.add a (.nextInt ^Random random 1000))
+            (recur))
+        (hamf/vec (.toArray a))))))
 
 (defn- select-sum-select-rows
   [ds]
@@ -1610,6 +1618,19 @@
       (-> (dtype/indexed-buffer (select-sum-obtain-ten-indexes) col)
           (dfn/sum-fast)))))
 
+
+(defn- select-sum-hamf
+  [ds]
+  (let [col (hamf/double-array (:x0 ds))]
+    (dotimes [_ 100000]
+      (->> (select-sum-obtain-ten-indexes)
+           (lznc/map (reify IFnDef$OD
+                       (invokePrim [this idx]
+                         (aget col (unchecked-int idx)))))
+           (hamf/reduce-reducer (ham_fisted.Sum$SimpleSum.))))))
+
+
+
 (defn select-sum-perf!
   []
   (let [t (fn [description f]
@@ -1620,4 +1641,5 @@
         ds (select-sum-obtain-ds)]
     (t "select-rows" (partial select-sum-select-rows ds))
     (t "tensor-select" (partial select-sum-tensor-select ds))
-    (t "indexed-buffer" (partial select-sum-indexed-buffer ds))))
+    (t "indexed-buffer" (partial select-sum-indexed-buffer ds))
+    (t "hamf-mapreduce" (fn [] (select-sum-hamf ds)))))
