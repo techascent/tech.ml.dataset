@@ -1595,7 +1595,7 @@
       (if (< (.size a) 10)
         (do (.add a (.nextInt ^Random random 1000))
             (recur))
-        (hamf/vec (.toArray a))))))
+        a))))
 
 (defn- select-sum-select-rows
   [ds]
@@ -1615,7 +1615,8 @@
   [ds]
   (let [col (:x0 ds)]
     (dotimes [_ 100000]
-      (-> (dtype/indexed-buffer (select-sum-obtain-ten-indexes) col)
+      ;;The other pathways either do this themselves or do not need it.
+      (-> (dtype/indexed-buffer (vec (select-sum-obtain-ten-indexes)) col)
           (dfn/sum-fast)))))
 
 
