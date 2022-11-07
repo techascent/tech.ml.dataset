@@ -3,6 +3,7 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.struct :as dt-struct]
+            [tech.v3.tensor :as dtt]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col]
@@ -1571,3 +1572,52 @@
   (ds/columnwise-concat test-ds '("new_sp_m1524" "new_sp_m014"))
 
   )
+
+(defn- select-sum-obtain-ds
+  []
+  (-> (for [_ (range 1000)]
+        (->> (for [i (range 10)]
+               [(keyword (str "x" i)) (rand)])
+             (into {})))
+      (ds/->dataset)))
+
+(defn- select-sum-obtain-ten-indexes
+  []
+  (loop []
+    (let [a (vec (repeatedly 10 #(rand-int 1000)))]
+      (if (= 10 (count (set a)))
+        a
+        (recur)))))
+
+(defn- select-sum-select-rows
+  [ds]
+  (dotimes [_ 100000]
+    (-> (ds/select-rows ds (select-sum-obtain-ten-indexes))
+        (:x0)
+        (dfn/sum-fast))))
+
+(defn- select-sum-tensor-select
+  [ds]
+  (let [col (:x0 ds)]
+    (dotimes [_ 100000]
+      (-> (dtt/select col (select-sum-obtain-ten-indexes))
+          (dfn/sum-fast)))))
+
+(defn- select-sum-indexed-buffer
+  [ds]
+  (let [col (:x0 ds)]
+    (dotimes [_ 100000]
+      (-> (dtype/indexed-buffer (select-sum-obtain-ten-indexes) col)
+          (dfn/sum-fast)))))
+
+(defn select-sum-perf!
+  []
+  (let [t (fn [description f]
+            (let [start-nanos (System/nanoTime)]
+              (f)
+              (let [elapsed-sec (/ (- (System/nanoTime) start-nanos) 1e9)]
+                (println (format "select-sum: %s in %.2fs" description elapsed-sec)))))
+        ds (select-sum-obtain-ds)]
+    (t "select-rows" (partial select-sum-select-rows ds))
+    (t "tensor-select" (partial select-sum-tensor-select ds))
+    (t "indexed-buffer" (partial select-sum-indexed-buffer ds))))
