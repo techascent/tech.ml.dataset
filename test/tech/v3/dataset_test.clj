@@ -22,7 +22,7 @@
             [clojure.test :refer [deftest is]]
             [ham-fisted.api :as hamf]
             [ham-fisted.lazy-noncaching :as lznc])
-  (:import [java.util List HashSet UUID Random]
+  (:import [java.util List HashSet UUID Random BitSet]
            [java.io File ByteArrayInputStream]
            [tech.v3 TMD]
            [ham_fisted IFnDef$OD]))
@@ -1590,17 +1590,21 @@
 (defn- select-sum-obtain-ten-indexes
   []
   ;;Changed to just return the set of indexes
-  (let [a (HashSet.)]
+
+  ;;Changed to use a BitSet.  This keeps the indexes in order
+  ;;so we are iterating through memory in order - required some updates
+  ;;to hamf.
+  (let [a (BitSet.)]
     (loop []
-      (if (< (.size a) 10)
-        (do (.add a (.nextInt ^Random random 1000))
+      (if (< (.cardinality a) 10)
+        (do (.set a (.nextInt ^Random random 1000))
             (recur))
         a))))
 
 (defn- select-sum-select-rows
   [ds]
   (dotimes [_ 100000]
-    (-> (ds/select-rows ds (select-sum-obtain-ten-indexes))
+    (-> (ds/select-rows ds (hamf/int-array (select-sum-obtain-ten-indexes)))
         (:x0)
         (dfn/sum-fast))))
 
@@ -1608,7 +1612,7 @@
   [ds]
   (let [col (:x0 ds)]
     (dotimes [_ 100000]
-      (-> (dtt/select col (select-sum-obtain-ten-indexes))
+      (-> (dtt/select col (hamf/int-array (select-sum-obtain-ten-indexes)))
           (dfn/sum-fast)))))
 
 (defn- select-sum-indexed-buffer
@@ -1616,7 +1620,7 @@
   (let [col (:x0 ds)]
     (dotimes [_ 100000]
       ;;The other pathways either do this themselves or do not need it.
-      (-> (dtype/indexed-buffer (vec (select-sum-obtain-ten-indexes)) col)
+      (-> (dtype/indexed-buffer (hamf/int-array (select-sum-obtain-ten-indexes)) col)
           (dfn/sum-fast)))))
 
 
@@ -1625,9 +1629,7 @@
   (let [col (hamf/double-array (:x0 ds))]
     (dotimes [_ 100000]
       (->> (select-sum-obtain-ten-indexes)
-           (lznc/map (reify IFnDef$OD
-                       (invokePrim [this idx]
-                         (aget col (unchecked-int idx)))))
+           (lznc/map (hamf/long-to-double-function idx (aget col (unchecked-int idx))))
            (hamf/reduce-reducer (ham_fisted.Sum$SimpleSum.))))))
 
 
@@ -1640,7 +1642,7 @@
               (let [elapsed-sec (/ (- (System/nanoTime) start-nanos) 1e9)]
                 (println (format "select-sum: %s in %.2fs" description elapsed-sec)))))
         ds (select-sum-obtain-ds)]
-    (t "select-rows" (partial select-sum-select-rows ds))
-    (t "tensor-select" (partial select-sum-tensor-select ds))
-    (t "indexed-buffer" (partial select-sum-indexed-buffer ds))
-    (t "hamf-mapreduce" (fn [] (select-sum-hamf ds)))))
+    (t "select-rows" #(select-sum-select-rows ds))
+    (t "tensor-select" #(select-sum-tensor-select ds))
+    (t "indexed-buffer" #(select-sum-indexed-buffer ds))
+    (t "hamf-mapreduce" #(select-sum-hamf ds))))
