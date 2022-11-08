@@ -1623,6 +1623,13 @@
       (-> (dtype/indexed-buffer (hamf/int-array (select-sum-obtain-ten-indexes)) col)
           (dfn/sum-fast)))))
 
+(defn- select-sum-clj-reduce
+  [ds]
+  (let [col (:x0 ds)]
+    (dotimes [_ 100000]
+      (reduce #(+ %1 (nth col %2))
+              0.0
+              (hamf/int-array (select-sum-obtain-ten-indexes))))))
 
 (defn- select-sum-hamf
   [ds]
@@ -1632,17 +1639,16 @@
            (lznc/map (hamf/long-to-double-function idx (aget col (unchecked-int idx))))
            (hamf/reduce-reducer (ham_fisted.Sum$SimpleSum.))))))
 
-
-
 (defn select-sum-perf!
   []
   (let [t (fn [description f]
             (let [start-nanos (System/nanoTime)]
               (f)
               (let [elapsed-sec (/ (- (System/nanoTime) start-nanos) 1e9)]
-                (println (format "select-sum: %s in %.2fs" description elapsed-sec)))))
+                (println (format "select-sum: %-14s in %.2fs" description elapsed-sec)))))
         ds (select-sum-obtain-ds)]
     (t "select-rows" #(select-sum-select-rows ds))
     (t "tensor-select" #(select-sum-tensor-select ds))
     (t "indexed-buffer" #(select-sum-indexed-buffer ds))
+    (t "clj-reduce" #(select-sum-clj-reduce ds))
     (t "hamf-mapreduce" #(select-sum-hamf ds))))
