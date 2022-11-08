@@ -1635,9 +1635,11 @@
   [ds]
   (let [col (hamf/double-array (:x0 ds))]
     (dotimes [_ 100000]
-      (->> (select-sum-obtain-ten-indexes)
-           (lznc/map (hamf/long-to-double-function idx (aget col (unchecked-int idx))))
-           (hamf/reduce-reducer (ham_fisted.Sum$SimpleSum.))))))
+      (hamf/reduce (hamf/long-accumulator
+                    acc v
+                    (+ (double acc) (aget col (unchecked-int v))))
+                   0.0
+                   (select-sum-obtain-ten-indexes)))))
 
 (defn select-sum-perf!
   []
