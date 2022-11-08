@@ -1629,7 +1629,7 @@
     (dotimes [_ 100000]
       (reduce #(+ %1 (nth col %2))
               0.0
-              (hamf/int-array (select-sum-obtain-ten-indexes))))))
+              (hamf/->collection (select-sum-obtain-ten-indexes))))))
 
 (defn- select-sum-hamf
   [ds]
