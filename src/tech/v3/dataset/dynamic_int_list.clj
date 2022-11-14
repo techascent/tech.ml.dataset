@@ -6,11 +6,12 @@
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.array-buffer :as abuf]
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath])
-  (:import [tech.v3.datatype PrimitiveList LongBuffer]
-           [tech.v3.datatype.list ListImpl]))
+  (:import [tech.v3.datatype LongBuffer]
+           [ham_fisted IMutList]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -28,7 +29,7 @@
         (>= ~number Short/MIN_VALUE)))
 
 
-(deftype DynamicIntList [^:unsynchronized-mutable ^ListImpl backing-store
+(deftype DynamicIntList [^:unsynchronized-mutable ^IMutList backing-store
                          ^:unsynchronized-mutable ^long int-width]
   dtype-proto/PClone
   (clone [_item] (DynamicIntList. (dtype-proto/clone backing-store)
@@ -43,17 +44,9 @@
     (dtype-proto/convertible-to-native-buffer? backing-store))
   (->native-buffer [_item]
     (dtype-proto/->native-buffer backing-store))
-  PrimitiveList
+  LongBuffer
   (elemwiseDatatype [_this] :int32)
-  (lsize [_this] (.lsize backing-store))
-  (ensureCapacity [_item new-size]
-    (.ensureCapacity backing-store new-size))
-  (addBoolean [this value]
-    (.addLong this (if value 1 0)))
-  (addDouble [this value]
-    (.addLong this (long value)))
-  (addObject [this value]
-    (.addLong this (long value)))
+  (lsize [_this] (.size backing-store))
   (addLong [_this value]
     ;;perform container conversion
     (cond
@@ -69,9 +62,8 @@
         (set! backing-store (dtype/make-container :list :int32 backing-store))
         (set! int-width 32)))
     (.addLong backing-store value))
-  LongBuffer
   (readLong [_this idx]
-    (.readLong backing-store idx))
+    (.getLong backing-store idx))
   ;;Writing is serialized.
   (writeLong [this idx value]
     (locking this
@@ -87,26 +79,26 @@
         (do
           (set! backing-store (dtype/make-container :list :int32 backing-store))
           (set! int-width 32)))
-      (.writeLong backing-store idx value))))
+      (.setLong backing-store idx value))))
 
 
 (defn dynamic-int-list
   "Create a dynamic int list from a sequence of numbers or from a
   single integer n-elems argument."
-  ^PrimitiveList [num-or-item-seq]
+  ^IMutList [num-or-item-seq]
   (if (number? num-or-item-seq)
     (DynamicIntList. (dtype/make-container :list :int8 (long num-or-item-seq))
                      8)
     (let [retval (DynamicIntList. (dtype/make-container :list :int8 0)
                                   8)]
-      (parallel-for/consume! #(.addLong retval (long %)) num-or-item-seq)
+      (.addAllReducible retval num-or-item-seq)
       retval)))
 
 
 (defn make-from-container
   "Make a dynamic int list from something convertible to a byte, short,
   or integer list.  Shares backing data."
-  ^PrimitiveList [container]
+  ^IMutList [container]
   (let [container-datatype (dtype/elemwise-datatype container)]
     (errors/when-not-errorf
      (and (casting/integer-type? container-datatype)
@@ -118,5 +110,5 @@
      "Container must be convertible to either an array buffer or native buffer: %s"
      (type container))
     (let [list-data (dtype-base/as-buffer container)]
-      (DynamicIntList. (dtype-list/wrap-container list-data)
+      (DynamicIntList. (abuf/as-growable-list container (dtype/ecount container))
                        (casting/int-width container-datatype)))))

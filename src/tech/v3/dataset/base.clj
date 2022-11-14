@@ -24,15 +24,14 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [com.github.ztellman.primitive-math :as pmath])
-  (:import [tech.v3.datatype ObjectReader PrimitiveList
-            ;;Dataset-specific to account for version changes
-            PackedLocalDate]
+  (:import [tech.v3.datatype ObjectReader PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.dataset Text]
            [java.util List LinkedHashMap Map Arrays HashMap
             ArrayList LinkedHashSet]
+           [ham_fisted IMutList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth reverse pmap]))
@@ -874,8 +873,8 @@
         (if (instance? StringTable coldata)
           coldata
           (str-table/string-table-from-strings coldata))
-        ^PrimitiveList str-data-buf (dtype/make-container :list :int8 0)
-        ^PrimitiveList offset-buf (dtype/make-container :list :int32 0)
+        ^IMutList str-data-buf (dtype/make-container :list :int8 0)
+        ^IMutList offset-buf (dtype/make-container :list :int32 0)
         data-ary (dtype-cmc/->array (.data str-table))]
     (pfor/consume!
      #(do
@@ -906,7 +905,7 @@
             string-data ^bytes string-data
             offsets (dtype/->buffer offsets)
             n-elems (dec (.lsize offsets))
-            ^PrimitiveList int->str
+            ^IMutList int->str
             (->> (dtype/make-reader
                   :string n-elems
                   (let [start-off (.readInt offsets idx)
@@ -939,8 +938,8 @@
 
 (defn- column->text-data
   [coldata]
-  (let [^PrimitiveList str-data-buf (dtype/make-container :list :int8 0)
-        ^PrimitiveList offset-buf (dtype/make-container :list :int64 0)]
+  (let [^IMutList str-data-buf (dtype/make-container :list :int8 0)
+        ^IMutList offset-buf (dtype/make-container :list :int64 0)]
     (pfor/consume!
      #(do
         (.addLong offset-buf (.lsize str-data-buf))
