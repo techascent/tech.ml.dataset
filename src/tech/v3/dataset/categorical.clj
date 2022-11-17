@@ -152,7 +152,7 @@ Non integers found: " (vec bad-mappings)))))
 
 (defn invert-categorical-map
   "Invert a categorical map returning the column to the original set of values."
-  [dataset {:keys [src-column lookup-table]}]
+  [dataset {:keys [src-column lookup-table] :as opts}]
   (let [column (ds-base/column dataset src-column)
         res-dtype (reduce casting/widest-datatype
                           (map dtype/datatype (keys lookup-table)))
@@ -254,7 +254,7 @@ Non integers found: " (vec bad-mappings)))))
 (defn invert-one-hot-map
   "Invert a one-hot transformation removing the one-hot columns and adding back the
   original column."
-  [dataset {:keys [one-hot-table src-column]}]
+  [dataset {:keys [one-hot-table src-column] :as opts}]
   (let [cast-fn (get @casting/*cast-table* :boolean)
         invert-map (set/map-invert one-hot-table)
         colnames (vec (keys invert-map))
