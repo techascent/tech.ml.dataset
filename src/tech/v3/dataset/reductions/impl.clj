@@ -8,15 +8,17 @@
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [tech.v3.dataset.column :as ds-col])
+            [tech.v3.dataset.column :as ds-col]
+            [ham-fisted.api :as hamf])
   (:import [java.util.function BiConsumer Function DoubleConsumer LongConsumer
             Consumer]
            [org.roaringbitmap RoaringBitmap]
-           [java.util Map$Entry ArrayList]
-           [java.util.function LongSupplier]
+           [java.util Map$Entry ArrayList List]
+           [java.util.function LongSupplier LongPredicate]
            [java.util.concurrent ConcurrentHashMap]
-           [tech.v3.datatype IndexReduction Buffer Consumers$StagedConsumer
-            ObjectReader PrimitiveList ECount UnaryPredicate]
+           [tech.v3.datatype IndexReduction Buffer
+            ObjectReader ECount UnaryPredicate]
+           [ham_fisted IMutList Reducible]
            [clojure.lang IFn]))
 
 
@@ -89,7 +91,6 @@
 (defn as-long-consumer ^LongConsumer [item] item)
 (defn as-consumer ^Consumer [item] item)
 (defn as-buffer ^Buffer [item] item)
-(defn as-staged-consumer ^Consumers$StagedConsumer [item] item)
 
 
 (defmacro typed-accept
@@ -116,9 +117,7 @@
          (typed-accept ~datatype ctx# reader# idx#)
          ctx#))
      (reduceReductions [this# lhs# rhs#]
-       (let [lhs# (as-staged-consumer lhs#)
-             rhs# (as-staged-consumer rhs#)]
-         (.combine lhs# rhs#)))
+       (hamf/reducible-merge lhs# rhs#))
      (reduceReductionList [this# item-list#]
        (if (== 1 (.size item-list#))
          (.get item-list# 0)
@@ -196,11 +195,12 @@
          (object-array (map #(.prepareBatch ^IndexReduction % dataset) reducer-ary))
          (when-let [reduce-filter (get options :index-filter)]
            (argops/->unary-predicate (reduce-filter dataset)))))
-      (filterIndex [this agg-ctx idx]
-        (let [^AggReducerContext agg-ctx agg-ctx]
-          (if-let [^UnaryPredicate ffn (.filter-ctx agg-ctx)]
-            (.unaryLong ffn idx)
-            true)))
+      (indexFilter [this agg-ctx]
+        (when-let [^UnaryPredicate ffn (.filter-ctx ^AggReducerContext agg-ctx)]
+          (if (instance? LongPredicate ffn)
+            ffn
+            (reify LongPredicate
+              (test [this idx] (.unaryLong ffn idx))))))
       (reduceIndex [this agg-ctx obj-ctx idx]
         (let [^AggReducerContext agg-ctx agg-ctx
               ^objects ds-ctx (.red-ctx agg-ctx)
@@ -225,11 +225,14 @@
           lhs-ctx))
       ;;reduce a list of reductions down to one reduction
       ;;the aggregate form of reduceReductions
-      (reduceReductionList [this red-ctx-list]
-        (let [n-inputs (.size red-ctx-list)]
-          (if (== n-inputs 1)
-            (first red-ctx-list)
-            (let [retval (object-array n-reducers)]
+      (reduceReductionList [this red-ctx-iterable]
+        (let [iter (.iterator red-ctx-iterable)
+              init-ctx (.next iter)]
+          (if (not (.hasNext iter))
+            init-ctx
+            (let [retval (object-array n-reducers)
+                  ^List red-ctx-list (hamf/->random-access red-ctx-iterable)
+                  n-inputs (.size red-ctx-list)]
               (dotimes [r-idx n-reducers]
                 (aset retval r-idx
                       (.reduceReductionList ^IndexReduction (aget reducer-ary r-idx)
@@ -265,7 +268,7 @@
 
 (defn- add-or-missing
   [^ResDsColData src-col ^long src-idx ^ResDsColData dst-col]
-  (let [^PrimitiveList dst-col-data (.col-data dst-col)]
+  (let [^Buffer dst-col-data (.col-data dst-col)]
     (if (.contains ^RoaringBitmap (.missing src-col) (unchecked-int src-idx))
       (do
         (.add ^RoaringBitmap (.missing dst-col) (.lsize dst-col-data))
@@ -277,7 +280,7 @@
 (defn- replace-or-missing
   [^ResDsColData src-col ^long src-idx
    ^ResDsColData dst-col ^long dst-idx]
-  (let [^PrimitiveList dst-col-data (.col-data dst-col)]
+  (let [^Buffer dst-col-data (.col-data dst-col)]
     (if (.contains ^RoaringBitmap (.missing src-col) (unchecked-int src-idx))
       (do
         (.add ^RoaringBitmap (.missing dst-col) (unchecked-int dst-idx))

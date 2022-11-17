@@ -1,6 +1,7 @@
 (ns ^:no-doc tech.v3.dataset.readers
   (:require [tech.v3.datatype :as dtype]
-            [tech.v3.protocols.dataset :as ds-proto])
+            [tech.v3.protocols.dataset :as ds-proto]
+            [ham-fisted.api :as hamf])
   (:import [tech.v3.datatype ObjectReader Buffer ListPersistentVector]
            [tech.v3.dataset FastStruct]
            [java.util List HashMap Collections ArrayList LinkedHashMap]))
@@ -81,20 +82,18 @@
          (reify ObjectReader
            (lsize [rdr] n-rows)
            (readObject [rdr row-idx]
-             (ListPersistentVector.
-              (let [data (ArrayList. n-cols)]
-                (dotimes [col-idx n-cols]
-                  (.add data (.get ^List (.get readers col-idx) row-idx)))
-                data))))
+             (let [data (hamf/object-array-list n-cols)]
+               (dotimes [col-idx n-cols]
+                 (.add data (.get ^List (.get readers col-idx) row-idx)))
+               data)))
          (reify ObjectReader
            (lsize [rdr] n-rows)
            (readObject [rdr row-idx]
              ;;in-place reads
-             (ListPersistentVector.
-              (reify ObjectReader
-                (lsize [this] n-cols)
-                (readObject [this col-idx]
-                  (.get ^List (.get readers col-idx) row-idx))))))))))
+             (reify ObjectReader
+               (lsize [this] n-cols)
+               (readObject [this col-idx]
+                 (.get ^List (.get readers col-idx) row-idx)))))))))
   (^Buffer [dataset]
    (value-reader dataset nil)))
 
@@ -116,8 +115,6 @@
        (lsize [rdr] (.lsize readers))
        (readObject [rdr idx]
          (let [data (readers idx)]
-           (FastStruct. colnamemap (if (instance? ListPersistentVector data)
-                                     (.data ^ListPersistentVector data)
-                                     data)))))))
+           (FastStruct. colnamemap data))))))
   (^Buffer [dataset]
    (mapseq-reader dataset nil)))

@@ -23,7 +23,8 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
-            [com.github.ztellman.primitive-math :as pmath])
+            [com.github.ztellman.primitive-math :as pmath]
+            [ham-fisted.api :as hamf])
   (:import [tech.v3.datatype ObjectReader PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
@@ -38,7 +39,7 @@
 
 
 (set! *warn-on-reflection* true)
-
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn dataset-name
   [dataset]
@@ -279,7 +280,7 @@
     - list of indexes. May contain duplicates.  Negative values will be counted from
       the end of the sequence."
   [dataset col-index row-index]
-  (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
+  (let [make-pos (fn [^long total ^long x] (if (neg? x) (+ x total) x))
         col-index (if (number? col-index) [col-index] col-index)
         row-index (if (number? row-index) [row-index] row-index)
         colname-seq (if (sequential? col-index)
@@ -376,21 +377,38 @@
 
 (defn- preprocess-row-indexes
   [row-indexes ^long n-rows]
-  (let [row-indexes (-> (cond
-                          (instance? RoaringBitmap row-indexes)
-                          (bitmap/bitmap->efficient-random-access-reader row-indexes)
-                          (nil? row-indexes) []
-                          :else
-                          (case (argtypes/arg-type row-indexes)
-                            :scalar [row-indexes]
-                            :reader row-indexes
-                            (dtype/make-container :int64 (take n-rows row-indexes))))
-                        (dtype/->buffer))]
-    (dtype/make-reader :int64 (dtype/ecount row-indexes)
-                       (let [val (.readLong row-indexes idx)]
-                         (if (< val 0)
-                           (+ val n-rows)
-                           val)))))
+  (let [bounded-reader (fn [b]
+                         (let [row-indexes (dtype/->reader b)]
+                           (dtype/make-reader :int64 (dtype/ecount row-indexes)
+                                              (let [val (.readLong row-indexes idx)]
+                                                (if (< val 0)
+                                                  (+ val n-rows)
+                                                  val)))))]
+    (cond
+      (instance? RoaringBitmap row-indexes)
+      row-indexes
+      (nil? row-indexes) []
+      (number? row-indexes)
+      (let [row-indexes (long row-indexes)
+            row-indexes (if (< row-indexes 0)
+                          (+ n-rows row-indexes)
+                          row-indexes)]
+        [row-indexes])
+      (dtype-proto/convertible-to-range? row-indexes)
+      (let [r (dtype-proto/->range row-indexes nil)
+            rs (long (dtype-proto/range-start r))
+            ri (long (dtype-proto/range-increment r))
+            re (+ rs (* ri (dtype/ecount ri)))]
+        (if (or (== 0 (dtype/ecount r))
+                (and (>= rs 0) (pos? re)))
+          r
+          (bounded-reader r)))
+      :else
+      (-> (case (argtypes/arg-type row-indexes)
+            :scalar [row-indexes]
+            :reader row-indexes
+            (dtype/make-container :int64 (take n-rows row-indexes)))
+          (bounded-reader)))))
 
 
 (defn- do-select-rows
@@ -413,7 +431,7 @@
   [dataset-or-col row-index]
   (if (ds-impl/dataset? dataset-or-col)
     (select-by-index dataset-or-col :all row-index)
-    (let [make-pos (fn [total x] (if (neg? x) (+ x total) x))
+    (let [make-pos (fn [^long total ^long x] (if (neg? x) (+ x total) x))
           row-index (if (sequential? row-index)
                       (dtype/emap (partial make-pos (row-count dataset-or-col))
                                   :int64 row-index)
@@ -671,7 +689,7 @@
                             missing
                             (dtype-proto/set-offset (ds-col/missing col)
                                                     offset))
-                           (+ offset (dtype/ecount col))])
+                           (+ (long offset) (dtype/ecount col))])
                         [(->bitmap) 0]
                         columns)
                        (first))
@@ -875,16 +893,16 @@
           (str-table/string-table-from-strings coldata))
         ^IMutList str-data-buf (dtype/make-container :list :int8 0)
         ^IMutList offset-buf (dtype/make-container :list :int32 0)
-        data-ary (dtype-cmc/->array (.data str-table))]
-    (pfor/consume!
+        data-ary (dtype-cmc/->array (dtype/->array-buffer (.data str-table)))]
+    (hamf/consume!
      #(do
-        (.addLong offset-buf (.lsize str-data-buf))
+        (.addLong offset-buf (.size str-data-buf))
         (when %
           (let [str-bytes (.getBytes ^String %)]
-            (.addAll str-data-buf (dtype/->buffer str-bytes)))))
+            (.addAllReducible str-data-buf (hamf/->random-access str-bytes)))))
      (.int->str str-table))
     ;;One extra long makes deserializing a bit less error prone.
-    (.addLong offset-buf (.lsize str-data-buf))
+    (.addLong offset-buf (.size str-data-buf))
     {:string-data (dtype/->array str-data-buf)
      :offsets (dtype/->array offset-buf)
      ;;Between version 1 and 2 we changed the string table to be just
@@ -908,8 +926,8 @@
             ^IMutList int->str
             (->> (dtype/make-reader
                   :string n-elems
-                  (let [start-off (.readInt offsets idx)
-                        end-off (.readInt offsets (inc idx))]
+                  (let [start-off (.readLong offsets idx)
+                        end-off (.readLong offsets (inc idx))]
                     (String. string-data start-off (pmath/- end-off start-off))))
                  (dtype/make-container :list :string))
             str->int (HashMap. (dtype/ecount int->str))]
@@ -942,12 +960,12 @@
         ^IMutList offset-buf (dtype/make-container :list :int64 0)]
     (pfor/consume!
      #(do
-        (.addLong offset-buf (.lsize str-data-buf))
+        (.addLong offset-buf (.size str-data-buf))
         (when %
           (let [str-bytes (.getBytes ^String (str %))]
             (.addAll str-data-buf (dtype/->buffer str-bytes)))))
      coldata)
-    (.addLong offset-buf (.lsize str-data-buf))
+    (.addLong offset-buf (.size str-data-buf))
     {:string-data (dtype/->array str-data-buf)
      :offsets (dtype/->array offset-buf)}))
 

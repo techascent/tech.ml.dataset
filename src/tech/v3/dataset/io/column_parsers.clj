@@ -11,14 +11,16 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.protocols :as dtype-proto])
   (:import [java.util UUID List]
-           [tech.v3.datatype PrimitiveList]
            [tech.v3.dataset Text]
+           [tech.v3.datatype Buffer]
+           [ham_fisted IMutList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
            [java.time.format DateTimeFormatter]))
 
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed)
 
 
 ;;For sequences of maps and spreadsheets
@@ -142,13 +144,13 @@
 
 
 (defn add-missing-values!
-  [^PrimitiveList container ^RoaringBitmap missing
+  [^IMutList container ^RoaringBitmap missing
    missing-value ^long idx]
-  (let [n-elems (.lsize container)]
+  (let [n-elems (.size container)]
     (when (< n-elems idx)
       (loop [n-elems n-elems]
         (when (< n-elems idx)
-          (.addObject container missing-value)
+          (.add container missing-value)
           (.add missing n-elems)
           (recur (unchecked-inc n-elems)))))))
 
@@ -181,11 +183,11 @@
         (and (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
-(deftype FixedTypeParser [^PrimitiveList container
+(deftype FixedTypeParser [^IMutList container
                           container-dtype
                           missing-value parse-fn
                           ^RoaringBitmap missing
-                          ^PrimitiveList failed-values
+                          ^IMutList failed-values
                           ^RoaringBitmap failed-indexes
                           column-name
                           ^:unsynchronized-mutable ^long max-idx]
@@ -214,14 +216,14 @@
           (identical? :tech.v3.dataset/parse-failure parsed-value)
           (if failed-values
             (do
-              (.addObject failed-values value)
+              (.add failed-values value)
               (.add failed-indexes (unchecked-int idx)))
             (errors/throwf "Failed to parse value %s as datatype %s on row %d"
                            value container-dtype idx))
           :else
           (do
             (add-missing-values! container missing missing-value idx)
-            (.addObject container parsed-value))))))
+            (.add container parsed-value))))))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
                            missing-value rowcount)))
@@ -297,17 +299,16 @@
 
 
 (defn- promote-container
-  ^PrimitiveList [old-container ^RoaringBitmap missing new-dtype options]
+  ^IMutList [old-container ^RoaringBitmap missing new-dtype options]
   (let [n-elems (dtype/ecount old-container)
         container (column-base/make-container new-dtype options)
         missing-value (column-base/datatype->missing-value new-dtype)
         ;;Ensure we unpack a container if we have to promote it.
         old-container (packing/unpack old-container)]
-    (.ensureCapacity container n-elems)
     (dotimes [idx n-elems]
       (if (.contains missing idx)
-        (.addObject container missing-value)
-        (.addObject container (casting/cast
+        (.add container missing-value)
+        (.add container (casting/cast
                                (old-container idx)
                                new-dtype))))
     container))
@@ -361,7 +362,7 @@
 
 
 (deftype PromotionalStringParser [^{:unsynchronized-mutable true
-                                    :tag PrimitiveList} container
+                                    :tag IMutList} container
                                   ^{:unsynchronized-mutable true} container-dtype
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^{:unsynchronized-mutable true} parse-fn
@@ -422,7 +423,12 @@
         :else
         (do
           (add-missing-values! container missing missing-value idx)
-          (.addObject container parsed-value)))))
+          (try
+            (.add container parsed-value)
+            (catch Exception e
+              (throw (RuntimeException. (str "Parse failure of datatype: "
+                                             (dtype/elemwise-datatype container)
+                                             e)))))))))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil missing-value rowcount)))
 
@@ -449,7 +455,7 @@
 
 
 (deftype PromotionalObjectParser [^{:unsynchronized-mutable true
-                                    :tag PrimitiveList} container
+                                    :tag IMutList} container
                                   ^{:unsynchronized-mutable true} container-dtype
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^RoaringBitmap missing
@@ -464,7 +470,7 @@
     (when-not (missing-value? value)
       (let [org-datatype (dtype/datatype value)
             packed-dtype (packing/pack-datatype org-datatype)
-            container-ecount (.lsize container)]
+            container-ecount (.size container)]
         (if (or (== 0 container-ecount)
                 (= container-dtype packed-dtype))
           (do
@@ -474,7 +480,7 @@
               (set! missing-value (column-base/datatype->missing-value packed-dtype)))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
-            (.addObject container value))
+            (.add container value))
           (let [widest-datatype (casting/widest-datatype
                                  (packing/unpack-datatype container-dtype)
                                  org-datatype)]
@@ -488,7 +494,7 @@
                                      widest-datatype))))
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
-            (.addObject container value))))))
+            (.add container value))))))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil
                            missing-value rowcount)))
@@ -496,7 +502,7 @@
 
 (defn promotional-object-parser
   ^PParser [column-name options]
-  (PromotionalObjectParser. (dtype/make-container :list :boolean 0)
+  (PromotionalObjectParser. (dtype/make-list :boolean)
                             :boolean
                             false
                             (bitmap/->bitmap)

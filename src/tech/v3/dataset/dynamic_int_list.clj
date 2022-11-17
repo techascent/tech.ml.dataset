@@ -32,11 +32,12 @@
 (deftype DynamicIntList [^:unsynchronized-mutable ^IMutList backing-store
                          ^:unsynchronized-mutable ^long int-width]
   dtype-proto/PClone
-  (clone [_item] (DynamicIntList. (dtype-proto/clone backing-store)
-                                 int-width))
+  (clone [_item] (dtype-proto/clone backing-store))
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [_item]
-    (dtype-proto/convertible-to-array-buffer? backing-store))
+    (and (identical? (dtype-proto/elemwise-datatype _item)
+                     (dtype-proto/elemwise-datatype backing-store))
+         (dtype-proto/convertible-to-array-buffer? backing-store)))
   (->array-buffer [_item]
     (dtype-proto/->array-buffer backing-store))
   dtype-proto/PToNativeBuffer
@@ -47,6 +48,8 @@
   LongBuffer
   (elemwiseDatatype [_this] :int32)
   (lsize [_this] (.size backing-store))
+  (subBuffer [this sidx eidx]
+    (dtype/->buffer (.subList backing-store sidx eidx)))
   (addLong [_this value]
     ;;perform container conversion
     (cond
@@ -54,12 +57,12 @@
       nil
       (short-range? value)
       (when (pmath/< int-width 16)
-        (set! backing-store (dtype/make-container :list :int16 backing-store))
+        (set! backing-store (dtype/make-list :int16 backing-store))
         (set! int-width 16))
 
       (pmath/< int-width 32)
       (do
-        (set! backing-store (dtype/make-container :list :int32 backing-store))
+        (set! backing-store (dtype/make-list :int32 backing-store))
         (set! int-width 32)))
     (.addLong backing-store value))
   (readLong [_this idx]
@@ -72,27 +75,30 @@
         nil
         (short-range? value)
         (when (pmath/< int-width 16)
-          (set! backing-store (dtype/make-container :list :int16 backing-store))
+          (set! backing-store (dtype/make-list :int16 backing-store))
           (set! int-width 16))
 
         (< int-width 32)
         (do
-          (set! backing-store (dtype/make-container :list :int32 backing-store))
+          (set! backing-store (dtype/make-list :int32 backing-store))
           (set! int-width 32)))
-      (.setLong backing-store idx value))))
+      (.setLong backing-store idx value)))
+  (longReduction [this rfn init]
+    (.longReduction backing-store rfn init)))
 
 
 (defn dynamic-int-list
   "Create a dynamic int list from a sequence of numbers or from a
   single integer n-elems argument."
-  ^IMutList [num-or-item-seq]
-  (if (number? num-or-item-seq)
-    (DynamicIntList. (dtype/make-container :list :int8 (long num-or-item-seq))
-                     8)
-    (let [retval (DynamicIntList. (dtype/make-container :list :int8 0)
-                                  8)]
-      (.addAllReducible retval num-or-item-seq)
-      retval)))
+  (^IMutList [num-or-item-seq]
+   (if (number? num-or-item-seq)
+     (DynamicIntList. (dtype/make-list :int8 (long num-or-item-seq))
+                      8)
+     (let [retval (DynamicIntList. (dtype/make-list :int8 0)
+                                   8)]
+       (.addAllReducible retval num-or-item-seq)
+       retval)))
+  (^IMutList [] (dynamic-int-list 0)))
 
 
 (defn make-from-container

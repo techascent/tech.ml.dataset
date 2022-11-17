@@ -13,10 +13,13 @@
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
-            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]])
+            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]]
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.api :as hamf])
   (:import [java.util Arrays]
+           [ham_fisted Reductions Casts ChunkedList IMutList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup]
+           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO]
            [tech.v3.datatype Buffer ListPersistentVector]))
 
 (set! *warn-on-reflection* true)
@@ -49,80 +52,97 @@
     (long-array item)))
 
 
+(defn- reduce-column-buffer
+  [rfn acc src missing missing-value primitive-missing-value sidx eidx]
+  (let [sidx (long sidx)
+        eidx (long eidx)
+        ^RoaringBitmap missing missing
+        ^Buffer src (dtype-proto/->buffer src)]
+    (cond
+      (instance? IFn$OLO rfn)
+      (let [primitive-missing-value (Casts/longCast primitive-missing-value)]
+        (Reductions/serialReduction (hamf/long-accumulator
+                                     acc idx
+                                     (.invokePrim ^IFn$OLO rfn acc
+                                                  (if (.contains missing idx)
+                                                    primitive-missing-value
+                                                    (.readLong src idx))))
+                                    acc
+                                    (hamf/range sidx eidx)))
+      (instance? IFn$ODO rfn)
+      (let [primitive-missing-value (Casts/doubleCast primitive-missing-value)]
+        (Reductions/serialReduction (hamf/long-accumulator
+                                     acc idx
+                                     (.invokePrim ^IFn$ODO rfn acc
+                                                  (if (.contains missing idx)
+                                                    primitive-missing-value
+                                                    (.readDouble src idx))))
+                                    acc
+                                    (hamf/range sidx eidx)))
+      :else
+      (Reductions/serialReduction (hamf/long-accumulator
+                                   acc idx
+                                   (rfn acc (if (.contains missing idx)
+                                              nil
+                                              (.readObject src idx))))
+                                  acc
+                                  (hamf/range sidx eidx)))))
+
+
 (defn- make-buffer
   (^Buffer [^RoaringBitmap missing data dtype]
    (let [^Buffer src (dtype-proto/->buffer data)
-         {:keys [unpacking-read packing-write]}
-         (packing/buffer-packing-pair dtype)
          missing-value (column-base/datatype->missing-value dtype)
          primitive-missing-value (column-base/datatype->packed-missing-value dtype)]
      ;;Sometimes we can utilize a pure passthrough.
-     (if (and (.isEmpty missing)
-              (not unpacking-read))
+     (if (.isEmpty missing)
        src
        (reify Buffer
          (elemwiseDatatype [this] dtype)
          (lsize [this] (.lsize src))
          (allowsRead [this] (.allowsRead src))
          (allowsWrite [this] (.allowsWrite src))
-         (readBoolean [this idx]
-           (if (.contains missing idx)
-             (casting/datatype->boolean :unknown missing-value)
-             (.readBoolean src idx)))
-         (readByte [this idx]
-           (if (.contains missing idx)
-             (unchecked-byte primitive-missing-value)
-             (.readByte src idx)))
-         (readShort [this idx]
-           (if (.contains missing idx)
-             (unchecked-short primitive-missing-value)
-             (.readShort src idx)))
-         (readChar [this idx]
-           (if (.contains missing idx)
-             (char primitive-missing-value)
-             (.readChar src idx)))
-         (readInt [this idx]
-           (if (.contains missing idx)
-             (unchecked-int primitive-missing-value)
-             (.readInt src idx)))
+         (subBuffer [this sidx eidx]
+           (ChunkedList/sublistCheck sidx eidx (.lsize src))
+           (cond
+             (and (== sidx 0) (== eidx (.lsize src)))
+             this
+             (not (.intersects missing sidx eidx))
+             (.subBuffer src sidx eidx)
+             :else
+             (let [ec (- eidx sidx)]
+               (reify Buffer
+                 (elemwiseDatatype [rdr] dtype)
+                 (lsize [rdr] ec)
+                 (subBuffer [rdr ssidx seidx]
+                   (ChunkedList/sublistCheck ssidx seidx ec)
+                   (.subBuffer this (+ sidx ssidx) (+ sidx seidx)))
+                 (readLong [rdr idx] (.readLong this (+ idx sidx)))
+                 (readDouble [rdr idx] (.readDouble this (+ idx sidx)))
+                 (readObject [rdr idx] (.readObject this (+ idx sidx)))
+                 (reduce [this rfn acc]
+                   (reduce-column-buffer rfn acc src missing missing-value
+                                         primitive-missing-value sidx eidx))
+                 (doubleReduction [this rfn acc]
+                   (reduce-column-buffer rfn acc src missing missing-value
+                                         primitive-missing-value sidx eidx))
+                 (longReduction [this rfn acc]
+                   (reduce-column-buffer rfn acc src missing missing-value
+                                         primitive-missing-value sidx eidx))))))
          (readLong [this idx]
            (if (.contains missing idx)
-             (unchecked-long primitive-missing-value)
+             (Casts/longCast primitive-missing-value)
              (.readLong src idx)))
-         (readFloat [this idx]
-           (if (.contains missing idx)
-             (float primitive-missing-value)
-             (.readFloat src idx)))
          (readDouble [this idx]
            (if (.contains missing idx)
-             (double primitive-missing-value)
+             (Casts/doubleCast primitive-missing-value)
              (.readDouble src idx)))
          (readObject [this idx]
            (when-not (.contains missing idx)
-             (if unpacking-read
-               (unpacking-read this idx)
-               (.readObject src idx))))
-         (writeBoolean [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeBoolean src idx val))
-         (writeByte [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeByte src idx val))
-         (writeShort [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeShort src idx val))
-         (writeChar [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeChar src idx val))
-         (writeInt [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeInt src idx val))
+             (.readObject src idx)))
          (writeLong [this idx val]
            (.remove missing (unchecked-int idx))
            (.writeLong src idx val))
-         (writeFloat [this idx val]
-           (.remove missing (unchecked-int idx))
-           (.writeFloat src idx val))
          (writeDouble [this idx val]
            (.remove missing (unchecked-int idx))
            (.writeDouble src idx val))
@@ -130,27 +150,32 @@
            (if val
              (do
                (.remove missing (unchecked-int idx))
-               (if packing-write
-                 (packing-write this idx val)
-                 (.writeObject src idx val)))
-             (.add missing (unchecked-int idx))))))))
+               (.writeObject src idx val))
+             (.add missing (unchecked-int idx))))
+         (reduce [this rfn acc]
+           (reduce-column-buffer rfn acc src missing missing-value primitive-missing-value
+                                 0 (.lsize src)))
+         (doubleReduction [this rfn acc]
+           (reduce-column-buffer rfn acc src missing missing-value
+                                 primitive-missing-value 0 (.lsize src)))
+         (longReduction [this rfn acc]
+           (reduce-column-buffer rfn acc src missing missing-value
+                                 primitive-missing-value 0 (.lsize src)))))))
   (^Buffer [missing data]
    (make-buffer missing data (dtype-proto/elemwise-datatype data))))
 
 
-(defmacro cached-vector! []
-  `(or ~'cached-vector
-       (do (set! ~'cached-vector
-                 (ListPersistentVector.
-                  (make-buffer ~'missing ~'data)))
-           ~'cached-vector)))
+(defmacro cached-buffer! []
+  `(or ~'buffer
+       (do (set! ~'buffer (make-buffer ~'missing ~'data))
+           ~'buffer)))
 
 
 (deftype Column
     [^RoaringBitmap missing
      data
      ^IPersistentMap metadata
-     ^:unsynchronized-mutable ^ListPersistentVector cached-vector
+     ^:unsynchronized-mutable ^Buffer buffer
      *index-structure]
 
   col-proto/PHasIndexStructure
@@ -177,7 +202,7 @@
     (Column. missing
              data
              metadata
-             cached-vector
+             buffer
              (delay (make-index-structure-fn data metadata))))
 
   dtype-proto/PToArrayBuffer
@@ -220,16 +245,15 @@
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [_this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
-      (do
-        (cached-vector!)
-        (.data cached-vector))
+      (cached-buffer!)
       (make-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
                    new-dtype)))
+  dtype-proto/PECount
+  (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToBuffer
   (convertible-to-buffer? [_this] true)
   (->buffer [_this]
-    (cached-vector!)
-    (.data cached-vector))
+    (cached-buffer!))
   dtype-proto/PToReader
   (convertible-to-reader? [_this]
     (dtype-proto/convertible-to-reader? data))
@@ -243,15 +267,17 @@
   dtype-proto/PSubBuffer
   (sub-buffer [this offset len]
     (let [offset (long offset)
-          len (long len)]
-      (if (and (== offset 0)
-               (== len (dtype/ecount this)))
+          len (long len)
+          eidx (+ offset len)]
+      (ChunkedList/sublistCheck offset (+ offset len) (dtype/ecount data))
+      (if (and (== offset 0) (== len (dtype/ecount this)))
         this
         ;;TODO - use bitmap operations to perform this calculation
-        (let [new-missing (dtype-proto/set-and
+        (let [new-missing (RoaringBitmap/and
                            missing
-                           (bitmap/->bitmap (range offset (+ offset len))))
-              new-data    (dtype-proto/sub-buffer data offset len)]
+                           (doto (RoaringBitmap.)
+                             (.add offset (+ offset len))))
+              new-data  (dtype-proto/sub-buffer data offset len)]
           (Column. new-missing
                    new-data
                    metadata
@@ -272,9 +298,6 @@
                metadata
                nil
                (delay (make-index-structure new-data metadata)))))
-  Iterable
-  (iterator [this]
-    (.iterator (dtype-proto/->buffer this)))
   col-proto/PIsColumn
   (is-column? [_this] true)
   col-proto/PColumn
@@ -282,7 +305,7 @@
   (set-name [_col name] (Column. missing
                                 data
                                 (assoc metadata :name name)
-                                cached-vector
+                                buffer
                                 *index-structure))
   (supported-stats [_col] stats/all-descriptive-stats-names)
   (missing [_col] missing)
@@ -328,33 +351,38 @@
       :pearson (dfn/pearsons-correlation col other-column)
       :spearman (dfn/spearmans-correlation col other-column)
       :kendall (dfn/kendalls-correlation col other-column)))
-  (select [_col selection]
-    (let [selection (if (= (dtype/elemwise-datatype selection) :boolean)
-                    (->efficient-reader (un-pred/bool-reader->indexes
-                                         (dtype/ensure-reader selection)))
-                    (->efficient-reader selection))]
-      (if (== 0 (dtype/ecount missing))
-        ;;common case
-        (let [bitmap (->bitmap)
+  (select [this selection]
+    (let [selection (cond
+                      (= (dtype/elemwise-datatype selection) :boolean)
+                      (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
+                      (instance? RoaringBitmap selection)
+                      (let [data (un-pred/maybe-bitmap->range selection)]
+                        (if (instance? RoaringBitmap data)
+                          (bitmap/bitmap->efficient-random-access-reader data)
+                          data))
+                      (not (dtype/reader? selection))
+                      (hamf/reduce-reducer (un-pred/index-reducer :int64) selection)
+                      :else
+                      selection)
+          r (when (dtype-proto/convertible-to-range? selection)
+              (dtype-proto/->range selection nil))]
+
+      (if (and r (== 1 (long (dtype-proto/range-increment r))))
+        (dtype-proto/sub-buffer this (dtype-proto/range-start r) (dtype-proto/ecount r))
+        (let [result-set (->bitmap)
+              ^Buffer selection (or (dtype/as-reader selection)
+                                    (dtype/->reader (hamf/long-array selection)))
+              n-idx-elems (.lsize selection)
               new-data (dtype/indexed-buffer selection data)]
-          (Column. bitmap
+          (when-not (.isEmpty missing)
+            (dotimes [idx n-idx-elems]
+              (when (.contains missing (.readLong selection idx))
+                (.add result-set idx))))
+          (Column. result-set
                    new-data
                    metadata
                    nil
-                   (delay (make-index-structure data metadata))))
-        ;;Uggh.  Construct a new missing set
-        (let [idx-rrdr (dtype/->reader selection)
-              n-idx-elems (.lsize idx-rrdr)
-              ^RoaringBitmap result-set (->bitmap)]
-          (dotimes [idx n-idx-elems]
-            (when (.contains missing (.readLong idx-rrdr idx))
-              (.add result-set idx)))
-          (let [new-data (dtype/indexed-buffer selection data)]
-            (Column. result-set
-                     new-data
-                     metadata
-                     nil
-                     (delay (make-index-structure new-data metadata))))))))
+                   (delay (make-index-structure new-data metadata)))))))
   (to-double-array [col error-on-missing?]
     (let [n-missing (dtype/ecount missing)
           any-missing? (not= 0 n-missing)
@@ -366,51 +394,42 @@
                     (casting/numeric-type? (dtype/get-datatype col)))
         (throw (Exception. "Non-numeric columns do not convert to doubles.")))
       (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
-  ILookup
-  (valAt [this idx]
-    (.valAt this idx nil))
-  (valAt [this idx def-val]
-    (if (integer? idx)
-      (.nth this (int idx) def-val)))
-  IObj
-  (meta [this]
-    (assoc metadata
-           :datatype (dtype-proto/elemwise-datatype this)
-           :n-elems (dtype-proto/ecount this)))
+  IMutList
+  (size [this] (.size (cached-buffer!)))
+  (get [this idx] (.get (cached-buffer!) idx))
+  (set [this idx v] (.set (cached-buffer!) idx v))
+  (getLong [this idx] (.getLong (cached-buffer!) idx))
+  (setLong [this idx v] (.setLong (cached-buffer!) idx v))
+  (getDouble [this idx] (.getDouble (cached-buffer!) idx))
+  (setDouble [this idx v] (.setDouble (cached-buffer!) idx v))
+  (valAt [this idx] (.valAt (cached-buffer!) idx))
+  (valAt [this idx def-val] (.valAt (cached-buffer!) idx def-val))
+  (invoke [this idx] (.invoke (cached-buffer!) idx))
+  (invoke [this idx def-val] (.invoke (cached-buffer!) idx def-val))
+  (meta [this] (assoc metadata
+                      :datatype (dtype-proto/elemwise-datatype this)
+                      :n-elems (dtype-proto/ecount this)))
   (withMeta [_this new-meta] (Column. missing
                                      data
                                      new-meta
-                                     cached-vector
+                                     buffer
                                      (delay (make-index-structure data new-meta))))
-  Counted
-  (count [_this] (int (dtype/ecount data)))
-  Indexed
-  (nth [_this idx]
-    (let [idx (long idx)
-          orig-idx idx
-          n-elems (dtype/ecount data)
-          idx (if (< idx 0) (+ n-elems idx) idx)]
-      (if (and (>= idx 0)
-               (< idx n-elems))
-        ((cached-vector!) idx)
-        (throw (Exception. (format "Index %d is out of range [%d, %d]"
-                                   orig-idx (- n-elems) (dec n-elems))))))
-    ((cached-vector!) idx))
-  (nth [_this idx def-val]
-    (let [idx (long idx)
-          n-elems (dtype/ecount data)
-          idx (if (< idx 0) (+ n-elems idx) idx)]
-      (if (and (>= idx 0)
-               (< idx n-elems))
-        ((cached-vector!) idx)
-        def-val)))
-  IFn
-  (invoke [_this idx]
-    ((cached-vector!) idx))
-  (applyTo [this args]
-    (when-not (= 1 (count args))
-      (throw (Exception. "Too many arguments to column")))
-    (.invoke this (first args)))
+  (nth [_this idx] (nth (cached-buffer!) idx))
+  (nth [_this idx def-val] (nth (cached-buffer!) idx def-val))
+  ;;should be the same as using hash-unorded-coll, effectively.
+  (hasheq [_this]   (.hasheq (cached-buffer!)))
+  (equiv [this o] (if (identical? this o) true (.equiv (cached-buffer!) o)))
+  (empty [this]
+    (Column. (->bitmap)
+             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
+             {}
+             nil
+             (delay nil)))
+  (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))
+  (longReduction [this rfn init] (.longReduction (cached-buffer!) rfn init))
+  (doubleReduction [this rfn init] (.doubleReduction (cached-buffer!) rfn init))
+  (parallelReduction [this init-val-fn rfn merge-fn options]
+    (.parallelReduction (cached-buffer!) init-val-fn rfn merge-fn options))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)
@@ -425,30 +444,8 @@
                   (dtype-pp/print-reader-data)))))
 
   ;;Delegates to ListPersistentVector, which caches results for us.
-  (hashCode [_this] (.hashCode (cached-vector!)))
-
-  clojure.lang.IHashEq
-  ;;should be the same as using hash-unorded-coll, effectively.
-  (hasheq [_this]   (.hasheq (cached-vector!)))
-
-  (equals [this o] (or (identical? this o)
-                       (.equals (cached-vector!) o)))
-
-  clojure.lang.Sequential
-  clojure.lang.IPersistentCollection
-  (seq   [_this]
-    (.seq (cached-vector!)))
-  (cons  [_this _o]
-    ;;can revisit this later if it makes sense.  For now, read only.
-    (throw (ex-info "conj/.cons is not supported on columns" {})))
-  (empty [this]
-    (Column. (->bitmap)
-             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
-             {}
-             nil
-             (delay nil)))
-  (equiv [this o] (or (identical? this o)
-                      (.equiv (cached-vector!) o))))
+  (hashCode [_this] (.hasheq (cached-buffer!)))
+  (equals [this o] (.equiv this o)))
 
 
 (dtype-pp/implement-tostring-print Column)

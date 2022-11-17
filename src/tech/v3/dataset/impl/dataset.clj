@@ -8,12 +8,15 @@
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.bitmap :as bitmap]
+            [tech.v3.datatype.unary-pred :as unary-pred]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
-            [tech.v3.datatype.graal-native :as graal-native])
+            [tech.v3.datatype.graal-native :as graal-native]
+            [ham-fisted.api :as hamf])
   (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry]
            [java.util Map List LinkedHashSet]
-           [tech.v3.datatype ObjectReader]))
+           [tech.v3.datatype ObjectReader]
+           [org.roaringbitmap RoaringBitmap]))
 
 
 (set! *warn-on-reflection* true)
@@ -277,22 +280,25 @@
                     (= :all index-seq)
                     nil
                     (dtype-proto/convertible-to-bitmap? index-seq)
-                    (let [bmp (dtype-proto/as-roaring-bitmap index-seq)]
-                      (dtype/->reader
-                       (bitmap/bitmap->efficient-random-access-reader
-                        bmp)))
+                    (let [bmp (-> (dtype-proto/as-roaring-bitmap index-seq)
+                                  (unary-pred/maybe-bitmap->range))]
+                      (if (instance? RoaringBitmap bmp)
+                        (dtype/->reader
+                         (bitmap/bitmap->efficient-random-access-reader
+                          bmp))
+                        bmp))
                     (dtype-proto/convertible-to-range? index-seq)
                     (let [idx-seq (dtype-proto/->range index-seq {})
                           rstart (long (dtype-proto/range-start idx-seq))
                           rinc (long (dtype-proto/range-increment idx-seq))
                           rend (+ rstart (* rinc (dtype/ecount idx-seq)))]
                       (if (> rinc 0)
-                        (range (nearest-range-start 0 rstart rinc)
-                               (min n-rows rend)
-                               rinc)
-                        (range (nearest-range-start (dec n-rows) rstart rinc)
-                               (max -1 rend)
-                               rinc)))
+                        (hamf/range (nearest-range-start 0 rstart rinc)
+                                    (min n-rows rend)
+                                    rinc)
+                        (hamf/range (nearest-range-start (dec n-rows) rstart rinc)
+                                    (max -1 rend)
+                                    rinc)))
                     (dtype/reader? index-seq)
                     (dtype/->reader index-seq)
                     :else

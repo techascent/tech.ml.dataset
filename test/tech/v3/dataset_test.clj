@@ -440,7 +440,7 @@
                 :a
                 #(dtype/emap (fn ^double [^double in]
                                (if (< in 2.0) (- in) in))
-                             :float64
+                             nil
                              %)))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [-1.0 2.0]
