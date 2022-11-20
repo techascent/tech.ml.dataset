@@ -1,5 +1,5 @@
 (ns ^:no-doc tech.v3.dataset.impl.column
-  (:require [tech.v3.protocols.column :as col-proto]
+  (:require [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.unary-pred :as un-pred]
@@ -9,18 +9,21 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
-            [tech.v3.dataset.impl.column-index-structure :refer [make-index-structure]]
             [ham-fisted.lazy-noncaching :as lznc]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.set :as set]
+            [ham-fisted.protocols :as hamf-proto])
   (:import [java.util Arrays]
            [ham_fisted Reductions Casts ChunkedList IMutList]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO]
-           [tech.v3.datatype Buffer ListPersistentVector]))
+           [tech.v3.datatype Buffer LongBuffer]))
+
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -34,22 +37,6 @@
   (if (instance? IPersistentMap item)
     item
     (into {} item)))
-
-
-(defn- ->efficient-reader
-  [item]
-  (cond
-    ;;Sets are ordered when converted as index buffers.
-    (instance? RoaringBitmap item)
-    (bitmap/bitmap->efficient-random-access-reader item)
-    (set? item)
-    (let [ary (long-array item)]
-      (Arrays/sort ary)
-      ary)
-    (dtype-proto/convertible-to-reader? item)
-    item
-    :else
-    (long-array item)))
 
 
 (defn- reduce-column-buffer
@@ -107,7 +94,7 @@
            (cond
              (and (== sidx 0) (== eidx (.lsize src)))
              this
-             (not (.intersects missing sidx eidx))
+             (not (set/intersects-range? missing sidx eidx))
              (.subBuffer src sidx eidx)
              :else
              (let [ec (- eidx sidx)]
@@ -171,39 +158,72 @@
            ~'buffer)))
 
 
+(defn- neg-access-reader
+  [^long n-elems data]
+  (let [m (meta data)
+        data (dtype/->reader data)]
+    (with-meta
+     (reify LongBuffer
+       (lsize [rdr] (.lsize data))
+       (readLong [rdr idx]
+         (let [v (.readLong data idx)]
+           (if (< v 0)
+             (+ v n-elems)
+             v)))
+       (subBuffer [rdr sidx eidx]
+         (neg-access-reader n-elems (.subBuffer data sidx eidx))))
+      (assoc m :min 0 :max (unchecked-dec n-elems)))))
+
+
+(defn- wrap-negative-access
+  [^long n-elems data]
+  (if (== 0 (dtype/ecount data))
+    data
+    (if (dtype-proto/has-constant-time-min-max? data)
+      (let [minv (long (dtype-proto/constant-time-min data))]
+        (if (>= minv 0)
+          data
+          (neg-access-reader n-elems data)))
+      (neg-access-reader n-elems data))))
+
+
+(defn simplify-row-indexes
+  [^long n-elems selection]
+  (if (:simplified? (meta selection))
+    selection
+    (vary-meta
+     (cond
+       ;;Cannot possibly be negative
+        (= (dtype/elemwise-datatype selection) :boolean)
+        (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
+        (set/bitset? selection)
+        (set/->integer-random-access selection)
+        (hamf-proto/set? selection)
+        (->> (set/->integer-random-access selection)
+             (wrap-negative-access n-elems))
+        :else
+        ;;Ensure the selection object has metadata
+        (let [minv (long (if (dtype-proto/has-constant-time-min-max? selection)
+                           (long (dtype-proto/constant-time-min selection))
+                           -1))]
+          (if (< (long minv) 0)
+            (->> (hamf/preduce-reducer (un-pred/index-reducer n-elems) selection)
+                 (wrap-negative-access n-elems))
+            ;;if the data indicates it has no negative values
+            (dtype/->reader selection))))
+     assoc :simplified? true)))
+
+
+(defn column-name
+  [col]
+  (:name (meta col)))
+
+
 (deftype Column
     [^RoaringBitmap missing
      data
      ^IPersistentMap metadata
-     ^:unsynchronized-mutable ^Buffer buffer
-     *index-structure]
-
-  col-proto/PHasIndexStructure
-  ;; This index-structure returned by this function can be invalid if
-  ;; the column's reader is based on a non-deterministic computation.
-  ;; For now, we think this may be okay because it's a unique edge-case.
-  ;; What value could an index have on data that is random and changing?
-  ;; We think it is reasonable to expect the user of tech.ml.dataset, which
-  ;; is a somewhat low-level library, to know that it wouldn't make sense
-  ;; to request the index structure on a column consisting of such data.
-  ;; For more, see this discussion on Clojurians Zulip: https://bit.ly/3dRa9MY
-  ;;
-  ;; TODO: Considering validating by checking index values against column data (traversal or hashing)
-  (index-structure [this]
-    (if (empty? missing)
-      @*index-structure
-      (throw (Exception.
-              (str "Cannot obtain an index for column `"
-                   (col-proto/column-name this)
-                   "` because it contains missing values.")))))
-  (index-structure-realized? [_this]
-    (realized? *index-structure))
-  (with-index-structure [_this make-index-structure-fn]
-    (Column. missing
-             data
-             metadata
-             buffer
-             (delay (make-index-structure-fn data metadata))))
+     ^:unsynchronized-mutable ^Buffer buffer]
 
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [_this]
@@ -211,7 +231,6 @@
          (dtype-proto/convertible-to-array-buffer? data)))
   (->array-buffer [_this]
     (dtype-proto/->array-buffer data))
-
   dtype-proto/PToNativeBuffer
   (convertible-to-native-buffer? [_this]
     (and (.isEmpty missing)
@@ -240,8 +259,7 @@
       (Column. missing
                new-data
                metadata
-               nil
-               (delay (make-index-structure new-data metadata)))))
+               nil)))
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [_this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
@@ -281,8 +299,7 @@
           (Column. new-missing
                    new-data
                    metadata
-                   nil
-                   (delay (make-index-structure new-data metadata)))))))
+                   nil)))))
   dtype-proto/PClone
   (clone [_col]
     (let [new-data (if (or (dtype/writer? data)
@@ -296,104 +313,27 @@
       (Column. cloned-missing
                new-data
                metadata
-               nil
-               (delay (make-index-structure new-data metadata)))))
-  col-proto/PIsColumn
-  (is-column? [_this] true)
-  col-proto/PColumn
-  (column-name [_col] (:name metadata))
-  (set-name [_col name] (Column. missing
-                                data
-                                (assoc metadata :name name)
-                                buffer
-                                *index-structure))
-  (supported-stats [_col] stats/all-descriptive-stats-names)
-  (missing [_col] missing)
-  (is-missing? [_col idx] (.contains missing (long idx)))
-  (set-missing [col long-rdr]
-    (let [long-rdr (if (dtype/reader? long-rdr)
-                     long-rdr
-                     ;;handle infinite seq's
-                     (take (dtype/ecount data) long-rdr))
-          bitmap (->bitmap long-rdr)]
-      (let [max-value (long (if-not (.isEmpty bitmap)
-                              (dtype-proto/constant-time-max bitmap)
-                              0))]
-        ;;trim the bitmap to fit the column
-        (when (>= max-value (dtype/ecount col))
-          (.andNot bitmap (bitmap/->bitmap (range (dtype/ecount col)
-                                                  (unchecked-inc max-value))))
-          (assert (< (long (dtype-proto/constant-time-max bitmap))
-                     (dtype/ecount col)))))
-      (.runOptimize bitmap)
-      (Column. bitmap
-               data
+               nil)))
+  ds-proto/PRowCount
+  (row-count [this] (dtype/ecount data))
+  ds-proto/PMissing
+  (missing [this] missing)
+  ds-proto/PSelectRows
+  (select-rows [this rowidxs]
+    (let [rowidxs (simplify-row-indexes (dtype/ecount this) rowidxs)
+          new-missing (if (== 0 (set/cardinality missing))
+                        (bitmap/->bitmap)
+                        (argops/argfilter (set/contains-fn missing)
+                                          {:storage-type :bitmap}
+                                          rowidxs))
+          new-data (dtype/indexed-buffer rowidxs data)]
+      (Column. new-missing
+               new-data
                metadata
-               nil
-               (delay (make-index-structure data metadata)))))
-  (buffer [_this] data)
-  (as-map [_this] #:tech.v3.dataset{:name (:name metadata)
-                                   :data data
-                                   :missing missing
-                                   :metadata metadata
-                                   :force-datatype? true})
-  (unique [this]
-    (->> (parallel-unique this)
-         (into #{})))
-  (stats [col stats-set]
-    (when-not (casting/numeric-type? (dtype-proto/elemwise-datatype col))
-      (throw (ex-info "Stats aren't available on non-numeric columns"
-                      {:column-type (dtype/get-datatype col)
-                       :column-name (:name metadata)})))
-    (dfn/descriptive-statistics stats-set col))
-  (correlation [col other-column correlation-type]
-    (case correlation-type
-      :pearson (dfn/pearsons-correlation col other-column)
-      :spearman (dfn/spearmans-correlation col other-column)
-      :kendall (dfn/kendalls-correlation col other-column)))
-  (select [this selection]
-    (let [selection (cond
-                      (= (dtype/elemwise-datatype selection) :boolean)
-                      (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
-                      (instance? RoaringBitmap selection)
-                      (let [data (un-pred/maybe-bitmap->range selection)]
-                        (if (instance? RoaringBitmap data)
-                          (bitmap/bitmap->efficient-random-access-reader data)
-                          data))
-                      (not (dtype/reader? selection))
-                      (hamf/reduce-reducer (un-pred/index-reducer :int64) selection)
-                      :else
-                      selection)
-          r (when (dtype-proto/convertible-to-range? selection)
-              (dtype-proto/->range selection nil))]
-
-      (if (and r (== 1 (long (dtype-proto/range-increment r))))
-        (dtype-proto/sub-buffer this (dtype-proto/range-start r) (dtype-proto/ecount r))
-        (let [result-set (->bitmap)
-              ^Buffer selection (or (dtype/as-reader selection)
-                                    (dtype/->reader (hamf/long-array selection)))
-              n-idx-elems (.lsize selection)
-              new-data (dtype/indexed-buffer selection data)]
-          (when-not (.isEmpty missing)
-            (dotimes [idx n-idx-elems]
-              (when (.contains missing (.readLong selection idx))
-                (.add result-set idx))))
-          (Column. result-set
-                   new-data
-                   metadata
-                   nil
-                   (delay (make-index-structure new-data metadata)))))))
-  (to-double-array [col error-on-missing?]
-    (let [n-missing (dtype/ecount missing)
-          any-missing? (not= 0 n-missing)
-          col-dtype (dtype/get-datatype col)]
-      (when (and any-missing? error-on-missing?)
-        (throw (Exception. "Missing values detected and error-on-missing? set")))
-      (when-not (or (= :boolean col-dtype)
-                    (= :object col-dtype)
-                    (casting/numeric-type? (dtype/get-datatype col)))
-        (throw (Exception. "Non-numeric columns do not convert to doubles.")))
-      (dtype/->double-array (dtype-proto/elemwise-reader-cast col :float64))))
+               nil)))
+  ds-proto/PColumn
+  (is-column? [_this] true)
+  (column-buffer [_this] data)
   IMutList
   (size [this] (.size (cached-buffer!)))
   (get [this idx] (.get (cached-buffer!) idx))
@@ -412,8 +352,7 @@
   (withMeta [_this new-meta] (Column. missing
                                      data
                                      new-meta
-                                     buffer
-                                     (delay (make-index-structure data new-meta))))
+                                     buffer))
   (nth [_this idx] (nth (cached-buffer!) idx))
   (nth [_this idx def-val] (nth (cached-buffer!) idx def-val))
   ;;should be the same as using hash-unorded-coll, effectively.
@@ -423,8 +362,7 @@
     (Column. (->bitmap)
              (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
              {}
-             nil
-             (delay nil)))
+             nil))
   (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))
   (longReduction [this rfn init] (.longReduction (cached-buffer!) rfn init))
   (doubleReduction [this rfn init] (.doubleReduction (cached-buffer!) rfn init))
@@ -439,7 +377,7 @@
       (format format-str
               (name (dtype/elemwise-datatype item))
               [n-elems]
-              (col-proto/column-name item)
+              (column-name item)
               (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
                   (dtype-pp/print-reader-data)))))
 
@@ -484,8 +422,7 @@
        (Column. missing
                 data
                 new-meta
-                nil
-                (delay (make-index-structure data new-meta)))))))
+                nil)))))
 
 
 (defn ensure-column-seq
@@ -507,13 +444,11 @@
       (dtype/copy! (.data column) (dtype/sub-buffer container 0 n-elems))
       (dtype/set-constant! container n-elems n-empty (get column-base/dtype->missing-val-map
                                                           col-dtype))
-      (new-column
-       (col-proto/column-name column)
-       container
-       (.metadata column)
-       (dtype-proto/set-add-range! (dtype/clone (.missing column))
-             (unchecked-int n-elems)
-             (unchecked-int (+ n-elems n-empty)))))))
+      (Column. (set/union (ds-proto/missing column)
+                          (bitmap/->bitmap (hamf/range n-elems (+ n-elems n-empty))))
+               container
+               (meta column)
+               nil))))
 
 
 (defn prepend-column-with-empty
@@ -521,31 +456,14 @@
   (if (== 0 (long n-empty))
     column
     (let [^Column column column
-          col-dtype (dtype/get-datatype column)]
-      (new-column
-       (col-proto/column-name column)
-       (dtype/concat-buffers
-        col-dtype
-        [(dtype/const-reader
-          (get column-base/dtype->missing-val-map col-dtype)
-          n-empty)
-         (.data column)])
-       (.metadata column)
-       (dtype-proto/set-add-range!
-        (dtype-proto/set-offset (.missing column) n-empty)
-        (unchecked-int 0)
-        (unchecked-int n-empty))))))
-
-
-;;Object defaults
-(extend-type Object
-  col-proto/PIsColumn
-  (is-column? [this] false)
-  col-proto/PColumn
-  (column-name [this] :_unnamed)
-  (supported-stats [this] nil)
-  (missing [col] (bitmap/->bitmap))
-  (select [col idx-seq]
-    (dtt/select col [(->efficient-reader idx-seq)]))
-  (to-double-array [col error-on-missing?]
-    (dtype/->double-array col)))
+          col-dtype (dtype/get-datatype column)
+          n-elems (dtype/ecount column)
+          container (dtype/make-container col-dtype (+ n-elems n-empty))]
+      (dtype/copy! (.data column) (dtype/sub-buffer container n-empty n-elems))
+      (dtype/set-constant! container 0 n-empty (get column-base/dtype->missing-val-map
+                                                    col-dtype))
+      (Column. (set/union (bitmap/->bitmap (hamf/range n-empty))
+                          (bitmap/offset (.missing column) n-empty))
+               container
+               (meta column)
+               nil))))

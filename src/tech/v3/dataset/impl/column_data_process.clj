@@ -5,7 +5,7 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.parallel.for :as pfor]
-            [tech.v3.protocols.column :as col-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.impl.column-base :as column-base])
   (:import [org.roaringbitmap RoaringBitmap]
@@ -111,8 +111,13 @@
          ;;allow missing/metadata to make it through so user can override
          (dissoc obj-data :tech.v3.dataset/data)
          #:tech.v3.dataset{:force-datatype? true})))
-    (col-proto/is-column? obj-data)
-    (col-proto/as-map obj-data)
+    (ds-proto/is-column? obj-data)
+    (let [cm (meta obj-data)]
+      #:tech.v3.datatype{:name (:name cm)
+                         :missing (ds-proto/missing obj-data)
+                         :force-datatype? true
+                         :data (ds-proto/column-buffer obj-data)
+                         :metadata cm})
     :else
     (scan-data obj-data nil)))
 
