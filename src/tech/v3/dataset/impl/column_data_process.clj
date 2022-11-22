@@ -60,7 +60,8 @@
                         :force-datatype? true
                         ;;integer types don't have meaningful data indicators of missing.
                         :missing (or missing
-                                     (if (casting/integer-type? obj-data-datatype)
+                                     (if (or (casting/integer-type? obj-data-datatype)
+                                             (identical? :boolean obj-data-datatype))
                                        (bitmap/->bitmap)
                                        (scan-missing obj-data)))}
       (let [obj-meta (meta obj-data)

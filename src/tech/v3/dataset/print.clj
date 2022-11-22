@@ -1,6 +1,5 @@
 (ns tech.v3.dataset.print
-  (:require [tech.v3.protocols.dataset :as ds-proto]
-            [tech.v3.protocols.column :as ds-col-proto]
+  (:require [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.format-sequence :as format-sequence]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
@@ -210,13 +209,13 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)
-         print-ds (ds-proto/select dataset :all index-range)
+         print-ds (ds-proto/select-rows dataset index-range)
          column-names (map #(when (some? %) (.toString ^Object %)) (keys print-ds))
          column-types (map #(str (when column-types? (:datatype (meta %))))
                            (vals print-ds))
          string-columns (map #(-> (dtype/->reader %)
                                   (packing/unpack)
-                                  (reader->string-lines (ds-col-proto/missing %)
+                                  (reader->string-lines (ds-proto/missing %)
                                                         line-policy
                                                         column-width
                                                         true)

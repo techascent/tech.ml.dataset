@@ -1,6 +1,5 @@
 (ns ^:no-doc tech.v3.dataset.impl.dataset
-  (:require [tech.v3.protocols.column :as ds-col-proto]
-            [tech.v3.protocols.dataset :as ds-proto]
+  (:require [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.print :as ds-print]
             [tech.v3.datatype.pprint :as dtype-pp]
@@ -12,10 +11,11 @@
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc])
   (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry]
-           [java.util Map List LinkedHashSet]
-           [tech.v3.datatype ObjectReader]
+           [java.util Map List LinkedHashSet LinkedHashMap]
+           [tech.v3.datatype ObjectReader FastStruct Buffer]
            [org.roaringbitmap RoaringBitmap]))
 
 
@@ -60,14 +60,14 @@
                  Integer/MAX_VALUE
                  n-rows)]
     (cond
-      (ds-col-proto/is-column? new-col-data)
+      (ds-proto/is-column? new-col-data)
       (vary-meta new-col-data assoc :name col-name)
       ;;maps are scalars in dtype-land but you can pass in column data maps
       ;;so this next check is a bit hairy
-      (and (identical? argtype :scalar)
+      (or (identical? argtype :scalar)
            ;;This isn't a column data map.  Maps are
-           (not (and (instance? Map new-col-data)
-                     (.containsKey ^Map new-col-data :tech.v3.dataset/data))))
+          (and (instance? Map new-col-data)
+               (not (.containsKey ^Map new-col-data :tech.v3.dataset/data))))
       (col-impl/new-column col-name (dtype/const-reader new-col-data n-rows))
       :else
       (let [map-data
@@ -85,32 +85,11 @@
                 (column-data-process/prepare-column-data new-col-data)))
             map-data (-> (update map-data :tech.v3.dataset/data
                                  (fn [data]
-                                   (if-not (= 0 n-cols)
+                                   (if-not (== 0 n-cols)
                                      (shorten-or-extend n-rows data)
                                      data)))
                          (assoc :tech.v3.dataset/name col-name))]
         (col-impl/new-column map-data)))))
-
-
-(defn- nearest-range-start
-  ^long [^long bound ^long range-start ^long increment]
-  (if (> increment 0)
-    ;;if starting before bound
-    (if (>= range-start bound)
-      range-start
-      (+ range-start
-         (+ increment
-            (* increment
-               (quot (- bound (inc range-start))
-                     increment)))))
-    ;;if starting after bound
-    (if (<= range-start bound)
-      range-start
-      (+ range-start
-         (+ increment
-            (* increment
-               (quot (- bound range-start)
-                     increment)))))))
 
 
 (defn- map-entries
@@ -137,10 +116,7 @@
   (remove [_this _k] (throw (UnsupportedOperationException.)))
   (putAll [_this _m] (throw (UnsupportedOperationException.)))
   (clear [_this]    (throw (UnsupportedOperationException.)))
-  (keySet [_this]
-    (let [retval (LinkedHashSet.)]
-      (.addAll retval (map-entries columns))
-      retval))
+  (keySet [_this] (.keySet ^Map colmap))
   (values [_this] columns)
   (entrySet [_this]
     (let [retval (LinkedHashSet.)]
@@ -160,13 +136,24 @@
   clojure.lang.MapEquivalence
 
   clojure.lang.IPersistentMap
-  (assoc   [this k v] (.add-or-update-column this k v))
+  (assoc [this k v]
+    (let [n-cols (ds-proto/column-count this)
+          c (coldata->column n-cols
+                             (ds-proto/row-count this)
+                             k v)
+          cidx (get colmap k n-cols)]
+      (Dataset. (assoc (or columns []) cidx c) (assoc colmap k cidx) metadata 0 0)))
   (assocEx [this k v]
     (if-not (colmap k)
-      (.add-or-update-column this k v)
+      (.assoc this k v)
       (throw (ex-info "Key already present" {:k k}))))
   ;;without implements (dissoc pm k) behavior
-  (without [this k] (.remove-column this k))
+  (without [this k]
+    (if-let [cidx (get colmap k)]
+      (Dataset. (hamf/concatv (hamf/subvec columns 0 cidx) (hamf/subvec columns (inc cidx)))
+                (dissoc colmap k)
+                metadata 0 0)
+      this))
   (entryAt [this k]
     (when-let [v (.valAt this k)]
       (clojure.lang.MapEntry. k v)))
@@ -199,14 +186,14 @@
   ;;Equality is likely a rat's nest, although we should be able to do it
   ;;if we wanted to!
   (hashCode [this]
-    (when (== _hash (int -1))
+    (when (== _hash 0)
       (set! _hash (clojure.lang.APersistentMap/mapHash  this)))
     _hash)
 
   clojure.lang.IHashEq
   ;;intentionally using seq instead of iterator for now.
   (hasheq [this]
-    (when (== _hasheq (int -1))
+    (when (== _hasheq 0)
       (set! _hasheq (hash-unordered-coll (or (.seq this)
                                              []))))
     _hasheq)
@@ -218,123 +205,150 @@
   (equiv [this o] (or (identical? this o)
                       (map-equiv this o)))
 
-  ds-proto/PColumnarDataset
-  (dataset-name [_dataset] (:name metadata))
-  (set-dataset-name [_dataset new-name]
-    (Dataset. columns colmap
-     (assoc metadata :name new-name) _hash _hasheq))
 
-  (columns [_dataset] columns)
+  ds-proto/PRowCount
+  (row-count [this]
+    (if (== 0 (.size columns))
+      0
+      (dtype/ecount (.get columns 0))))
 
-  (add-column [dataset col]
-    (let [existing-names (set (map ds-col-proto/column-name columns))
-          new-col-name (ds-col-proto/column-name col)]
-      (when (existing-names new-col-name)
-        (throw (ex-info (format "Column of same name (%s) already exists in columns"
-                                new-col-name)
-                        {:existing-columns existing-names
-                         :column-name new-col-name})))
-      (new-dataset
-       (ds-proto/dataset-name dataset)
-       metadata
-       (concat (ds-proto/columns dataset) [col]))))
 
-  (remove-column [dataset col-name]
-    (->> columns
-         (remove #(= (ds-col-proto/column-name %) col-name))
-         (new-dataset (ds-proto/dataset-name dataset) metadata)))
+  ds-proto/PColumnCount
+  (column-count [this]
+    (.size columns))
 
-  (update-column [dataset col-name col-fn]
-    (when-not (contains? colmap col-name)
-      (throw (ex-info (format "Failed to find column %s" col-name)
-                      {:col-name col-name
-                       :col-names (keys colmap)})))
-    (let [col-idx (get colmap col-name)
-          col (.get columns (int col-idx))
-          n-rows (long (second (dtype/shape dataset)))
-          n-cols (long (first (dtype/shape dataset)))
-          new-col-data (coldata->column n-cols n-rows col-name (col-fn col))]
-      (Dataset.
-       (assoc columns col-idx new-col-data)
-       colmap
-       metadata
-       -1
-       -1)))
 
-  (add-or-update-column [dataset col-name new-col-data]
-    (let [n-rows (long (second (dtype/shape dataset)))
-          n-cols (long (first (dtype/shape dataset)))
-          col-data (coldata->column n-cols n-rows col-name new-col-data)]
-      (if (contains? colmap col-name)
-        (ds-proto/update-column dataset col-name (constantly col-data))
-        (ds-proto/add-column dataset col-data))))
+  ds-proto/PMissing
+  (missing [this]
+    (hamf/reduce (fn [acc col]
+                   (.or ^RoaringBitmap acc
+                        (bitmap/->bitmap (ds-proto/missing col)))
+                   acc)
+                 (RoaringBitmap.)
+                 columns))
 
-  (select [dataset column-name-seq-or-map index-seq]
-    ;;Conversion to a reader is expensive in some cases so do it here
-    ;;to avoid each column doing it.
-    (let [map-selector? (instance? Map column-name-seq-or-map)
-          n-rows (long (second (dtype/shape dataset)))
-          indexes (cond
-                    (nil? index-seq)
-                    []
-                    (= :all index-seq)
-                    nil
-                    (dtype-proto/convertible-to-bitmap? index-seq)
-                    (let [bmp (-> (dtype-proto/as-roaring-bitmap index-seq)
-                                  (unary-pred/maybe-bitmap->range))]
-                      (if (instance? RoaringBitmap bmp)
-                        (dtype/->reader
-                         (bitmap/bitmap->efficient-random-access-reader
-                          bmp))
-                        bmp))
-                    (dtype-proto/convertible-to-range? index-seq)
-                    (let [idx-seq (dtype-proto/->range index-seq {})
-                          rstart (long (dtype-proto/range-start idx-seq))
-                          rinc (long (dtype-proto/range-increment idx-seq))
-                          rend (+ rstart (* rinc (dtype/ecount idx-seq)))]
-                      (if (> rinc 0)
-                        (hamf/range (nearest-range-start 0 rstart rinc)
-                                    (min n-rows rend)
-                                    rinc)
-                        (hamf/range (nearest-range-start (dec n-rows) rstart rinc)
-                                    (max -1 rend)
-                                    rinc)))
-                    (dtype/reader? index-seq)
-                    (dtype/->reader index-seq)
-                    :else
-                    (dtype/->reader (dtype/make-container
-                                     :jvm-heap :int32
-                                     index-seq)))
-          columns
-          (cond
-            (= :all column-name-seq-or-map)
-            columns
-            map-selector?
-            (->> column-name-seq-or-map
-                 (map (fn [[old-name new-name]]
-                        (if-let [col-idx (get colmap old-name)]
-                          (let [col (.get columns (unchecked-int col-idx))]
-                            (ds-col-proto/set-name col new-name))
-                          (throw (Exception.
-                                  (format "Failed to find column %s" old-name)))))))
-            :else
-            (->> column-name-seq-or-map
-                 (map (fn [colname]
-                        (if-let [col-idx (get colmap colname)]
-                          (.get columns (unchecked-int col-idx))
-                          (throw (Exception.
-                                  (format "Failed to find column %s" colname))))))))]
+  ds-proto/PSelectRows
+  (select-rows [dataset rowidxs]
+    (let [rowidxs (col-impl/simplify-row-indexes (ds-proto/row-count dataset) rowidxs)]
       (->> columns
-           ;;select may be slow if we have to recalculate missing values.
-           (map (fn [col]
-                  (if indexes
-                    (ds-col-proto/select col indexes)
-                    col)))
+           ;;select may be slower if we have to recalculate missing values.
+           (lznc/map #(ds-proto/select-rows % rowidxs))
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
 
-  (supported-column-stats [_dataset]
-    (ds-col-proto/supported-stats (first columns)))
+  ds-proto/PSelectColumns
+  (select-columns [dataset colnames]
+    ;;Conversion to a reader is expensive in some cases so do it here
+    ;;to avoid each column doing it.
+    (let [map-selector? (instance? Map colnames)]
+      (->> (cond
+             (identical? :all colnames)
+             columns
+             map-selector?
+             (->> colnames
+                  (lznc/map (fn [[old-name new-name]]
+                              (if-let [col-idx (get colmap old-name)]
+                                (vary-meta (.get columns (unchecked-int col-idx))
+                                           assoc :name new-name)
+                                (throw (Exception.
+                                        (format "Failed to find column %s" old-name)))))))
+             :else
+             (->> colnames
+                  (lznc/map (fn [colname]
+                              (if-let [col-idx (get colmap colname)]
+                                (.get columns (unchecked-int col-idx))
+                                (throw (Exception.
+                                        (format "Failed to find column %s" colname))))))))
+           (new-dataset (ds-proto/dataset-name dataset) metadata))))
+
+  ds-proto/PDataset
+  (is-dataset? [item] true)
+  (column [ds cname]
+    (if-let [retval (.get ds cname)]
+      retval
+      (throw (RuntimeException. (str "Column not found: " cname)))))
+
+  (rowvecs [ds options]
+    (let [readers (hamf/mapv dtype/->reader columns)
+          n-cols (count readers)
+          n-rows (ds-proto/row-count ds)
+          copying? (get options :copying?)]
+      (if (and copying? (< n-cols 7))
+        (case n-cols
+          0 (reify ObjectReader
+              (lsize [rdr] n-rows)
+              (readObject [rdr row-idx] []))
+          1 (let [c0 (readers 0)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx)])))
+          2 (let [c0 (readers 0)
+                  c1 (readers 1)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)])))
+          3 (let [c0 (readers 0)
+                  c1 (readers 1)
+                  c2 (readers 2)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                           (c2 row-idx)])))
+          4 (let [c0 (readers 0)
+                  c1 (readers 1)
+                  c2 (readers 2)
+                  c3 (readers 3)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                           (c2 row-idx) (c3 row-idx)])))
+          5 (let [c0 (readers 0)
+                  c1 (readers 1)
+                  c2 (readers 2)
+                  c3 (readers 3)
+                  c4 (readers 4)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                           (c2 row-idx) (c3 row-idx)
+                                           (c4 row-idx)])))
+          6 (let [c0 (readers 0)
+                  c1 (readers 1)
+                  c2 (readers 2)
+                  c3 (readers 3)
+                  c4 (readers 4)
+                  c5 (readers 5)]
+              (reify ObjectReader
+                (lsize [rdr] n-rows)
+                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
+                                           (c2 row-idx) (c3 row-idx)
+                                           (c4 row-idx) (c5 row-idx)]))))
+        (if copying?
+          (reify ObjectReader
+            (lsize [rdr] n-rows)
+            (readObject [rdr row-idx]
+              (hamf/mapv #((readers %) row-idx) (range n-cols))))
+          (reify ObjectReader
+            (lsize [rdr] n-rows)
+            (readObject [rdr row-idx]
+              ;;in-place reads
+              (reify ObjectReader
+                (lsize [this] n-cols)
+                (readObject [this col-idx]
+                  (.get ^List (readers col-idx) row-idx)))))))))
+
+  (rows [ds options]
+    (let [rvecs (.rowvecs ds options)
+          colnamemap (LinkedHashMap.)
+         _ (doseq [[c-name c-idx] (->> columns
+                                       (lznc/map (comp :name meta))
+                                       (lznc/map-indexed #(vector %2 (int %1))))]
+             (.put colnamemap c-name c-idx))
+          n-rows (dtype/ecount rvecs)]
+      (reify ObjectReader
+        (lsize [rdr] n-rows)
+        (readObject [rdr idx]
+          (FastStruct. colnamemap (rvecs idx))))))
 
 
   dtype-proto/PShape
@@ -401,52 +415,56 @@
          dataset-name (or (if (map? options)
                             (:dataset-name options)
                             options)
-                          "_unnamed")]
+                          (:name ds-metadata)
+                          "_unnamed")
+         column-seq (hamf/vec column-seq)]
      (if-not (seq column-seq)
        (Dataset. [] {}
                  (assoc (col-impl/->persistent-map ds-metadata)
                         :name
-                        dataset-name) -1 -1)
-       (let [column-seq (->> (col-impl/ensure-column-seq column-seq)
-                             (map-indexed (fn [idx column]
-                                            (let [cname (ds-col-proto/column-name
-                                                         column)]
-                                              (if (or (nil? cname)
-                                                      (and (string? cname)
-                                                           (empty? cname)))
-                                                (ds-col-proto/set-name column idx)
-                                                column)))))
-             sizes (->> (map dtype/ecount column-seq)
-                        distinct
-                        vec)
-
-             column-seq (if (== (count sizes) 1)
-                          column-seq
-                          (let [max-size (long (apply max 0 sizes))]
-                            (->> column-seq
-                                 (map #(col-impl/extend-column-with-empty
-                                        % (- max-size (count %)))))))
-             column-seq (if (and (map? options)
-                                 (:key-fn options))
-                          (let [key-fn (:key-fn options)]
-                            (->> column-seq
-                                 (map #(ds-col-proto/set-name
-                                        %
-                                        (key-fn (ds-col-proto/column-name %))))))
-                          column-seq)
-             ]
-
-         (Dataset. (vec column-seq)
+                        dataset-name) 0 0)
+       (let [column-seq (hamf/vec column-seq)
+             sizes (->> column-seq
+                        (lznc/map (fn [data]
+                                    (let [data (if (map? data)
+                                                 (get data :tech.v3.dataset/data data)
+                                                 data)
+                                          argtype (argtypes/arg-type data)]
+                                      ;;nil return expected
+                                      (if (or (identical? argtype :scalar)
+                                              (identical? argtype :iterable))
+                                        1
+                                        (dtype/ecount data)))))
+                        (lznc/remove nil?)
+                        (hamf/immut-set))
+             n-rows (long (if (== 0 (count sizes))
+                            0
+                            (apply max sizes)))
+             n-cols (count column-seq)
+             key-fn (or (when (map? options)
+                          (get options :key-fn identity))
+                        identity)
+             column-seq (->> column-seq
+                             (lznc/map-indexed
+                              (fn [idx column]
+                                (let [cname (ds-proto/column-name column)
+                                      cname (if (or (nil? cname)
+                                                    (and (string? cname)
+                                                         (empty? cname)))
+                                              (key-fn idx)
+                                              (key-fn cname))]
+                                  (coldata->column n-cols n-rows cname column))))
+                             (hamf/vec))]
+         (Dataset. column-seq
                    (->> column-seq
-                        (map-indexed
+                        (lznc/map-indexed
                          (fn [idx col]
-                           [(ds-col-proto/column-name col) idx]))
+                           [(ds-proto/column-name col) idx]))
                         (into {}))
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
                           dataset-name)
-                   -1 -1)
-         ))))
+                   0 0)))))
   ([options column-seq]
    (new-dataset options {} column-seq))
   ([column-seq]
@@ -468,8 +486,7 @@
   (instance? Dataset ds))
 
 
-(defn empty-dataset
-  []
-  (new-dataset
-   "_unnamed"
-   nil))
+(def ^:private EMPTY (new-dataset "_unnamed" nil))
+
+
+(defn empty-dataset [] EMPTY)

@@ -40,7 +40,7 @@
 
 
 (defn- reduce-column-buffer
-  [rfn acc src missing missing-value primitive-missing-value sidx eidx]
+  [rfn acc src missing primitive-missing-value sidx eidx]
   (let [sidx (long sidx)
         eidx (long eidx)
         ^RoaringBitmap missing missing
@@ -108,13 +108,13 @@
                  (readDouble [rdr idx] (.readDouble this (+ idx sidx)))
                  (readObject [rdr idx] (.readObject this (+ idx sidx)))
                  (reduce [this rfn acc]
-                   (reduce-column-buffer rfn acc src missing missing-value
+                   (reduce-column-buffer rfn acc src missing
                                          primitive-missing-value sidx eidx))
                  (doubleReduction [this rfn acc]
-                   (reduce-column-buffer rfn acc src missing missing-value
+                   (reduce-column-buffer rfn acc src missing
                                          primitive-missing-value sidx eidx))
                  (longReduction [this rfn acc]
-                   (reduce-column-buffer rfn acc src missing missing-value
+                   (reduce-column-buffer rfn acc src missing
                                          primitive-missing-value sidx eidx))))))
          (readLong [this idx]
            (if (.contains missing idx)
@@ -140,13 +140,13 @@
                (.writeObject src idx val))
              (.add missing (unchecked-int idx))))
          (reduce [this rfn acc]
-           (reduce-column-buffer rfn acc src missing missing-value primitive-missing-value
+           (reduce-column-buffer rfn acc src missing primitive-missing-value
                                  0 (.lsize src)))
          (doubleReduction [this rfn acc]
-           (reduce-column-buffer rfn acc src missing missing-value
+           (reduce-column-buffer rfn acc src missing
                                  primitive-missing-value 0 (.lsize src)))
          (longReduction [this rfn acc]
-           (reduce-column-buffer rfn acc src missing missing-value
+           (reduce-column-buffer rfn acc src missing
                                  primitive-missing-value 0 (.lsize src)))))))
   (^Buffer [missing data]
    (make-buffer missing data (dtype-proto/elemwise-datatype data))))
@@ -193,6 +193,7 @@
     selection
     (vary-meta
      (cond
+       (nil? selection) (hamf/range 0)
        ;;Cannot possibly be negative
         (= (dtype/elemwise-datatype selection) :boolean)
         (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
@@ -212,11 +213,6 @@
             ;;if the data indicates it has no negative values
             (dtype/->reader selection))))
      assoc :simplified? true)))
-
-
-(defn column-name
-  [col]
-  (:name (meta col)))
 
 
 (deftype Column
@@ -377,7 +373,7 @@
       (format format-str
               (name (dtype/elemwise-datatype item))
               [n-elems]
-              (column-name item)
+              (ds-proto/column-name item)
               (-> (dtype-proto/sub-buffer item 0 (min 20 n-elems))
                   (dtype-pp/print-reader-data)))))
 

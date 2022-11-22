@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.protocols
   (:require [tech.v3.datatype.protocols :as dtype-proto])
-  (:import [org.roaringbitmap RoaringBitmap]))
+  (:import [org.roaringbitmap RoaringBitmap]
+           [tech.v3.datatype Buffer]))
 
 
 (defprotocol PRowCount
@@ -28,10 +29,8 @@
   ;;error on failure
   (column [ds colname])
   ;;indexable object.
-  (rows [ds])
-  (rowvecs [ds])
-  (row-at [ds idx])
-  (rowvec-at [ds idx]))
+  (^Buffer rows [ds options])
+  (^Buffer rowvecs [ds options]))
 
 
 (extend-type Object
@@ -45,3 +44,21 @@
   (column-count [this] 0)
   PMissing
   (missing [this] (RoaringBitmap.)))
+
+
+(defn column-name
+  [col]
+  (if (map? col)
+    (or (get col :tech.v3.dataset/name)
+        (get-in col [:tech.v3.dataset/metadata :name]))
+    (:name (meta col))))
+
+
+(defn dataset-name
+  [ds]
+  (:name (meta ds)))
+
+
+(defn set-name
+  [item nm]
+  (vary-meta item assoc :name nm))

@@ -9,7 +9,8 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.protocols :as dtype-proto])
+            [tech.v3.datatype.protocols :as dtype-proto]
+            [ham-fisted.api :as hamf])
   (:import [java.util UUID List]
            [tech.v3.dataset Text]
            [tech.v3.datatype Buffer]
@@ -148,11 +149,8 @@
    missing-value ^long idx]
   (let [n-elems (.size container)]
     (when (< n-elems idx)
-      (loop [n-elems n-elems]
-        (when (< n-elems idx)
-          (.add container missing-value)
-          (.add missing n-elems)
-          (recur (unchecked-inc n-elems)))))))
+      (.add missing (long n-elems) idx)
+      (.addAllReducible container (hamf/repeat (- idx n-elems) missing-value)))))
 
 
 (defn finalize-parser-data!

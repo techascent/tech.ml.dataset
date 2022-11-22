@@ -39,6 +39,7 @@
   ObjectBuffer
   (elemwiseDatatype [_this] :string)
   (lsize [_this] (.size data))
+  (size [_this] (.size data))
   (subBuffer [this sidx eidx]
     (ChunkedList/sublistCheck sidx eidx (.lsize this))
     (if (and (== sidx 0)
