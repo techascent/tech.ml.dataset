@@ -5,15 +5,15 @@
   The functions in this namespace manipulate the metadata on the columns of the dataset, wich can be inspected  via `clojure.core/meta`"
 
   (:require [tech.v3.dataset.base :as ds-base]
-            [tech.v3.protocols.column :as col-proto]
-            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
-            [clojure.set :as set]))
+            [tech.v3.datatype.bitmap :as bitmap]
+            [ham-fisted.set :as set]))
 
 
 (defn- indiscrete-mapping
@@ -100,7 +100,7 @@ Non integers found: " (vec bad-mappings)))))
                    categorical-map
                    (assoc categorical-map col-val (nxt @idx))))
                m
-               (col-proto/unique (ds-base/column dataset colname)))
+               (set/unique (ds-base/column dataset colname)))
        colname
        (or res-dtype :float64))))
 
@@ -113,7 +113,7 @@ Non integers found: " (vec bad-mappings)))))
         result-datatype (or (:result-datatype fit-data) :float64)
         lookup-table (:lookup-table fit-data)
         column (ds-base/column dataset colname)
-        missing (col-proto/missing column)
+        missing (ds-proto/missing column)
         col-meta (meta column)
         missing-value (col-base/datatype->missing-value result-datatype)]
     (assoc dataset colname
@@ -175,7 +175,7 @@ Non integers found: " (vec bad-mappings)))))
             (-> (meta column)
                 (dissoc :categorical-map)
                 (assoc :categorical? true))
-            (col-proto/missing column)))))
+            (ds-proto/missing column)))))
 
 
 (defn- safe-str
@@ -217,7 +217,7 @@ Non integers found: " (vec bad-mappings)))))
   (let [{:keys [one-hot-table src-column result-datatype]}
         one-hot-fit-data
         column (ds-base/column dataset src-column)
-        missing (col-proto/missing column)
+        missing (ds-proto/missing column)
         dataset (dissoc dataset src-column)]
     (->> one-hot-table
          (mapcat
@@ -267,8 +267,7 @@ Non integers found: " (vec bad-mappings)))))
                                                 :object
                                                 (ds-base/column one-hot-ds colname)))))
         dataset (apply dissoc dataset colnames)
-        missing (reduce dtype-proto/set-or
-                        (map col-proto/missing (vals one-hot-ds)))
+        missing (bitmap/reduce-union (map ds-proto/missing (vals one-hot-ds)))
         res-dtype (reduce casting/widest-datatype
                           (map dtype/datatype (keys one-hot-table)))]
     (assoc dataset

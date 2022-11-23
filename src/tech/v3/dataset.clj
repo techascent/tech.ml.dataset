@@ -847,8 +847,7 @@ test/data/stocks.csv [10 3]:
 
 ```clojure
 (dissoc dataset col-name)
-```
-  "
+```"
   ([dataset col-name]
   (tech.v3.dataset.base/remove-column dataset col-name)))
 
@@ -1214,14 +1213,6 @@ user> (take 5 (ds/rowvecs stocks))
   "Select rows from the dataset or column."
   ([dataset-or-col row-indexes]
   (tech.v3.dataset.base/select-rows dataset-or-col row-indexes)))
-
-
-(defn select-rows-by-index
-  "Select rows from the dataset or column by seq of index(includes negative) or :all.
-
-   See documentation for `select-by-index`."
-  ([dataset-or-col row-index]
-  (tech.v3.dataset.base/select-rows-by-index dataset-or-col row-index)))
 
 
 (defn set-dataset-name

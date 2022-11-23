@@ -27,6 +27,7 @@
             [tech.v3.dataset.io.csv]
             [tech.v3.dataset.zip]
             [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList Random Arrays
             LinkedHashMap]
@@ -70,7 +71,6 @@
                 select-columns
                 select-columns-by-index
                 select-rows
-                select-rows-by-index
                 drop-rows
                 remove-rows
                 missing
@@ -457,6 +457,16 @@ test/data/stocks.csv [10 3]:
                     (columns filtered-ds)))))
 
 
+(defn- update-values
+  [col missing scalar-val]
+  (if (== 0 (dtype/ecount missing))
+    col
+    (hamf/reduce (hamf/long-accumulator
+                  col idx (.writeObject ^Buffer col idx scalar-val) col)
+                 (dtype/clone col)
+                 missing)))
+
+
 (defn replace-missing-value
   ([dataset filter-fn-or-ds scalar-value]
    (update-columnwise dataset filter-fn-or-ds
@@ -466,9 +476,7 @@ test/data/stocks.csv [10 3]:
                             col
                             (ds-col/new-column
                              (:name (meta col))
-                             (update-reader/update-reader
-                              col (bitmap/bitmap-value->bitmap-map
-                                   missing scalar-value))
+                             (update-values col missing scalar-value)
                              (meta col)
                              (bitmap/->bitmap)))))))
   ([dataset scalar-value]
@@ -759,10 +767,9 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
   ([ds map-fn options]
-   (pmap-ds ds
-            #(merge % (->> (rows %)
-                           (sequence (map map-fn))
-                           (->>dataset options)))
+   (pmap-ds ds #(merge % (->> (rows %)
+                              (lznc/map map-fn)
+                              (->>dataset options)))
             options))
   ([ds map-fn]
    (row-map ds map-fn nil)))
@@ -831,11 +838,11 @@ user>
     (fn [ds]
       (let [ds (assoc ds :_row-id (range (row-count ds)))
             nds (->> (rows ds)
-                     (sequence (comp
-                                (map #(let [maps (mapcat-fn %)
-                                            rid (% :_row-id)]
-                                        (map (fn [row] (assoc row :_row-id rid)) maps)))
-                                cat))
+                     (lznc/map #(let [rid (% :_row-id)]
+                                  (->> (mapcat-fn %)
+                                       ;;make sure returned value has appropriate row id.
+                                       (lznc/map (fn [row] (assoc row :_row-id rid))))))
+                     (apply lznc/concat)
                      (->>dataset options))]
         (-> (dissoc ds :_row-id)
             (select-rows (nds :_row-id))

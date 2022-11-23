@@ -7,46 +7,42 @@
             [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.argtypes :as argtypes]
-            [tech.v3.dataset.impl.dataset :as ds-impl])
-  (:import [java.util HashMap Map$Entry Map]
-           [java.util.function Function]))
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.api :as hamf])
+  (:import [java.util HashMap Map$Entry Map LinkedHashMap]
+           [java.util.function Function]
+           [ham_fisted Reductions$IndexedAccum]))
 
 
 (defn mapseq->dataset
   ([options mapseq]
-   (let [rows mapseq
-         parse-context (parse-context/options->parser-fn options :object)
-         parsers (HashMap.)
+   (let [parse-context (parse-context/options->parser-fn options :object)
+         parsers (LinkedHashMap.)
          key-fn (:key-fn options identity)
-         colparser-compute-fn (reify Function
-                                (apply [this colname]
-                                  (let [col-idx (.size parsers)]
-                                    {:column-idx col-idx
-                                     :column-name (key-fn colname)
-                                     :column-parser (parse-context colname)})))
+         colparser-compute-fn (hamf/function
+                               colname
+                                (let [col-idx (.size parsers)]
+                                  {:column-idx col-idx
+                                   :column-name (key-fn colname)
+                                   :column-parser (parse-context colname)}))
          colname->parser (fn [colname]
                            (:column-parser
                             (.computeIfAbsent parsers colname
-                                              colparser-compute-fn)))
-         iter (pfor/->iterator rows)
-         n-rows (loop [continue? (.hasNext iter)
-                       row-idx 0]
-                  (if continue?
-                    (do
-                      (when-let [^Map row (.next iter)]
-                        (pfor/doiter
-                         cell (.entrySet row)
-                         (let [^Map$Entry cell cell
-                               k (.getKey cell)
-                               v (.getValue cell)
-                               parser (colname->parser k)]
-                           (column-parsers/add-value! parser row-idx v))))
-                      (recur (.hasNext iter)
-                             (unchecked-inc row-idx)))
-                    row-idx))]
-     ;;key-fn has already been applied
-     (parse-context/parsers->dataset (assoc options :key-fn nil) parsers n-rows)
-     ))
+                                              colparser-compute-fn)))]
+     (->> mapseq
+          (hamf/reduce (hamf/indexed-accum
+                        acc row-idx row
+                        (do
+                          ;;hamf/consume! uses reduce under the hood
+                          (hamf/consume!
+                           (fn [e]
+                             (let [parser (colname->parser (key e))]
+                               (column-parsers/add-value! parser row-idx (val e))))
+                           row)
+                          (unchecked-inc row-idx)))
+                       0)
+          (parse-context/parsers->dataset (assoc options :key-fn nil) parsers))))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

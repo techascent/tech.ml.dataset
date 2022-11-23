@@ -33,6 +33,10 @@
   (^Buffer rowvecs [ds options]))
 
 
+(defprotocol PDatasetTransform
+  (transform [t dataset]))
+
+
 (extend-type Object
   PDataset
   (is-dataset? [item] false)

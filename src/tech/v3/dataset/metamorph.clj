@@ -785,8 +785,7 @@ test/data/stocks.csv [10 3]:
 
 ```clojure
 (dissoc dataset col-name)
-```
-  "
+```"
   ([col-name]
   (tech.v3.dataset.metamorph-api/remove-column col-name)))
 
@@ -1152,14 +1151,6 @@ user> (take 5 (ds/rowvecs stocks))
   "Select rows from the dataset or column."
   ([row-indexes]
   (tech.v3.dataset.metamorph-api/select-rows row-indexes)))
-
-
-(defn select-rows-by-index
-  "Select rows from the dataset or column by seq of index(includes negative) or :all.
-
-   See documentation for `select-by-index`."
-  ([row-index]
-  (tech.v3.dataset.metamorph-api/select-rows-by-index row-index)))
 
 
 (defn set-dataset-name

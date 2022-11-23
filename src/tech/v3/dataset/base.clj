@@ -14,17 +14,19 @@
             [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.argtypes :as argtypes]
+            [tech.v3.datatype.statistics :as stats]
             [tech.v3.parallel.for :refer [pmap] :as pfor]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
-            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [com.github.ztellman.primitive-math :as pmath]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.set :as set])
   (:import [tech.v3.datatype ObjectReader PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
            [tech.v3.dataset.impl.column Column]
@@ -47,51 +49,45 @@
 
 (defn set-dataset-name
   [dataset ds-name]
-  (ds-proto/set-dataset-name dataset ds-name))
+  (vary-meta dataset assoc :name ds-name))
 
 
 (defn row-count
   ^long [dataset-or-col]
   (if dataset-or-col
-    (if (ds-impl/dataset? dataset-or-col)
-      (second (dtype/shape dataset-or-col))
-      (dtype/ecount dataset-or-col))
+    (ds-proto/row-count dataset-or-col)
     0))
 
 
 (defn column-count
   ^long [dataset]
   (if dataset
-    (first (dtype/shape dataset))
+    (ds-proto/column-count dataset)
     0))
 
 
 (defn columns
   "Return sequence of all columns in dataset."
   [dataset]
-  (when dataset
-    (ds-proto/columns dataset)))
+  (when dataset (vals dataset)))
 
 
 (defn column
   [dataset colname]
-  (if-let [retval (get dataset colname)]
-    retval
-    (errors/throwf "Unable to find column %s" colname)))
+  (ds-proto/column dataset colname))
 
 
 (defn column-names
   "In-order sequence of column names"
   [dataset]
   (some->> dataset
-           ds-proto/columns
-           (map ds-col/column-name)))
+           vals
+           (map ds-proto/column-name)))
 
 
 (defn has-column?
   [dataset column-name]
-  (some-> dataset
-          (contains? column-name)))
+  (some-> dataset (contains? column-name)))
 
 
 (defn columns-with-missing-seq
@@ -117,17 +113,14 @@
   "Add a new column. Error if name collision"
   [dataset column]
   (if dataset
-    (ds-proto/add-column dataset column)
+    (assoc dataset (ds-proto/column-name column) column)
     (ds-impl/new-dataset [column])))
 
 
 (defn new-column
   "Create a new column from some values"
   [dataset column-name values]
-  (->> (if (ds-col/is-column? values)
-         (ds-col/set-name values column-name)
-         (ds-col/new-column column-name values))
-       (add-column dataset)))
+  (assoc (or dataset (ds-impl/empty-dataset)) column-name values))
 
 
 (defn remove-column
@@ -135,8 +128,7 @@
 
 ```clojure
 (dissoc dataset col-name)
-```
-  "
+```"
   [dataset col-name]
   (dissoc dataset col-name))
 
@@ -179,10 +171,7 @@
   "Update a column returning a new dataset.  update-fn is a column->column
   transformation.  Error if column does not exist."
   [dataset col-name update-fn]
-  (errors/when-not-error
-   dataset
-   "No dataset passed in to update-column.")
-  (ds-proto/update-column dataset col-name update-fn))
+  (update (or dataset (ds-impl/empty-dataset)) col-name update-fn))
 
 
 (defn order-column-names
@@ -223,9 +212,7 @@
 (defn add-or-update-column
   "If column exists, replace.  Else append new column."
   ([dataset colname column]
-   (if dataset
-     (ds-proto/add-or-update-column dataset colname column)
-     (add-column nil (vary-meta column assoc :name colname))))
+   (assoc (or dataset (ds-impl/empty-dataset)) colname column))
   ([dataset column]
    (add-or-update-column dataset (ds-col/column-name column) column)))
 
@@ -256,20 +243,13 @@
     (let [lmin (long (dtype-proto/constant-time-min selection))
           lmax (long (dtype-proto/constant-time-max selection))]
       (errors/when-not-errorf
-       (and (< lmax (row-count dataset))
-            (>= lmin 0))
+       (< lmax (row-count dataset))
        "Index sequence range [%d-%d] out of dataset row range [0-%d]"
        lmin lmax (dec (row-count dataset)))))
-  (let [selection (if (number? selection)
-                    [selection]
-                    (if (= :boolean (dtype/elemwise-datatype selection))
-                      (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
-                      selection))]
-    (if-not (or (nil? colname-seq)
-                (and (sequential? colname-seq)
-                     (nil? (seq colname-seq))))
-      (ds-proto/select dataset colname-seq selection)
-      (ds-impl/empty-dataset))))
+  (-> dataset
+      (ds-proto/select-columns colname-seq)
+      (ds-proto/select-rows selection)))
+
 
 (defn select-by-index
   "Trim dataset according to this sequence of indexes.  Returns a new dataset.
@@ -350,7 +330,7 @@
   [dataset colnames]
   (let [col-map? (map? colnames)
         col-vector? (vector? colnames)
-        existing-cols (ds-proto/columns dataset)]
+        existing-cols (vals dataset)]
 
     (cond (not (or col-map? col-vector?))
           (throw (ex-info "column names must be a map or vector"
@@ -411,32 +391,10 @@
           (bounded-reader)))))
 
 
-(defn- do-select-rows
-  [dataset-or-col row-indexes]
-  (if (ds-impl/dataset? dataset-or-col)
-    (select dataset-or-col :all row-indexes)
-    (ds-col/select dataset-or-col row-indexes)))
-
-
 (defn select-rows
   "Select rows from the dataset or column."
   [dataset-or-col row-indexes]
-  (let [row-indexes (preprocess-row-indexes row-indexes (row-count dataset-or-col))]
-    (do-select-rows dataset-or-col row-indexes)))
-
-(defn select-rows-by-index
-  "Select rows from the dataset or column by seq of index(includes negative) or :all.
-
-   See documentation for `select-by-index`."
-  [dataset-or-col row-index]
-  (if (ds-impl/dataset? dataset-or-col)
-    (select-by-index dataset-or-col :all row-index)
-    (let [make-pos (fn [^long total ^long x] (if (neg? x) (+ x total) x))
-          row-index (if (sequential? row-index)
-                      (dtype/emap (partial make-pos (row-count dataset-or-col))
-                                  :int64 row-index)
-                      row-index)]
-      (ds-col/select dataset-or-col row-index))))
+  (ds-proto/select-rows dataset-or-col row-indexes))
 
 
 (defn drop-rows
@@ -444,12 +402,13 @@
   [dataset-or-col row-indexes]
   (cond-> dataset-or-col
     (not (zero? (dtype/ecount row-indexes)))
-    (do-select-rows (dtype-proto/set-and-not
-                     (bitmap/->bitmap
-                      (range (row-count dataset-or-col)))
-                     (if (instance? RoaringBitmap row-indexes)
-                       row-indexes
-                       (preprocess-row-indexes row-indexes (row-count dataset-or-col)))))))
+    (select-rows (set/difference
+                  (bitmap/->bitmap 0 (row-count dataset-or-col))
+                  (if (instance? RoaringBitmap row-indexes)
+                    row-indexes
+                    (col-impl/simplify-row-indexes
+                     (row-count dataset-or-col)
+                     row-indexes))))))
 
 
 (defn remove-rows
@@ -461,11 +420,8 @@
 (defn missing
   "Given a dataset or a column, return the missing set as a roaring bitmap"
   ^RoaringBitmap [dataset-or-col]
-  (if (ds-impl/dataset? dataset-or-col)
-    (reduce #(dtype-proto/set-or %1 (ds-col/missing %2))
-            (->bitmap)
-            (columns dataset-or-col))
-    (ds-col/missing dataset-or-col)))
+  (when dataset-or-col
+    (ds-proto/missing dataset-or-col)))
 
 
 (defn drop-missing
@@ -486,14 +442,15 @@
   "Reverse the rows in the dataset or column."
   [dataset-or-col]
   (cond-> dataset-or-col
-    (not-empty dataset-or-col) (select-rows (-> dataset-or-col row-count range dtype/reverse))))
+    (not-empty dataset-or-col)
+    (select-rows (hamf/range (unchecked-dec (row-count dataset-or-col)) -1 -1))))
 
 
 (defn supported-column-stats
   "Return the set of natively supported stats for the dataset.  This must be at least
 #{:mean :variance :median :skew}."
   [dataset]
-  (ds-proto/supported-column-stats dataset))
+  stats/all-descriptive-stats-names)
 
 
 (defn filter
@@ -628,6 +585,13 @@
    (sort-by-column dataset colname nil)))
 
 
+(defn- non-empty-column
+  [ds cname]
+  (when-let [col (ds cname)]
+    (when (> (dtype/ecount col) (dtype/ecount (ds-proto/missing col)))
+      col)))
+
+
 (defn- do-concat
   [reader-concat-fn dataset other-datasets]
   (let [datasets (->> (clojure.core/concat [dataset] (remove nil? other-datasets))
@@ -648,7 +612,7 @@
             (->> column-names
                  (mapv (fn [cname]
                          (->> datasets
-                              (map #(% cname))
+                              (map #(non-empty-column % cname))
                               (remove nil?)
                               (map dtype/elemwise-datatype)
                               (reduce (fn [lhs-dtype rhs-dtype]
@@ -664,7 +628,7 @@
             (let [columns
                   (->> datasets
                        (map (fn [ds]
-                              (if-let [retval (ds colname)]
+                              (if-let [retval (non-empty-column ds colname)]
                                 retval
                                 (let [rc (row-count ds)
                                       missing (bitmap/->bitmap (range rc))
@@ -685,10 +649,9 @@
                   missing
                   (->> (reduce
                         (fn [[missing offset] col]
-                          [(dtype-proto/set-or
+                          [(set/union
                             missing
-                            (dtype-proto/set-offset (ds-col/missing col)
-                                                    offset))
+                            (bitmap/offset (ds-col/missing col) offset))
                            (+ (long offset) (dtype/ecount col))])
                         [(->bitmap) 0]
                         columns)
@@ -996,12 +959,14 @@
   The reverse operation is data->column."
   [col]
   (let [metadata (meta col)
-        coldata (packing/pack (.buffer ^Column col))
-        dtype (dtype/elemwise-datatype coldata)]
+        coldata (packing/pack (ds-proto/column-buffer col))
+        dtype (dtype/elemwise-datatype coldata)
+        ne (dtype/ecount col)]
     {:metadata (assoc metadata :datatype dtype)
-     :missing (dtype/->array
-               (bitmap/bitmap->efficient-random-access-reader
-                (ds-col/missing col)))
+     :missing (dtype/->array (if (< ne Integer/MAX_VALUE)
+                               :int32
+                               :int64)
+                             (bitmap/->random-access (ds-col/missing col)))
      :name (:name metadata)
      :version dataset-data-version
      :data (cond
@@ -1089,6 +1054,7 @@
 
 
 (defn extend-with-empty
+  "Extend a dataset with empty values"
   [ds n-empty]
   (->> (columns ds)
        (map #(ds-col/extend-column-with-empty % n-empty))
