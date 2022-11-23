@@ -1,13 +1,17 @@
 (ns tech.v3.dataset.column
-  (:require [tech.v3.protocols.column :as col-proto]
+  (:require [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
+            [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.datatype.bitmap :as bitmap])
+            [tech.v3.datatype.bitmap :as bitmap]
+            [ham-fisted.set :as set]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc])
   (:import [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer LongReader DoubleReader ObjectReader]
@@ -22,30 +26,30 @@
   "Return true if this item is a column."
   [item]
   (when item
-    (col-proto/is-column? item)))
+    (ds-proto/is-column? item)))
 
 
 (defn column-name
   [col]
-  (col-proto/column-name col))
+  (ds-proto/column-name col))
 
 
 (defn set-name
   "Return a new column."
   [col name]
-  (col-proto/set-name col name))
+  (ds-proto/set-name col name))
 
 
 (defn supported-stats
   "List of available stats for the column"
   [col]
-  (col-proto/supported-stats col))
+  stats/all-descriptive-stats-names)
 
 
 (defn missing
   "Indexes of missing values.  Both iterable and reader."
   ^RoaringBitmap [col]
-  (col-proto/missing col))
+  (ds-proto/missing col))
 
 
 (defn is-missing?
@@ -59,38 +63,13 @@
   "Set the missing indexes for a column.  This doesn't change any values in the
   underlying data store."
   [col idx-seq]
-  (col-proto/set-missing col idx-seq))
-
-
-(defn index-structure
-  "Returns an index structure for the column. The index structure can help optimize
-  certain operations as they can provide faster lookup and subsetting of a column
-  or dataset.
-
-  Also see: tech.v3.dataset.column/select-from-index."
-  [col]
-  (col-proto/index-structure col))
-
-
-(defn index-structure-realized?
-   "Returns true if the index-structure value has been produced. The index-structure
-is only produced the first time it is requested."
-  [col]
-  (col-proto/index-structure-realized? col))
-
-
-(defn with-index-structure
-  "Returns a copy of the column that will return an index-structure using the
-  provided `custom-make-index-strucutre-fn`. It also registers `klass` aliased
-  to `datatype-keyword` so it can be identified by the typing system."
-  [col custom-make-index-structure-fn]
-  (col-proto/with-index-structure col custom-make-index-structure-fn))
+  (Column. (bitmap/->bitmap idx-seq) (ds-proto/column-buffer col) (meta col) nil))
 
 
 (defn unique
   "Set of all unique values"
   [col]
-  (col-proto/unique col))
+  (set/unique col))
 
 
 (defn stats
@@ -98,7 +77,7 @@ is only produced the first time it is requested."
 form.  Guaranteed support across implementations for :mean :variance :median :skew.
 Implementations should check their metadata before doing calculations."
   [col stats-set]
-  (col-proto/stats col stats-set))
+  (stats/descriptive-statistics stats-set col))
 
 
 (defn correlation
@@ -110,7 +89,10 @@ Implementations should check their metadata before doing calculations."
 
   Returns floating point number between [-1 1]"
   [lhs rhs correlation-type]
-  (col-proto/correlation lhs rhs correlation-type))
+  (case correlation-type
+    :pearsons (stats/pearsons-correlation lhs rhs)
+    :spearmans (stats/spearmans-correlation lhs rhs)
+    :kendall (stats/kendalls-correlation lhs rhs)))
 
 
 (defn select
@@ -120,7 +102,7 @@ Implementations should check their metadata before doing calculations."
   of indices, duplicates are possible and will select the specified position more
   than once."
   [col selection]
-  (col-proto/select col selection))
+  (ds-proto/select-rows col selection))
 
 (defn clone
   "Clone this column not changing anything."
@@ -200,28 +182,10 @@ Implementations should check their metadata before doing calculations."
   an implicit string->double mapping is expected.  For booleans, true=1 false=0.
   Finally, any missing values should be indicated by a NaN of the expected type."
   ^doubles [col & [error-on-missing?]]
-  (col-proto/to-double-array col error-on-missing?))
-
-
-(defn- derive-dtype
-  [map-fn arg-count]
-  (case arg-count
-    1 (cond (instance? IFn$DD map-fn)
-            :float64
-            (instance? IFn$LL map-fn)
-            :int64
-            :else :object)
-    2 (cond (instance? IFn$DDD map-fn)
-            :float64
-            (instance? IFn$LLL map-fn)
-            :int64
-            :else :object)
-    3 (cond (instance? IFn$DDDD map-fn)
-            :float64
-            (instance? IFn$LLLL map-fn)
-            :int64
-            :else :object)
-    :object))
+  (when (and error-on-missing? (not (== 0 (dtype/ecount (ds-proto/missing col)))))
+    (throw (RuntimeException. (str "Missing value detected on column: "
+                                   (ds-proto/column-name col)))))
+  (hamf/double-array (dtype/->reader col :float64)))
 
 
 (defn column-map
@@ -247,60 +211,26 @@ Implementations should check their metadata before doing calculations."
                       (or res-dtype {}))
         ;;object readers get scanned to infer datatype
         res-dtype (res-opt-map :datatype)
-        res-dtype (if (nil? res-dtype)
-                    (derive-dtype map-fn (count args))
-                    res-dtype)
         missing-fn (res-opt-map :missing-fn)
         ^RoaringBitmap missing (if missing-fn
                                  (bitmap/->bitmap (missing-fn args))
                                  nil)
-
         ^Buffer data (apply dtype/emap map-fn res-dtype args)
         data (if (or (nil? missing) (.isEmpty missing))
                ;;data will be scanned by the dataset to ascertain datatype and/or missing
                (dtype/clone data)
-               ;;Force data to be realized
-               (let [missing-val (get col-base/dtype->missing-val-map res-dtype nil)]
-                 (-> (case (casting/simple-operation-space res-dtype)
-                       :int64
-                       (reify LongReader
-                         (elemwiseDatatype [this] (.elemwiseDatatype data))
-                         (lsize [this] (.lsize data))
-                         (readLong [this idx]
-                           (if-not (.contains missing idx)
-                             (.readLong data idx)
-                             (unchecked-long missing-val))))
-                       :float64
-                       (reify DoubleReader
-                         (elemwiseDatatype [this] (.elemwiseDatatype data))
-                         (lsize [this] (.lsize data))
-                         (readDouble [this idx]
-                           (if-not (.contains missing idx)
-                             (.readDouble data idx)
-                             (double missing-val))))
-                       (reify ObjectReader
-                         (elemwiseDatatype [this] (.elemwiseDatatype data))
-                         (lsize [this] (.lsize data))
-                         (readObject [this idx]
-                           (if-not (.contains missing idx)
-                             (.readObject data idx)
-                             missing-val))))
-                     (dtype/clone))))]
-    (col-impl/new-column :_unnamed
-                         data
-                         nil
-                         (if missing-fn
-                           (missing-fn args)
-                           nil))))
+               (-> (col-impl/make-column-buffer missing data res-dtype)
+                   (dtype/clone)))]
+    (Column. missing data {:name :_unnamed} nil)))
 
 
 (defn union-missing-sets
   "Union the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (reduce dt-proto/set-or (map col-proto/missing col-seq)))
+  (bitmap/reduce-union (lznc/map ds-proto/missing col-seq)))
 
 
 (defn intersect-missing-sets
   "Intersect the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (reduce dt-proto/set-and (map col-proto/missing col-seq)))
+  (bitmap/reduce-intersection (lznc/map ds-proto/missing col-seq)))

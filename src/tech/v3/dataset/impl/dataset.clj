@@ -219,13 +219,7 @@
 
 
   ds-proto/PMissing
-  (missing [this]
-    (hamf/reduce (fn [acc col]
-                   (.or ^RoaringBitmap acc
-                        (bitmap/->bitmap (ds-proto/missing col)))
-                   acc)
-                 (RoaringBitmap.)
-                 columns))
+  (missing [this] (bitmap/reduce-union (lznc/map ds-proto/missing columns)))
 
   ds-proto/PSelectRows
   (select-rows [dataset rowidxs]

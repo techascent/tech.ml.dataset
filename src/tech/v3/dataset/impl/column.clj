@@ -11,7 +11,6 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.tensor :as dtt]
-            [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [ham-fisted.lazy-noncaching :as lznc]
@@ -76,7 +75,7 @@
                                   (hamf/range sidx eidx)))))
 
 
-(defn- make-buffer
+(defn ^:no-doc make-column-buffer
   (^Buffer [^RoaringBitmap missing data dtype]
    (let [^Buffer src (dtype-proto/->buffer data)
          missing-value (column-base/datatype->missing-value dtype)
@@ -149,12 +148,12 @@
            (reduce-column-buffer rfn acc src missing
                                  primitive-missing-value 0 (.lsize src)))))))
   (^Buffer [missing data]
-   (make-buffer missing data (dtype-proto/elemwise-datatype data))))
+   (make-column-buffer missing data (dtype-proto/elemwise-datatype data))))
 
 
 (defmacro cached-buffer! []
   `(or ~'buffer
-       (do (set! ~'buffer (make-buffer ~'missing ~'data))
+       (do (set! ~'buffer (make-column-buffer ~'missing ~'data))
            ~'buffer)))
 
 
@@ -260,8 +259,8 @@
   (elemwise-reader-cast [_this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
       (cached-buffer!)
-      (make-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
-                   new-dtype)))
+      (make-column-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
+                          new-dtype)))
   dtype-proto/PECount
   (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToBuffer

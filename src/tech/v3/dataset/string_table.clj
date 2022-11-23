@@ -3,7 +3,6 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.dataset.dynamic-int-list :as int-list]
-            [tech.v3.dataset.parallel-unique :refer [parallel-unique]]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.datatype.errors :as errors]
             [ham-fisted.api :as hamf])
