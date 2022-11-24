@@ -13,6 +13,7 @@
             [tech.v3.dataset.test-utils :as test-utils]
             [tech.v3.dataset.rolling :as ds-roll]
             [tech.v3.dataset.column-filters :as cf]
+            [tech.v3.dataset.print :as ds-print]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
             [tech.v3.libs.fastexcel]
@@ -1556,6 +1557,11 @@
           meta
           :k
           ))))
+
+(deftest print-all-test
+  (let [ds (ds/->dataset (for [i (range 1000)] {:a i}))]
+    (is (= (meta (ds/print-all ds))
+           (meta (ds-print/print-range ds :all))))))
 
 (comment
 
