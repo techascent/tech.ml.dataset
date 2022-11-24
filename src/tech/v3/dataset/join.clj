@@ -622,7 +622,7 @@ outer-join [8 4]:
            n-retval (.size retval)
            n-retval-dec (unchecked-dec n-retval)]
        (dotimes [iter n-retval]
-         (.addLong rev-retval (.readLong retval (- n-retval-dec iter))))
+         (.addLong rev-retval (.getLong retval (- n-retval-dec iter))))
        [(- n-elems (.size rev-retval))
         rev-retval])))
 

@@ -6,6 +6,7 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.jvm-map :as jvm-map]
+            [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [tech.v3.parallel.for :as pfor]
             [clojure.test :refer [deftest is]])

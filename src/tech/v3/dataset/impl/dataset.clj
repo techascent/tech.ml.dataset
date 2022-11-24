@@ -280,27 +280,27 @@
           1 (let [c0 (readers 0)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx)])))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx)))))
           2 (let [c0 (readers 0)
                   c1 (readers 1)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)])))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)))))
           3 (let [c0 (readers 0)
                   c1 (readers 1)
                   c2 (readers 2)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
-                                           (c2 row-idx)])))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
+                                                       (c2 row-idx)))))
           4 (let [c0 (readers 0)
                   c1 (readers 1)
                   c2 (readers 2)
                   c3 (readers 3)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
-                                           (c2 row-idx) (c3 row-idx)])))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
+                                                       (c2 row-idx) (c3 row-idx)))))
           5 (let [c0 (readers 0)
                   c1 (readers 1)
                   c2 (readers 2)
@@ -308,9 +308,9 @@
                   c4 (readers 4)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
-                                           (c2 row-idx) (c3 row-idx)
-                                           (c4 row-idx)])))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
+                                                       (c2 row-idx) (c3 row-idx)
+                                                       (c4 row-idx)))))
           6 (let [c0 (readers 0)
                   c1 (readers 1)
                   c2 (readers 2)
@@ -319,9 +319,9 @@
                   c5 (readers 5)]
               (reify ObjectReader
                 (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] [(c0 row-idx) (c1 row-idx)
-                                           (c2 row-idx) (c3 row-idx)
-                                           (c4 row-idx) (c5 row-idx)]))))
+                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
+                                                       (c2 row-idx) (c3 row-idx)
+                                                       (c4 row-idx) (c5 row-idx))))))
         (if copying?
           (reify ObjectReader
             (lsize [rdr] n-rows)
