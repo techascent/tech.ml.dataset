@@ -308,6 +308,12 @@ user> (ds/rowvec-at stocks -1)
    (sample dataset 5 nil)))
 
 
+(defn print-all
+  "Helper function equivalent to `(tech.v3.dataset.print/print-range ... :all)`"
+  [dataset]
+  (vary-meta dataset clojure.core/assoc :print-index-range :all))
+
+
 (defn min-n-by-column
   "Find the minimum N entries (unsorted) by column.  Resulting data will be indexed in
   original order. If you want a sorted order then sort the result.
