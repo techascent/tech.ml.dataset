@@ -190,28 +190,39 @@
   [^long n-elems selection]
   (if (:simplified? (meta selection))
     selection
-    (vary-meta
-     (cond
-       (nil? selection) (hamf/range 0)
-       ;;Cannot possibly be negative
-        (= (dtype/elemwise-datatype selection) :boolean)
-        (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
-        (set/bitset? selection)
-        (set/->integer-random-access selection)
-        (hamf-proto/set? selection)
-        (->> (set/->integer-random-access selection)
-             (wrap-negative-access n-elems))
-        :else
-        ;;Ensure the selection object has metadata
-        (let [minv (long (if (dtype-proto/has-constant-time-min-max? selection)
-                           (long (dtype-proto/constant-time-min selection))
-                           -1))]
-          (if (< (long minv) 0)
-            (->> (hamf/preduce-reducer (un-pred/index-reducer n-elems) selection)
-                 (wrap-negative-access n-elems))
-            ;;if the data indicates it has no negative values
-            (dtype/->reader selection))))
-     assoc :simplified? true)))
+    (do
+      (vary-meta
+       (cond
+         (nil? selection) (hamf/range 0)
+         ;;Cannot possibly be negative
+         (= (dtype/elemwise-datatype selection) :boolean)
+         (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
+         (set/bitset? selection)
+         (set/->integer-random-access selection)
+         (hamf-proto/set? selection)
+         (->> (set/->integer-random-access selection)
+              (wrap-negative-access n-elems))
+         (keyword? selection)
+         (case selection
+           :all (hamf/range n-elems)
+           :lla (hamf/range (dec n-elems) -1 -1))
+         (number? selection)
+         (let [selection (long selection)
+               selection (if (< selection 0)
+                           (+ n-elems selection)
+                           selection)]
+           (with-meta [selection] {:min selection :max selection :scalar? true}))
+         :else
+         ;;Ensure the selection object has metadata
+         (let [minv (long (if (dtype-proto/has-constant-time-min-max? selection)
+                            (long (dtype-proto/constant-time-min selection))
+                            -1))]
+           (if (< (long minv) 0)
+             (->> (hamf/preduce-reducer (un-pred/index-reducer n-elems) selection)
+                  (wrap-negative-access n-elems))
+             ;;if the data indicates it has no negative values
+             (dtype/->reader selection))))
+       assoc :simplified? true))))
 
 
 (deftype Column

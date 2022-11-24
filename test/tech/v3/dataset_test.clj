@@ -663,11 +663,11 @@
            (vec ((ds/select-columns-by-index ds [-1]) :V4))))
 
     (is (= [2 6 1.5 \C]
-           (-> (ds/select-rows-by-index ds -4)
+           (-> (ds/select-rows ds -4)
                (ds/value-reader)
                (first)
                (vec))
-           (-> (ds/select-rows-by-index ds [-4])
+           (-> (ds/select-rows ds [-4])
                (ds/value-reader)
                (first)
                (vec))))))

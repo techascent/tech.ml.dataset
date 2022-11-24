@@ -6,6 +6,7 @@
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.bitmap :as bitmap]
@@ -63,7 +64,13 @@
   "Set the missing indexes for a column.  This doesn't change any values in the
   underlying data store."
   [col idx-seq]
-  (Column. (bitmap/->bitmap idx-seq) (ds-proto/column-buffer col) (meta col) nil))
+
+  (Column. (-> (case (argtypes/arg-type idx-seq)
+                 :scalar [idx-seq]
+                 :iterable (hamf/take (dtype/ecount col) idx-seq)
+                 idx-seq)
+               (bitmap/->bitmap))
+           (ds-proto/column-buffer col) (meta col) nil))
 
 
 (defn unique
@@ -212,16 +219,19 @@ Implementations should check their metadata before doing calculations."
         ;;object readers get scanned to infer datatype
         res-dtype (res-opt-map :datatype)
         missing-fn (res-opt-map :missing-fn)
-        ^RoaringBitmap missing (if missing-fn
-                                 (bitmap/->bitmap (missing-fn args))
-                                 nil)
+        ^RoaringBitmap missing (when missing-fn
+                                 (bitmap/->bitmap (missing-fn args)))
         ^Buffer data (apply dtype/emap map-fn res-dtype args)
         data (if (or (nil? missing) (.isEmpty missing))
                ;;data will be scanned by the dataset to ascertain datatype and/or missing
                (dtype/clone data)
                (-> (col-impl/make-column-buffer missing data res-dtype)
                    (dtype/clone)))]
-    (Column. missing data {:name :_unnamed} nil)))
+    (col-impl/new-column
+     #:tech.v3.dataset{:name :_unnamed
+                       :data data
+                       :force-datatype (boolean missing)
+                       :missing missing})))
 
 
 (defn union-missing-sets

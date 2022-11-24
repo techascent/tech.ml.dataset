@@ -313,7 +313,7 @@
   (let [colname-seq (if (fn? colname-seq-or-fn)
                           (column-names (colname-seq-or-fn dataset))
                           colname-seq-or-fn)]
-    (select dataset colname-seq :all)))
+    (ds-proto/select-columns dataset colname-seq)))
 
 (defn select-columns-by-index
   "Select columns from the dataset by seq of index(includes negative) or :all.
@@ -557,7 +557,7 @@
      (->> (ds-readers/mapseq-reader dataset)
           (dtype/emap key-fn :object)
           (argops/argsort compare-fn options)
-          (select dataset :all))))
+          (select-rows dataset))))
   ([dataset key-fn]
    (sort-by dataset key-fn nil)))
 
@@ -580,7 +580,7 @@
   ([dataset colname compare-fn & [options]]
    (when dataset
      (->> (argops/argsort compare-fn options (packing/unpack (column dataset colname)))
-          (select dataset :all))))
+          (select-rows dataset))))
   ([dataset colname]
    (sort-by-column dataset colname nil)))
 

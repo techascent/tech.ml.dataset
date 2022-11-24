@@ -57,7 +57,9 @@
   [n-cols n-rows col-name new-col-data]
   (let [argtype (argtypes/arg-type new-col-data)
         n-rows (if (= 0 n-cols)
-                 Integer/MAX_VALUE
+                 (if (dtype/reader? new-col-data)
+                   (dtype/ecount new-col-data)
+                   (count (take Integer/MAX_VALUE new-col-data)))
                  n-rows)]
     (cond
       (ds-proto/is-column? new-col-data)
@@ -83,13 +85,16 @@
                                    (dtype/sub-buffer new-col-data 0 n-rows)
                                    new-col-data)]
                 (column-data-process/prepare-column-data new-col-data)))
-            map-data (-> (update map-data :tech.v3.dataset/data
-                                 (fn [data]
-                                   (if-not (== 0 n-cols)
-                                     (shorten-or-extend n-rows data)
-                                     data)))
-                         (assoc :tech.v3.dataset/name col-name))]
-        (col-impl/new-column map-data)))))
+            new-c (col-impl/new-column (assoc map-data :tech.v3.dataset/name col-name))
+            c-len (dtype/ecount new-c)]
+
+        (cond
+          (< c-len n-rows)
+          (col-impl/extend-column-with-empty new-c (- n-rows c-len))
+          (> c-len n-rows)
+          (dtype/sub-buffer new-c 0 n-rows)
+          :else
+          new-c)))))
 
 
 (defn- map-entries

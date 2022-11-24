@@ -53,8 +53,8 @@
 (defn column-name
   [col]
   (if (map? col)
-    (or (get col :tech.v3.dataset/name)
-        (get-in col [:tech.v3.dataset/metadata :name]))
+    (get col :tech.v3.dataset/name
+         (get-in col [:tech.v3.dataset/metadata :name]))
     (:name (meta col))))
 
 
