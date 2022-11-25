@@ -1183,11 +1183,12 @@
            (:b2 (ds/column-map testds :b2 #(inc %)
                                {:datatype :float64
                                 :missing-fn ds-col/union-missing-sets} [:b]))))
-    ;;Missing set scanning causes NPE at inc.
-    (is (thrown? Throwable
-                 (ds/column-map testds :b2 #(inc %)
-                                {:datatype :float64}
-                                [:b])))))
+    ;;Missing used to scanning causes NPE at inc.
+    ;;Now data is casted to Double/NaN
+    #_(is (thrown? Throwable
+                   (ds/column-map testds :b2 #(inc %)
+                                  {:datatype :float64}
+                                  [:b])))))
 
 
 (deftest remove-columns-issue-242
@@ -1201,8 +1202,7 @@
 (deftest column-cast-packed-date
   (let [x (ds/->dataset [{:a 0 :b "2020-03-05"} {:a 1 :b nil}])
         y (ds/column-cast x :b :packed-local-date)]
-    (is (= (vec (.data (y :b)))
-           (vec (y :b))))
+    (is (instance? java.time.LocalDate ((y :b) 0)))
     (is (nil? ((y :b) 1)))))
 
 
@@ -1473,8 +1473,8 @@
                                            :reducer (fn [a b]
                                                       (+ (dfn/sum a) (dfn/sum b)))
                                            :datatype :int16}})]
-    (is (= :int16 (dtype/elemwise-datatype (fin-ds :c))))
-    (is (= [20 30 42 56 72]
+    (is (= :float64 (dtype/elemwise-datatype (fin-ds :c))))
+    (is (= [20.0 30.0 42.0 56.0 72.0]
            (vec (take 5 (fin-ds :c)))))))
 
 
@@ -1554,6 +1554,7 @@
                 (map long)
                 (set))))))
 
+
 (deftest column-meta-roundtrip
   (is (= :v
          (->
@@ -1562,219 +1563,3 @@
           meta
           :k
           ))))
-
-(comment
-
-  (def test-ds (ds/->dataset
-                "https://github.com/genmeblog/techtest/raw/master/data/who.csv.gz"))
-
-  (->> '("new_sp_m014" "new_sp_m1524")
-       (ds/select-columns test-ds)
-       (ds/columns)
-       (map (comp :datatype meta)))
-
-  (ds/columnwise-concat test-ds '("new_sp_m014" "new_sp_m1524"))
-  (ds/columnwise-concat test-ds '("new_sp_m1524" "new_sp_m014"))
-
-  )
-
-(defn- select-sum-obtain-ds
-  []
-  (-> (for [idx (range 1000)]
-        (->> (for [i (range 10)]
-               [(keyword (str "x" i)) (rand)])
-             (into {:row idx})))
-      (ds/->dataset)))
-
-
-(def random ^{:tag 'Random} (Random.))
-
-(defn- select-sum-obtain-ten-indexes
-  []
-  ;;Changed to just return the set of indexes
-
-  ;;Changed to use a BitSet.  This keeps the indexes in order
-  ;;so we are iterating through memory in order - required some updates
-  ;;to hamf.
-  (let [a (BitSet.)]
-    (loop []
-      (if (< (.cardinality a) 10)
-        (do (.set a (.nextInt ^Random random 1000))
-            (recur))
-        a))))
-
-(defn- select-sum-select-rows
-  [ds]
-  (dotimes [_ 100000]
-    (-> (ds/select-rows ds (hamf/int-array (select-sum-obtain-ten-indexes)))
-        (:x0)
-        (dfn/sum-fast))))
-
-(defn- select-sum-tensor-select
-  [ds]
-  (let [col (:x0 ds)]
-    (dotimes [_ 100000]
-      (-> (dtt/select col (hamf/int-array (select-sum-obtain-ten-indexes)))
-          (dfn/sum-fast)))))
-
-(defn- select-sum-indexed-buffer
-  [ds]
-  (let [col (:x0 ds)]
-    (dotimes [_ 100000]
-      ;;The other pathways either do this themselves or do not need it.
-      (-> (dtype/indexed-buffer (hamf/int-array (select-sum-obtain-ten-indexes)) col)
-          (dfn/sum-fast)))))
-
-(defn- select-sum-clj-reduce
-  [ds]
-  (let [col (:x0 ds)]
-    (dotimes [_ 100000]
-      (reduce #(+ %1 (nth col %2))
-              0.0
-              (hamf/->collection (select-sum-obtain-ten-indexes))))))
-
-(defn- select-sum-hamf
-  [ds]
-  (let [col (hamf/double-array (:x0 ds))]
-    (dotimes [_ 100000]
-      (hamf/reduce (hamf/long-accumulator
-                    acc v
-                    (+ (double acc) (aget col (unchecked-int v))))
-                   0.0
-                   (select-sum-obtain-ten-indexes)))))
-
-
-
-
-(defn select-sum-perf!
-  []
-  (let [t (fn [description f]
-            (let [start-nanos (System/nanoTime)]
-              (f)
-              (let [elapsed-sec (/ (- (System/nanoTime) start-nanos) 1e9)]
-                (println (format "select-sum: %-14s in %.2fs" description elapsed-sec)))))
-        ds (select-sum-obtain-ds)]
-    (t "select-rows" #(select-sum-select-rows ds))
-    (t "tensor-select" #(select-sum-tensor-select ds))
-    (t "indexed-buffer" #(select-sum-indexed-buffer ds))
-    (t "clj-reduce" #(select-sum-clj-reduce ds))
-    (t "hamf-mapreduce" #(select-sum-hamf ds))))
-
-
-(defn intersection-clj
-  [& datasets]
-  (->> datasets
-       (map (comp frequencies #(ds/rows % {:copying? true})))
-       (reduce (fn [acc m]
-                 (mapcat (fn [[el n]]
-                           (let [new-n (min n (get m el 0))]
-                             (when (pos? new-n)
-                               [[el new-n]])))
-                         acc)))
-       (mapcat (fn [[el n]] (repeat n el)))
-       ds/->dataset))
-
-
-(defn intersection-value-space
-  [& datasets]
-  (->> datasets
-       (reduce (fn [acc ds]
-                 (let [rows (ds/rows ds {:copying? true})]
-                   (if acc
-                     (->> rows
-                          (lznc/filter (hamf/predicate
-                                        v (.containsKey ^java.util.Map acc v)))
-                          (hamf/frequencies)
-                          (hamf/map-intersection
-                           (hamf/bi-function l r (min (long l) (long r)))
-                           acc))
-                     (hamf/frequencies rows))))
-               nil)
-       (lznc/map #(assoc (key %) :count (val %)))
-       (ds/->>dataset)))
-
-
-(defn- concurrent-hashmap-frequencies
-  [data]
-  (hamf/preduce
-   (constantly (hamf/java-concurrent-hashmap))
-   (fn [acc v]
-     (.compute ^Map acc v BitmapTrieCommon/incBiFn)
-     acc)
-   (fn [l r] l)
-   {:min-n 1000}
-   data))
-
-
-(defn- concurrent-hashmap-intersection
-  [bifn ^ConcurrentHashMap l ^ConcurrentHashMap r]
-  (let [retval (hamf/java-concurrent-hashmap)
-        bifn (hamf/->bi-function bifn)]
-    (.forEach l 100 (reify java.util.function.BiConsumer
-                      (accept [this k v]
-                        (let [ov (.getOrDefault r k ::not-found)]
-                          (when-not (identical? ov ::not-found)
-                            (.put retval k (.apply bifn v ov)))))))
-    retval))
-
-
-(defn intersection-value-space-concurrent-hashmap
-  [& datasets]
-  (->> datasets
-       (reduce (fn [acc ds]
-                 (let [rows (ds/rows ds {:copying? true})]
-                   (if acc
-                     (->> rows
-                          (lznc/filter (hamf/predicate
-                                        v (.containsKey ^java.util.Map acc v)))
-                          (concurrent-hashmap-frequencies)
-                          (concurrent-hashmap-intersection
-                           (hamf/bi-function l r (min (long l) (long r)))
-                           acc))
-                     (concurrent-hashmap-frequencies rows))))
-               nil)
-       (lznc/map #(assoc (key %) :count (val %)))
-       (ds/->>dataset)))
-
-
-(defn intersection-index-space
-  [& datasets]
-  (->> datasets
-       (reduce
-        (fn [acc ds]
-          (let [rows (ds/rows ds {:copying? true})
-                n-rows (dtype/ecount rows)]
-            (if acc
-              (->> (hamf/range n-rows)
-                   (lznc/filter (hamf/long-predicate
-                                 v (.containsKey ^java.util.Map acc (rows v))))
-                   (hamf/group-by-reduce rows
-                                         #(dtype/make-list :int32)
-                                         (hamf/long-accumulator
-                                          acc v (do (.addLong ^IMutList acc v) acc))
-                                         #(do (.addAll ^IMutList %1 ^IMutList %2) %1))
-                   (hamf/map-intersection
-                    (hamf/bi-function l r (hamf/subvec l 0 (min (count l) (count r))))
-                    acc))
-              (argops/arggroup rows))))
-        nil)
-       (hamf/vals)
-       (apply lznc/concat)
-       (hamf/int-array-list)
-       (#(with-meta % {:min 0 :max (count %)}))
-       (ds/select-rows (first datasets))))
-
-
-(def ds-a (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 2 :b 3}]))
-(def ds-b (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 3 :b 3}]))
-
-
-(defonce big-ds-a (ds/->dataset {:a (lznc/repeatedly 20000 #(rand-int 337))
-                                 :b (cycle [:a :b :c :d :e])
-                                 :c (cycle [:d :e :f :g :h])}))
-
-
-
-(defonce big-ds-b (ds/->dataset {:a (lznc/repeatedly 20000 #(rand-int 337))
-                                 :b (cycle [:a :b :c :d :e])
-                                 :c (cycle [:d :e :f :g :h])}))

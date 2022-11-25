@@ -60,9 +60,10 @@
                    acc)))))
   (add [this value]
     (errors/when-not-errorf
-     (instance? String value)
+     (or (nil? value) (instance? String value))
      "Value added to string table is not a string: %s" value)
-    (let [item-idx (int (.computeIfAbsent
+    (let [value (or value "")
+          item-idx (int (.computeIfAbsent
                          str->int
                          value
                          (reify Function

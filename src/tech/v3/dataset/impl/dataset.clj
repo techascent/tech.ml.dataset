@@ -12,11 +12,16 @@
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native]
             [ham-fisted.api :as hamf]
-            [ham-fisted.lazy-noncaching :as lznc])
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.protocols :as hamf-proto]
+            [ham-fisted.set :as set])
   (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry]
            [java.util Map List LinkedHashSet LinkedHashMap]
            [tech.v3.datatype ObjectReader FastStruct Buffer]
-           [org.roaringbitmap RoaringBitmap]))
+           [org.roaringbitmap RoaringBitmap]
+           [ham_fisted BitmapTrieCommon]
+           [java.util.concurrent ConcurrentHashMap]
+           [java.util.function BiConsumer]))
 
 
 (set! *warn-on-reflection* true)
@@ -224,7 +229,7 @@
 
 
   ds-proto/PMissing
-  (missing [this] (bitmap/reduce-union (lznc/map ds-proto/missing columns)))
+  (missing [this] (apply set/reduce-union (lznc/map ds-proto/missing columns)))
 
   ds-proto/PSelectRows
   (select-rows [dataset rowidxs]

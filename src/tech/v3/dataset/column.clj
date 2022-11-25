@@ -237,10 +237,10 @@ Implementations should check their metadata before doing calculations."
 (defn union-missing-sets
   "Union the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (bitmap/reduce-union (lznc/map ds-proto/missing col-seq)))
+  (apply set/reduce-union (lznc/map ds-proto/missing col-seq)))
 
 
 (defn intersect-missing-sets
   "Intersect the missing sets of the columns returning a roaring bitmap"
   [col-seq]
-  (bitmap/reduce-intersection (lznc/map ds-proto/missing col-seq)))
+  (apply set/reduce-intersection (lznc/map ds-proto/missing col-seq)))

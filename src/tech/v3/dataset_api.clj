@@ -13,6 +13,7 @@
             [tech.v3.datatype.update-reader :as update-reader]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
@@ -35,6 +36,7 @@
            [ham_fisted IMutList]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer]
+           [tech.v3.dataset.impl.column Column]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
@@ -461,10 +463,14 @@ test/data/stocks.csv [10 3]:
   [col missing scalar-val]
   (if (== 0 (dtype/ecount missing))
     col
-    (hamf/reduce (hamf/long-accumulator
-                  col idx (.writeObject ^Buffer col idx scalar-val) col)
-                 (dtype/clone col)
-                 missing)))
+    (let [col (Column. (bitmap/->bitmap)
+                       (dtype/clone (ds-proto/column-buffer col))
+                       (meta col) nil)]
+      (hamf/reduce (hamf/long-accumulator
+                    data idx (.writeObject ^Buffer data idx scalar-val) data)
+                   (dtype/->buffer col)
+                   missing)
+      col)))
 
 
 (defn replace-missing-value

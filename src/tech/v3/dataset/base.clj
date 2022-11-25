@@ -615,17 +615,19 @@
                               (map #(non-empty-column % cname))
                               (remove nil?)
                               (map dtype/elemwise-datatype)
-                              (reduce (fn [lhs-dtype rhs-dtype]
-                                        (if (identical? lhs-dtype rhs-dtype)
-                                          lhs-dtype
-                                          (casting/simple-operation-space
-                                           (packing/unpack-datatype lhs-dtype)
-                                           (packing/unpack-datatype rhs-dtype)))))))))]
+                              (reduce (fn ([lhs-dtype rhs-dtype]
+                                           (if (identical? lhs-dtype rhs-dtype)
+                                             lhs-dtype
+                                             (casting/simple-operation-space
+                                              (packing/unpack-datatype lhs-dtype)
+                                              (packing/unpack-datatype rhs-dtype))))
+                                        ([] nil)))))))]
         (->>
          (map vector column-names column-dtypes)
          (map
           (fn [[colname dtype]]
-            (let [columns
+            (let [dtype (or dtype :boolean)
+                  columns
                   (->> datasets
                        (map (fn [ds]
                               (if-let [retval (non-empty-column ds colname)]
