@@ -25,7 +25,8 @@
 
 
 (def ^:private excludes-dataset
-  '#{bind-> all-descriptive-stats-names major-version ->dataset ->>dataset column-map-m})
+  '#{bind-> all-descriptive-stats-names major-version ->dataset ->>dataset column-map-m
+     mapseq-parser})
 
 
 

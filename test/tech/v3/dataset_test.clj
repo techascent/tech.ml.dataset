@@ -71,7 +71,7 @@
 (deftest iterable
   (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))]
     (is (= (ds/column-names ds)
-           (map ds-col/column-name (vals ds))))))
+            (map ds-col/column-name (vals ds))))))
 
 
 (deftest string-column-add-or-update

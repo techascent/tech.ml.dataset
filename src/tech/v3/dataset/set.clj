@@ -27,13 +27,16 @@
 
 (defn- concurrent-hashmap-intersection
   [bifn ^ConcurrentHashMap l ^ConcurrentHashMap r]
-  (let [retval (hamf/java-concurrent-hashmap)
+  (let [[^ConcurrentHashMap minmap ^ConcurrentHashMap maxmap]
+        (if (< (.size l) (.size r))
+          [l r] [r l])
+        retval (hamf/java-concurrent-hashmap)
         bifn (hamf/->bi-function bifn)]
-    (.forEach l 100 (reify java.util.function.BiConsumer
-                      (accept [this k v]
-                        (let [ov (.getOrDefault r k ::not-found)]
-                          (when-not (identical? ov ::not-found)
-                            (.put retval k (.apply bifn v ov)))))))
+    (.forEach minmap 100 (reify java.util.function.BiConsumer
+                           (accept [this k v]
+                             (let [ov (.getOrDefault maxmap k ::not-found)]
+                               (when-not (identical? ov ::not-found)
+                                 (.put retval k (.apply bifn v ov)))))))
     retval))
 
 

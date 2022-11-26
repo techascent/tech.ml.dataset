@@ -9,40 +9,63 @@
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [ham-fisted.lazy-noncaching :as lznc]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.protocols :as hamf-proto])
   (:import [java.util HashMap Map$Entry Map LinkedHashMap]
-           [java.util.function Function]
-           [ham_fisted Reductions$IndexedAccum]))
+           [java.util.function Function Consumer]
+           [clojure.lang IDeref]
+           [ham_fisted Reductions$IndexedAccum Reducible]))
+
+
+(defrecord ^:private MapseqReducer [options
+                                    parse-context
+                                    ^Map parsers
+                                    key-fn
+                                    colname->parser
+                                    row-idx*]
+  Consumer
+  (accept [this row]
+    (let [row-idx (long @row-idx*)]
+      (vswap! row-idx* unchecked-inc)
+      (hamf/consume!
+       (fn [e]
+         (let [parser (colname->parser (key e))]
+           (column-parsers/add-value! parser row-idx (val e))))
+       row)))
+  IDeref
+  (deref [this]
+    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers @row-idx*)))
+
+
+(defn mapseq-reducer
+  "Create a non-parallelized mapseq hamf reducer.  If you want a single IFn that follows the
+  convention of clojure transducers call hamf/reducer->rfn."
+  [options]
+  (reify
+    hamf-proto/Reducer
+    (->init-val-fn [r]
+      #(let [parse-context (parse-context/options->parser-fn options :object)
+             parsers (LinkedHashMap.)
+             key-fn (:key-fn options identity)
+             colparser-compute-fn (hamf/function
+                                   colname
+                                   (let [col-idx (.size parsers)]
+                                     {:column-idx col-idx
+                                      :column-name (key-fn colname)
+                                      :column-parser (parse-context colname)}))
+             colname->parser (fn [colname]
+                               (:column-parser
+                                (.computeIfAbsent parsers colname
+                                                  colparser-compute-fn)))
+             row-idx* (volatile! 0)]
+         (MapseqReducer. options parse-context parsers key-fn colname->parser row-idx*)))
+    (->rfn [r] hamf/consumer-accumulator)
+    (finalize [r v] @v)))
 
 
 (defn mapseq->dataset
   ([options mapseq]
-   (let [parse-context (parse-context/options->parser-fn options :object)
-         parsers (LinkedHashMap.)
-         key-fn (:key-fn options identity)
-         colparser-compute-fn (hamf/function
-                               colname
-                                (let [col-idx (.size parsers)]
-                                  {:column-idx col-idx
-                                   :column-name (key-fn colname)
-                                   :column-parser (parse-context colname)}))
-         colname->parser (fn [colname]
-                           (:column-parser
-                            (.computeIfAbsent parsers colname
-                                              colparser-compute-fn)))]
-     (->> mapseq
-          (hamf/reduce (hamf/indexed-accum
-                        acc row-idx row
-                        (do
-                          ;;hamf/consume! uses reduce under the hood
-                          (hamf/consume!
-                           (fn [e]
-                             (let [parser (colname->parser (key e))]
-                               (column-parsers/add-value! parser row-idx (val e))))
-                           row)
-                          (unchecked-inc row-idx)))
-                       0)
-          (parse-context/parsers->dataset (assoc options :key-fn nil) parsers))))
+   (hamf/reduce-reducer (mapseq-reducer options) mapseq))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

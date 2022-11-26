@@ -22,6 +22,7 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.categorical :as ds-cat]
             [tech.v3.dataset.utils :as ds-utils]
+            [tech.v3.dataset.io.mapseq-colmap :as io-mapseq]
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
@@ -29,10 +30,11 @@
             [tech.v3.dataset.zip]
             [ham-fisted.api :as hamf]
             [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.protocols :as hamf-proto]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList Random Arrays
             LinkedHashMap]
-           [java.util.function Function]
+           [java.util.function Function Consumer]
            [ham_fisted IMutList]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer]
@@ -207,6 +209,57 @@ user> (ds/rowvec-at stocks -1)
                 ->dataset
                 ->>dataset
                 write!)
+
+
+(defn mapseq-parser
+  "Return a clojure function that when called with one arg that arg must be the next map
+  to add to the dataset.  When called with no args returns the current dataset.  This can be
+  used to efficiently transform a stream of maps into a dataset while getting intermediate
+  datasets during the parse operation.
+
+Options are the same for [[->dataset]].
+
+  ```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (def pfn (ds/mapseq-parser))
+#'user/pfn
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 2 :c 3})
+nil
+user> (pfn)
+_unnamed [3 3]:
+
+| :a | :b | :c |
+|---:|---:|---:|
+|  1 |  2 |    |
+|  1 |  2 |    |
+|  2 |    |  3 |
+user> (pfn {:a 3 :d 4})
+nil
+user> (pfn {:a 5 :c 6})
+nil
+user> (pfn)
+_unnamed [5 4]:
+
+| :a | :b | :c | :d |
+|---:|---:|---:|---:|
+|  1 |  2 |    |    |
+|  1 |  2 |    |    |
+|  2 |    |  3 |    |
+|  3 |    |    |  4 |
+|  5 |    |  6 |    |
+```"
+  ([options]
+   (let [reducer (io-mapseq/mapseq-reducer options)
+         parser ((hamf-proto/->init-val-fn reducer))]
+     (fn mapseq-parser
+       ([row] (.accept ^Consumer parser row))
+       ([] (deref parser)))))
+  ([] (mapseq-parser nil)))
 
 
 

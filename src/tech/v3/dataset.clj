@@ -715,6 +715,54 @@ _unnamed [4 5]:
 
 
 (def ^{:tag 'long} major-version tech.v3.dataset-api/major-version)
+(defn mapseq-parser
+  "Return a clojure function that when called with one arg that arg must be the next map
+  to add to the dataset.  When called with no args returns the current dataset.  This can be
+  used to efficiently transform a stream of maps into a dataset while getting intermediate
+  datasets during the parse operation.
+
+Options are the same for [[->dataset]].
+
+  ```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (def pfn (ds/mapseq-parser))
+#'user/pfn
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 2 :c 3})
+nil
+user> (pfn)
+_unnamed [3 3]:
+
+| :a | :b | :c |
+|---:|---:|---:|
+|  1 |  2 |    |
+|  1 |  2 |    |
+|  2 |    |  3 |
+user> (pfn {:a 3 :d 4})
+nil
+user> (pfn {:a 5 :c 6})
+nil
+user> (pfn)
+_unnamed [5 4]:
+
+| :a | :b | :c | :d |
+|---:|---:|---:|---:|
+|  1 |  2 |    |    |
+|  1 |  2 |    |    |
+|  2 |    |  3 |    |
+|  3 |    |    |  4 |
+|  5 |    |  6 |    |
+```"
+  ([options]
+  (tech.v3.dataset-api/mapseq-parser options))
+  ([]
+  (tech.v3.dataset-api/mapseq-parser )))
+
+
 (defn mapseq-reader
   "Return a reader that produces a map of column-name->column-value
   upon read."
