@@ -9,7 +9,7 @@
   (:import [java.util List HashMap Map ArrayList]
            [java.util.function Function]
            [tech.v3.datatype ObjectBuffer Buffer]
-           [ham_fisted IMutList ChunkedList]))
+           [ham_fisted IMutList ChunkedList Casts]))
 
 
 (set! *warn-on-reflection* true)

@@ -48,6 +48,7 @@
   LongBuffer
   (elemwiseDatatype [_this] :int32)
   (lsize [_this] (.size backing-store))
+  (size [_this] (.size backing-store))
   (subBuffer [this sidx eidx]
     (dtype/->buffer (.subList backing-store sidx eidx)))
   (addLong [_this value]
@@ -65,6 +66,8 @@
         (set! backing-store (dtype/make-list :int32 backing-store))
         (set! int-width 32)))
     (.addLong backing-store value))
+  (getLong [_this idx]
+    (.getLong backing-store idx))
   (readLong [_this idx]
     (.getLong backing-store idx))
   ;;Writing is serialized.
@@ -83,8 +86,8 @@
           (set! backing-store (dtype/make-list :int32 backing-store))
           (set! int-width 32)))
       (.setLong backing-store idx value)))
-  (longReduction [this rfn init]
-    (.longReduction backing-store rfn init)))
+  (reduce [this rfn init]
+    (.reduce backing-store rfn init)))
 
 
 (defn dynamic-int-list

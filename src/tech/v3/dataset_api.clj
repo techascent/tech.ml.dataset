@@ -123,7 +123,7 @@
   * copying? - When true the data is copied out of the dataset row by row upon read of that
   row.  When false the data is only referenced upon each read of a particular key.  Copying
   is appropriate if you want to use the row values as keys a map and it is inappropriate if
-  you are only going to read a given key for a given row once.
+  you are only going to read a very small portion of the row map.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
@@ -219,7 +219,7 @@ user> (ds/rowvec-at stocks -1)
 
 Options are the same for [[->dataset]].
 
-  ```clojure
+```clojure
 user> (require '[tech.v3.dataset :as ds])
 nil
 user> (def pfn (ds/mapseq-parser))
@@ -519,10 +519,10 @@ test/data/stocks.csv [10 3]:
     (let [col (Column. (bitmap/->bitmap)
                        (dtype/clone (ds-proto/column-buffer col))
                        (meta col) nil)]
-      (hamf/reduce (hamf/long-accumulator
-                    data idx (.writeObject ^Buffer data idx scalar-val) data)
-                   (dtype/->buffer col)
-                   missing)
+      (reduce (hamf/long-accumulator
+               data idx (.writeObject ^Buffer data idx scalar-val) data)
+              (dtype/->buffer col)
+              missing)
       col)))
 
 
@@ -797,6 +797,12 @@ _unnamed [3 3]:
   See options for [[pmap-ds]].  In particular, note that you can
   produce a sequence of datasets as opposed to a single large dataset.
 
+
+  Speed demons should attempt both `{:copying? false}` and `{:copying? true}` in the options
+  map as that changes rather drastically how data is read from the datasets.  If you are
+  going to read all the data in the dataset, `{:copying? true}` will most likely be
+  the faster of the two.
+
   Examples:
 
 ```clojure
@@ -826,7 +832,7 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
   ([ds map-fn options]
-   (pmap-ds ds #(merge % (->> (rows %)
+   (pmap-ds ds #(merge % (->> (rows % options)
                               (lznc/map map-fn)
                               (->>dataset options)))
             options))
@@ -973,25 +979,25 @@ user>
                       (str-table/make-string-table n-elems)
                       (dtype/make-list dst-dtype n-elems))
              missing-val (col-base/datatype->missing-value dst-dtype)]
-         (hamf/reduce (fn [^List res-writer ^long idx]
-                        (if (.contains missing idx)
-                          (.add res-writer missing-val)
-                          (let [existing-val (col-reader idx)
-                                new-val (cast-fn existing-val)]
-                            (cond
-                              (= new-val :tech.v3.dataset/missing)
-                              (locking new-missing
-                                (.add new-missing idx)
-                                (.add res-writer missing-val))
-                              (= new-val :tech.v3.dataset/parse-failure)
-                              (locking new-missing
-                                (.add res-writer missing-val)
-                                (.add new-missing idx)
-                                (.add unparsed-indexes idx)
-                                (.add unparsed-data existing-val))
-                              :else
-                              (.add res-writer new-val))))
-                        res-writer) result (hamf/range n-elems))
+         (reduce (fn [^List res-writer ^long idx]
+                   (if (.contains missing idx)
+                     (.add res-writer missing-val)
+                     (let [existing-val (col-reader idx)
+                           new-val (cast-fn existing-val)]
+                       (cond
+                         (= new-val :tech.v3.dataset/missing)
+                         (locking new-missing
+                           (.add new-missing idx)
+                           (.add res-writer missing-val))
+                         (= new-val :tech.v3.dataset/parse-failure)
+                         (locking new-missing
+                           (.add res-writer missing-val)
+                           (.add new-missing idx)
+                           (.add unparsed-indexes idx)
+                           (.add unparsed-data existing-val))
+                         :else
+                         (.add res-writer new-val))))
+                   res-writer) result (hamf/range n-elems))
          (ds-col/new-column #:tech.v3.dataset{:name dst-colname
                                               :data result
                                               :force-datatype? true

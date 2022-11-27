@@ -108,12 +108,6 @@
                  (readObject [rdr idx] (.readObject this (+ idx sidx)))
                  (reduce [this rfn acc]
                    (reduce-column-buffer rfn acc src missing
-                                         primitive-missing-value sidx eidx))
-                 (doubleReduction [this rfn acc]
-                   (reduce-column-buffer rfn acc src missing
-                                         primitive-missing-value sidx eidx))
-                 (longReduction [this rfn acc]
-                   (reduce-column-buffer rfn acc src missing
                                          primitive-missing-value sidx eidx))))))
          (readLong [this idx]
            (if (.contains missing idx)
@@ -140,13 +134,7 @@
              (.add missing (unchecked-int idx))))
          (reduce [this rfn acc]
            (reduce-column-buffer rfn acc src missing primitive-missing-value
-                                 0 (.lsize src)))
-         (doubleReduction [this rfn acc]
-           (reduce-column-buffer rfn acc src missing
-                                 primitive-missing-value 0 (.lsize src)))
-         (longReduction [this rfn acc]
-           (reduce-column-buffer rfn acc src missing
-                                 primitive-missing-value 0 (.lsize src)))))))
+                                 0 (.lsize src)))))))
   (^Buffer [missing data]
    (make-column-buffer missing data (dtype-proto/elemwise-datatype data))))
 
@@ -370,8 +358,6 @@
              {}
              nil))
   (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))
-  (longReduction [this rfn init] (.longReduction (cached-buffer!) rfn init))
-  (doubleReduction [this rfn init] (.doubleReduction (cached-buffer!) rfn init))
   (parallelReduction [this init-val-fn rfn merge-fn options]
     (.parallelReduction (cached-buffer!) init-val-fn rfn merge-fn options))
   Object

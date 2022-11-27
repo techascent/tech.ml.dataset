@@ -11,6 +11,7 @@
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native]
+            [com.github.ztellman.primitive-math :as pmath]
             [ham-fisted.api :as hamf]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.protocols :as hamf-proto]
@@ -18,6 +19,7 @@
   (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry]
            [java.util Map List LinkedHashSet LinkedHashMap]
            [tech.v3.datatype ObjectReader FastStruct Buffer]
+           [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
            [ham_fisted BitmapTrieCommon]
            [java.util.concurrent ConcurrentHashMap]
@@ -25,6 +27,7 @@
 
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* true)
 
 
 (declare new-dataset map-entries empty-dataset)
@@ -92,7 +95,6 @@
                 (column-data-process/prepare-column-data new-col-data)))
             new-c (col-impl/new-column (assoc map-data :tech.v3.dataset/name col-name))
             c-len (dtype/ecount new-c)]
-
         (cond
           (< c-len n-rows)
           (col-impl/extend-column-with-empty new-c (- n-rows c-len))
@@ -109,6 +111,30 @@
     (readObject [rdr idx]
       (let [col (.get columns idx)]
         (MapEntry. (:name (meta col)) col)))))
+
+
+(defmacro ^:private rvec-reader
+  [n-cols]
+  (let [vec-ctor `(hamf/vector ~@(->> (range n-cols)
+                                      (map (fn [cidx]
+                                             `(~(symbol (str "c" cidx)) ~'row-idx)))))]
+    `(let ~(->> (range n-cols)
+                (mapcat (fn [cidx]
+                          [(symbol (str "c" cidx)) `(~'readers ~cidx)]))
+                (vec))
+       (reify ObjectReader
+         (lsize [rdr#] ~'n-rows)
+         (readObject [rdr# ~'row-idx] ~vec-ctor)
+         (subBuffer [rdr# sidx# eidx#]
+           (-> (ds-proto/select-rows ~'ds (hamf/range sidx# eidx#))
+               (ds-proto/rowvecs ~'options)))
+         (reduce [rdr# rfn# init#]
+           (let [~'n-rows (long ~'n-rows)]
+             (loop [~'row-idx 0
+                    acc# init#]
+               (if (and (pmath/< ~'row-idx ~'n-rows) (not (reduced? acc#)))
+                 (recur (unchecked-inc ~'row-idx) (rfn# acc# ~vec-ctor))
+                 acc#))))))))
 
 
 
@@ -273,86 +299,95 @@
       (throw (RuntimeException. (str "Column not found: " cname)))))
 
   (rowvecs [ds options]
-    (let [readers (hamf/mapv dtype/->reader columns)
+    (let [readers (hamf/object-array-list
+                   (lznc/map dtype/->reader columns))
           n-cols (count readers)
-          n-rows (ds-proto/row-count ds)
+          n-rows (long (ds-proto/row-count ds))
           copying? (get options :copying?)]
-      (if (and copying? (< n-cols 7))
+      (if copying?
         (case n-cols
           0 (reify ObjectReader
               (lsize [rdr] n-rows)
-              (readObject [rdr row-idx] []))
-          1 (let [c0 (readers 0)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx)))))
-          2 (let [c0 (readers 0)
-                  c1 (readers 1)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)))))
-          3 (let [c0 (readers 0)
-                  c1 (readers 1)
-                  c2 (readers 2)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
-                                                       (c2 row-idx)))))
-          4 (let [c0 (readers 0)
-                  c1 (readers 1)
-                  c2 (readers 2)
-                  c3 (readers 3)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
-                                                       (c2 row-idx) (c3 row-idx)))))
-          5 (let [c0 (readers 0)
-                  c1 (readers 1)
-                  c2 (readers 2)
-                  c3 (readers 3)
-                  c4 (readers 4)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
-                                                       (c2 row-idx) (c3 row-idx)
-                                                       (c4 row-idx)))))
-          6 (let [c0 (readers 0)
-                  c1 (readers 1)
-                  c2 (readers 2)
-                  c3 (readers 3)
-                  c4 (readers 4)
-                  c5 (readers 5)]
-              (reify ObjectReader
-                (lsize [rdr] n-rows)
-                (readObject [rdr row-idx] (hamf/vector (c0 row-idx) (c1 row-idx)
-                                                       (c2 row-idx) (c3 row-idx)
-                                                       (c4 row-idx) (c5 row-idx))))))
-        (if copying?
+              (readObject [rdr row-idx] [])
+              (subBuffer [rdr sidx eidx]
+                (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
+                    (ds-proto/rowvecs options))))
+          1 (rvec-reader 1)
+          2 (rvec-reader 2)
+          3 (rvec-reader 3)
+          4 (rvec-reader 4)
+          5 (rvec-reader 5)
+          6 (rvec-reader 6)
+          7 (rvec-reader 7)
+          8 (rvec-reader 8)
+          (let [crange (hamf/range n-cols)
+                inner-reader
+                (hamf/long->obj
+                 row-idx
+                 (->> crange
+                      (lznc/map (hamf/long->obj
+                                 col-idx (.readObject ^Buffer (.get readers col-idx) row-idx)))
+                      (hamf/vec)))]
+            (reify ObjectReader
+              (lsize [rdr] n-rows)
+              (readObject [rdr row-idx]
+                (inner-reader row-idx))
+              (subBuffer [rdr sidx eidx]
+                (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
+                    (ds-proto/rowvecs options)))
+              (reduce [rdr rfn acc]
+                (let [n-rows (long n-rows)
+                      crange (hamf/range n-cols)]
+                  (reduce (hamf/long-accumulator
+                             acc row-idx
+                             (rfn acc (inner-reader row-idx)))
+                          acc (hamf/range n-rows)))))))
+        (let [crange (hamf/range n-cols)
+              inner-reader
+              (fn [^long row-idx]
+                (reify ObjectReader
+                  (lsize [this] n-cols)
+                  (readObject [this col-idx]
+                    ((readers col-idx) row-idx))
+                  (reduce [this rfn acc]
+                    (reduce (hamf/long-accumulator
+                             acc col-idx (rfn acc ((.get readers col-idx) row-idx)))
+                            acc
+                            crange))))]
           (reify ObjectReader
             (lsize [rdr] n-rows)
             (readObject [rdr row-idx]
-              (hamf/mapv #((readers %) row-idx) (range n-cols))))
-          (reify ObjectReader
-            (lsize [rdr] n-rows)
-            (readObject [rdr row-idx]
-              ;;in-place reads
-              (reify ObjectReader
-                (lsize [this] n-cols)
-                (readObject [this col-idx]
-                  (.get ^List (readers col-idx) row-idx)))))))))
+              (inner-reader row-idx))
+            (subBuffer [rdr sidx eidx]
+              (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
+                  (ds-proto/rowvecs options)))
+            (reduce [this rfn acc]
+              (reduce (hamf/long-accumulator
+                       acc row-idx (rfn acc (inner-reader row-idx)))
+                      acc (hamf/range n-rows))))))))
 
   (rows [ds options]
     (let [rvecs (.rowvecs ds options)
           colnamemap (LinkedHashMap.)
-         _ (doseq [[c-name c-idx] (->> columns
-                                       (lznc/map (comp :name meta))
-                                       (lznc/map-indexed #(vector %2 (int %1))))]
-             (.put colnamemap c-name c-idx))
+          _ (reduce (hamf/indexed-accum
+                     acc idx cname
+                     (.put colnamemap cname idx)
+                     colnamemap)
+                    colnamemap
+                    (lznc/map #(get (.-metadata ^Column %) :name) columns))
           n-rows (dtype/ecount rvecs)]
       (reify ObjectReader
         (lsize [rdr] n-rows)
         (readObject [rdr idx]
-          (FastStruct. colnamemap (rvecs idx))))))
+          (FastStruct. colnamemap (rvecs idx)))
+        (subBuffer [rdr sidx eidx]
+          (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
+              (ds-proto/rows options)))
+        (reduce [rdr rfn acc]
+          (reduce (fn [acc vv]
+                    (rfn acc (FastStruct. colnamemap vv)))
+                  acc
+                  rvecs)))))
 
 
   dtype-proto/PShape
