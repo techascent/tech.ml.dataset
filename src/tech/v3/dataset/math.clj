@@ -27,8 +27,9 @@
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
-            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
+            [ham-fisted.set :as set]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
@@ -194,7 +195,7 @@
          original-indexes (-> (doto  (bitmap/->bitmap
                                       (range (dtype/ecount result)))
                                 (.andNot ^RoaringBitmap missing))
-                              (bitmap/bitmap->efficient-random-access-reader))
+                              (bitmap/->random-access))
          result (if (dtype-dt/datetime-datatype? target-dtype)
                   (dtype-dt/milliseconds->datetime target-dtype result)
                   result)]
@@ -214,7 +215,7 @@
                      updated-missing (if any-missing?
                                        (scatter-missing original-indexes col-missing)
                                        (bitmap/->bitmap))
-                     total-missing (dtype-proto/set-or updated-missing missing)
+                     total-missing (set/union updated-missing missing)
                      ;;Scatter original data into new locations
                      _ (dtype/copy! col
                                     (dtype/indexed-buffer original-indexes new-data))
