@@ -65,11 +65,13 @@
   underlying data store."
   [col idx-seq]
 
-  (Column. (-> (case (argtypes/arg-type idx-seq)
-                 :scalar [idx-seq]
-                 :iterable (hamf/take (dtype/ecount col) idx-seq)
-                 idx-seq)
-               (bitmap/->bitmap))
+  (Column. (-> (when idx-seq
+                 (case (argtypes/arg-type idx-seq)
+                   :scalar [idx-seq]
+                   :iterable (hamf/take (dtype/ecount col) idx-seq)
+                   idx-seq))
+               (bitmap/->bitmap)
+               (set/intersection (bitmap/->bitmap 0 (dtype/ecount col))))
            (ds-proto/column-buffer col) (meta col) nil))
 
 
@@ -97,8 +99,8 @@ Implementations should check their metadata before doing calculations."
   Returns floating point number between [-1 1]"
   [lhs rhs correlation-type]
   (case correlation-type
-    :pearsons (stats/pearsons-correlation lhs rhs)
-    :spearmans (stats/spearmans-correlation lhs rhs)
+    :pearson (stats/pearsons-correlation lhs rhs)
+    :spearman (stats/spearmans-correlation lhs rhs)
     :kendall (stats/kendalls-correlation lhs rhs)))
 
 

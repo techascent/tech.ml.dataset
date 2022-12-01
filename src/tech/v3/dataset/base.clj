@@ -488,12 +488,10 @@
                            :else
                            #(= predicate %))))]
        (->> (column dataset colname)
-            (packing/unpack)
             (argops/argfilter predicate)
             (select dataset :all)))))
   ([dataset colname]
    (some->> (column dataset colname)
-            packing/unpack
             unary-pred/bool-reader->indexes
             (select-rows dataset))))
 

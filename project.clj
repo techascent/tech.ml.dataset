@@ -67,7 +67,8 @@
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
+                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
+                             [kixi/stats "0.5.5"]]
               :source-paths ["src"]
               :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}

@@ -59,7 +59,7 @@
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.ffi :as dt-ffi]
             [tech.v3.dataset.impl.column :as col-impl]
-            [tech.v3.protocols.column :as col-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [tech.v3.dataset.base :as ds-base]
@@ -73,7 +73,8 @@
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]]
-            [charred.api :as json])
+            [charred.api :as json]
+            [ham-fisted.set :as set])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -533,7 +534,7 @@ Dependent block frames are not supported!!")
         str-t (ds-base/ensure-column-string-table col)
         ^StringTable prev-str-t (::previous-string-table metadata)
         int->str (str-table/int->string str-t)
-        indices (dtype/as-concrete-buffer (str-table/indices str-t))
+        indices (dtype-proto/->array-buffer (str-table/indices str-t))
         n-elems (.size int->str)
         bit-width (casting/int-width (dtype/elemwise-datatype indices))
         arrow-indices-type (ArrowType$Int. bit-width true)
@@ -664,8 +665,7 @@ Dependent block frames are not supported!!")
   (let [colmeta (meta col)
         nullable? (boolean
                    (or (:nullable? colmeta)
-                       (not (.isEmpty
-                             (col-proto/missing col)))))
+                       (not (empty? (ds-proto/missing col)))))
         col-dtype (:datatype colmeta)
         colname (:name colmeta)
         extra-data (merge (select-keys (meta col) [:timezone])
@@ -1069,7 +1069,7 @@ Dependent block frames are not supported!!")
         len (.lsize rdr)
         retval (byte-array (len->bitwise-len len))]
     (dotimes [idx len]
-      (when (.readBoolean rdr idx)
+      (when (.readObject rdr idx)
         (toggle-bit retval idx)))
     retval))
 
@@ -1103,7 +1103,7 @@ Dependent block frames are not supported!!")
       (case col-dt
         :boolean [(boolean-bytes cbuf)]
         :string (let [str-t (ds-base/ensure-column-string-table col)
-                      indices (dtype/as-concrete-buffer (str-table/indices str-t))]
+                      indices (dtype-proto/->array-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
         :text
         (let [byte-data (dtype/make-list :int8)
@@ -1111,9 +1111,9 @@ Dependent block frames are not supported!!")
           (pfor/doiter
            strdata cbuf
            (let [strdata (str (or strdata ""))]
-             (.add offsets (.lsize byte-data))
+             (.add offsets (.size byte-data))
              (.addAll byte-data (dtype/->buffer (.getBytes strdata)))))
-          (.add offsets (.lsize byte-data))
+          (.add offsets (.size byte-data))
           [(nio-buffer/as-nio-buffer offsets)
            (nio-buffer/as-nio-buffer byte-data)])))))
 
@@ -1130,7 +1130,7 @@ Dependent block frames are not supported!!")
         nodes-buffs-lens
         (->> (ds-base/columns dataset)
              (map (fn [col]
-                    (let [col-missing (col-proto/missing col)
+                    (let [col-missing (ds-proto/missing col)
                           n-missing (dtype/ecount col-missing)
                           valid-buf (if (== 0 n-missing)
                                       all-valid-buf
@@ -1293,7 +1293,8 @@ Dependent block frames are not supported!!")
           index-data (-> (first buffers)
                          (native-buffer/set-native-datatype
                           (get-in encoding [:index-type :datatype]))
-                         (dtype/sub-buffer 0 n-elems))
+                         (dtype/sub-buffer 0 n-elems)
+                         (dtype/clone))
           retval (StringTable. str-list nil (dyn-int-list/make-from-container
                                              index-data))]
       retval)
@@ -1330,7 +1331,7 @@ Dependent block frames are not supported!!")
             (.add missing (pmath/+ offset 6)))
           (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
             (.add missing (pmath/+ offset 7))))))
-    (dtype-proto/set-and missing (range n-elems))))
+    (set/intersection missing (range n-elems))))
 
 
 (defn ^:no-doc byte-buffer->bitwise-boolean-buffer
@@ -1797,7 +1798,7 @@ Please use stream->dataset-seq.")))
      (fn [ds col]
        (cond
          (= :uuid (dtype/elemwise-datatype col))
-         (let [missing (col-proto/missing col)
+         (let [missing (ds-proto/missing col)
                metadata (meta col)]
            (assoc ds (metadata :name)
                   #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
@@ -1809,7 +1810,7 @@ Please use stream->dataset-seq.")))
          (if (and (nil? prev-ds)
                   (instance? StringTable (.data ^Column col)))
            ds
-           (let [missing (col-proto/missing col)
+           (let [missing (ds-proto/missing col)
                  metadata (meta col)]
              (if (nil? prev-ds)
                (assoc ds (metadata :name)

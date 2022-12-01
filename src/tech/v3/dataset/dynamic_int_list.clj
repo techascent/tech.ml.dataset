@@ -35,9 +35,7 @@
   (clone [_item] (dtype-proto/clone backing-store))
   dtype-proto/PToArrayBuffer
   (convertible-to-array-buffer? [_item]
-    (and (identical? (dtype-proto/elemwise-datatype _item)
-                     (dtype-proto/elemwise-datatype backing-store))
-         (dtype-proto/convertible-to-array-buffer? backing-store)))
+    (dtype-proto/convertible-to-array-buffer? backing-store))
   (->array-buffer [_item]
     (dtype-proto/->array-buffer backing-store))
   dtype-proto/PToNativeBuffer
@@ -46,11 +44,12 @@
   (->native-buffer [_item]
     (dtype-proto/->native-buffer backing-store))
   LongBuffer
-  (elemwiseDatatype [_this] :int32)
+  (elemwiseDatatype [_this] (dtype-proto/elemwise-datatype backing-store))
   (lsize [_this] (.size backing-store))
   (size [_this] (.size backing-store))
   (subBuffer [this sidx eidx]
     (dtype/->buffer (.subList backing-store sidx eidx)))
+  (cloneList [this] (DynamicIntList. (.cloneList backing-store) int-width))
   (addLong [_this value]
     ;;perform container conversion
     (cond

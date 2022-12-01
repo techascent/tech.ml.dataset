@@ -222,7 +222,7 @@ user> (ds-reduce/group-by-column-agg
            slower than the other two, especially during union operations.
   * [:theta](https://datasketches.apache.org/docs/Theta/ThetaSketchFramework.html)
   * [:cpc](https://datasketches.apache.org/docs/CPC/CPC.html)
-        * `:cpc-lgk` - Defaults to 10. "
+  * `:cpc-lgk` - Defaults to 10. "
   ([colname {:keys [algorithm datatype]
              :or {algorithm :hyper-log-log
                   datatype :float64} :as

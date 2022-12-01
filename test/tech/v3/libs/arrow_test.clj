@@ -80,6 +80,7 @@
                cp-col (copy-ds cname)]
            (is (= dt (dtype/elemwise-datatype inp-col)) (str "inplace failure " cname))
            (is (= dt (dtype/elemwise-datatype cp-col)) (str "copy failure " cname))
+
            (is (= (vec col) (vec inp-col)) (str "inplace failure " cname))
            (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
     (finally

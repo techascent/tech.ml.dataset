@@ -16,8 +16,7 @@
            [java.util Map$Entry ArrayList List]
            [java.util.function LongSupplier LongPredicate]
            [java.util.concurrent ConcurrentHashMap]
-           [tech.v3.datatype IndexReduction Buffer
-            ObjectReader ECount UnaryPredicate]
+           [tech.v3.datatype Buffer ObjectReader ECount UnaryPredicate]
            [ham_fisted IMutList Reducible]
            [clojure.lang IFn]))
 
@@ -26,7 +25,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 
-(defn ^:no-doc group-by-column-aggregate-impl
+#_(defn ^:no-doc group-by-column-aggregate-impl
   "Perform a group by over a sequence of datasets where the reducer is handed each index
   and the context is stored in a map.  The reduction in this case is unordered so your
   indexes will arrive out of order.  The index-reductions's prepare-batch method will be
@@ -55,7 +54,7 @@
     ^IndexReduction reducer
     {:keys [finalize-type
             map-initial-capacity]
-     :or {map-initial-capacity 100000
+     :or {map-initial-capacity 10000
           finalize-type :stream}}
     ds-seq]
    (let [reduction (ConcurrentHashMap. (int map-initial-capacity))]
@@ -91,6 +90,7 @@
 (defn as-long-consumer ^LongConsumer [item] item)
 (defn as-consumer ^Consumer [item] item)
 (defn as-buffer ^Buffer [item] item)
+(defn as-reducible ^Reducible [item] item)
 
 
 (defmacro typed-accept
@@ -119,13 +119,11 @@
      (reduceReductions [this# lhs# rhs#]
        (hamf/reducible-merge lhs# rhs#))
      (reduceReductionList [this# item-list#]
-       (if (== 1 (.size item-list#))
-         (.get item-list# 0)
-         (.combineList (as-staged-consumer (.get item-list# 0))
-                       (dtype/sub-buffer item-list# 1))))
+       (let [iter# (.iterator item-list#)
+             fitem# (.next iter#)]
+         (.reduceIter (as-reducible fitem#) iter#)))
      (finalize [this# lhs#]
-       (~finalize-fn
-        (.value (as-staged-consumer lhs#))))))
+       (~finalize-fn @lhs#))))
 
 
 (defprotocol PReducerCombiner
@@ -143,14 +141,14 @@
   Object
   (reducer-combiner-key [reducer] nil)
   (finalize-combined-reducer [this ctx]
-    (.finalize ^IndexReduction this ctx)))
+    #_(.finalize ^IndexReduction this ctx)))
 
 
 (defrecord AggReducerContext [^objects red-ctx
                               ^UnaryPredicate filter-ctx])
 
 
-(defn aggregate-reducer
+#_(defn aggregate-reducer
   "Create a reducer that aggregates to several other reducers.  Reducers are provided
   in a map of reducer-name->reducer and the result is a map of `reducer-name` ->
   `finalized` reducer value.
@@ -369,7 +367,7 @@ tech.v3.dataset.reductions> (group-by-column-agg
          _ (when (seq colnames)
              (.addAll colnames-list (vec (distinct colnames))))
          reservoir-size (long reservoir-size)]
-     (reify IndexReduction
+     #_(reify IndexReduction
        (prepareBatch [this ds]
          (when (.isEmpty colnames-list)
            (.addAll colnames-list (ds-base/column-names ds)))
