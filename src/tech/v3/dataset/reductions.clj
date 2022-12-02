@@ -48,6 +48,7 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.datatype.statistics :as dt-stats]
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.datatype.export-symbols :refer [export-symbols]]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.io :as ds-io]
@@ -121,6 +122,7 @@ user> (ds-reduce/group-by-column-agg
            hamf-proto/ParallelReducer
            (->merge-fn [r] merge-fn)))))))
 
+
 (defn first-value
   [colname]
   (fn [ds]
@@ -138,7 +140,9 @@ user> (ds-reduce/group-by-column-agg
 (defn sum
   "Create a double consumer which will sum the values."
   [colname]
-  (reducer->column-reducer (Sum.) colname))
+  (reducer->column-reducer (hamf/reducer-with-finalize
+                            (Sum.)
+                            #((deref %) :sum)) colname))
 
 
 (defn mean
@@ -221,73 +225,25 @@ user> (ds-reduce/group-by-column-agg
   ([colname]
    (count-distinct colname :object)))
 
-
-#_(defn prob-cdf
-  "Probabilistic CDF using using tdunning/TDigest. Returns the fraction of all
-  points added which are `<= cdf`.
-
-  * `colname` - Column to run algorithm
-  * `cdf` - cdf
-  * `compression` - The compression parameter.  100 is a common value for normal uses.
-  1000 is extremely large. The number of centroids retained will be a smallish (usually
-  less than 10) multiple of this number."
-
-  ([colname cdf compression]
-   (TDigestReducer. colname [[:cdf (double cdf)]] compression first))
-  ([colname cdf]
-   (prob-cdf colname cdf 100)))
+;;prob-cdf
+;;prob-quantile
+;;prob-median
+;;prob-interquartile-range
+;;
 
 
-#_(defn prob-quantile
-  "Probabilistic quantile using tdunning/TDigest. Returns an estimate of the cutoff
-   such that a specified fraction of the data added to this TDigest would be less
-   than or equal to the cutoff.
 
-  * `colname` - Column to run algorithm
-  * `quantile` - Specified fraction from 0.0-1.0.  0.5 returns the median.
-  * `compression` - The compression parameter.  100 is a common value for normal uses.
-  1000 is extremely large. The number of centroids retained will be a smallish (usually
-  less than 10) multiple of this number."
-  ([colname quantile compression]
-   (TDigestReducer. colname [[:quantile (double quantile)]] compression first))
-  ([colname quantile]
-   (prob-quantile colname quantile 100)))
-
-
-#_(defn prob-median
-  "Probabilistic median using Use tdunning/TDigest.  See `prob-quartile`."
-  ([colname compression]
-   (prob-quantile colname 0.5 compression))
-  ([colname] (prob-median colname 100)))
-
-
-#_(defn prob-interquartile-range
-    "Probabilistic interquartile range using tdunning/TDigest.  The interquartile
-  range is defined as `(- (quartile 0.75) (quartile 0.25)).`
-
-  See `prob-quartile`.
-  "
-  ([colname compression]
-   (TDigestReducer. colname [[:quantile 0.75]
-                             [:quantile 0.25]]
-                    compression (fn [[third-q first-q]]
-                                  (- (double third-q)
-                                     (double first-q)))))
-  ([colname]
-   (prob-interquartile-range colname 100)))
-
-
-#_(defn reservoir-desc-stat
+(defn reservoir-desc-stat
   "Calculate a descriptive statistic using reservoir sampling.  A list of statistic
   names are found in `tech.v3.datatype.statistics/all-descriptive-stats-names`.
   Options are options used in
-  [double-reservoir](https://cnuernber.github.io/dtype-next/tech.v3.datatype.sampling.html#var-double-reservoir).
+  [reservoir-sampler](https://cnuernber.github.io/dtype-next/tech.v3.datatype.sampling.html#var-double-reservoir).
 
   Note that this method will *not* convert datetime objects to milliseconds for you as
   in descriptive-stats."
   ([colname reservoir-size stat-name options]
    (reify
-    ds-reduce-impl/PReducerCombiner
+    PReducerCombiner
     (reducer-combiner-key [reducer] [colname :reservoir-stats reservoir-size options])
      (combine-reducers [reducer combiner-key]
        (let [reducer (dt-sample/reservoir-sampler reservoir-size

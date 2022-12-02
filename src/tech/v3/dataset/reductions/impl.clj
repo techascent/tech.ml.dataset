@@ -86,46 +86,6 @@
    (group-by-column-aggregate-impl column-name reducer nil ds-seq)))
 
 
-(defn as-double-consumer ^DoubleConsumer [item] item)
-(defn as-long-consumer ^LongConsumer [item] item)
-(defn as-consumer ^Consumer [item] item)
-(defn as-buffer ^Buffer [item] item)
-(defn as-reducible ^Reducible [item] item)
-
-
-(defmacro typed-accept
-  [datatype consumer buffer idx]
-  (case datatype
-    :float64 `(.accept (as-double-consumer ~consumer)
-                       (.readDouble (as-buffer ~buffer) ~idx))
-    :int64 `(.accept (as-long-consumer ~consumer)
-                     (.readLong (as-buffer ~buffer) ~idx))
-    `(.accept (as-consumer ~consumer)
-              (.readObject (as-buffer ~buffer) ~idx))))
-
-
-(defmacro staged-consumer-reducer
-  "Make an indexed reducer based on a staged-consumer."
-  [datatype colname staged-consumer-constructor-fn finalize-fn]
-  `(reify IndexReduction
-     (prepareBatch [this# ds#]
-       (dtype/->reader (ds-base/column ds# ~colname) ~datatype))
-     (reduceIndex [this# reader# ctx# idx#]
-       (let [ctx# (if ctx#
-                    ctx#
-                    (~staged-consumer-constructor-fn))]
-         (typed-accept ~datatype ctx# reader# idx#)
-         ctx#))
-     (reduceReductions [this# lhs# rhs#]
-       (hamf/reducible-merge lhs# rhs#))
-     (reduceReductionList [this# item-list#]
-       (let [iter# (.iterator item-list#)
-             fitem# (.next iter#)]
-         (.reduceIter (as-reducible fitem#) iter#)))
-     (finalize [this# lhs#]
-       (~finalize-fn @lhs#))))
-
-
 (defprotocol PReducerCombiner
   "Some reduces such as ones based on tdigest can be specified separately
   in the output map but actually for efficiency need be represented by 1
@@ -141,7 +101,7 @@
   Object
   (reducer-combiner-key [reducer] nil)
   (finalize-combined-reducer [this ctx]
-    #_(.finalize ^IndexReduction this ctx)))
+    (hamf-proto/finalize this ctx)))
 
 
 (defrecord AggReducerContext [^objects red-ctx

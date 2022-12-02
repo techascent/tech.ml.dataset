@@ -1,5 +1,6 @@
 (ns tech.v3.dataset.protocols
-  (:require [tech.v3.datatype.protocols :as dtype-proto])
+  (:require [tech.v3.datatype.protocols :as dtype-proto]
+            [ham-fisted.protocols :as hamf-proto])
   (:import [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer]))
 
@@ -66,3 +67,23 @@
 (defn set-name
   [item nm]
   (vary-meta item assoc :name nm))
+
+
+;;For large reductions we may want to combine reducers on a single column when
+;;possible.
+(defprotocol PReducerCombiner
+  "Some reduces such as ones based on apache can be specified separately
+  in the output map but actually for efficiency need be represented by 1
+  concrete reducer."
+  (reducer-combiner-key [reducer])
+  (combine-reducers [reducer combiner-key]
+    "Return a new reducer that has configuration indicated by the above
+     combiner-key.")
+  (finalize-combined-reducer [this ctx]))
+
+
+(extend-protocol PReducerCombiner
+  Object
+  (reducer-combiner-key [reducer] nil)
+  (finalize-combined-reducer [this ctx]
+    (hamf-proto/finalize this ctx)))

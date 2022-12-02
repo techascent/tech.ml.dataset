@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.11.1" :scope "provided"]
                  [cnuernber/dtype-next             "10.000-SNAPSHOT"]
-                 [techascent/tech.io               "4.21"
+                 [techascent/tech.io               "4.22"
                   :exclusions [org.apache.commons/commons-compress]]
                  ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -29,8 +29,6 @@
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
 
-                 ;;High performance probabilistic stats
-                 [com.techascent/t-digest "4.0-pre-release-1"]
                  [org.apache.datasketches/datasketches-java "2.0.0"]
 
                  ;;provided scope

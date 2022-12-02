@@ -9,14 +9,33 @@
             [tech.v3.io :as io]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.io.context :as parse-context]
-            [tech.v3.dataset.impl.dataset :as ds-impl])
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [ham-fisted.api :as hamf])
   (:import [tech.v3.datatype ArrayHelpers]
+           [clojure.lang IReduceInit]
            [java.lang AutoCloseable]
            [java.util Iterator]))
 
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
+
+(deftype ^:private TakeReducer [^Iterator src
+                                ^{:unsynchronized-mutable true
+                                  :tag long} count]
+  IReduceInit
+  (reduce [this rfn acc]
+    (let [cnt count]
+      (loop [idx 0
+             continue? (.hasNext src)
+             acc acc]
+        ;;Note no reduced? check.
+        (if (and continue? (< idx cnt))
+          (let [acc (rfn acc (.next src))]
+            (recur (unchecked-inc idx) (.hasNext src) acc))
+          (do
+            (set! count (- cnt idx))
+            acc))))))
 
 
 (defn- parse-next-batch
@@ -31,20 +50,21 @@
            options :string (fn [^long col-idx]
                              (when (< col-idx n-header-cols)
                                (header-row col-idx))))]
-      (loop [row-idx 0
-             continue? (.hasNext row-iter)]
-        (when (and continue? (< row-idx num-rows))
-          (let [row (.next row-iter)]
-            (pfor/indexed-doiter
-             col-idx data row
-             (let [parser (col-idx->parser col-idx)]
-               (column-parsers/add-value! parser row-idx data))))
-          (recur (unchecked-inc row-idx) (.hasNext row-iter))))
+      (reduce (hamf/indexed-accum
+               acc row-idx row
+               (reduce (hamf/indexed-accum
+                        acc col-idx field
+                        (-> (col-idx->parser col-idx)
+                            (column-parsers/add-value! row-idx field)))
+                       nil
+                       row))
+              nil
+              (TakeReducer. row-iter num-rows))
       (cons (parse-context/parsers->dataset options parsers)
             (lazy-seq (parse-next-batch row-iter header-row options))))))
 
 
-(defn- rows->dataset-seq
+(defn rows->dataset-seq
   "Given a sequence of rows each row container a sequence of strings, parse into columnar data.
   See csv->columns."
   [{:keys [header-row?]
@@ -59,17 +79,15 @@
                      (vec (.next row-iter))
                      [])]
     (if (not (.hasNext row-iter))
-      [(if header-row
-         (let [n-header-cols (count header-row)
-               {:keys [parsers col-idx->parser]}
-               (parse-context/options->col-idx-parse-context
-                options :string (fn [^long col-idx]
-                                  (when (< col-idx n-header-cols)
-                                    (header-row col-idx))))]
-           (dotimes [idx n-header-cols]
-             (col-idx->parser idx))
-           (parse-context/parsers->dataset options parsers))
-         (ds-impl/empty-dataset))]
+      [(let [n-header-cols (count header-row)
+             {:keys [parsers col-idx->parser]}
+             (parse-context/options->col-idx-parse-context
+              options :string (fn [^long col-idx]
+                                (when (< col-idx n-header-cols)
+                                  (header-row col-idx))))]
+         (dotimes [idx n-header-cols]
+           (col-idx->parser idx))
+         (parse-context/parsers->dataset options parsers))]
       (parse-next-batch row-iter header-row options))))
 
 
