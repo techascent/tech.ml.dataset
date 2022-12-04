@@ -2,7 +2,9 @@
   (:require [tech.v3.datatype.protocols :as dtype-proto]
             [ham-fisted.protocols :as hamf-proto])
   (:import [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype Buffer]))
+           [tech.v3.datatype Buffer]
+           [clojure.lang IDeref])
+  (:refer-clojure :exclude [merge]))
 
 
 (defprotocol PRowCount
@@ -69,21 +71,31 @@
   (vary-meta item assoc :name nm))
 
 
+(defprotocol PDatasetReducer
+  "An object that produces a per-dataset reducer and can merge contexts.
+  It is also expected that this implements hamf-proto/Finalize"
+  (ds->reducer [this ds])
+  (merge [this lctx rctx])
+  )
+
+
+(extend-type Object
+  PDatasetReducer
+  (ds->reducer [this ds] this)
+  (finalize-ds-reduced [this ctx]
+    (if (instance? IDeref ctx)
+      (.deref ^IDeref ctx)
+      ctx)))
+
 ;;For large reductions we may want to combine reducers on a single column when
 ;;possible.
 (defprotocol PReducerCombiner
   "Some reduces such as ones based on apache can be specified separately
   in the output map but actually for efficiency need be represented by 1
   concrete reducer."
-  (reducer-combiner-key [reducer])
-  (combine-reducers [reducer combiner-key]
-    "Return a new reducer that has configuration indicated by the above
-     combiner-key.")
-  (finalize-combined-reducer [this ctx]))
+  (reducer-combiner-key [reducer]))
 
 
 (extend-protocol PReducerCombiner
   Object
-  (reducer-combiner-key [reducer] nil)
-  (finalize-combined-reducer [this ctx]
-    (hamf-proto/finalize this ctx)))
+  (reducer-combiner-key [reducer] nil))

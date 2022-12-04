@@ -60,6 +60,7 @@
              row-idx* (volatile! 0)]
          (MapseqReducer. options parse-context parsers key-fn colname->parser row-idx*)))
     (->rfn [r] hamf/consumer-accumulator)
+    hamf-proto/Finalize
     (finalize [r v] @v)))
 
 

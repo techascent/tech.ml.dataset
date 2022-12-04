@@ -55,8 +55,9 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.column :as ds-col]
-            [tech.v3.dataset.reductions.impl :as ds-reduce-impl]
             [tech.v3.dataset.io.mapseq-colmap :as io-mapseq]
+            [tech.v3.dataset.reductions.impl :as impl]
+            [tech.v3.dataset.reductions.apache-data-sketch :as sketch]
             [tech.v3.parallel.for :as parallel-for]
             [com.github.ztellman.primitive-math :as pmath]
             [ham-fisted.api :as hamf]
@@ -78,63 +79,28 @@ user> (ds-reduce/group-by-column-agg
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn reducer->column-reducer
+  "Given a hamf parallel reducer and a column name, return a dataset reducer of one column."
   ([reducer cname]
    (reducer->column-reducer reducer nil cname))
   ([reducer op-space cname]
-   (fn [ds]
-     (let [rfn (hamf-proto/->rfn reducer)
-           op-space (or op-space
-                        (cond
-                          (instance? IFn$OLO rfn) :int64
-                          (instance? IFn$ODO rfn) :float64
-                          :else
-                          :object))
-           col (dtype/->reader (ds-base/column ds cname) op-space)
-           merge-fn (hamf-proto/->merge-fn reducer)
-           init-fn (hamf-proto/->init-val-fn reducer)]
-       (case (casting/simple-operation-space op-space)
-         :int64
-         (let [rfn (Transformables/toLongReductionFn rfn)]
-           (reify
-             hamf-proto/Reducer
-             (->init-val-fn [r] init-fn)
-             (->rfn [r] (hamf/long-accumulator
-                         acc v (.invokePrim rfn acc (.readLong col v))))
-             (finalize [r v] (hamf-proto/finalize reducer v))
-             hamf-proto/ParallelReducer
-             (->merge-fn [r] merge-fn)))
-         :float32
-         (let [rfn (Transformables/toDoubleReductionFn rfn)]
-           (reify
-             hamf-proto/Reducer
-             (->init-val-fn [r] init-fn)
-             (->rfn [r] (hamf/long-accumulator
-                         acc v (.invokePrim rfn acc (.readDouble col v))))
-             (finalize [r v] (hamf-proto/finalize reducer v))
-             hamf-proto/ParallelReducer
-             (->merge-fn [r] merge-fn)))
-         (reify
-           hamf-proto/Reducer
-           (->init-val-fn [r] init-fn)
-           (->rfn [r] (hamf/long-accumulator
-                       acc v (rfn acc (.readObject col v))))
-           (finalize [r v] (hamf-proto/finalize reducer v))
-           hamf-proto/ParallelReducer
-           (->merge-fn [r] merge-fn)))))))
+   (impl/reducer->column-reducer reducer op-space cname)))
 
 
 (defn first-value
   [colname]
-  (fn [ds]
-    (let [col (ds-base/column ds colname)]
-      (reify
-        hamf-proto/Reducer
-        (->init-val-fn [r] (constantly nil))
-        (->rfn [r] (hamf/long-accumulator
-                    acc v (if (not acc) [(col v)] acc)))
-        (finalize [r v] (first v) )
-        hamf-proto/ParallelReducer
-        (->merge-fn [r] (fn [l r] l))))))
+  (reify ds-proto/PDatasetReducer
+    (ds->reducer [this ds]
+      (let [col (ds-base/column ds colname)]
+        (reify
+          hamf-proto/Reducer
+          (->init-val-fn [r] (constantly nil))
+          (->rfn [r] (hamf/long-accumulator
+                      acc v (if (not acc) [(col v)] acc)))
+          hamf-proto/ParallelReducer
+          (->merge-fn [r] (fn [l r] l)))))
+    (merge [this l r] l)
+    hamf-proto/Finalize
+    (finalize [this v] (first v))))
 
 
 (defn sum
@@ -149,21 +115,25 @@ user> (ds-reduce/group-by-column-agg
   "Create a double consumer which will produce a mean of the column."
   [colname]
   (let [ds-fn (sum colname)]
-    (fn [ds]
-      (let [r (ds-fn ds)]
-        (hamf/reducer-with-finalize
-         r #(let [vv (deref %)] (/ (double (vv :sum)) (double (vv :n-elems)))))))))
+    (reducer->column-reducer (hamf/reducer-with-finalize
+                              (Sum.)
+                              #(let [m (deref %)]
+                                 (/ (double (m :sum))
+                                    (double (m :n-elems)))))
+                             colname)))
 
 (defn row-count
   "Create a simple reducer that returns the number of times reduceIndex was called."
   []
-  (constantly (reify
-                hamf-proto/Reducer
-                (->init-val-fn [r] #(Consumers$IncConsumer.))
-                (->rfn [r] hamf/consumer-accumulator)
-                (finalize [r v] (deref v))
-                hamf-proto/ParallelReducer
-                (->merge-fn [r] hamf/reducible-merge))))
+  (reify ds-proto/PDatasetReducer
+    (ds->reducer [this ds]
+      (reify
+        hamf-proto/Reducer
+        (->init-val-fn [r] #(Consumers$IncConsumer.))
+        (->rfn [r] hamf/consumer-accumulator)))
+    (merge [this l r] (hamf/reducible-merge l r))
+    hamf-proto/Finalize
+    (finalize [this v] (deref v))))
 
 
 (deftype BitmapConsumer [^RoaringBitmap bitmap]
@@ -225,13 +195,49 @@ user> (ds-reduce/group-by-column-agg
   ([colname]
    (count-distinct colname :object)))
 
-;;prob-cdf
-;;prob-quantile
-;;prob-median
-;;prob-interquartile-range
-;;
+(defn prob-set-cardinality
+  "See docs for [[tech.v3.dataset.reductions.apache-data-sketch/prob-set-cardinality]].
 
+  Options:
 
+  * `:hll-lgk` - defaults to 12, this is log-base2 of k, so k = 4096. lgK can be
+           from 4 to 21.
+  * `:hll-type` - One of #{4,6,8}, defaults to 8.  The HLL_4, HLL_6 and HLL_8
+           represent different levels of compression of the final HLL array where the
+           4, 6 and 8 refer to the number of bits each bucket of the HLL array is
+           compressed down to. The HLL_4 is the most compressed but generally slightly
+           slower than the other two, especially during union operations.
+  * `:datatype` - One of :float64, :int64, :string"
+  ([colname options] (sketch/prob-set-cardinality colname options))
+  ([colname] (sketch/prob-set-cardinality colname)))
+
+(defn prob-cdf
+  "See docs for [[tech.v3.dataset.reductions.apache-data-sketch/prob-cdf]]
+
+  * k - defaults to 128. This produces a normalized rank error of about 1.7%"
+  ([colname cdf] (sketch/prob-cdf colname cdf))
+  ([colname cdf k] (sketch/prob-cdf colname cdf k)))
+
+(defn prob-quantile
+  "See docs for [[tech.v3.dataset.reductions.apache-data-sketch/prob-quantile]]
+
+  * k - defaults to 128. This produces a normalized rank error of about 1.7%"
+  ([colname quantile] (sketch/prob-quantile colname quantile))
+  ([colname quantile k] (sketch/prob-quantile colname quantile k)))
+
+(defn prob-median
+  "See docs for [[tech.v3.dataset.reductions.apache-data-sketch/prob-median]]
+
+  * k - defaults to 128. This produces a normalized rank error of about 1.7%"
+  ([colname] (sketch/prob-median colname))
+  ([colname k] (sketch/prob-median colname k)))
+
+(defn prob-interquartile-range
+  "See docs for [[tech.v3.dataset.reductions.apache-data-sketch/prob-interquartile-range
+
+  * k - defaults to 128. This produces a normalized rank error of about 1.7%"
+  ([colname k] (sketch/prob-interquartile-range colname k))
+  ([colname] (sketch/prob-interquartile-range colname)))
 
 (defn reservoir-desc-stat
   "Calculate a descriptive statistic using reservoir sampling.  A list of statistic
@@ -242,99 +248,118 @@ user> (ds-reduce/group-by-column-agg
   Note that this method will *not* convert datetime objects to milliseconds for you as
   in descriptive-stats."
   ([colname reservoir-size stat-name options]
-   (reify
-    PReducerCombiner
-    (reducer-combiner-key [reducer] [colname :reservoir-stats reservoir-size options])
-     (combine-reducers [reducer combiner-key]
-       (let [reducer (dt-sample/reservoir-sampler reservoir-size
-                                                  (assoc options :datatype :float64))]
-         ;;reservoir sampling can sample any object type, so it produces a generic
-         ;;consumer, not a double consumer
-         (ds-reduce-impl/staged-consumer-reducer
-          :object colname (hamf-proto/->init-val-fn reducer)
-          identity)))
-    (finalize-combined-reducer [this ctx]
-      ((dt-stats/descriptive-statistics [stat-name] options @ctx) stat-name))))
+   (let [col-reducer (reducer->column-reducer
+                      (dt-sample/reservoir-sampler reservoir-size
+                                     (assoc options :datatype :float64))
+                      colname)]
+     (reify
+       ds-proto/PDatasetReducer
+       (ds->reducer [this ds] (ds-proto/ds->reducer col-reducer ds))
+       (merge [this lhs rhs]
+         (reduce hamf/double-consumer-accumulator
+                 lhs
+                 @rhs))
+       hamf-proto/Finalize
+       (finalize [this ctx]
+         ((dt-stats/descriptive-statistics [stat-name] options @ctx) stat-name))
+       ds-proto/PReducerCombiner
+       (reducer-combiner-key [reducer] [colname :reservoir-stats reservoir-size options]))))
   ([colname reservoir-size stat-name]
    (reservoir-desc-stat colname reservoir-size stat-name nil)))
 
 
-#_(export-symbols tech.v3.dataset.reductions.impl
-                reservoir-dataset)
+(defn reservoir-dataset
+  ([reservoir-size] (reservoir-dataset reservoir-size nil))
+  ([reservoir-size options]
+   (let [sampler-reducer (dt-sample/reservoir-sampler reservoir-size
+                                                      (assoc options :datatype :object))
+         sampler-rfn (hamf-proto/->rfn sampler-reducer)
+         merge-fn (hamf-proto/->merge-fn sampler-reducer)]
+     (reify
+       ds-proto/PDatasetReducer
+       (ds->reducer [this ds]
+         (let [^Buffer rows (ds-proto/rows ds {:copying? true})]
+           (reify
+             hamf-proto/Reducer
+             (->init-val-fn [r] (hamf-proto/->init-val-fn sampler-reducer))
+             (->rfn [r] (hamf/long-accumulator
+                         acc idx (sampler-rfn acc (.readObject rows idx))))
+             hamf-proto/ParallelReducer
+             (->merge-fn [r] merge-fn))))
+       (merge [this lhs rhs] (merge-fn lhs rhs))
+       hamf-proto/Finalize
+       (finalize [this ctx] (ds-io/->dataset @ctx options))))))
 
-#_(defn reducer
+
+(defn reducer
   "Make a group-by-agg reducer.
 
   * `column-name` - Single column name or multiple columns.
-  * `per-elem-fn` - Called with the context as the first arg and each column's data
-     as further arguments.
+  * `init-val-fn` - Function to produce initial accumulators
+  * `rfn` - Function that takes the accumulator and each column's data as
+     as further arguments.  For a single-column pathway this looks like a normal clojure
+     reduction function but for two columns it gets extra arguments.
+  * `merge-fn` - Function that takes two accumulators and merges them.  Merge is not required
+    for [[group-by-column-agg]] but it *is* required for [[aggregate]].
   * `finalize-fn` - finalize the result after aggregation.  Optional, will be replaced
      with identity of not provided."
-  ([column-name per-elem-fn finalize-fn]
-   (let [finalize-fn (or finalize-fn identity)
+  ([column-name init-val-fn rfn merge-fn finalize-fn]
+   (let [finalize-fn (or finalize-fn #(rfn %))
+         init-val-fn (or init-val-fn #(rfn))
          column-names (if (= :scalar (argtypes/arg-type column-name))
                         [column-name]
-                        (vec column-name))]
-     (case (count column-names)
-       1
-       (reify IndexReduction
-         (prepareBatch [this dataset]
-           (dtype/->buffer (ds-base/column dataset (column-names 0))))
-         (reduceIndex [this col obj-ctx idx]
-           (per-elem-fn obj-ctx (.readObject ^Buffer col idx)))
-         (reduceReductions [this lhs rhs]
-           (throw (Exception. "Merge pathway not provided")))
-         (finalize [this ctx]
-           (finalize-fn ctx)))
-       2
-       (reify IndexReduction
-         (prepareBatch [this dataset]
-           (->> (map #(-> (ds-base/column dataset %)
-                          (dtype/->buffer))
-                     column-names)
-                (object-array)))
-         (reduceIndex [this columns obj-ctx idx]
-           (let [^objects columns columns]
-             (per-elem-fn obj-ctx
-                          (.readObject ^Buffer (aget columns 0) idx)
-                          (.readObject ^Buffer (aget columns 1) idx))))
-         (reduceReductions [this lhs rhs]
-           (throw (Exception. "Merge pathway not provided")))
-         (finalize [this ctx]
-           (finalize-fn ctx)))
-       3
-       (reify IndexReduction
-         (prepareBatch [this dataset]
-           (->> (map #(-> (ds-base/column dataset %)
-                          (dtype/->buffer))
-                     column-names)
-                (object-array)))
-         (reduceIndex [this columns obj-ctx idx]
-           (let [^objects columns columns]
-             (per-elem-fn obj-ctx
-                          (.readObject ^Buffer (aget columns 0) idx)
-                          (.readObject ^Buffer (aget columns 1) idx)
-                          (.readObject ^Buffer (aget columns 2) idx))))
-         (reduceReductions [this lhs rhs]
-           (throw (Exception. "Merge pathway not provided")))
-         (finalize [this ctx]
-           (finalize-fn ctx)))
-       (reify IndexReduction
-         (prepareBatch [this dataset]
-           (mapv #(-> (ds-base/column dataset %)
-                      (dtype/->buffer))
-                 column-names))
-         (reduceIndex [this columns obj-ctx idx]
-           (apply per-elem-fn obj-ctx
-                  (sequence
-                   (map #(.readObject ^Buffer % idx))
-                   columns)))
-         (reduceReductions [this lhs rhs]
-           (throw (Exception. "Merge pathway not provided")))
-         (finalize [this ctx]
-           (finalize-fn ctx))))))
-  ([column-name per-elem-fn]
-   (reducer column-name per-elem-fn nil)))
+                        (vec column-name))
+         merge-fn (or merge-fn #(rfn %1 %2))]
+     (reify ds-proto/PDatasetReducer
+       (ds->reducer [this ds]
+         (let [rvecs (-> (ds-proto/select-columns ds column-names)
+                         (ds-proto/rowvecs {:copying? true}))]
+           (reify
+             hamf-proto/Reducer
+             (->init-val-fn [r] init-val-fn)
+             (->rfn [r] (hamf/long-accumulator
+                         acc row-idx
+                         (apply rfn acc (.readObject rvecs row-idx))))
+             hamf-proto/ParallelReducer
+             (->merge-fn [r] merge-fn))))
+       (merge [this lhs rhs] (merge-fn lhs rhs))
+       hamf-proto/Finalize
+       (finalize [this ctx] (finalize-fn ctx)))))
+  ([column-name rfn]
+   (reducer column-name rfn rfn
+            rfn rfn)))
+
+
+(defn- combine-reducers
+  [reducers]
+  (let [reducer->indexes (->> reducers
+                              (map-indexed vector)
+                              (hamf/group-by (comp ds-proto/reducer-combiner-key second))
+                              (mapcat (fn [[ckey reducer-seq]]
+                                        (if (nil? ckey)
+                                          (lznc/map (fn [[ridx reducer]]
+                                                      [reducer [ridx]])
+                                                    reducer-seq)
+                                          (let [reducer (second (first reducer-seq))]
+                                            [[reducer (hamf/mapv first reducer-seq)]])))))]
+    [(mapv first reducer->indexes)
+     (->> (lznc/map second reducer->indexes)
+          (lznc/map-indexed (fn [dst-idx src-indexes]
+                              (map #(vector % dst-idx) src-indexes)))
+          (apply lznc/concat)
+          (hamf/sort-by first)
+          (hamf/mapv second))]))
+
+(defn- finalize-combined-reducers
+  [reducers rev-indexes cnames ^objects reduced-values]
+  (->> reducers
+       (lznc/map-indexed
+        (fn [src-idx reducer]
+          (hamf-proto/finalize
+           reducer (aget reduced-values (long (rev-indexes src-idx))))))
+       (hamf/vec)
+       (FastStruct. cnames)))
+
 
 (defn group-by-column-agg
   "Group a sequence of datasets by a column and aggregate down into a new dataset.
@@ -420,6 +445,8 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                               acc idx v (.put ^Map acc v idx) acc)
                              (LinkedHashMap.)))
          reducers (hamf/vals agg-map)
+         [combined-reducers rev-indexes] (combine-reducers reducers)
+
          ;;allow a single dataset to be passed in without wrapping in seq notation
          ds-seq (if (ds-impl/dataset? ds-seq)
                   [ds-seq]
@@ -441,18 +468,16 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                                           :force-datatype? true}))
                    ds-seq)])
            [colname ds-seq])
-         last-agg-reducer* (volatile! nil)
          result-map
          (reduce (fn [agg-map next-ds]
                    (let [group-col (dtype/->buffer (ds-base/column next-ds colname))
                          n-rows (ds-base/row-count next-ds)
                          idx-filter (when-let [filter-fn (get options :index-filter)]
                                       (filter-fn next-ds))
-                         agg-reducer (vswap! last-agg-reducer*
-                                             (constantly
-                                              (->> (hamf/mapv #(% next-ds) reducers)
-                                                   (hamf/compose-reducers
-                                                    {:rfn-datatype :int64}))))
+                         agg-reducer (->> combined-reducers
+                                          (hamf/mapv #(ds-proto/ds->reducer % next-ds))
+                                          (hamf/compose-reducers
+                                           {:rfn-datatype :int64}))
                          group-col (-> (ds-base/column next-ds colname)
                                        (dtype/->reader))]
                      (->> (if idx-filter
@@ -467,13 +492,9 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                             :min-n 1000}))))
                  (ConcurrentHashMap. (int (get options :map-initial-capacity 10000)))
                  ds-seq)
-         finalize-fn (if-let [r @last-agg-reducer*]
-                       (fn [map-val]
-                         (FastStruct. cnames (hamf-proto/finalize r map-val)))
-                       identity)
+         finalize-fn #(finalize-combined-reducers reducers rev-indexes cnames %)
          ;;Create a parsing reducer
-         ds-reducer (io-mapseq/mapseq-reducer nil)
-         c ((hamf-proto/->init-val-fn ds-reducer))]
+         c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer nil)))]
      ;;Also possible to parse N datasets in parallel and do a concat-copying
      ;;operation but in my experience this steps takes up nearly no time.
      (.forEach ^ConcurrentHashMap result-map 1000
@@ -481,13 +502,13 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                 k v
                 (do
                   (let [vv (finalize-fn v)]
-                      (locking c (.accept ^Consumer c vv))))))
-     (hamf-proto/finalize ds-reducer c)))
+                    (locking c (.accept ^Consumer c vv))))))
+     @c))
   ([colname agg-map ds-seq]
    (group-by-column-agg colname agg-map nil ds-seq)))
 
 
-#_(defn aggregate
+(defn aggregate
   "Create a set of aggregate statistics over a sequence of datasets.  Returns a
   dataset with a single row and uses the same interface group-by-column-agg.
 
@@ -505,28 +526,42 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 ```"
   ([agg-map options ds-seq]
    (let [cnames (vec (keys agg-map))
-         reducer (ds-reduce-impl/aggregate-reducer (vals agg-map) options)
-         ctx-map (ConcurrentHashMap.)]
-     (doseq [ds ds-seq]
-       (let [batch-data (.prepareBatch reducer ds)]
-         (parallel-for/indexed-map-reduce
-          (ds-base/row-count ds)
-          (fn [^long start-idx ^long group-len]
-            (let [tid (.getId (Thread/currentThread))
-                  end-idx (+ start-idx group-len)]
-              (loop [idx start-idx
-                     ctx (.get ctx-map tid)]
-                (if (< idx end-idx)
-                  (recur (unchecked-inc idx)
-                         (.reduceIndex reducer batch-data ctx idx))
-                  (.put ctx-map tid ctx))))))))
-     (ds-io/->dataset [(->> (.values ctx-map)
-                            (vec)
-                            (.reduceReductionList reducer)
-                            (.finalize reducer)
-                            (map vector cnames)
-                            (into {}))]
-                      options)))
+         reducers (vals agg-map)
+         [combined-reducers rev-indexes] (combine-reducers reducers)
+         context-map (ConcurrentHashMap.)
+         _ (reduce (fn [acc ds]
+                     (let [rs (->> (map #(ds-proto/ds->reducer % ds) combined-reducers)
+                                   (hamf/compose-reducers {:rfn-datatype :int64}))
+                           rs-rfn (hamf-proto/->rfn rs)
+                           rs-init (hamf-proto/->init-val-fn rs)
+                           init-fn (hamf/function _k (rs-init))]
+                       (doall (hamf/pgroups
+                               (ds-base/row-count ds)
+                               (fn [^long sidx ^long eidx]
+                                 (let [tid (.getId (Thread/currentThread))]
+                                   (.put context-map tid
+                                         (reduce rs-rfn
+                                                 (.computeIfAbsent context-map tid init-fn)
+                                                 (hamf/range sidx eidx)))))
+                               {:min-n 100}))))
+                   nil
+                   (if (ds-impl/dataset? ds-seq) [ds-seq] ds-seq))
+         ^objects final-ctx
+         (reduce (fn [^objects lhs ^objects rhs]
+                   (dotimes [idx (count combined-reducers)]
+                     (aset lhs idx
+                           (ds-proto/merge (combined-reducers idx)
+                                           (aget lhs idx)
+                                           (aget rhs idx))))
+                   lhs)
+                 (.values context-map))]
+     (ds-io/->dataset [(zipmap cnames
+                               (->> reducers
+                                    (map-indexed
+                                     (fn [ridx reducer]
+                                       (hamf-proto/finalize
+                                        reducer
+                                        (aget final-ctx (long (rev-indexes ridx))))))))])))
   ([agg-map ds-seq]
    (aggregate agg-map nil ds-seq)))
 
