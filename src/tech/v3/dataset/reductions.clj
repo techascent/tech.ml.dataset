@@ -127,10 +127,7 @@ user> (ds-reduce/group-by-column-agg
   []
   (reify ds-proto/PDatasetReducer
     (ds->reducer [this ds]
-      (reify
-        hamf-proto/Reducer
-        (->init-val-fn [r] #(Consumers$IncConsumer.))
-        (->rfn [r] hamf/consumer-accumulator)))
+      (hamf/consumer-reducer #(Consumers$IncConsumer.)))
     (merge [this l r] (hamf/reducible-merge l r))
     hamf-proto/Finalize
     (finalize [this v] (deref v))))
@@ -350,13 +347,14 @@ user> (ds-reduce/group-by-column-agg
           (hamf/sort-by first)
           (hamf/mapv second))]))
 
+
 (defn- finalize-combined-reducers
   [reducers rev-indexes cnames ^objects reduced-values]
   (->> reducers
        (lznc/map-indexed
-        (fn [src-idx reducer]
+        (fn [^long src-idx reducer]
           (hamf-proto/finalize
-           reducer (aget reduced-values (long (rev-indexes src-idx))))))
+           reducer (aget reduced-values (long (.get ^List rev-indexes src-idx))))))
        (hamf/vec)
        (FastStruct. cnames)))
 
@@ -444,7 +442,8 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
                      (reduce (hamf/indexed-accum
                               acc idx v (.put ^Map acc v idx) acc)
                              (LinkedHashMap.)))
-         reducers (hamf/vals agg-map)
+         ;;convert reducers to something with lightning fast reduction.
+         reducers (hamf/object-array-list (hamf/vals agg-map))
          [combined-reducers rev-indexes] (combine-reducers reducers)
 
          ;;allow a single dataset to be passed in without wrapping in seq notation

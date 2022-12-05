@@ -81,7 +81,8 @@ user> (ds-reduce/group-by-column-agg
   [item]
   (if (instance? org.apache.datasketches.hll.Union item)
     item
-    (org.apache.datasketches.hll.Union. ^HllSketch item)))
+    (doto (org.apache.datasketches.hll.Union.)
+      (.update  ^HllSketch item))))
 
 
 (defn hll-reducer
@@ -123,7 +124,7 @@ user> (ds-reduce/group-by-column-agg
       (->init-val-fn [r] cons-fn)
       (->rfn [r] rfn)
       hamf-proto/Finalize
-      (finalize [r v] (sketch-estimate val))
+      (finalize [r v] (sketch-estimate v))
       hamf-proto/ParallelReducer
       (->merge-fn [r] merge-fn))))
 

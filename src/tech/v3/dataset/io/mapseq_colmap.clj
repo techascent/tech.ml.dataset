@@ -11,7 +11,7 @@
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.api :as hamf]
             [ham-fisted.protocols :as hamf-proto])
-  (:import [java.util HashMap Map$Entry Map LinkedHashMap]
+  (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap]
            [java.util.function Function Consumer]
            [clojure.lang IDeref]
            [ham_fisted Reductions$IndexedAccum Reducible]))
@@ -28,9 +28,11 @@
     (let [row-idx (long @row-idx*)]
       (vswap! row-idx* unchecked-inc)
       (hamf/consume!
-       (fn [e]
-         (let [parser (colname->parser (key e))]
-           (column-parsers/add-value! parser row-idx (val e))))
+       (hamf/consumer
+        e
+        (let [^Map$Entry e e
+              parser (colname->parser (.getKey e))]
+          (column-parsers/add-value! parser row-idx (.getValue e))))
        row)))
   IDeref
   (deref [this]

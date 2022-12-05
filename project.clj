@@ -29,7 +29,7 @@
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
 
-                 [org.apache.datasketches/datasketches-java "2.0.0"]
+                 [org.apache.datasketches/datasketches-java "3.3.0"]
 
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]

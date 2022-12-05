@@ -9,10 +9,14 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [tech.v3.parallel.for :as pfor]
-            [clojure.test :refer [deftest is]])
-  (:import [tech.v3.datatype UnaryPredicate]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc]
+            [clojure.test :refer [deftest is]]
+            [clojure.core.protocols :as cl-proto])
+  (:import [tech.v3.datatype UnaryPredicate FastStruct$FMapEntry]
            [java.time LocalDate YearMonth]
-           [java.util ArrayList]))
+           [java.util ArrayList Map$Entry]
+           [clojure.lang MapEntry]))
 
 
 (deftest simple-reduction
@@ -54,9 +58,8 @@
                      :n-dates (ds-reduce/count-distinct :date :int32)}
                     {:index-filter (fn [dataset]
                                       (let [rdr (dtype/->reader (dataset :price))]
-                                        (reify UnaryPredicate
-                                          (unaryLong [p idx]
-                                            (> (.readDouble rdr idx) 100.0)))))}
+                                        (hamf/long-predicate
+                                         idx (> (.readDouble rdr idx) 100.0))))}
                     [stocks stocks stocks])
                    (ds/sort-by-column :symbol))
         fstocks (ds/filter-column stocks :price #(> % 100.0))
@@ -110,26 +113,17 @@
         result (ds-reduce/aggregate
                 {:n-elems (ds-reduce/row-count)
                  :n-dates (ds-reduce/count-distinct :date :int32)
-                 :n-dates-hll (ds-sketch/prob-set-cardinality :date)
-                 :n-dates-theta (ds-sketch/prob-set-cardinality
-                                 :date {:algorithm :theta})
-                 :n-dates-cpc (ds-sketch/prob-set-cardinality
-                               :date {:algorithm :cpc})
+                 :n-dates-hll (ds-sketch/prob-set-cardinality :date {:datatype :string})
                  :n-symbols-hll (ds-sketch/prob-set-cardinality
                                  :symbol {:datatype :string})
-                 :n-symbols-theta (ds-sketch/prob-set-cardinality
-                                   :symbol {:algorithm :theta :datatype :string})
-                 :n-symbols-cpc (ds-sketch/prob-set-cardinality
-                                 :symbol {:algorithm :cpc :datatype :string})
                  :quantiles (ds-sketch/prob-quantiles :price [0.25 0.5 0.75])
                  :cdfs (ds-sketch/prob-cdfs :price [50 100 150])
                  :pmfs (ds-sketch/prob-pmfs :price [50 100 150])}
                 [stocks stocks stocks])
-        {:keys [n-dates-hll n-dates-theta n-symbols-hll n-symbols-theta
-                n-dates-cpc n-symbols-cpc]} (first (ds/mapseq-reader result))]
-    (is (dfn/equals [123 123 5 5 5]
-                    [n-dates-hll n-dates-theta
-                     n-symbols-hll n-symbols-theta n-symbols-cpc]
+        {:keys [n-dates-hll n-symbols-hll]} (first (ds/mapseq-reader result))]
+    (is (dfn/equals [123 5]
+                    [n-dates-hll
+                     n-symbols-hll]
                     0.1))))
 
 
@@ -187,24 +181,32 @@
        (ds/->>dataset)))
 
 
-(defrecord YMC [year-month ^long count ^long _row-id])
+(defrecord YMC [year-month ^long count ^long _row-id]
+  clojure.lang.IReduceInit
+  (reduce [this rfn init]
+    (let [init (-> init
+                   (rfn (FastStruct$FMapEntry. :year-month year-month))
+                   (rfn (FastStruct$FMapEntry. :count count))
+                   (rfn (FastStruct$FMapEntry. :_row-id _row-id)))]
+      (if (and __extmap (not (reduced? init)))
+        (reduce rfn init __extmap)
+        init))))
+
 
 
 (defn- tally-days-as-year-months
   [{:keys [^LocalDate start ^LocalDate end]}]
   (let [nd (.until start end java.time.temporal.ChronoUnit/DAYS)
-        tally (jvm-map/hash-map)
-        incrementor (jvm-map/bi-function k v
-                                         (if v
-                                           (unchecked-inc (long v))
-                                           1))
+        tally (hamf/java-hashmap)
+        incrementor (hamf/bi-function k v
+                                      (if v
+                                        (unchecked-inc (long v))
+                                        1))
         _ (dotimes [idx nd]
             (let [ym (YearMonth/from (.plusDays start idx))]
-              (jvm-map/compute! tally ym incrementor)))
-        retval (ArrayList. (.size tally))]
-    (jvm-map/foreach! tally
-                      (jvm-map/bi-consumer k v (.add retval (YMC. k v 0))))
-    retval))
+              (.compute tally ym incrementor)))]
+    (lznc/map #(let [^Map$Entry e %]
+                 (YMC. (.getKey e) (.getValue e) 0)) tally)))
 
 
 (defn- otfrom-pathway
@@ -219,8 +221,7 @@
        ;;single dataset - do joins and such here
        (#(let [ds %
                count (ds :count)]
-           ;;return a sequence of datasets for next step
-           [(assoc ds :count2 (dfn/sq count))]))
+           (assoc ds :count2 (dfn/sq count))))
        (ds-reduce/group-by-column-agg
         [:placement :year-month]
         {:min-count        (ds-reduce/prob-quantile :count 0.0)
@@ -256,12 +257,12 @@
         (dotimes [day-idx nd]
           (let [ym (YearMonth/from (.plusDays start day-idx))]
             (jvm-map/compute! tally ym incrementor)))
-        (pfor/doiter
-         kv (.entrySet tally)
-         (let [^java.util.Map$Entry kv kv]
-           (.addLong indexes row-idx)
-           (.add year-months (.getKey kv))
-           (.add counts (.getValue kv))))))
+        (hamf/consume! (hamf/consumer
+                        kv (do
+                             (.addLong indexes row-idx)
+                             (.add year-months (key kv))
+                             (.add counts (val kv))))
+                       tally)))
     (-> (ds/select-rows ds indexes)
         (assoc :year-month year-months
                :count counts))))

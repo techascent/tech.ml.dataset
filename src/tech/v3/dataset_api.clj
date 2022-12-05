@@ -901,17 +901,15 @@ user>
    (pmap-ds
     ds
     (fn [ds]
-      (let [ds (assoc ds :_row-id (range (row-count ds)))
-            nds (->> (rows ds)
-                     (lznc/map #(let [rid (% :_row-id)]
-                                  (->> (mapcat-fn %)
-                                       ;;make sure returned value has appropriate row id.
-                                       (lznc/map (fn [row] (assoc row :_row-id rid))))))
-                     (apply lznc/concat)
+      (let [nds (->> (rows ds options)
+                     (lznc/map-indexed (fn [^long rid row]
+                                         (->> (mapcat-fn row)
+                                              ;;make sure returned value has appropriate row id
+                                              (lznc/map #(assoc % :_row-id rid)))))
+                     (lznc/apply-concat)
                      (->>dataset options))]
-        (-> (dissoc ds :_row-id)
-            (select-rows (nds :_row-id))
-            (merge (dissoc nds :_row-id)))))
+        (->  (select-rows ds (nds :_row-id))
+             (merge (dissoc nds :_row-id)))))
     options))
   ([ds mapcat-fn]
    (row-mapcat ds mapcat-fn nil)))

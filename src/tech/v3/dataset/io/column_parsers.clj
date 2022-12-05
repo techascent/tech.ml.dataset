@@ -14,7 +14,7 @@
   (:import [java.util UUID List]
            [tech.v3.dataset Text]
            [tech.v3.datatype Buffer]
-           [ham_fisted IMutList]
+           [ham_fisted IMutList Casts]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn]
            [java.time.format DateTimeFormatter]))
@@ -173,8 +173,10 @@
   "Is this a missing value coming from a CSV file"
   [value]
   ;;fastpath for numbers
-  (if (instance? Number value)
-    (Double/isNaN (unchecked-double value))
+  (cond
+    (or (instance? Double value) (instance? Float value))
+    (Double/isNaN (Casts/doubleCast value))
+    (not (instance? Number value))
     (or (nil? value)
         (.equals "" value)
         (identical? value :tech.v3.dataset/missing)
