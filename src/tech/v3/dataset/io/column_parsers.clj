@@ -469,10 +469,13 @@
     (set! max-idx (max idx max-idx))
     (when-not (missing-value? value)
       (let [org-datatype (dtype/datatype value)
-            packed-dtype (packing/pack-datatype org-datatype)
+            ;;Avoid the pack call if possible
+            packed-dtype (if (identical? container-dtype org-datatype)
+                           org-datatype
+                           (packing/pack-datatype org-datatype))
             container-ecount (.size container)]
         (if (or (== 0 container-ecount)
-                (= container-dtype packed-dtype))
+                (identical? container-dtype packed-dtype))
           (do
             (when (== 0 container-ecount)
               (set! container (column-base/make-container packed-dtype options))

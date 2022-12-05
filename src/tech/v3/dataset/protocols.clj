@@ -53,12 +53,17 @@
   (missing [this] (RoaringBitmap.)))
 
 
-(defn column-name
-  [col]
-  (if (map? col)
-    (get col :tech.v3.dataset/name
-         (get-in col [:tech.v3.dataset/metadata :name]))
-    (:name (meta col))))
+(defprotocol PColumnName
+  (column-name [col]))
+
+
+(extend-type Object
+  PColumnName
+  (column-name [col]
+    (if (map? col)
+      (get col :tech.v3.dataset/name
+           (get-in col [:tech.v3.dataset/metadata :name]))
+      (:name (meta col)))))
 
 
 (defn dataset-name

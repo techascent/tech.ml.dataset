@@ -76,14 +76,24 @@
 
 
 (defn ^:no-doc make-column-buffer
-  (^Buffer [^RoaringBitmap missing data dtype]
+  (^Buffer [^RoaringBitmap missing data dtype op-dtype]
    (let [^Buffer src (dtype-proto/->buffer data)
          missing-value (column-base/datatype->missing-value dtype)
          primitive-missing-value (column-base/datatype->packed-missing-value dtype)]
      ;;Sometimes we can utilize a pure passthrough.
      (if (.isEmpty missing)
        src
-       (reify Buffer
+       (reify
+         dtype-proto/POperationalElemwiseDatatype
+         (operational-elemwise-datatype [this] op-dtype)
+         dtype-proto/PElemwiseReaderCast
+         (elemwise-reader-cast [this new-dtype]
+           (make-column-buffer
+            missing
+            (dtype-proto/elemwise-reader-cast data new-dtype)
+            new-dtype
+            new-dtype))
+         Buffer
          (elemwiseDatatype [this] dtype)
          (lsize [this] (.lsize src))
          (allowsRead [this] (.allowsRead src))
@@ -134,14 +144,15 @@
              (.add missing (unchecked-int idx))))
          (reduce [this rfn acc]
            (reduce-column-buffer rfn acc src missing primitive-missing-value
-                                 0 (.lsize src)))))))
-  (^Buffer [missing data]
-   (make-column-buffer missing data (dtype-proto/elemwise-datatype data))))
+                                 0 (.lsize src))))))))
 
 
-(defmacro cached-buffer! []
+(defmacro cached-buffer!
+  []
   `(or ~'buffer
-       (do (set! ~'buffer (make-column-buffer ~'missing ~'data))
+       (do (set! ~'buffer (make-column-buffer ~'missing ~'data
+                                              (.elemwise-datatype ~'this)
+                                              (.operational-elemwise-datatype ~'this)))
            ~'buffer)))
 
 
@@ -255,16 +266,16 @@
                metadata
                nil)))
   dtype-proto/PElemwiseReaderCast
-  (elemwise-reader-cast [_this new-dtype]
+  (elemwise-reader-cast [this new-dtype]
     (if (= new-dtype (dtype-proto/elemwise-datatype data))
       (cached-buffer!)
       (make-column-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
-                          new-dtype)))
+                          new-dtype new-dtype)))
   dtype-proto/PECount
   (ecount [this] (dtype-proto/ecount data))
   dtype-proto/PToBuffer
   (convertible-to-buffer? [_this] true)
-  (->buffer [_this]
+  (->buffer [this]
     (cached-buffer!))
   dtype-proto/PToReader
   (convertible-to-reader? [_this]
@@ -328,6 +339,8 @@
   ds-proto/PColumn
   (is-column? [_this] true)
   (column-buffer [_this] data)
+  ds-proto/PColumnName
+  (column-name [this] (get metadata :name))
   IMutList
   (size [this] (.size (cached-buffer!)))
   (get [this idx] (.get (cached-buffer!) idx))
@@ -347,10 +360,10 @@
                                      data
                                      new-meta
                                      buffer))
-  (nth [_this idx] (nth (cached-buffer!) idx))
-  (nth [_this idx def-val] (nth (cached-buffer!) idx def-val))
+  (nth [this idx] (nth (cached-buffer!) idx))
+  (nth [this idx def-val] (nth (cached-buffer!) idx def-val))
   ;;should be the same as using hash-unorded-coll, effectively.
-  (hasheq [_this]   (.hasheq (cached-buffer!)))
+  (hasheq [this]   (.hasheq (cached-buffer!)))
   (equiv [this o] (if (identical? this o) true (.equiv (cached-buffer!) o)))
   (empty [this]
     (Column. (->bitmap)
@@ -374,7 +387,7 @@
                   (dtype-pp/print-reader-data)))))
 
   ;;Delegates to ListPersistentVector, which caches results for us.
-  (hashCode [_this] (.hasheq (cached-buffer!)))
+  (hashCode [this] (.hasheq (cached-buffer!)))
   (equals [this o] (.equiv this o)))
 
 

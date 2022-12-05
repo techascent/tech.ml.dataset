@@ -227,7 +227,7 @@ Implementations should check their metadata before doing calculations."
         data (if (or (nil? missing) (.isEmpty missing))
                ;;data will be scanned by the dataset to ascertain datatype and/or missing
                (dtype/clone data)
-               (-> (col-impl/make-column-buffer missing data res-dtype)
+               (-> (col-impl/make-column-buffer missing data res-dtype res-dtype)
                    (dtype/clone)))]
     (col-impl/new-column
      #:tech.v3.dataset{:name :_unnamed
