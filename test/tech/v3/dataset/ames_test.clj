@@ -257,7 +257,7 @@
                                                  %)
                                           col)))
 
-                                 
+
              (ds/update-column "SaleCondition"
                                (fn [col] (map
                                           #(case % ("Abnorml" "Alloca" "AdjLand" "Family" "Normal" ) "sale-1"
@@ -330,7 +330,7 @@
    "TotalBath"
    "KitchenQual"
    "GarageArea"
-   "ExterGrade"])
+   "SimplExterGrade"])
 
 
 (defn full-ames-pt-2
