@@ -9,7 +9,7 @@ import java.util.Comparator;
 import org.roaringbitmap.RoaringBitmap;
 import tech.v3.datatype.Buffer;
 import tech.v3.datatype.NDBuffer;
-import tech.v3.datatype.IFnDef;
+import ham_fisted.IFnDef;
 
 
 /**
