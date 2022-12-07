@@ -453,7 +453,7 @@
     (is (= "['Overgrow', 'Chlorophyll']" (first (ds "abilities"))))))
 
 (deftest issue-292
-  (let [ds (ds/->dataset "test/data/issue-292.csv")]
+  (let [ds (ds/->dataset "test/data/issue-292.csv" )]
     (is (== 3 (ds/column-count ds)))))
 
 

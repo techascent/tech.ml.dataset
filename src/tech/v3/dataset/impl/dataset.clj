@@ -65,8 +65,14 @@
   [n-cols n-rows col-name new-col-data]
   (let [argtype (argtypes/arg-type new-col-data)
         n-rows (if (= 0 n-cols)
-                 (if (dtype/reader? new-col-data)
+                 (cond
+                   (dtype/reader? new-col-data)
                    (dtype/ecount new-col-data)
+                   (map? new-col-data)
+                   (if (contains? new-col-data :tech.v3.dataset/data)
+                     (dtype/ecount (new-col-data :tech.v3.dataset/data))
+                     1)
+                   :else
                    (count (take Integer/MAX_VALUE new-col-data)))
                  n-rows)]
     (cond

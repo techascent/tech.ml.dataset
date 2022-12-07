@@ -62,8 +62,8 @@
                    (input-stream-or-reader data))]
     ;;Use mixed json parse profile as we don't care if the input is immutable or mutable and
     ;;mixed has the best performance.
-    (let [options (assoc options :profile :mixed)]
-      (->> (charred/read-json is (apply concat (seq options)))
+    (let [options (assoc options :profile :mutable)]
+      (->> (apply charred/read-json is (apply concat (seq options)))
            (parse-mapseq-colmap/mapseq->dataset options)))))
 
 

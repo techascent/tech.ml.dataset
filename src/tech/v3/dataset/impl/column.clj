@@ -125,7 +125,7 @@
              (.readLong src idx)))
          (readDouble [this idx]
            (if (.contains missing idx)
-             (Casts/doubleCast primitive-missing-value)
+             Double/NaN
              (.readDouble src idx)))
          (readObject [this idx]
            (when-not (.contains missing idx)
