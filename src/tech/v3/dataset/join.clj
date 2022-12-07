@@ -14,9 +14,10 @@
             [tech.v3.dataset.utils :as ds-utils]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.set :as set])
-  (:import [tech.v3.datatype ObjectReader PrimitiveList Buffer
+  (:import [tech.v3.datatype ObjectReader Buffer
             BinaryPredicate BinaryOperator
             BinaryOperators$DoubleBinaryOperator]
+           [ham_fisted IMutList]
            [java.util List HashSet Map]))
 
 
@@ -207,7 +208,7 @@
               (dotimes [inner-idx n-indexes]
                 (let [idx (+ outer-idx inner-idx)
                       rhs-val (.readObject rhs-col idx)]
-                  (if-let [^PrimitiveList item (.get idx-groups rhs-val)]
+                  (if-let [^IMutList item (.get idx-groups rhs-val)]
                     (do
                       (when lhs-missing? (.add lhs-found rhs-val))
                       (dotimes [_n-iters (.size item)] (.add rhs-indexes idx))
@@ -621,7 +622,7 @@ outer-join [8 4]:
            n-retval (.size retval)
            n-retval-dec (unchecked-dec n-retval)]
        (dotimes [iter n-retval]
-         (.addLong rev-retval (.readLong retval (- n-retval-dec iter))))
+         (.addLong rev-retval (.getLong retval (- n-retval-dec iter))))
        [(- n-elems (.size rev-retval))
         rev-retval])))
 

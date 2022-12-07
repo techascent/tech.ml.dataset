@@ -7,7 +7,7 @@
             [tech.v3.datatype :as dtype]
             [clojure.tools.logging :as log])
   (:import [java.util Map]
-           [tech.v3.datatype PrimitiveList]
+           [ham_fisted IMutList]
            [tech.v3.dataset Text]))
 
 
@@ -72,11 +72,11 @@
   enabled)
 
 (defn make-container
-  (^PrimitiveList [dtype options]
+  (^IMutList [dtype options]
    (case dtype
      :string (str-table/make-string-table 0 "")
      :text
-     (let [^PrimitiveList list-data
+     (let [^IMutList list-data
            (try
              (if (and (not= false (get options :text-temp-dir false))
                       @file-backed-text-enabled*)
@@ -93,7 +93,7 @@
                (dtype/make-list :text)))]
              list-data)
      (dtype/make-list dtype)))
-  (^PrimitiveList [dtype]
+  (^IMutList [dtype]
    (make-container dtype nil)))
 
 

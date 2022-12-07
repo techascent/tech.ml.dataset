@@ -1,6 +1,6 @@
 (ns tech.v3.dataset.io
   (:require [tech.v3.io :as io]
-            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [charred.api :as charred]
@@ -62,8 +62,8 @@
                    (input-stream-or-reader data))]
     ;;Use mixed json parse profile as we don't care if the input is immutable or mutable and
     ;;mixed has the best performance.
-    (let [options (assoc options :profile :mixed)]
-      (->> (charred/read-json is (apply concat (seq options)))
+    (let [options (assoc options :profile :mutable)]
+      (->> (apply charred/read-json is (apply concat (seq options)))
            (parse-mapseq-colmap/mapseq->dataset options)))))
 
 
@@ -227,7 +227,7 @@
                    options)
          dataset
          (cond
-           (satisfies? ds-proto/PColumnarDataset dataset)
+           (ds-proto/is-dataset? dataset)
            dataset
            (or (string? dataset)
                (instance? InputStream dataset)
@@ -244,7 +244,7 @@
              (ds-impl/new-dataset options nil)
              (parse-mapseq-colmap/mapseq->dataset options dataset)))]
      (if dataset-name
-       (ds-proto/set-dataset-name dataset dataset-name)
+       (vary-meta dataset assoc :name dataset-name)
        dataset)))
   ([dataset]
    (->dataset dataset {})))

@@ -1,0 +1,4 @@
+#!/bin/bash
+
+
+cd ../ && lein install && cd ubertest && scripts/compile

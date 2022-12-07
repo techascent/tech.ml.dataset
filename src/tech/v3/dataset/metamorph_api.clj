@@ -5,7 +5,7 @@
   their result as a metamorph context."
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling]
-            [tech.v3.protocols.dataset :as prot])
+            [tech.v3.dataset.protocols :as prot])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
 
@@ -25,7 +25,8 @@
 
 
 (def ^:private excludes-dataset
-  '#{bind-> all-descriptive-stats-names major-version ->dataset ->>dataset column-map-m})
+  '#{bind-> all-descriptive-stats-names major-version ->dataset ->>dataset column-map-m
+     mapseq-parser})
 
 
 

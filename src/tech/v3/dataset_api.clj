@@ -13,6 +13,7 @@
             [tech.v3.datatype.update-reader :as update-reader]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
@@ -21,17 +22,23 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.categorical :as ds-cat]
             [tech.v3.dataset.utils :as ds-utils]
+            [tech.v3.dataset.io.mapseq-colmap :as io-mapseq]
             ;;csv/tsv load/save provided by default
             [tech.v3.dataset.io.univocity]
             [tech.v3.dataset.io.nippy]
             [tech.v3.dataset.io.csv]
             [tech.v3.dataset.zip]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.protocols :as hamf-proto]
             [clojure.set :as set])
   (:import [java.util List Iterator Collection ArrayList Random Arrays
             LinkedHashMap]
-           [java.util.function Function]
+           [java.util.function Function Consumer]
+           [ham_fisted IMutList]
            [org.roaringbitmap RoaringBitmap]
-           [tech.v3.datatype PrimitiveList Buffer]
+           [tech.v3.datatype Buffer]
+           [tech.v3.dataset.impl.column Column]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth shuffle
                             rand-nth update]))
@@ -68,7 +75,6 @@
                 select-columns
                 select-columns-by-index
                 select-rows
-                select-rows-by-index
                 drop-rows
                 remove-rows
                 missing
@@ -117,7 +123,7 @@
   * copying? - When true the data is copied out of the dataset row by row upon read of that
   row.  When false the data is only referenced upon each read of a particular key.  Copying
   is appropriate if you want to use the row values as keys a map and it is inappropriate if
-  you are only going to read a given key for a given row once.
+  you are only going to read a very small portion of the row map.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
@@ -203,6 +209,57 @@ user> (ds/rowvec-at stocks -1)
                 ->dataset
                 ->>dataset
                 write!)
+
+
+(defn mapseq-parser
+  "Return a clojure function that when called with one arg that arg must be the next map
+  to add to the dataset.  When called with no args returns the current dataset.  This can be
+  used to efficiently transform a stream of maps into a dataset while getting intermediate
+  datasets during the parse operation.
+
+Options are the same for [[->dataset]].
+
+```clojure
+user> (require '[tech.v3.dataset :as ds])
+nil
+user> (def pfn (ds/mapseq-parser))
+#'user/pfn
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 1 :b 2})
+nil
+user> (pfn {:a 2 :c 3})
+nil
+user> (pfn)
+_unnamed [3 3]:
+
+| :a | :b | :c |
+|---:|---:|---:|
+|  1 |  2 |    |
+|  1 |  2 |    |
+|  2 |    |  3 |
+user> (pfn {:a 3 :d 4})
+nil
+user> (pfn {:a 5 :c 6})
+nil
+user> (pfn)
+_unnamed [5 4]:
+
+| :a | :b | :c | :d |
+|---:|---:|---:|---:|
+|  1 |  2 |    |    |
+|  1 |  2 |    |    |
+|  2 |    |  3 |    |
+|  3 |    |    |  4 |
+|  5 |    |  6 |    |
+```"
+  ([options]
+   (let [reducer (io-mapseq/mapseq-reducer options)
+         parser ((hamf-proto/->init-val-fn reducer))]
+     (fn mapseq-parser
+       ([row] (.accept ^Consumer parser row))
+       ([] (deref parser)))))
+  ([] (mapseq-parser nil)))
 
 
 
@@ -375,7 +432,7 @@ test/data/stocks.csv [10 3]:
   "Transform a column into a sequence of maps using transform-fn.
   Return dataset created out of the sequence of maps."
   ([dataset colname transform-fn options]
-   (->> (pmap transform-fn (dataset colname))
+   (->> (hamf/pmap transform-fn (dataset colname))
         (->>dataset options)))
   ([dataset colname transform-fn]
    (column->dataset dataset colname transform-fn {})))
@@ -461,6 +518,20 @@ test/data/stocks.csv [10 3]:
                     (columns filtered-ds)))))
 
 
+(defn- update-values
+  [col missing scalar-val]
+  (if (== 0 (dtype/ecount missing))
+    col
+    (let [col (Column. (bitmap/->bitmap)
+                       (dtype/clone (ds-proto/column-buffer col))
+                       (meta col) nil)]
+      (reduce (hamf/long-accumulator
+               data idx (.writeObject ^Buffer data idx scalar-val) data)
+              (dtype/->buffer col)
+              missing)
+      col)))
+
+
 (defn replace-missing-value
   ([dataset filter-fn-or-ds scalar-value]
    (update-columnwise dataset filter-fn-or-ds
@@ -470,9 +541,7 @@ test/data/stocks.csv [10 3]:
                             col
                             (ds-col/new-column
                              (:name (meta col))
-                             (update-reader/update-reader
-                              col (bitmap/bitmap-value->bitmap-map
-                                   missing scalar-value))
+                             (update-values col missing scalar-value)
                              (meta col)
                              (bitmap/->bitmap)))))))
   ([dataset scalar-value]
@@ -734,6 +803,12 @@ _unnamed [3 3]:
   See options for [[pmap-ds]].  In particular, note that you can
   produce a sequence of datasets as opposed to a single large dataset.
 
+
+  Speed demons should attempt both `{:copying? false}` and `{:copying? true}` in the options
+  map as that changes rather drastically how data is read from the datasets.  If you are
+  going to read all the data in the dataset, `{:copying? true}` will most likely be
+  the faster of the two.
+
   Examples:
 
 ```clojure
@@ -763,10 +838,9 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
   ([ds map-fn options]
-   (pmap-ds ds
-            #(merge % (->> (rows %)
-                           (sequence (map map-fn))
-                           (->>dataset options)))
+   (pmap-ds ds #(merge % (->> (rows % options)
+                              (lznc/map map-fn)
+                              (->>dataset options)))
             options))
   ([ds map-fn]
    (row-map ds map-fn nil)))
@@ -833,17 +907,15 @@ user>
    (pmap-ds
     ds
     (fn [ds]
-      (let [ds (assoc ds :_row-id (range (row-count ds)))
-            nds (->> (rows ds)
-                     (sequence (comp
-                                (map #(let [maps (mapcat-fn %)
-                                            rid (% :_row-id)]
-                                        (map (fn [row] (assoc row :_row-id rid)) maps)))
-                                cat))
+      (let [nds (->> (rows ds options)
+                     (lznc/map-indexed (fn [^long rid row]
+                                         (->> (mapcat-fn row)
+                                              ;;make sure returned value has appropriate row id
+                                              (lznc/map #(assoc % :_row-id rid)))))
+                     (lznc/apply-concat)
                      (->>dataset options))]
-        (-> (dissoc ds :_row-id)
-            (select-rows (nds :_row-id))
-            (merge (dissoc nds :_row-id)))))
+        (->  (select-rows ds (nds :_row-id))
+             (merge (dissoc nds :_row-id)))))
     options))
   ([ds mapcat-fn]
    (row-mapcat ds mapcat-fn nil)))
@@ -909,35 +981,35 @@ user>
              unparsed-indexes (bitmap/->bitmap)
              result (if (= dst-dtype :string)
                       (str-table/make-string-table n-elems)
-                      (dtype/make-container :jvm-heap dst-dtype n-elems))
-             res-writer (dtype/->writer result)
+                      (dtype/make-list dst-dtype n-elems))
              missing-val (col-base/datatype->missing-value dst-dtype)]
-         (pfor/parallel-for
-          idx
-          n-elems
-          (if (.contains missing idx)
-            (res-writer idx missing-val)
-            (let [existing-val (col-reader idx)
-                  new-val (cast-fn existing-val)]
-              (cond
-                (= new-val :tech.v3.dataset/missing)
-                (locking new-missing
-                  (.add new-missing idx)
-                  (res-writer idx missing-val))
-                (= new-val :tech.v3.dataset/parse-failure)
-                (locking new-missing
-                  (res-writer idx missing-val)
-                  (.add new-missing idx)
-                  (.add unparsed-indexes idx)
-                  (.add unparsed-data existing-val))
-                :else
-                (res-writer idx new-val)))))
-         (ds-col/new-column dst-colname result (clojure.core/assoc
-                                                (meta src-col)
-                                                :unparsed-indexes unparsed-indexes
-                                                :unparsed-data unparsed-data)
-                            missing))))))
-
+         (reduce (fn [^List res-writer ^long idx]
+                   (if (.contains missing idx)
+                     (.add res-writer missing-val)
+                     (let [existing-val (col-reader idx)
+                           new-val (cast-fn existing-val)]
+                       (cond
+                         (= new-val :tech.v3.dataset/missing)
+                         (locking new-missing
+                           (.add new-missing idx)
+                           (.add res-writer missing-val))
+                         (= new-val :tech.v3.dataset/parse-failure)
+                         (locking new-missing
+                           (.add res-writer missing-val)
+                           (.add new-missing idx)
+                           (.add unparsed-indexes idx)
+                           (.add unparsed-data existing-val))
+                         :else
+                         (.add res-writer new-val))))
+                   res-writer) result (hamf/range n-elems))
+         (ds-col/new-column #:tech.v3.dataset{:name dst-colname
+                                              :data result
+                                              :force-datatype? true
+                                              :missing missing
+                                              :metadata (clojure.core/assoc
+                                                         (meta src-col)
+                                                         :unparsed-indexes unparsed-indexes
+                                                         :unparsed-data unparsed-data)}))))))
 
 
 (defn columnwise-concat
@@ -1065,7 +1137,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
           (fn [^long start-idx ^long len]
             (let [container (col-base/make-container result-datatype)
                   indexes (dtype/make-list :int64)
-                  ^PrimitiveList idx-container
+                  ^IMutList idx-container
                   (when idx-colname
                     (dtype/make-list :int32))]
               (dotimes [iter len]
@@ -1153,41 +1225,41 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
            stats-ds
            (->> (->dataset dataset)
                 (columns)
-                (pmap (fn [ds-col]
-                        (let [n-missing (dtype/ecount (ds-col/missing ds-col))
-                              n-valid (- (dtype/ecount ds-col)
-                                         n-missing)
-                              col-dtype (dtype/get-datatype ds-col)]
-                          (merge
-                           {:col-name (ds-col/column-name ds-col)
-                            :datatype col-dtype
-                            :n-valid n-valid
-                            :n-missing n-missing
-                            :first (first ds-col)
-                            :last (nth ds-col (dec (dtype/ecount ds-col)))}
-                           (cond
-                             (dtype-dt/datetime-datatype? col-dtype)
-                             (dtype-dt/millisecond-descriptive-statistics
-                              numeric-stats
-                              nil
-                              ds-col)
-                             (and (not (:categorical? (meta ds-col)))
-                                  (casting/numeric-type? col-dtype))
-                             (dfn/descriptive-statistics numeric-stats ds-col)
-                             :else
-                             (let [histogram (->> (frequencies ds-col)
-                                                  (clojure.core/sort-by second >))
-                                   max-categorical-values (or (:n-categorical-values
-                                                               options) 21)]
+                (hamf/pmap (fn [ds-col]
+                             (let [n-missing (dtype/ecount (ds-col/missing ds-col))
+                                   n-valid (- (dtype/ecount ds-col)
+                                              n-missing)
+                                   col-dtype (dtype/get-datatype ds-col)]
                                (merge
-                                {:mode (ffirst histogram)
-                                 :n-values (count histogram)}
-                                {:values
-                                 (->> (map first histogram)
-                                      (take max-categorical-values)
-                                      (vec))}
-                                (when (< (count histogram) max-categorical-values)
-                                  {:histogram histogram}))))))))
+                                {:col-name (ds-col/column-name ds-col)
+                                 :datatype col-dtype
+                                 :n-valid n-valid
+                                 :n-missing n-missing
+                                 :first (first ds-col)
+                                 :last (nth ds-col (dec (dtype/ecount ds-col)))}
+                                (cond
+                                  (dtype-dt/datetime-datatype? col-dtype)
+                                  (dtype-dt/millisecond-descriptive-statistics
+                                   numeric-stats
+                                   nil
+                                   ds-col)
+                                  (and (not (:categorical? (meta ds-col)))
+                                       (casting/numeric-type? col-dtype))
+                                  (dfn/descriptive-statistics numeric-stats ds-col)
+                                  :else
+                                  (let [histogram (->> (frequencies ds-col)
+                                                       (clojure.core/sort-by second >))
+                                        max-categorical-values (or (:n-categorical-values
+                                                                    options) 21)]
+                                    (merge
+                                     {:mode (ffirst histogram)
+                                      :n-values (count histogram)}
+                                     {:values
+                                      (->> (map first histogram)
+                                           (take max-categorical-values)
+                                           (vec))}
+                                     (when (< (count histogram) max-categorical-values)
+                                       {:histogram histogram}))))))))
                 (clojure.core/sort-by (comp str :col-name))
                 ->dataset)
            existing-colname-set (->> (column-names stats-ds)

@@ -4,6 +4,7 @@
   (:require [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as col]
             [tech.v3.datatype.update-reader :as update-rdr]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.packing :as packing]
@@ -40,8 +41,8 @@
 
 (defn- maybe-column-buffer
   [col]
-  (if (instance? Column col)
-    (.buffer ^Column col)
+  (if (ds-proto/is-column? col)
+    (ds-proto/column-buffer col)
     col))
 
 (defn- replace-missing-with-value
@@ -53,7 +54,7 @@
                      (cond
                        (map? value) value
                        (iterable-sequence? value) (zipmap missing (cycle value))
-                       :else (bitmap/bitmap-value->bitmap-map
+                       :else (bitmap/bitmap-value->map
                               missing
                               (let [col-dt (dtype/elemwise-datatype unpack-data)]
                                 (casting/cast value col-dt)))))

@@ -3,6 +3,8 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.struct :as dt-struct]
+            [tech.v3.datatype.argops :as argops]
+            [tech.v3.tensor :as dtt]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col]
@@ -19,10 +21,15 @@
             [tech.v3.libs.fastexcel]
             [tech.v3.io :as tech-io]
             [taoensso.nippy :as nippy]
-            [clojure.test :refer [deftest is]])
-  (:import [java.util List HashSet UUID]
+            [clojure.test :refer [deftest is]]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc])
+  (:import [java.util List HashSet UUID Random BitSet Map]
+           [java.util.concurrent ConcurrentHashMap]
            [java.io File ByteArrayInputStream]
-           [tech.v3 TMD]))
+           [tech.v3 TMD]
+           [ham_fisted IFnDef$OD IMutList BitmapTrieCommon]))
+
 
 (deftest datatype-parser
   (let [ds (ds/->dataset "test/data/datatype_parser.csv")]
@@ -66,7 +73,7 @@
 (deftest iterable
   (let [ds (ds/->dataset (test-utils/mapseq-fruit-dataset))]
     (is (= (ds/column-names ds)
-           (map ds-col/column-name (vals ds))))))
+            (map ds-col/column-name (vals ds))))))
 
 
 (deftest string-column-add-or-update
@@ -437,7 +444,7 @@
                 :a
                 #(dtype/emap (fn ^double [^double in]
                                (if (< in 2.0) (- in) in))
-                             :float64
+                             nil
                              %)))]
     (is (= :float64 (dtype/get-datatype (ds :a))))
     (is (= [-1.0 2.0]
@@ -660,11 +667,11 @@
            (vec ((ds/select-columns-by-index ds [-1]) :V4))))
 
     (is (= [2 6 1.5 \C]
-           (-> (ds/select-rows-by-index ds -4)
+           (-> (ds/select-rows ds -4)
                (ds/value-reader)
                (first)
                (vec))
-           (-> (ds/select-rows-by-index ds [-4])
+           (-> (ds/select-rows ds [-4])
                (ds/value-reader)
                (first)
                (vec))))))
@@ -1178,11 +1185,12 @@
            (:b2 (ds/column-map testds :b2 #(inc %)
                                {:datatype :float64
                                 :missing-fn ds-col/union-missing-sets} [:b]))))
-    ;;Missing set scanning causes NPE at inc.
-    (is (thrown? Throwable
-                 (ds/column-map testds :b2 #(inc %)
-                                {:datatype :float64}
-                                [:b])))))
+    ;;Missing used to scanning causes NPE at inc.
+    ;;Now data is casted to Double/NaN
+    #_(is (thrown? Throwable
+                   (ds/column-map testds :b2 #(inc %)
+                                  {:datatype :float64}
+                                  [:b])))))
 
 
 (deftest remove-columns-issue-242
@@ -1196,8 +1204,7 @@
 (deftest column-cast-packed-date
   (let [x (ds/->dataset [{:a 0 :b "2020-03-05"} {:a 1 :b nil}])
         y (ds/column-cast x :b :packed-local-date)]
-    (is (= (vec (.data (y :b)))
-           (vec (y :b))))
+    (is (instance? java.time.LocalDate ((y :b) 0)))
     (is (nil? ((y :b) 1)))))
 
 
@@ -1468,8 +1475,8 @@
                                            :reducer (fn [a b]
                                                       (+ (dfn/sum a) (dfn/sum b)))
                                            :datatype :int16}})]
-    (is (= :int16 (dtype/elemwise-datatype (fin-ds :c))))
-    (is (= [20 30 42 56 72]
+    (is (= :float64 (dtype/elemwise-datatype (fin-ds :c))))
+    (is (= [20.0 30.0 42.0 56.0 72.0]
            (vec (take 5 (fin-ds :c)))))))
 
 
@@ -1549,6 +1556,7 @@
                 (map long)
                 (set))))))
 
+
 (deftest column-meta-roundtrip
   (is (= :v
          (->
@@ -1563,17 +1571,53 @@
     (is (= (meta (ds/print-all ds))
            (meta (ds-print/print-range ds :all))))))
 
-(comment
+(deftest column-copy-test
+  []
+  (let [short-col (:a (ds/->dataset (interleave
+                                     (repeat 10 {:a (short 25)})
+                                     (repeat 10 {:a nil}))))]
+    (is (= (vec (apply concat  (repeat 10 [25 -32768])))
+           (vec  (dtype/->array short-col))))
+    (is (= (vec (apply concat (repeat 10 [true false])))
+           (vec (dfn/finite? (dtype/->array :float64 short-col)))))
+    (is (= (vec (apply concat (repeat 10 [true false])))
+           (vec (dfn/finite? short-col))))
+    (is (= 25
+           (Math/round (dfn/mean short-col))))))
 
-  (def test-ds (ds/->dataset
-                "https://github.com/genmeblog/techtest/raw/master/data/who.csv.gz"))
+(deftest select-columns-test
+  (let [DS (ds/->dataset {:A [1 2 3]
+                          :B [4 5 6]
+                          :C ["A" "B" "C"]})]
+    (is (= (ds/select-columns DS [:C])
+           (ds/select-columns DS cf/categorical)))
+    (is (= (ds/select-columns DS cf/numeric)
+           (ds/select-columns DS [:A :B])))))
 
-  (->> '("new_sp_m014" "new_sp_m1524")
-       (ds/select-columns test-ds)
-       (ds/columns)
-       (map (comp :datatype meta)))
+(deftest drop-columns-test
+  (let [DS (ds/->dataset {:A [1 2 3]
+                          :B [4 5 6]
+                          :C ["A" "B" "C"]})]
+    (is (= (ds/drop-columns DS cf/categorical)
+           (ds/remove-columns DS cf/categorical)
+           (ds/select-columns DS [:A :B])))
+    (is (= (ds/drop-columns DS cf/numeric)
+           (ds/remove-columns DS cf/numeric)
+           (ds/select-columns DS [:C])))))
 
-  (ds/columnwise-concat test-ds '("new_sp_m014" "new_sp_m1524"))
-  (ds/columnwise-concat test-ds '("new_sp_m1524" "new_sp_m014"))
+(deftest column-select-test
+  (let [c (ds-col/new-column :test [0 1 2 3 4 5])]
+    (is (= [0 1 2]
+           (ds-col/select c [0 1 2])))
+    (is (= [0 1 2]
+           (ds-col/select c (dfn/< c 3))))))
 
-  )
+(deftest dataset-column-select-test
+  (let [ds (ds/->dataset {:A [1 2 3 4 5]
+                          :B [2 3 4 5 6]})]
+    (is (= (ds/->dataset {:A [1 5]
+                          :B [2 6]})
+           (ds/select ds :all [0 4])))
+    (is (= (ds/->dataset {:A [1 2]
+                          :B [2 3]})
+           (ds/select ds :all (dfn/< (:A ds) 3))))))

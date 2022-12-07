@@ -442,9 +442,9 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
       (addValue [p idx value]
         (if (identical? value :tech.v3.dataset/missing)
           (do
-            (.addObject container missing-value)
+            (.add container missing-value)
             (.add missing (unchecked-int idx)))
-          (.addObject container value)))
+          (.add container value)))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
                                            missing-value n-rows)))))

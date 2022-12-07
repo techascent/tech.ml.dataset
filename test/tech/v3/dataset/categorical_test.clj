@@ -29,13 +29,14 @@
 
 
 
-(t/is (=
-       (->
-        (ds/->dataset {:x [:a :b] :y ["1" "0"]})
-        (ds/categorical->number [:y])
-        :y)
-
-       [0.0 1.0]))
+(t/deftest cat-to-number
+  (t/is (=
+         (set
+          (->
+           (ds/->dataset {:x [:a :b] :y ["1" "0"]})
+           (ds/categorical->number [:y])
+           :y))
+         (set [0 1]))))
 
 
 

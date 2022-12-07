@@ -1,11 +1,11 @@
-(defproject techascent/tech.ml.dataset "6.104-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "7.000-beta-2-SNAPSHOT"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.11.1" :scope "provided"]
-                 [cnuernber/dtype-next             "9.033"]
-                 [techascent/tech.io               "4.21"
+                 [cnuernber/dtype-next             "10.000-beta-1"]
+                 [techascent/tech.io               "4.23"
                   :exclusions [org.apache.commons/commons-compress]]
                  ;;[com.cnuernber/charred            "1.011"]
                  [com.univocity/univocity-parsers  "2.9.0"]
@@ -29,9 +29,7 @@
                  ;;Version of slf4j hand chosen to be a middle ground between projects.
                  [org.slf4j/slf4j-api "1.7.30"]
 
-                 ;;High performance probabilistic stats
-                 [com.techascent/t-digest "4.0-pre-release-1"]
-                 [org.apache.datasketches/datasketches-java "2.0.0"]
+                 [org.apache.datasketches/datasketches-java "3.3.0"]
 
                  ;;provided scope
                  [org.bytedeco/openblas "0.3.10-1.5.4" :scope "provided"]
@@ -67,7 +65,8 @@
   :profiles {:dev
              {:dependencies [[criterium "0.4.5"]
                              [http-kit "2.3.0"]
-                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]]
+                             [com.clojure-goes-fast/clj-memory-meter "0.1.0"]
+                             [kixi/stats "0.5.5"]]
               :source-paths ["src"]
               :resource-paths ["dev-resources"]
               :test-paths ["test" "neanderthal"]}

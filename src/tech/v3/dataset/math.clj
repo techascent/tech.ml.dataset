@@ -27,8 +27,10 @@
             [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
-            [tech.v3.protocols.dataset :as ds-proto]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.missing :as ds-missing]
+            [ham-fisted.set :as set]
+            [ham-fisted.api :as hamf]
             [com.github.ztellman.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
@@ -76,34 +78,42 @@
                                     selected-non-numeric)
                             {:selected-columns colname-seq
                              :non-numeric-columns non-numeric})))
-        dataset (ds-base/select dataset
-                        (->> (ds-base/columns dataset)
-                             (map ds-col/column-name)
-                             (remove (set (concat
-                                           (map :column-name  missing-columns)
-                                           non-numeric))))
-                        :all)
-        lhs-colseq (if (seq colname-seq)
-                     (map (partial ds-base/column dataset) colname-seq)
-                     (ds-base/columns dataset))
-        rhs-colseq (ds-base/columns dataset)
-        correlation-type (or :pearson correlation-type)]
-    (->> (for [lhs lhs-colseq]
-           [(ds-col/column-name lhs)
+        dataset (ds-base/select-columns dataset
+                                        (->> (ds-base/columns dataset)
+                                             (map ds-col/column-name)
+                                             (remove (set (concat
+                                                           (map :column-name  missing-columns)
+                                                           non-numeric)))))
+        lhs-colseq (->> (if (seq colname-seq)
+                          (map (partial ds-base/column dataset) colname-seq)
+                          (ds-base/columns dataset))
+                        (map (fn [col] [(ds-col/column-name col)
+                                        (hamf/double-array (dtype/->reader col :float64))])))
+        rhs-colseq (->> (ds-base/columns dataset)
+                        (map (fn [col] [(ds-col/column-name col)
+                                        (hamf/double-array (dtype/->reader col :float64))])))
+        correlation-type (or :pearson correlation-type)
+        corr-fn (case correlation-type
+                  :pearson #(statistics/pearsons-correlation {:nan-strategy :keep} %1 %2)
+                  :spearman #(statistics/spearmans-correlation {:nan-strategy :keep} %1 %2)
+                  :kendall #(statistics/kendalls-correlation {:nan-strategy :keep} %1 %2))]
+    (->> (for [[lname ldata] lhs-colseq]
+           [lname
             (->> rhs-colseq
-                 (map (fn [rhs]
-                        (when-not rhs
-                          (throw (ex-info "Failed" {})))
-                        (let [corr (ds-col/correlation lhs rhs correlation-type)]
-                          (if (dfn/finite? corr)
-                            [(ds-col/column-name rhs) corr]
+                 (map (fn [[rname rdata]]
+                        (let [corr (corr-fn ldata rdata)]
+                          (if (Double/isFinite corr)
+                            [rname corr]
                             (do
-                              (log/warnf "Correlation failed: %s-%s"
-                                         (ds-col/column-name lhs)
-                                         (ds-col/column-name rhs))
+                              (log/warnf "Correlation failed: %s-%s" lname rname)
                               nil)))))
                  (remove nil?)
-                 (sort-by (comp #(Math/abs (double %)) second) >))])
+                 ;;Using a type-hinted key-fn allows the sort operator to use a double array
+                 ;;which has a very fast indirect sort operation.
+                 (hamf/sort-by (hamf/obj->double
+                                v (-> (second v)
+                                      (double)
+                                      (Math/abs))) >))])
          (into {}))))
 
 
@@ -194,7 +204,7 @@
          original-indexes (-> (doto  (bitmap/->bitmap
                                       (range (dtype/ecount result)))
                                 (.andNot ^RoaringBitmap missing))
-                              (bitmap/bitmap->efficient-random-access-reader))
+                              (bitmap/->random-access))
          result (if (dtype-dt/datetime-datatype? target-dtype)
                   (dtype-dt/milliseconds->datetime target-dtype result)
                   result)]
@@ -214,7 +224,7 @@
                      updated-missing (if any-missing?
                                        (scatter-missing original-indexes col-missing)
                                        (bitmap/->bitmap))
-                     total-missing (dtype-proto/set-or updated-missing missing)
+                     total-missing (set/union updated-missing missing)
                      ;;Scatter original data into new locations
                      _ (dtype/copy! col
                                     (dtype/indexed-buffer original-indexes new-data))

@@ -13,7 +13,7 @@
                                (:testdata))]
               (is (= (dtype/elemwise-datatype test-col)
                      (dtype/elemwise-datatype rhs)))
-              (is (every? identity (dfn/eq test-col rhs)))))]
+              (is (every? identity (dfn/eq test-col rhs)) (vec lhs))))]
     (inferred-equals [true false true false] (boolean-array [true false true false]))
     (inferred-equals (list 0 Double/NaN 1.0) (double-array [0.0 Double/NaN 1.0]))
     (inferred-equals #:tech.v3.dataset{:data [1 2 3 nil 4]

@@ -300,7 +300,7 @@
                               (ds/->dataset {:id ["c"]
                                              :y  [3]})
                               {:on [:id] :how :outer})]
-    ))
+    (is (= [nil nil 3] (vec (:y res))))))
 
 
 (comment
