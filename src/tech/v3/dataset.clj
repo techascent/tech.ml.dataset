@@ -884,6 +884,12 @@ test/data/stocks.csv [10 3]:
   (tech.v3.dataset-api/pmap-ds ds ds-map-fn)))
 
 
+(defn print-all
+  "Helper function equivalent to `(tech.v3.dataset.print/print-range ... :all)`"
+  ([dataset]
+  (tech.v3.dataset-api/print-all dataset)))
+
+
 (defn rand-nth
   "Return a random row from the dataset in map format"
   ([dataset]
