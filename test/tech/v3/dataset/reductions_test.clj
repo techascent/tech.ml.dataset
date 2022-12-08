@@ -7,6 +7,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.jvm-map :as jvm-map]
             [tech.v3.datatype.argops :as argops]
+            [tech.v3.datatype.statistics :as stats]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [tech.v3.parallel.for :as pfor]
             [ham-fisted.api :as hamf]
@@ -15,7 +16,7 @@
             [clojure.core.protocols :as cl-proto])
   (:import [tech.v3.datatype UnaryPredicate FastStruct$FMapEntry]
            [java.time LocalDate YearMonth]
-           [java.util ArrayList Map$Entry]
+           [java.util ArrayList Map$Entry Arrays]
            [clojure.lang MapEntry]))
 
 
@@ -329,71 +330,3 @@
             {:n-elems (ds-reduce/count-distinct :genre)}
             [(ds/->dataset "test/data/example-genres.nippy")])]
     (is (pos? (first (ds :n-elems))))))
-
-
-(comment
-  (require '[tech.v3.datatype.jvm-map :as jvm-map])
-  (import '[java.time LocalDate YearMonth]
-          '[java.time.temporal ChronoUnit]
-          '[java.util ArrayList])
-
-
-  ;; Defrecord because in my tests with the profile assoc onto an
-  ;; arraymap gets called a lot.  There are a *ton* of these objects
-  ;; produced.  Note that I also add in _row_id which is used in the
-  ;; dataset reduction.  A little bit of inside details :-).
-  (defrecord YMC [year-month ^long days ^long _row-id])
-
-  ;; To do a high performance incrementing pathway on an implementation of java.util.Map
-  ;; you want to use the compute operator which takes an implementation of java.util.function.BiFunction
-  (def incrementor (jvm-map/bi-function k v
-                                        (if v
-                                          (unchecked-inc (long v))
-                                          1)))
-
-
-  (defn tally-days-as-year-months
-    "Fast inline implementation tallying the days from start to end in a map
-  by year-month.  Returns map of year-month to day tally."
-    [{:keys [^LocalDate start ^LocalDate end]}]
-    ;;nd is num-days
-    ;;This is equivalent of tick/range but avoids the clojure
-    ;;sequence abstraction in favor of a direct dotimes
-    (let [nd (.until start end ChronoUnit/DAYS)
-          tally (jvm-map/hash-map)
-          ;;nd means num-days
-          _ (dotimes [idx nd]
-              (jvm-map/compute! tally (YearMonth/from (.plusDays start idx)) incrementor))
-          retval (ArrayList. (.size tally))]
-      (jvm-map/foreach! tally (jvm-map/bi-consumer k v (.add retval (YMC. k v 0))))
-      ;;Return list of maps of
-      retval))
-
-  (defn prep-days-per-month-3
-    [{:keys [simulation-results costs-and-internal-weighting]}]
-    (as-> simulation-results $
-      ;;Make as small of an incoming dataset as possible
-      (tc/select-columns $ [:simulation :placement :start :end])
-      ;; Expand the dataset into one row per day from start to end.
-      ;;row-mapcat uses pmap-ds for its implementation and result-type means it
-      ;;returns a lazy-ish sequence of datasets
-      (ds/row-mapcat $ tally-days-as-year-months {:result-type :as-seq})
-      ;;First reduction - row-mapcat is producing a sequence of datasets.
-      (ds-reduce/group-by-column-agg [:simulation :placement :year-month] {:days (ds-reduce/sum :days)} $)
-      ;;returns a single datasets
-      (#(let [ds (tc/inner-join ds costs-and-internal-weighting [:placement])]
-          (let [days (ds :days)
-                internal (ds :internal)
-                internal-days (dfn/* days internal)
-                external-days (dfn/- days internal-days)
-                monthly-internal-cost (dfn/* (ds :internal-daily-cost) internal-days)
-                monthly-external-cost (dfn/* (ds :external-daily-cost) external-days)]
-            ;;Return sequence of datasets for next step
-            [(assoc ds
-                    :internal-days internal-days
-                    :external-days external-days
-                    :monthly-internal-cost monthly-internal-cost
-                    :monthly-external-cost monthly-external-cost)]))
-       $)))
-
-  )

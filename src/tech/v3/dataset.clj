@@ -723,7 +723,7 @@ _unnamed [4 5]:
 
 Options are the same for [[->dataset]].
 
-  ```clojure
+```clojure
 user> (require '[tech.v3.dataset :as ds])
 nil
 user> (def pfn (ds/mapseq-parser))
@@ -1013,6 +1013,12 @@ user> (ds/row-at stocks -1)
   See options for [[pmap-ds]].  In particular, note that you can
   produce a sequence of datasets as opposed to a single large dataset.
 
+
+  Speed demons should attempt both `{:copying? false}` and `{:copying? true}` in the options
+  map as that changes rather drastically how data is read from the datasets.  If you are
+  going to read all the data in the dataset, `{:copying? true}` will most likely be
+  the faster of the two.
+
   Examples:
 
 ```clojure
@@ -1118,7 +1124,7 @@ user>
   * copying? - When true the data is copied out of the dataset row by row upon read of that
   row.  When false the data is only referenced upon each read of a particular key.  Copying
   is appropriate if you want to use the row values as keys a map and it is inappropriate if
-  you are only going to read a given key for a given row once.
+  you are only going to read a very small portion of the row map.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
