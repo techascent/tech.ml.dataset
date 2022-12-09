@@ -71,6 +71,7 @@
           lft (fix-left x lft e?)]
       [e? exp lft rght])))
 
+
 (defn- fit-precision
   "Find best matching presision for given sequence."
   [xs ^long digits ^long threshold]

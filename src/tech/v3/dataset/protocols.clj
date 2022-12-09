@@ -53,12 +53,27 @@
   (missing [this] (RoaringBitmap.)))
 
 
+(extend-type nil
+  PDataset
+  (is-dataset? [item] false)
+  PColumn
+  (is-column? [item] false)
+  PRowCount
+  (row-count [this] 0)
+  PColumnCount
+  (column-count [this] 0)
+  PMissing
+  (missing [this] (RoaringBitmap.)))
+
+
 (defprotocol PColumnName
   (column-name [col]))
 
 
-(extend-type Object
-  PColumnName
+(extend-protocol PColumnName
+  nil
+  (column-name [col] nil)
+  Object
   (column-name [col]
     (if (map? col)
       (get col :tech.v3.dataset/name
@@ -80,8 +95,7 @@
   "An object that produces a per-dataset reducer and can merge contexts.
   It is also expected that this implements hamf-proto/Finalize"
   (ds->reducer [this ds])
-  (merge [this lctx rctx])
-  )
+  (merge [this lctx rctx]))
 
 
 (extend-type Object

@@ -214,7 +214,6 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          column-types (map #(str (when column-types? (:datatype (meta %))))
                            (vals print-ds))
          string-columns (map #(-> (dtype/->reader %)
-                                  (packing/unpack)
                                   (reader->string-lines (ds-proto/missing %)
                                                         line-policy
                                                         column-width

@@ -58,13 +58,13 @@
       (instance? IFn$ODO rfn)
       (let [primitive-missing-value (Casts/doubleCast primitive-missing-value)]
         (Reductions/serialReduction (hamf/long-accumulator
-                                     acc idx
-                                     (.invokePrim ^IFn$ODO rfn acc
-                                                  (if (.contains missing idx)
-                                                    primitive-missing-value
-                                                    (.readDouble src idx))))
-                                    acc
-                                    (hamf/range sidx eidx)))
+                                       acc idx
+                                       (.invokePrim ^IFn$ODO rfn acc
+                                                    (if (.contains missing idx)
+                                                      primitive-missing-value
+                                                      (.readDouble src idx))))
+                                      acc
+                                      (hamf/range sidx eidx)))
       :else
       (Reductions/serialReduction (hamf/long-accumulator
                                    acc idx

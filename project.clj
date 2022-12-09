@@ -1,10 +1,10 @@
-(defproject techascent/tech.ml.dataset "7.000-beta-4-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "7.000-beta-4"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure              "1.11.1" :scope "provided"]
-                 [cnuernber/dtype-next             "10.000-beta-2"]
+                 [cnuernber/dtype-next             "10.000-beta-5"]
                  [techascent/tech.io               "4.23"
                   :exclusions [org.apache.commons/commons-compress]]
                  ;;[com.cnuernber/charred            "1.011"]

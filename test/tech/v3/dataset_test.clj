@@ -1621,3 +1621,9 @@
     (is (= (ds/->dataset {:A [1 2]
                           :B [2 3]})
            (ds/select ds :all (dfn/< (:A ds) 3))))))
+
+
+(deftest basic-desc-stats
+  (let [ds (ds/->dataset "test/data/stocks.csv")
+        stats (ds/descriptive-stats ds)]
+    (is (not (nil? (.toString ^Object stats))))))
