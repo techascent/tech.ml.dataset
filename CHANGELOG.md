@@ -1,4 +1,8 @@
 # Changelog
+
+# 7.000-beta-7
+ * Integration of ham-fisted deeply into dtype-next, tmd, and tablecloth
+
 # 6.103
  * issues [329](https://github.com/techascent/tech.ml.dataset/issues/329) and [328](https://github.com/techascent/tech.ml.dataset/issues/328) - CVE related dependency upgrades.
 
