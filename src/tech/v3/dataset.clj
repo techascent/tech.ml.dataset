@@ -773,7 +773,17 @@ _unnamed [5 4]:
 
 
 (defn mapseq-rf
-  "Create a transduce-compatible rf that reduces a sequence of maps into a dataset"
+  "Create a transduce-compatible rf that reduces a sequence of maps into a dataset.
+  Same options as [[->dataset]].
+
+```clojure
+user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 1 :b 2}])
+:transduced [1 2]:
+
+| :a | :b |
+|---:|---:|
+|  1 |  2 |
+```"
   ([]
   (tech.v3.dataset-api/mapseq-rf ))
   ([options]

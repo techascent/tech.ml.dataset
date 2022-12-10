@@ -1,6 +1,9 @@
 # Changelog
 
-# 7.000-beta-7
+# 7.000-beta-6
+ * Added a transduce-compatible rf pathway for sequence of maps - `ds/mapseq-rf`.
+
+# 7.000-beta-5
  * Integration of ham-fisted deeply into dtype-next, tmd, and tablecloth
 
 # 6.103
