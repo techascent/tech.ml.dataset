@@ -262,6 +262,22 @@ _unnamed [5 4]:
   ([] (mapseq-parser nil)))
 
 
+(defn mapseq-rf
+  "Create a transduce-compatible rf that reduces a sequence of maps into a dataset.
+  Same options as [[->dataset]].
+
+```clojure
+user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 1 :b 2}])
+:transduced [1 2]:
+
+| :a | :b |
+|---:|---:|
+|  1 |  2 |
+```"
+  ([] (mapseq-rf nil))
+  ([options] (-> (io-mapseq/mapseq-reducer options) (hamf/reducer->rf))))
+
+
 
 (defmacro bind->
   "Threads like `->` but binds name to expr like `as->`:

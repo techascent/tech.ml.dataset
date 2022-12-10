@@ -772,6 +772,14 @@ _unnamed [5 4]:
   (tech.v3.dataset.readers/mapseq-reader dataset)))
 
 
+(defn mapseq-rf
+  "Create a transduce-compatible rf that reduces a sequence of maps into a dataset"
+  ([]
+  (tech.v3.dataset-api/mapseq-rf ))
+  ([options]
+  (tech.v3.dataset-api/mapseq-rf options)))
+
+
 (defn min-n-by-column
   "Find the minimum N entries (unsorted) by column.  Resulting data will be indexed in
   original order. If you want a sorted order then sort the result.
