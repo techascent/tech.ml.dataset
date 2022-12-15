@@ -4,5 +4,5 @@ set -e
 
 scripts/run-tests
 lein codox
-scripts/javadoc
+# scripts/javadoc
 deploy-and-tag $@

@@ -1,5 +1,5 @@
 (ns tech.v3.dataset.set
-  "Extensions to datasets to do bag-semantics set/union and intersection."
+  "Extensions to datasets to do per-row bag-semantics set/union and intersection."
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.protocols :as ds-proto]
@@ -96,7 +96,7 @@
                            (concurrent-hashmap-union
                             (hamf/bi-function l r (min (long l) (long r)))
                             acc))
-                      (concurrent-hashmap-union rows))))
+                      (concurrent-hashmap-frequencies rows))))
                 nil)
         (expand-setop-result options)))
   ([datasets] (reduce-union nil datasets)))
