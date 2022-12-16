@@ -11,7 +11,6 @@
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native]
-            [com.github.ztellman.primitive-math :as pmath]
             [ham-fisted.api :as hamf]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.protocols :as hamf-proto]

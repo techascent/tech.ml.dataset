@@ -22,7 +22,7 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.parallel.for :as pfor]
-            [com.github.ztellman.primitive-math :as pmath])
+            [clj-commons.primitive-math :as pmath])
   (:import [smile.math.matrix Matrix]
            [smile.math.blas BLAS]
            [tech.v3.datatype DoubleReader Buffer]

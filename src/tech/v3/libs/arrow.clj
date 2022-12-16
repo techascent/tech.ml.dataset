@@ -70,7 +70,7 @@
             [tech.v3.resource :as resource]
             [tech.v3.io :as io]
             [clojure.tools.logging :as log]
-            [com.github.ztellman.primitive-math :as pmath]
+            [clj-commons.primitive-math :as pmath]
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]]
             [charred.api :as json]

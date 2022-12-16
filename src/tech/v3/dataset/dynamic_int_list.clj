@@ -9,7 +9,7 @@
             [tech.v3.datatype.array-buffer :as abuf]
             [tech.v3.datatype.list :as dtype-list]
             [tech.v3.parallel.for :as parallel-for]
-            [com.github.ztellman.primitive-math :as pmath])
+            [clj-commons.primitive-math :as pmath])
   (:import [tech.v3.datatype LongBuffer]
            [ham_fisted IMutList]))
 

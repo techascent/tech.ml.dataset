@@ -24,7 +24,6 @@
             [tech.v3.dataset.string-table :as str-table]
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
-            [com.github.ztellman.primitive-math :as pmath]
             [ham-fisted.api :as hamf]
             [ham-fisted.set :as set])
   (:import [tech.v3.datatype ObjectReader PackedLocalDate]
@@ -891,7 +890,7 @@
                   :string n-elems
                   (let [start-off (.readLong offsets idx)
                         end-off (.readLong offsets (inc idx))]
-                    (String. string-data start-off (pmath/- end-off start-off))))
+                    (String. string-data start-off (- end-off start-off))))
                  (dtype/make-container :list :string))
             str->int (HashMap. (dtype/ecount int->str))]
         (dotimes [idx n-elems]

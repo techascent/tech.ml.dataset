@@ -31,7 +31,7 @@
             [tech.v3.dataset.missing :as ds-missing]
             [ham-fisted.set :as set]
             [ham-fisted.api :as hamf]
-            [com.github.ztellman.primitive-math :as pmath]
+            [clj-commons.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
   (:import [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
