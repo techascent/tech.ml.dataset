@@ -1,18 +1,7 @@
 (ns tech.v3.dataset.math
-  "Various mathematic transformations of datasets such as building correlation tables,
-  pca, and normalizing columns to have mean of 0 and variance of 1. In order to use pca
-  you need to add preferrably neanderthal or either latest javacpp openblas support or
-  smile mkl support to your project:
-
-```clojure
-  ;;preferrably
-  [uncomplicate/neanderthal \"0.43.3\"]
-
-
-  ;;alternatively
-  [org.bytedeco/openblas \"0.3.10-1.5.4\"]
-  [org.bytedeco/openblas-platform \"0.3.10-1.5.4\"]
-```"
+  "Various mathematic transformations of datasets such as (inefficiently)
+  building simple tables, pca, and normalizing columns to have mean of 0 and variance of 1.
+  More in-depth transformations are found at `tech.v3.dataset.neanderthal`."
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.functional :as dfn]
@@ -238,104 +227,6 @@
                     new-col total-missing missing-strategy missing-value)
                    new-col)))))
           (ds-impl/new-dataset (meta ds))))))
-
-
-(defrecord PCATransform [means eigenvalues eigenvectors n-components result-datatype])
-
-(def ^:private neanderthal-fns*
-  (delay
-    (try
-      {:fit-pca (requiring-resolve 'tech.v3.dataset.neanderthal/fit-pca!)
-       :transform-pca (requiring-resolve 'tech.v3.dataset.neanderthal/transform-pca!)}
-      (catch Exception e
-        (log/debugf "Neanderthal loading failed: %s" (str e))
-        {}))))
-
-
-(defn neanderthal-enabled?
-  []
-  (empty? @neanderthal-fns*))
-
-
-(defn fit-pca
-  "Run PCA on the dataset.  Dataset must not have missing values
-  or non-numeric string columns.
-
-  Keep in mind that PCA may be highly influenced by outliers in the dataset
-  and a probabilistic or some level of auto-encoder dimensionality reduction
-  more effective for your problem.
-
-
-  Returns pca-info:
-  {:means - vec of means
-   :eigenvalues - vec of eigenvalues
-   :eigenvectors - matrix of eigenvectors
-  }
-
-
-  Use transform-pca with a dataset and the the returned value to perform
-  PCA on a dataset.
-
-  Options:
-
-    - method - svd, cov - Either use SVD or covariance based method.  SVD is faster
-      but covariance method means the post-projection variances are accurate.
-      Defaults to cov.  Both methods produce similar projection matrixes.
-    - variance-amount - fractional amount of variance to keep.  Defaults to 0.95.
-    - n-components - If provided overrides variance amount and sets the number of
-      components to keep. This controls the number of result columns directly as an
-      integer.
-    - covariance-bias? - When using :cov, divide by n-rows if true and (dec n-rows)
-      if false. defaults to false."
-  (^PCATransform [dataset {:keys [n-components variance-amount]
-                           :or {variance-amount 0.95} :as options}]
-   (errors/when-not-error
-    (== 0 (dtype/ecount (ds-base/missing dataset)))
-    "Cannot pca a dataset with missing entries.  See replace-missing.")
-   (let [result-datatype :float64
-         fit-pca! (or (@neanderthal-fns* :fit-pca) ds-tens/fit-pca-smile!)
-         {:keys [eigenvalues] :as pca-result}
-         (fit-pca! (ds-tens/dataset->tensor dataset :float64) options)
-         ;;The eigenvalues are the variance.
-         variance-amount (double variance-amount)
-         ;;We know the eigenvalues are sorted from greatest to least
-         used-variance? (nil? n-components)
-         n-components (long
-                       (or n-components
-                           (let [variance-sum (double (dfn/reduce-+ eigenvalues))
-                                 target-variance-sum (* variance-amount variance-sum)
-                                 n-variance (dtype/ecount eigenvalues)]
-                             (loop [idx 0
-                                    tot-var 0.0]
-                               (if (and (< idx n-variance)
-                                        (< tot-var target-variance-sum))
-                                 (recur (unchecked-inc idx)
-                                        (+ tot-var (double (nth eigenvalues idx))))
-                                 idx)))))]
-     (map->PCATransform (merge (assoc pca-result
-                                      :n-components n-components
-                                      :result-datatype result-datatype)
-                               (when used-variance?
-                                 {:variance-amount variance-amount})))))
-  (^PCATransform [dataset]
-   (fit-pca dataset nil)))
-
-
-(defn transform-pca
-  "PCA transform the dataset returning a new dataset.  The method used to generate the pca information
-  is indicated in the metadata of the dataset."
-  [dataset {:keys [n-components result-datatype] :as pca-transform}]
-  (let [transform-pca! (or (@neanderthal-fns* :transform-pca) ds-tens/transform-pca-smile!)]
-    (-> (ds-tens/dataset->tensor dataset result-datatype)
-        (transform-pca! pca-transform n-components)
-        (ds-tens/tensor->dataset dataset :pca-result)
-        (vary-meta assoc :pca-method (:method pca-transform)))))
-
-
-(extend-type PCATransform
-  ds-proto/PDatasetTransform
-  (transform [t dataset]
-    (transform-pca dataset t)))
 
 
 (defrecord StdScaleTransform [])

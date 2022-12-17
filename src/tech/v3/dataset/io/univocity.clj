@@ -374,18 +374,3 @@
      (rows->csv! output headers str-rdr output-options)))
   ([ds output]
    (write-csv! ds output {})))
-
-
-(defmethod ds-io/dataset->data! :csv
-  [dataset output options]
-  (write-csv! dataset output options))
-
-
-(defmethod ds-io/dataset->data! :tsv
-  [dataset output options]
-  (write-csv! dataset output (assoc options :separator \tab)))
-
-
-(defmethod ds-io/dataset->data! :txt
-  [dataset output options]
-  (write-csv! dataset output (assoc options :separator \tab)))

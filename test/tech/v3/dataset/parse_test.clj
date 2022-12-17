@@ -358,19 +358,10 @@
                                          {:separator ",n"})))))
 
 
-(deftest long-column-data-throws
-  (try
-    (let [ds (ds/->dataset [{:a "onelongstring"}])]
-      (is (thrown? Throwable
-                   (ds/write! ds "longfile.csv" {:max-chars-per-column 5}))))
-    (finally
-      (.delete (java.io.File. "longfile.csv")))))
-
-
 (deftest quoted-column-data
   (try
     (let [ds (ds/->dataset [{:a "onelongstring"}])]
-      (ds/write! ds "quoted.csv" {:quoted-columns [:a]})
+      (ds/write! ds "quoted.csv" {:quote? true})
       (is (= "\"a\"\n\"onelongstring\"\n"
              (slurp "quoted.csv"))))
     (finally

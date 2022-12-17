@@ -4,13 +4,15 @@
             [charred.coerce :as coerce]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.parallel.for :as pfor]
-            [tech.v3.parallel.queue-iter :as queue-iter]
             [tech.v3.datatype :as dtype]
             [tech.v3.io :as io]
+            [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.dataset.impl.dataset :as ds-impl]
-            [ham-fisted.api :as hamf])
+            [tech.v3.dataset.protocols :as ds-proto]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc])
   (:import [tech.v3.datatype ArrayHelpers]
            [clojure.lang IReduceInit]
            [java.lang AutoCloseable]
@@ -137,63 +139,82 @@
   (load-csv data options))
 
 
-(comment
-  (require '[tech.v3.dataset.io.univocity :as univocity])
-  (require '[criterium.core :as crit])
+(defn rows->csv!
+  "Given an something convertible to an output stream, an optional set of headers
+  as string arrays, and a sequence of string arrows, write a CSV or a TSV file.
+
+  Options:
+
+  * `:separator` - Defaults to \tab.
+  * `:quote` - Default \\\"
+  * `:quote?` A predicate function which determines if a string should be quoted.
+        Defaults to quoting only when necessary.  May also be the the value 'true' in which
+        case every field is quoted.
+  *  :newline - `:lf` (default) or `:cr+lf`.
+  *  :close-writer? - defaults to true.  When true, close writer when finished."
+  ([output headers rows]
+   (rows->csv! output headers rows {}))
+  ([output headers rows
+    {:keys [separator]
+     :or {separator \tab}
+     :as options}]
+   (apply charred/write-csv (io/writer! output)
+          (if headers (lznc/concat [headers] rows) rows)
+          (apply concat (seq (assoc options :separator separator))))))
 
 
-  (crit/quick-bench (univocity/csv->dataset "test/data/issue-292.csv"))
-  ;; Evaluation count : 24 in 6 samples of 4 calls.
-  ;;            Execution time mean : 27.045594 ms
-  ;;   Execution time std-deviation : 887.643388 µs
-  ;;  Execution time lower quantile : 26.015627 ms ( 2.5%)
-  ;;  Execution time upper quantile : 27.984189 ms (97.5%)
-  ;;                  Overhead used : 1.721587 ns
-  (crit/quick-bench (csv->dataset "test/data/issue-292.csv"))
-  ;; Evaluation count : 6 in 6 samples of 1 calls.
-  ;;            Execution time mean : 139.203976 ms
-  ;;   Execution time std-deviation : 3.406500 ms
-  ;;  Execution time lower quantile : 136.348543 ms ( 2.5%)
-  ;;  Execution time upper quantile : 143.004906 ms (97.5%)
-  ;;                  Overhead used : 1.721587 ns
-
-  (crit/quick-bench (ds-csv->dataset "test/data/issue-292.csv"))
-
-  (dotimes [idx 1000]
-    (ds-csv->dataset "test/data/issue-292.csv"))
+(defn- data->string
+  ^String [data-item]
+  (when-not (nil? data-item)
+    (cond
+      (string? data-item) data-item
+      (keyword? data-item) (name data-item)
+      (symbol? data-item) (name data-item)
+      :else (.toString ^Object data-item))))
 
 
-  (with-bindings {#'*compile-path* "compiled"}
-    (compile 'tech.v3.dataset.io.csv))
+(defn- write-csv!
+  "Write a dataset to a tsv or csv output stream.  Closes output if a stream
+  is passed in.  File output format will be inferred if output is a string -
+    - .csv, .tsv - switches between tsv, csv.  Tsv is the default.
+    - *.gz - write to a gzipped stream.
 
-  (defn read-all
-    [^java.io.Reader reader]
-    (loop [data (.read reader)]
-      (if (== -1 data)
-        :ok
-        (recur (.read reader)))))
+  options:
+
+  * `:separator` - in case output isn't a string, you can use either \\, or \\tab to switch
+    between csv or tsv output respectively.
+  * `:headers?` - if csv headers are written, defaults to true.
+  * `:gzipped?` - When true, use a gizpped output stream.
+  * `:file-type` - `:csv` or `:tsv`."
+  ([ds output options]
+   (let [{:keys [gzipped? file-type]}
+         (merge
+          (when (string? output)
+            (ds-io/str->file-info output))
+          options)
+         headers (when (get options :headers? true)
+                   (map (comp data->string :name meta) (vals ds)))
+         rows (->> (ds-proto/rowvecs ds nil)
+                   (lznc/map #(lznc/map data->string %)))
+         tsv? (or (= file-type :tsv) (= \tab (:separator options)))
+         output (if gzipped?
+                  (io/gzip-output-stream! output)
+                  output)]
+     (rows->csv! output headers rows (assoc options :separator (if tsv? \tab \,)))))
+  ([ds output]
+   (write-csv! ds output {})))
 
 
-  (defn read-all-cbuf
-    [^java.io.Reader reader]
-    (let [cbuf (char-array 1024)]
-      (loop [data (.read reader)]
-        (if (== -1 data)
-          :ok
-          (recur (.read reader cbuf))))))
+(defmethod ds-io/dataset->data! :csv
+  [dataset output options]
+  (write-csv! dataset output options))
 
 
-  (defn read-all-cbuf-ibuf
-    [^java.io.Reader reader]
-    (let [cbuf (char-array 1024)
-          ibuf (int-array 1024)]
-      (loop [data (.read reader cbuf)]
-        (if (== -1 data)
-          :ok
-          (do
-            (dotimes [idx data]
-              (ArrayHelpers/aset ibuf idx (clojure.lang.RT/intCast (aget cbuf idx))))
-            (recur (.read reader cbuf)))))))
+(defmethod ds-io/dataset->data! :tsv
+  [dataset output options]
+  (write-csv! dataset output (assoc options :separator \tab)))
 
 
-  )
+(defmethod ds-io/dataset->data! :txt
+  [dataset output options]
+  (write-csv! dataset output (assoc options :separator \tab)))

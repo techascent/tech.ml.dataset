@@ -35,8 +35,7 @@ _unnamed [5 1]:
 |  5.22696543 |
 |  5.79519272 |
 |  5.01974726 |
-```
-  "
+```"
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as modelling]
             [tech.v3.datatype :as dtype]

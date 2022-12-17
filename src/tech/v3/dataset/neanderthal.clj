@@ -1,5 +1,13 @@
 (ns tech.v3.dataset.neanderthal
-  "Conversion of a dataset to/from a neanderthal dense matrix"
+  "Conversion of a dataset to/from a neanderthal dense matrix as well as various
+  dataset transformations such as pca, covariance and correlation matrixes.
+
+
+  Please include these additional dependencies in your project:
+
+```clojure
+  [uncomplicate/neanderthal \"0.45.0\"]
+```"
   (:require [uncomplicate.neanderthal.core :as n-core]
             [uncomplicate.neanderthal.native :as n-native]
             [uncomplicate.neanderthal.linalg :as linalg]
@@ -10,10 +18,14 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.dataset.tensor :as ds-tens]
+            [tech.v3.dataset.base :as ds-base]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.functional :as dfn]
             [tech.v3.tensor :as dtt]
-            [tech.v3.parallel.for :as pfor]))
+            [tech.v3.parallel.for :as pfor]
+            [clojure.tools.logging :as log]))
 
 
 (defn dataset->dense
@@ -163,3 +175,131 @@
     (n-com-core/release nproj)
     (n-com-core/release resmat)
     result))
+
+
+(defrecord PCATransform [means eigenvalues eigenvectors n-components result-datatype])
+
+(def ^:private neanderthal-fns*
+  (delay
+    (try
+      {:fit-pca (requiring-resolve 'tech.v3.dataset.neanderthal/fit-pca!)
+       :transform-pca (requiring-resolve 'tech.v3.dataset.neanderthal/transform-pca!)}
+      (catch Exception e
+        (log/debugf "Neanderthal loading failed: %s" (str e))
+        {}))))
+
+
+(defn neanderthal-enabled?
+  []
+  (empty? @neanderthal-fns*))
+
+
+(defn fit-pca
+  "Run PCA on the dataset.  Dataset must not have missing values
+  or non-numeric string columns.
+
+  Keep in mind that PCA may be highly influenced by outliers in the dataset
+  and a probabilistic or some level of auto-encoder dimensionality reduction
+  more effective for your problem.
+
+
+  Returns pca-info:
+  {:means - vec of means
+   :eigenvalues - vec of eigenvalues
+   :eigenvectors - matrix of eigenvectors
+  }
+
+
+  Use transform-pca with a dataset and the the returned value to perform
+  PCA on a dataset.
+
+  Options:
+
+    - method - svd, cov - Either use SVD or covariance based method.  SVD is faster
+      but covariance method means the post-projection variances are accurate.
+      Defaults to cov.  Both methods produce similar projection matrixes.
+    - variance-amount - fractional amount of variance to keep.  Defaults to 0.95.
+    - n-components - If provided overrides variance amount and sets the number of
+      components to keep. This controls the number of result columns directly as an
+      integer.
+    - covariance-bias? - When using :cov, divide by n-rows if true and (dec n-rows)
+      if false. defaults to false."
+  (^PCATransform [dataset {:keys [n-components variance-amount]
+                           :or {variance-amount 0.95} :as options}]
+   (errors/when-not-error
+    (== 0 (dtype/ecount (ds-base/missing dataset)))
+    "Cannot pca a dataset with missing entries.  See replace-missing.")
+   (let [result-datatype :float64
+         {:keys [eigenvalues] :as pca-result}
+         (fit-pca! (ds-tens/dataset->tensor dataset :float64) options)
+         ;;The eigenvalues are the variance.
+         variance-amount (double variance-amount)
+         ;;We know the eigenvalues are sorted from greatest to least
+         used-variance? (nil? n-components)
+         n-components (long
+                       (or n-components
+                           (let [variance-sum (double (dfn/reduce-+ eigenvalues))
+                                 target-variance-sum (* variance-amount variance-sum)
+                                 n-variance (dtype/ecount eigenvalues)]
+                             (loop [idx 0
+                                    tot-var 0.0]
+                               (if (and (< idx n-variance)
+                                        (< tot-var target-variance-sum))
+                                 (recur (unchecked-inc idx)
+                                        (+ tot-var (double (nth eigenvalues idx))))
+                                 idx)))))]
+     (map->PCATransform (merge (assoc pca-result
+                                      :n-components n-components
+                                      :result-datatype result-datatype)
+                               (when used-variance?
+                                 {:variance-amount variance-amount})))))
+  (^PCATransform [dataset]
+   (fit-pca dataset nil)))
+
+
+(defn transform-pca
+  "PCA transform the dataset returning a new dataset.  The method used to generate the pca information
+  is indicated in the metadata of the dataset."
+  [dataset {:keys [n-components result-datatype] :as pca-transform}]
+  (-> (ds-tens/dataset->tensor dataset result-datatype)
+      (transform-pca! pca-transform n-components)
+      (ds-tens/tensor->dataset dataset :pca-result)
+      (vary-meta assoc :pca-method (:method pca-transform))))
+
+
+(extend-type PCATransform
+  ds-proto/PDatasetTransform
+  (transform [t dataset]
+    (transform-pca dataset t)))
+
+
+#_(defn matrix-desc-stats
+  "Return a set of information about neanderthal matrix A
+  - per-column means
+  - per-column variances
+  - per-column standard deviations
+  - covariance matrix
+  - correlation matrix"
+  ([A] (matrix-desc-stats nil A))
+  ([options A]
+   (with-release [n-cols (second (nc/dims a))
+                  fge1s (entry! (nm/fge 1 5) 1)
+                  means (scal! (/ 1.0 5) (nc/mm fge1s A))
+                  -meancols (rk  (nc/scal -1 (nc/view-vctr fge1s)) (nc/view-vctr means))
+                  A-means (axpy! 1.0 A (copy -meancols))
+                  A-means-sqr (vm/sqr A-means)
+                  A-means-sqr-summed (mm fge1s A-means-sqr)
+                  A-var (nc/scal (/ 1.0 5) A-means-sqr-summed)
+                  A-stdevs (vm/sqrt A-var)
+                  A-cov (nc/scal (/ 1.0 5) (mm (trans A-means) A-means))
+                  sigx*sigy (rk (view-vctr A-stdevs) (view-vctr A-stdevs))
+                  A-cor (vm/div A-cov sigx*sigy)]
+     (pr-str [A
+              means -meancols
+              A-means A-means-sqr
+              A-means-sqr-summed
+              A-var
+              A-stdevs
+              A-cov
+              sigx*sigy
+              A-cor]))))

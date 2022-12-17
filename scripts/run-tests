@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
-lein clean
-lein codegen
-lein test
+scripts/compile
+clj -A:dev -X:codegen
+clj -A:dev -M:test

@@ -1,0 +1,126 @@
+{:paths ["src" "resources" "target/classes"]
+ :deps {cnuernber/dtype-next {:mvn/version "10.000-beta-14"}
+        techascent/tech.io {:mvn/version "4.24"
+                            :exclusions [org.apache.commons/commons-compress]}
+        org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}}
+ :aliases
+ {:codox
+  {:extra-deps {codox-theme-rdash/codox-theme-rdash {:mvn/version "0.1.2"}
+                nrepl/nrepl {:mvn/version "0.8.3"}
+                cider/cider-nrepl {:mvn/version "0.25.5"}
+                com.cnuernber/codox {:mvn/version "1.001"}}
+   :exec-fn codox.main/-main
+   :exec-args {:group-id "techascent"
+               :artifact-id "tech.ml.dataset"
+               :version "7.000-beta-9-SNAPSHOT"
+               :name "TMD"
+               :description "High Performance Clojure Data Processing System"
+               :metadata {:doc/format :markdown}
+               :html {:transforms [[:head] [:append [:script {:async true
+                                                              :src "https://www.googletagmanager.com/gtag/js?id=G-RGTB4J7LGP"}]]
+                                   [:head] [:append [:script "window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-95TVFC1FEB');"]]]}
+               :themes [:rdash]
+               :source-paths ["src"]
+               :output-path "docs"
+               :doc-paths ["topics"]
+               :source-uri "https://github.com/techascent/tech.ml.dataset/blob/master/{filepath}#L{line}"
+               :namespaces [tech.v3.dataset
+                            tech.v3.dataset.math
+                            tech.v3.dataset.tensor
+                            tech.v3.dataset.join
+                            tech.v3.dataset.modelling
+                            tech.v3.dataset.column
+                            tech.v3.dataset.clipboard
+                            tech.v3.dataset.neanderthal
+                            tech.v3.dataset.metamorph
+                            tech.v3.dataset.categorical
+                            tech.v3.dataset.rolling
+                            tech.v3.dataset.reductions
+                            tech.v3.dataset.reductions.apache-data-sketch
+                            tech.v3.dataset.column-filters
+                            tech.v3.dataset.io.datetime
+                            tech.v3.dataset.io.univocity
+                            tech.v3.dataset.io.string-row-parser
+                            tech.v3.dataset.io.csv
+                            tech.v3.dataset.set
+                            tech.v3.dataset.print
+                            tech.v3.dataset.zip
+                            tech.v3.libs.smile.data
+                            tech.v3.libs.poi
+                            tech.v3.libs.parquet
+                            tech.v3.libs.fastexcel
+                            tech.v3.libs.arrow
+                            tech.v3.libs.guava.cache
+                            tech.v3.libs.tribuo]}}
+  ;; Run with clj -T:build function-in-build
+  :dev
+  {:extra-deps
+   {criterium/criterium {:mvn/version "0.4.5"}
+    net.java.dev.jna/jna {:mvn/version "5.12.1"}
+    uncomplicate/neanderthal {:mvn/version "0.45.0"}
+    ch.qos.logback/logback-classic {:mvn/version "1.3.5"}
+    com.clojure-goes-fast/clj-memory-meter {:mvn/version "0.1.0"}
+    com.cnuernber/benchmark {:mvn/version "1.000-beta-2"}
+    org.apache.poi/poi-ooxml {:mvn/version "5.2.3"
+                              :exclusions [commons-codec/commons-codec]}
+    com.univocity/univocity-parsers {:mvn/version "2.9.0"}
+    org.dhatim/fastexcel-reader {:mvn/version "0.12.8"
+                                 :exclusions [org.apache.poi/poi-ooxml]}
+    com.github.haifengl/smile-core {:mvn/version "2.6.0"
+                                    :exclusions [org.slf4j/slf4j-api]}
+    com.github.haifengl/smile-io   {:mvn/version "2.6.0"
+                                    :exclusions [com.github.haifengl/smile-core
+                                                 org.slf4j/slf4j-api]}
+    org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
+                                   :exclusions [commons-codec/commons-codec
+                                                com.fasterxml.jackson.core/jackson-core
+                                                com.fasterxml.jackson.core/jackson-annotations
+                                                com.fasterxml.jackson.core/jackson-databind
+                                                org.slf4j/slf4j-api]}
+    org.lz4/lz4-java {:mvn/version "1.8.0"}
+    com.cnuernber/jarrow {:mvn/version "1.000"}
+    zero.one/geni  {:mvn/version "0.0.34"
+                    :exclusions [commons-codec/commons-codec]}
+    org.apache.spark/spark-avro_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-core_2.12 {:mvn/version "3.0.1"
+                                      :exclusions [org.slf4j/slf4j-log4j12]}
+    org.apache.spark/spark-hive_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-mllib_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-sql_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-streaming_2.12 {:mvn/version "3.0.1"}
+    org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
+    }
+   :extra-paths ["neanderthal" "test"]}
+
+  :jdk-17
+  {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
+              "--enable-native-access=ALL-UNNAMED"
+              "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+              "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+  :codegen
+  {:extra-paths ["src" "dev"]
+   :exec-fn tech.v3.dataset.codegen/-main}
+  :build
+  {:deps {io.github.clojure/tools.build {:git/tag "v0.8.1" :git/sha "7d40500"}}
+   :ns-default build}
+  :test
+  {:extra-deps {com.cognitect/test-runner
+                {:git/url "https://github.com/cognitect-labs/test-runner"
+                 :sha "209b64504cb3bd3b99ecfec7937b358a879f55c1"}}
+   :extra-paths ["neanderthal" "test"]
+   :main-opts ["-m" "cognitect.test-runner"]}
+  :deploy
+  {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+   :exec-fn deps-deploy.deps-deploy/deploy
+   :exec-args {:installer :remote
+               :sign-releases? true
+               :artifact "target/tech.ml.dataset.jar"}}
+  :install
+  {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+   :exec-fn deps-deploy.deps-deploy/deploy
+   :exec-args {:installer :local
+               :artifact "target/tech.ml.dataset.jar"}}}}

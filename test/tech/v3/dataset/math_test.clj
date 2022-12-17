@@ -67,39 +67,3 @@
                                                [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
                                 [1 0]))
   )
-
-
-;;PCA is broken on travis.
-;;test that pca compares to smile.
-(deftest ^:travis-broken pca-smile
-  (let [test-data (dtt/transpose
-                   (dtt/->tensor [[7 4 6 8 8 7 5 9 7 8]
-                                  [4 1 3 6 5 2 3 5 4 2]
-                                  [3 8 5 1 7 9 3 8 5 2]] :datatype :float64)
-                   [1 0])
-        test-ds (ds-tens/tensor->dataset test-data)
-        svd-fit (ds-math/fit-pca test-ds {:method :svd :n-components 2})
-        svd-transformed-ds (ds-math/transform-pca test-ds svd-fit)
-        corr-fit (ds-math/fit-pca test-ds {:method :cov :n-components 2})
-        corr-transformed-ds (ds-math/transform-pca test-ds corr-fit)
-        ;;Slow, partially correct smile method (only correct for n-rows > n-cols)
-        smile-svd-pca (doto (PCA/fit (->> test-data
-                                          dtt/rows
-                                          (map dtype/->double-array)
-                                          (into-array (Class/forName "[D"))))
-                        (.setProjection (int 2)))
-        smile-transformed-ds (-> (.project smile-svd-pca
-                                           (->> test-data
-                                                (dtt/rows)
-                                                (map dtype/->double-array)
-                                                (into-array (Class/forName "[D"))))
-                                 (dtt/->tensor))]
-    ;;Make sure we get the same answer as smile.
-    (is (= :svd (:method svd-fit)))
-    (is (dfn/equals smile-transformed-ds
-                    (ds-tens/dataset->tensor svd-transformed-ds)
-                    0.01))
-    (is (= :cov (:method corr-fit)))
-    (is (dfn/equals smile-transformed-ds
-                    (ds-tens/dataset->tensor corr-transformed-ds)
-                    0.01))))

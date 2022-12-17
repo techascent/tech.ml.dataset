@@ -4,6 +4,7 @@
             [tech.v3.dataset.column-filters :as cf]
             [tech.v3.dataset.modelling :as ds-mod]
             [tech.v3.dataset.math :as ds-math]
+            [tech.v3.dataset.neanderthal :as ds-nean]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.functional :as dfn]
             [taoensso.nippy :as nippy]
@@ -415,8 +416,8 @@
                     (vec (repeat (count mean-var-seq) 0))
                     0.001))
     (let [cat-ds (cf/categorical dataset)
-          pca-fit (ds-math/fit-pca numeric-ds {:n-components 10})
-          pca-ds (ds-math/transform-pca numeric-ds pca-fit)]
+          pca-fit (ds-nean/fit-pca numeric-ds {:n-components 10})
+          pca-ds (ds-nean/transform-pca numeric-ds pca-fit)]
       (is (= 127 (ds/column-count dataset)))
       (is (= 45 (ds/column-count cat-ds)))
       (is (= 10 (count (ds/columns pca-ds)))))))
