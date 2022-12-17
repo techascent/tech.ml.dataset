@@ -1,5 +1,12 @@
 # Changelog
 
+# 7.000-beta-9
+ * Lots of small dtype-next updates
+ * slightly better resource tracking
+ * first deps.edn-based release.
+ * Smile, poi are no longer auto-included dependencies.  You have to include them manually.
+ * pca removed from math, now only in tech.v3.dataset.neanderthal.
+
 # 7.000-beta-6
  * Added a transduce-compatible rf pathway for sequence of maps - `ds/mapseq-rf`.
 

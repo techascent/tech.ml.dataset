@@ -4,6 +4,6 @@ set -e
 
 scripts/run-tests
 clj -T:build jar
-cp target/classes/META-INF/maven/cnuernber/dtype-next/pom.xml .
+cp target/classes/META-INF/maven/techascent/tech.ml.dataset/pom.xml .
 clj -X:codox
 clj -X:deploy
