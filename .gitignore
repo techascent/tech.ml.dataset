@@ -2,6 +2,8 @@ target
 /classes
 /checkouts
 .lein-repl-history
+*.asc
+*.pom
 pom.xml
 pom.xml.asc
 *.jar

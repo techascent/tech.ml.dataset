@@ -1,16 +1,17 @@
 (ns tech.v3.dataset.set
   "Extensions to datasets to do per-row bag-semantics set/union and intersection."
   (:require [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.protocols :as ds-proto]
+            [tech.v3.datatype :as dtype]
             [ham-fisted.api :as hamf]
             [ham-fisted.lazy-noncaching :as lznc])
   (:import [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiConsumer]
-           [java.util Map]
+           [java.util Map HashSet]
+           [tech.v3.datatype Buffer]
            [ham_fisted BitmapTrieCommon]))
-
-
 
 
 (defn- concurrent-hashmap-frequencies
@@ -67,6 +68,33 @@
 
 
 (defn reduce-intersection
+  "Given a sequence of datasets, union the rows such that tuples that exist in all datasets
+  appear in the final dataset at their mininum repetition amount.  Can return either a
+  dataset with duplicate tuples or a dataset with a :count column.
+
+  Options:
+
+  * `:count` - Name of count column, if nil then tuples are duplicated and count is implicit.
+
+```clojure
+user> (def ds-a (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 2 :b 3}]))
+#'user/ds-a
+user> (def ds-b (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 3 :b 3}]))
+#'user/ds-b
+user> (ds-set/reduce-intersection [ds-a ds-b])
+_unnamed [2 2]:
+
+| :a | :b |
+|---:|---:|
+|  1 |  2 |
+|  1 |  2 |
+user> (ds-set/reduce-intersection {:count :count} [ds-a ds-b])
+_unnamed [1 3]:
+
+| :a | :b | :count |
+|---:|---:|-------:|
+|  1 |  2 |      2 |
+```"
   ([options datasets]
    (->> datasets
         (reduce (fn [acc ds]
@@ -86,6 +114,37 @@
 
 
 (defn reduce-union
+  "Given a sequence of datasets, union the rows such that all tuples appear in the final
+  dataset at their maximum repetition amount.  Can return either a dataset with duplicate
+  tuples or a dataset with a :count column.
+
+  Options:
+
+  * `:count` - Name of count column, if nil then tuples are duplicated and count is implicit.
+
+```clojure
+user> (def ds-a (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 2 :b 3}]))
+#'user/ds-a
+user> (def ds-b (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 3 :b 3}]))
+#'user/ds-b
+user> (ds-set/reduce-union [ds-a ds-b])
+_unnamed [4 2]:
+
+| :a | :b |
+|---:|---:|
+|  2 |  3 |
+|  3 |  3 |
+|  1 |  2 |
+|  1 |  2 |
+user> (ds-set/reduce-union {:count :count} [ds-a ds-b])
+_unnamed [3 3]:
+
+| :a | :b | :count |
+|---:|---:|-------:|
+|  2 |  3 |      1 |
+|  3 |  3 |      1 |
+|  1 |  2 |      2 |
+```"
   ([options datasets]
    (->> datasets
         (reduce (fn [acc ds]
@@ -102,122 +161,32 @@
   ([datasets] (reduce-union nil datasets)))
 
 
-(comment
-  (defn intersection-clj
-  [& datasets]
-  (->> datasets
-       (map (comp frequencies #(ds/rows % {:copying? true})))
-       (reduce (fn [acc m]
-                 (mapcat (fn [[el n]]
-                           (let [new-n (min n (get m el 0))]
-                             (when (pos? new-n)
-                               [[el new-n]])))
-                         acc)))
-       (mapcat (fn [[el n]] (repeat n el)))
-       ds/->dataset))
+(defn union
+  "Union two datasets producing a new dataset with the union of tuples.  Repeated tuples will
+  be repeated in final dataset at their maximum per-dataset repetition count."
+  ([a] a)
+  ([a b] (reduce-union [a b]))
+  ([a b & args] (reduce-union (lznc/concat [a b] args))))
 
 
-(defn intersection-value-space
-  [& datasets]
-  (->> datasets
-       (reduce (fn [acc ds]
-                 (let [rows (ds/rows ds {:copying? true})]
-                   (if acc
-                     (->> rows
-                          (lznc/filter (hamf/predicate
-                                        v (.containsKey ^java.util.Map acc v)))
-                          (hamf/frequencies)
-                          (hamf/map-intersection
-                           (hamf/bi-function l r (min (long l) (long r)))
-                           acc))
-                     (hamf/frequencies rows))))
-               nil)
-       (lznc/map #(assoc (key %) :count (val %)))
-       (ds/->>dataset)))
+(defn intersection
+  "Intersect two datasets producing a new dataset with the union of tuples.
+  Tuples repeated across all datasets repeated in final dataset at their minimum
+  per-dataset repetition count."
+  ([a] a)
+  ([a b] (reduce-intersection [a b]))
+  ([a b & args] (reduce-intersection (lznc/concat [a b] args))))
 
 
-(defn- concurrent-hashmap-frequencies
-  [data]
-  (hamf/preduce
-   (constantly (hamf/java-concurrent-hashmap))
-   (fn [acc v]
-     (.compute ^Map acc v BitmapTrieCommon/incBiFn)
-     acc)
-   (fn [l r] l)
-   {:min-n 1000}
-   data))
-
-
-(defn- concurrent-hashmap-intersection
-  [bifn ^ConcurrentHashMap l ^ConcurrentHashMap r]
-  (let [retval (hamf/java-concurrent-hashmap)
-        bifn (hamf/->bi-function bifn)]
-    (.forEach l 100 (reify java.util.function.BiConsumer
-                      (accept [this k v]
-                        (let [ov (.getOrDefault r k ::not-found)]
-                          (when-not (identical? ov ::not-found)
-                            (.put retval k (.apply bifn v ov)))))))
-    retval))
-
-
-(defn intersection-value-space-concurrent-hashmap
-  [& datasets]
-  (->> datasets
-       (reduce (fn [acc ds]
-                 (let [rows (ds/rows ds {:copying? true})]
-                   (if acc
-                     (->> rows
-                          (lznc/filter (hamf/predicate
-                                        v (.containsKey ^java.util.Map acc v)))
-                          (concurrent-hashmap-frequencies)
-                          (concurrent-hashmap-intersection
-                           (hamf/bi-function l r (min (long l) (long r)))
-                           acc))
-                     (concurrent-hashmap-frequencies rows))))
-               nil)
-       (lznc/map #(assoc (key %) :count (val %)))
-       (ds/->>dataset)))
-
-
-(defn intersection-index-space
-  [& datasets]
-  (->> datasets
-       (reduce
-        (fn [acc ds]
-          (let [rows (ds/rows ds {:copying? true})
-                n-rows (dtype/ecount rows)]
-            (if acc
-              (->> (hamf/range n-rows)
-                   (lznc/filter (hamf/long-predicate
-                                 v (.containsKey ^java.util.Map acc (rows v))))
-                   (hamf/group-by-reduce rows
-                                         #(dtype/make-list :int32)
-                                         (hamf/long-accumulator
-                                          acc v (do (.addLong ^IMutList acc v) acc))
-                                         #(do (.addAll ^IMutList %1 ^IMutList %2) %1))
-                   (hamf/map-intersection
-                    (hamf/bi-function l r (hamf/subvec l 0 (min (count l) (count r))))
-                    acc))
-              (argops/arggroup rows))))
-        nil)
-       (hamf/vals)
-       (apply lznc/concat)
-       (hamf/int-array-list)
-       (#(with-meta % {:min 0 :max (count %)}))
-       (ds/select-rows (first datasets))))
-
-
-(def ds-a (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 2 :b 3}]))
-(def ds-b (ds/->dataset [{:a 1 :b 2} {:a 1 :b 2} {:a 3 :b 3}]))
-
-
-(defonce big-ds-a (ds/->dataset {:a (lznc/repeatedly 20000 #(rand-int 337))
-                                 :b (cycle [:a :b :c :d :e])
-                                 :c (cycle [:d :e :f :g :h])}))
-
-
-
-(defonce big-ds-b (ds/->dataset {:a (lznc/repeatedly 20000 #(rand-int 337))
-                                 :b (cycle [:a :b :c :d :e])
-                                 :c (cycle [:d :e :f :g :h])}))
-  )
+(defn difference
+  "Remove tuples from a that also appear in b."
+  ([a] a)
+  ([a b]
+   (let [b-rows (ds-proto/rows b {:copying? true})
+         ^HashSet s (->> (hamf/upgroups
+                          (dtype/ecount b-rows)
+                          (fn [^long sidx ^long eidx]
+                            (doto (HashSet.)
+                              (.addAll (.subBuffer ^Buffer b-rows sidx eidx)))))
+                         (reduce #(do (.addAll ^HashSet %1 ^HashSet %2) %1)))]
+     (ds-base/filter a (hamf/predicate r (not (.contains s r)))))))

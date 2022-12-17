@@ -9,10 +9,16 @@
 
   "
   (:require [tech.v3.tensor :as dtt]
+            [tech.v3.tensor.dimensions :as dims]
+            [tech.v3.dataset.tensor :as ds-tens]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.functional :as dfn]
+            [tech.v3.datatype.errors :as errors]
+            [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.protocols :as dtype-proto])
   (:import [smile.math.matrix Matrix]
-           [smile.math.blas BLAS]))
+           [smile.math.blas BLAS]
+           [java.nio DoubleBuffer]))
 
 
 
@@ -78,8 +84,6 @@
   (when-not (= 2 (count (dtype/shape tens-data)))
     (throw (ex-info "Data is not right shape" {})))
   (let [[n-rows n-cols] (dtype/shape tens-data)
-        ;;Force computations and coalesce into one buffer
-        tens-data (externally-safe tens-data)
         ;;Smile blas sometimes crashes with row major tensors
         [high-stride low-stride] (:strides (dtt/tensor->dimensions tens-data))
         high-stride (long high-stride)
@@ -147,8 +151,8 @@
         [lhs-shape rhs-shape] (mmul-check lhs rhs)
           ;;It is worth it to copy because copy is a O(N) while matrix*matrix is
           ;;O(N^3).
-        lhs (externally-safe lhs)
-        rhs (externally-safe rhs)
+        ;; lhs (externally-safe lhs)
+        ;; rhs (externally-safe rhs)
         op-space (if (and (= lhs-dtype :float32)
                           (= (dtype/elemwise-datatype rhs) :float32))
                    :float32
@@ -199,7 +203,7 @@
              c-max-stride))
     C))
 
-(defn fit-pca-smile!
+#_(defn fit-pca-smile!
   "Run Principle Component Analysis on a tensor.
 
   Keep in mind that PCA may be highly influenced by outliers in the dataset
@@ -231,7 +235,7 @@
     (= 2 (count (dtype/shape tensor)))
     "PCA only applies to tensors with rank 2; rank %d passed in"
     (count (dtype/shape tensor)))
-   (let [{:keys [means tensor]} (mean-center-columns! tensor {:nan-strategy :keep})
+   (let [{:keys [means tensor]} (ds-tens/mean-center-columns! tensor {:nan-strategy :keep})
          [n-rows _n-cols] (dtype/shape tensor)
          n-rows (long n-rows)
          smile-matrix (tensor->smile-matrix tensor)]
@@ -273,7 +277,7 @@
    (fit-pca-smile! tensor nil)))
 
 
-(defn transform-pca-smile!
+#_(defn transform-pca-smile!
   "PCA transform the dataset returning a new tensor.  Mean-centers
   the tensor in-place."
   [tensor pca-info n-components]
@@ -288,6 +292,6 @@
            (<= (long n-components) (long n-cols))
            "Num components (%d) must be <= num cols (%d)"
            n-components n-cols)
-        tensor (:tensor (mean-center-columns! tensor (select-keys pca-info [:means])))
+        tensor (:tensor (ds-tens/mean-center-columns! tensor (select-keys pca-info [:means])))
         project-matrix (dtt/select eigenvectors :all (range n-components))]
     (matrix-multiply tensor project-matrix)))
