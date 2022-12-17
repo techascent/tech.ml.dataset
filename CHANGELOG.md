@@ -1,5 +1,9 @@
 # Changelog
 
+# 7.000-beta-10
+ * added normal set functions - union, intersection, and difference - to
+   `tech.v3.dataset.set`.
+
 # 7.000-beta-9
  * Lots of small dtype-next updates
  * slightly better resource tracking
