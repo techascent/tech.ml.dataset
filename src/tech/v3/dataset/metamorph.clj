@@ -766,6 +766,12 @@ test/data/stocks.csv [10 3]:
   (tech.v3.dataset.metamorph-api/pmap-ds ds-map-fn)))
 
 
+(defn print-all
+  "Helper function equivalent to `(tech.v3.dataset.print/print-range ... :all)`"
+  ([]
+  (tech.v3.dataset.metamorph-api/print-all )))
+
+
 (defn probability-distributions->label-column
   "Given a dataset that has columns in which the column names describe labels and the
   rows describe a probability distribution, create a label column by taking the max

@@ -1,4 +1,4 @@
-(defproject techascent/tech.ml.dataset "6.104-SNAPSHOT"
+(defproject techascent/tech.ml.dataset "6.104"
   :description "Clojure high performance data processing system"
   :url "http://github.com/techascent/tech.ml.dataset"
   :license {:name "Eclipse Public License"
@@ -24,10 +24,7 @@
                                org.slf4j/slf4j-api]]
                  ;;In your projects you may want to use exclude this if you have code
                  ;;that already relies on log4j2.
-                 [ch.qos.logback/logback-classic "1.4.4"
-                  :exclusions [org.slf4j/slf4j-api]]
-                 ;;Version of slf4j hand chosen to be a middle ground between projects.
-                 [org.slf4j/slf4j-api "1.7.30"]
+                 [ch.qos.logback/logback-classic "1.3.5"]
 
                  ;;High performance probabilistic stats
                  [com.techascent/t-digest "4.0-pre-release-1"]
