@@ -273,6 +273,31 @@
     (transform-pca dataset t)))
 
 
+
+#_(defn mean-std[rets]
+  (let [N (nc/mrows rets)
+        A (nn/fge rets)
+        fge1s (nc/entry! (nn/fge 1 N) 1)
+        means (nc/scal! (/ 1.0 N) (nc/mm fge1s A))
+        -ones (nc/scal -1 (nc/view-vctr fge1s))
+        -meancols (nc/rk -ones (nc/view-vctr means))
+        A-mcm (nc/axpy! 1.0 A (nc/copy -meancols))
+        A-means-sqr-summed (nc/mm fge1s (nm/sqr A-mcm))
+        A-stdevs (nm/sqrt (nc/scal (/ 1.0 (dec N)) A-means-sqr-summed))
+        A-sharpes (nc/ax (Math/sqrt 252) (nm/div means A-stdevs))]
+     {:means means :mcm A-mcm :stdevs A-stdevs :sharpes A-sharpes}))
+
+#_(defn cov-cor[rets]
+  (let [mstd (mean-std rets)
+        N (nc/mrows rets)
+        A-mcm (:mcm mstd)
+        A-stdevs (:stdevs mstd)
+        A-cov (nc/scal (/ 1.0 (dec N)) (nc/mm (nc/trans A-mcm) A-mcm))
+        sigx*sigy (nc/rk (nc/view-vctr A-stdevs) (nc/view-vctr A-stdevs))
+        A-cor (nm/div A-cov sigx*sigy)]
+    (merge mstd {:covmatrix A-cov :corrmatrix A-cor})))
+
+
 #_(defn matrix-desc-stats
   "Return a set of information about neanderthal matrix A
   - per-column means
