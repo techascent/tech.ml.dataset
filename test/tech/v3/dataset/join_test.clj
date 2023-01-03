@@ -6,7 +6,8 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is]])
+  (:import [java.time LocalDate]))
 
 
 (deftest simple-join-test
@@ -301,6 +302,30 @@
                                              :y  [3]})
                               {:on [:id] :how :outer})]
     (is (= [nil nil 3] (vec (:y res))))))
+
+
+(deftest left-join-dates
+  (is (= [{:a (LocalDate/of 2022 12 20)
+	   :b 4,
+	   :right.a (LocalDate/of 2022 12 20)
+	   :c 5}
+	  {:a (LocalDate/of 2022 12 28)
+	   :b 3,
+	   :right.a nil,
+	   :c nil}
+	  {:a (LocalDate/of 2022 12 30)
+	   :b 4,
+	   :right.a nil,
+	   :c nil}]
+         (vec (ds/rows
+               (tech.v3.dataset.join/left-join
+                :a
+                (ds/->dataset [{:a (LocalDate/of 2022 12 28) :b 3}
+                               {:a (LocalDate/of 2022 12 30) :b 4}
+                               {:a (LocalDate/of 2022 12 20) :b 4}])
+                (ds/->dataset [{:a (LocalDate/of 2022 12 20) :c 5}
+                               {:a (LocalDate/of 2022 10 20) :c 6}
+                               {:a (LocalDate/of 2022 11 20) :c 7}])))))))
 
 
 (comment

@@ -443,7 +443,7 @@
   (if (== 0 (long n-empty))
     column
     (let [^Column column column
-          col-dtype (dtype/elemwise-datatype column)
+          col-dtype (packing/unpack-datatype (dtype/elemwise-datatype column))
           n-elems (dtype/ecount column)
           container (dtype/make-container col-dtype (+ n-elems n-empty))]
       (dtype/copy! (.data column) (dtype/sub-buffer container 0 n-elems))
@@ -461,7 +461,7 @@
   (if (== 0 (long n-empty))
     column
     (let [^Column column column
-          col-dtype (dtype/get-datatype column)
+          col-dtype (packing/unpack-datatype (dtype/elemwise-datatype column))
           n-elems (dtype/ecount column)
           container (dtype/make-container col-dtype (+ n-elems n-empty))]
       (dtype/copy! (.data column) (dtype/sub-buffer container n-empty n-elems))

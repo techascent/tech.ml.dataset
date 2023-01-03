@@ -15,6 +15,7 @@
             [tech.v3.dataset.test-utils :as test-utils]
             [tech.v3.dataset.rolling :as ds-roll]
             [tech.v3.dataset.column-filters :as cf]
+            [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.print :as ds-print]
             ;;Loading multimethods required to load the files
             [tech.v3.libs.poi]
@@ -26,6 +27,7 @@
             [ham-fisted.lazy-noncaching :as lznc])
   (:import [java.util List HashSet UUID Random BitSet Map]
            [java.util.concurrent ConcurrentHashMap]
+           [java.time LocalDate]
            [java.io File ByteArrayInputStream]
            [tech.v3 TMD]
            [ham_fisted IFnDef$OD IMutList BitmapTrieCommon]))
@@ -1627,3 +1629,14 @@
   (let [ds (ds/->dataset "test/data/stocks.csv")
         stats (ds/descriptive-stats ds)]
     (is (not (nil? (.toString ^Object stats))))))
+
+
+(deftest extend-prepend-packed-column
+  (let [ds (ds/->dataset {:a [(LocalDate/of 2022 12 28)]})
+        acol (ds :a)
+        pa (col-impl/prepend-column-with-empty acol 5)
+        ap (col-impl/extend-column-with-empty acol 5)]
+    (is (= [nil nil nil nil nil (LocalDate/of 2022 12 28)]
+           (vec pa)))
+    (is (= [(LocalDate/of 2022 12 28) nil nil nil nil nil]
+           (vec ap)))))
