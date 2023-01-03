@@ -1,5 +1,10 @@
 # Changelog
 
+# 7.000-beta-12
+ * Large hamf update.
+ * fixed a set of issues - descriptive-stats col order, nippy after arrow,
+   column correlation type.
+
 # 7.000-beta-10
  * added normal set functions - union, intersection, and difference - to
    `tech.v3.dataset.set`.
