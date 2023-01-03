@@ -1386,7 +1386,9 @@ Dependent block frames are not supported!!")
                             (int8-buf->missing
                              (first specific-bufs)
                              n-elems))
-                  metadata (into col-metadata (:metadata field))]
+                  metadata (-> (into col-metadata (:metadata field))
+                               ;;Fixes issue 330
+                               (with-meta nil))]
               [(conj retval
                      (col-impl/new-column
                       (:name field)
