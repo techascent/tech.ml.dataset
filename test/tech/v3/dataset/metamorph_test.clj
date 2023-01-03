@@ -27,10 +27,11 @@
           (take 5)))))
 
 (deftest brief
-  (is (= 334.0
-         (->>
-          ((ds-mm/brief )
-           {:metamorph/data df})
-          :metamorph/data
-          first
-          :min))))
+  (let [df (ds/select-columns df (sort (ds/column-names df)))]
+    (is (= 334.0
+           (->>
+            ((ds-mm/brief)
+             {:metamorph/data df})
+            :metamorph/data
+            first
+            :min)))))

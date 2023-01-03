@@ -1275,7 +1275,6 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                            (vec))}
                                      (when (< (count histogram) max-categorical-values)
                                        {:histogram histogram}))))))))
-                (clojure.core/sort-by (comp str :col-name))
                 ->dataset)
            existing-colname-set (->> (column-names stats-ds)
                                      set)]
