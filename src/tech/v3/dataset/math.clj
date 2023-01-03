@@ -81,7 +81,7 @@
         rhs-colseq (->> (ds-base/columns dataset)
                         (map (fn [col] [(ds-col/column-name col)
                                         (hamf/double-array (dtype/->reader col :float64))])))
-        correlation-type (or :pearson correlation-type)
+        correlation-type (or correlation-type :pearson)
         corr-fn (case correlation-type
                   :pearson #(statistics/pearsons-correlation {:nan-strategy :keep} %1 %2)
                   :spearman #(statistics/spearmans-correlation {:nan-strategy :keep} %1 %2)
