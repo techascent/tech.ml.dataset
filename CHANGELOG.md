@@ -1,5 +1,8 @@
 # Changelog
 
+# 7.000-beta-14
+ * Fix for [issue 342](https://github.com/techascent/tech.ml.dataset/issues/341) - join on date columns.
+
 # 7.000-beta-12
  * Large hamf update.
  * fixed a set of issues - descriptive-stats col order, nippy after arrow,
