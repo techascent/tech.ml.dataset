@@ -1,5 +1,8 @@
 # Changelog
 
+# 7.000-beta-16
+ * Latest dtype-next - support for jdk-19 and fix for arggroup.
+
 # 7.000-beta-14
  * Fix for [issue 342](https://github.com/techascent/tech.ml.dataset/issues/341) - join on date columns.
 
