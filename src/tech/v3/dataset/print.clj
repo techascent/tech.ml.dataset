@@ -7,7 +7,9 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.graal-native :as graal-native]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.api :as hamf])
   (:import [tech.v3.datatype ObjectReader]
            [java.util List ArrayList]
            [org.roaringbitmap RoaringBitmap]))
@@ -209,7 +211,12 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)
-         print-ds (ds-proto/select-rows dataset index-range)
+         print-ds (ds-proto/select-rows dataset
+                                        (lznc/filter
+                                         (hamf/long-predicate
+                                          idx (and (< idx n-rows)
+                                                   (>= idx (- n-rows))))
+                                         index-range))
          column-names (map #(when (some? %) (.toString ^Object %)) (keys print-ds))
          column-types (map #(str (when column-types? (:datatype (meta %))))
                            (vals print-ds))

@@ -1640,3 +1640,12 @@
            (vec pa)))
     (is (= [(LocalDate/of 2022 12 28) nil nil nil nil nil]
            (vec ap)))))
+
+(deftest filter-regression-342
+  (ds/filter-column (ds/->dataset (repeat 1000 {:datatype :float64 :b 2} ))
+                    :datatype #(= % :object)))
+
+
+(deftest head-tail-regression-343
+  (let [ds (ds/->dataset {:a (repeat 1000 :a)
+                          :b (range 1000)})]))
