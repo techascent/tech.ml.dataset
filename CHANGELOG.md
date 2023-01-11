@@ -1,4 +1,7 @@
 # Changelog
+# 7.000-beta-17
+ * dataset group-by operations must respect the initial order of keys in the grouping criteria.
+ * group-by-column, group-by are heavily optimized and quite a bit faster for large datasets.
 
 # 7.000-beta-16
  * Latest dtype-next - support for jdk-19 and fix for arggroup.

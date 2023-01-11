@@ -490,7 +490,15 @@ null [6 3]:
 
 (defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value."
+  a map of colname->column-value.
+
+  Options - options are passed into dtype arggroup:
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([key-fn options]
+  (tech.v3.dataset.metamorph-api/group-by key-fn options))
   ([key-fn]
   (tech.v3.dataset.metamorph-api/group-by key-fn)))
 
@@ -498,21 +506,38 @@ null [6 3]:
 (defn group-by->indexes
   "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
   is an in-order contiguous group of indexes."
+  ([key-fn options]
+  (tech.v3.dataset.metamorph-api/group-by->indexes key-fn options))
   ([key-fn]
   (tech.v3.dataset.metamorph-api/group-by->indexes key-fn)))
 
 
 (defn group-by-column
-  "Return a map of column-value->dataset."
+  "Return a map of column-value->dataset.
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([colname options]
+  (tech.v3.dataset.metamorph-api/group-by-column colname options))
   ([colname]
   (tech.v3.dataset.metamorph-api/group-by-column colname)))
 
 
 (defn group-by-column->indexes
   "(Non-lazy) - Group a dataset by a column return a map of column-val->indexes
-  where indexes is an in-order contiguous group of indexes."
+  where indexes is an in-order contiguous group of indexes.
+
+  Options are passed into dtype's arggroup method."
+  ([colname options]
+  (tech.v3.dataset.metamorph-api/group-by-column->indexes colname options))
   ([colname]
   (tech.v3.dataset.metamorph-api/group-by-column->indexes colname)))
+
+
+(defn group-by-column-consumer
+  ([cname]
+  (tech.v3.dataset.metamorph-api/group-by-column-consumer cname)))
 
 
 (defn has-column?

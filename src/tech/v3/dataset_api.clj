@@ -277,6 +277,35 @@ user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 
   ([options] (-> (io-mapseq/mapseq-reducer options) (hamf/reducer->rf))))
 
 
+(defn ^:no-doc group-by-column-consumer
+  [ds cname]
+  (let [rows (rows ds)
+        col (dtype/->reader (column ds cname))
+        mapseq-r (io-mapseq/mapseq-reducer nil)
+        mapseq-rfn (hamf-proto/->rfn mapseq-r)
+        group-by-r (reify
+                     hamf-proto/Reducer
+                     (->init-val-fn [this] (hamf-proto/->init-val-fn mapseq-r))
+                     (->rfn [this] (hamf/long-accumulator
+                                    acc idx
+                                    (mapseq-rfn acc (.readObject rows idx))))
+                     hamf-proto/Finalize
+                     (finalize [this v]
+                       (if (vector? v)
+                         (apply concat-copying v)
+                         (hamf-proto/finalize mapseq-r v)))
+                     hamf-proto/ParallelReducer
+                     (->merge-fn [this]
+                       (fn [a b]
+                         (hamf/concatv
+                          (if (vector? a) a [(hamf-proto/finalize mapseq-r a)])
+                          (if (vector? b) b [(hamf-proto/finalize mapseq-r b)])))))]
+    (hamf/group-by-reducer (hamf/long->obj idx (.readObject col idx))
+                            group-by-r
+                            {:map-fn (constantly (hamf/java-concurrent-hashmap))}
+                            (hamf/range (row-count ds)))))
+
+
 
 (defmacro bind->
   "Threads like `->` but binds name to expr like `as->`:

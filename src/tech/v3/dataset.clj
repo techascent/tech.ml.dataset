@@ -634,7 +634,15 @@ null [6 3]:
 
 (defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value."
+  a map of colname->column-value.
+
+  Options - options are passed into dtype arggroup:
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([dataset key-fn options]
+  (tech.v3.dataset.base/group-by dataset key-fn options))
   ([dataset key-fn]
   (tech.v3.dataset.base/group-by dataset key-fn)))
 
@@ -642,21 +650,38 @@ null [6 3]:
 (defn group-by->indexes
   "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
   is an in-order contiguous group of indexes."
+  ([dataset key-fn options]
+  (tech.v3.dataset.base/group-by->indexes dataset key-fn options))
   ([dataset key-fn]
   (tech.v3.dataset.base/group-by->indexes dataset key-fn)))
 
 
 (defn group-by-column
-  "Return a map of column-value->dataset."
+  "Return a map of column-value->dataset.
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([dataset colname options]
+  (tech.v3.dataset.base/group-by-column dataset colname options))
   ([dataset colname]
   (tech.v3.dataset.base/group-by-column dataset colname)))
 
 
 (defn group-by-column->indexes
   "(Non-lazy) - Group a dataset by a column return a map of column-val->indexes
-  where indexes is an in-order contiguous group of indexes."
+  where indexes is an in-order contiguous group of indexes.
+
+  Options are passed into dtype's arggroup method."
+  ([dataset colname options]
+  (tech.v3.dataset.base/group-by-column->indexes dataset colname options))
   ([dataset colname]
   (tech.v3.dataset.base/group-by-column->indexes dataset colname)))
+
+
+(defn group-by-column-consumer
+  ([ds cname]
+  (tech.v3.dataset-api/group-by-column-consumer ds cname)))
 
 
 (defn has-column?

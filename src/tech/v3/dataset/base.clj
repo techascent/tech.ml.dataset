@@ -25,6 +25,7 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [ham-fisted.api :as hamf]
+            [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
   (:import [tech.v3.datatype ObjectReader PackedLocalDate]
            [tech.v3.dataset.impl.dataset Dataset]
@@ -32,8 +33,9 @@
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.dataset Text]
            [java.util List LinkedHashMap Map Arrays HashMap
-            ArrayList LinkedHashSet]
-           [ham_fisted IMutList]
+            ArrayList LinkedHashSet Map$Entry]
+           [java.util.function LongConsumer]
+           [ham_fisted IMutList MapForward Reductions]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn])
   (:refer-clojure :exclude [filter group-by sort-by concat take-nth reverse pmap]))
@@ -495,42 +497,63 @@
             (select-rows dataset))))
 
 
+(defn- finalize-index-map
+  [idx-map ds options]
+  (let [finalizer (get options :group-by-finalizer identity)]
+    (dorun (hamf/pmap (fn [^Map$Entry e]
+                        (.setValue e (finalizer (select-rows ds (deref (.getValue e))))))
+                      idx-map))
+    idx-map))
+
+
 (defn group-by->indexes
   "(Non-lazy) - Group a dataset and return a map of key-fn-value->indexes where indexes
   is an in-order contiguous group of indexes."
-  [dataset key-fn]
-  (some->> dataset
-           ds-readers/mapseq-reader
-           (argops/arggroup-by key-fn {:unordered? false})))
+  ([dataset key-fn options]
+   (when dataset
+     (argops/arggroup-by key-fn options (ds-proto/rows dataset options))))
+  ([dataset key-fn] (group-by->indexes dataset key-fn nil)))
+
 
 
 (defn group-by
   "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value."
-  ([dataset key-fn]
+  a map of colname->column-value.
+
+  Options - options are passed into dtype arggroup:
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([dataset key-fn options]
    (when dataset
-     (->> (group-by->indexes dataset key-fn)
-          (pmap (fn [[k v]] [k (select dataset :all v)]))
-          (into {})))))
+     (-> (group-by->indexes dataset key-fn (merge {:skip-finalize? true} options))
+         (finalize-index-map dataset options))))
+  ([dataset key-fn] (group-by dataset key-fn nil)))
 
 
 (defn group-by-column->indexes
     "(Non-lazy) - Group a dataset by a column return a map of column-val->indexes
-  where indexes is an in-order contiguous group of indexes."
-  [dataset colname]
-  (->> (column dataset colname)
-       (argops/arggroup {:unordered? false})))
+  where indexes is an in-order contiguous group of indexes.
+
+  Options are passed into dtype's arggroup method."
+  ([dataset colname options]
+   (when dataset (argops/arggroup options (column dataset colname))))
+  ([dataset colname]
+   (group-by-column->indexes dataset colname nil)))
 
 
 (defn group-by-column
-  "Return a map of column-value->dataset."
-  [dataset colname]
-  (when dataset
-    (->> (group-by-column->indexes dataset colname)
-         (pmap (fn [[k v]]
-                 [k (-> (select dataset :all v)
-                        (set-dataset-name k))]))
-         (into {}))))
+  "Return a map of column-value->dataset.
+
+  * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
+     rows are selected.  This can be used to immediately perform a reduction on each new
+     dataset which is faster than doing it in a separate run."
+  ([dataset colname options]
+   (when dataset
+     (-> (group-by-column->indexes dataset colname (merge {:skip-finalize? true} options))
+         (finalize-index-map dataset options))))
+  ([dataset colname] (group-by-column dataset colname nil)))
 
 
 (defn sort-by
