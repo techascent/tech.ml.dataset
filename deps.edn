@@ -14,7 +14,7 @@
                :artifact-id "tech.ml.dataset"
                :version "7.000-beta-18"
                :name "TMD"
-               :description "High Performance Clojure Data Processing System"
+               :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}
                :html {:transforms [[:head] [:append [:script {:async true
                                                               :src "https://www.googletagmanager.com/gtag/js?id=G-RGTB4J7LGP"}]]

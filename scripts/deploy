@@ -5,5 +5,5 @@ set -e
 scripts/run-tests
 clj -T:build jar
 cp target/classes/META-INF/maven/techascent/tech.ml.dataset/pom.xml .
-clj -A:dev -X:codox
+scripts/build-docs
 clj -X:deploy
