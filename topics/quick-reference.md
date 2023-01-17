@@ -9,8 +9,8 @@ functions that are we find most useful.
 
 ## Loading/Saving
 
-* [->dataset, ->>dataset](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var--.3Edataset) - loads csv, tsv,
-  sequence-of-maps, map-of-arrays, xlsx, xls, and if their respective namespaces and dependencies are loaded, parquet and arrow.
+* [->dataset, ->>dataset](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var--.3Edataset) - loads csv, tsv, sequence-of-maps, map-of-arrays, xlsx, xls, and if their respective namespaces and dependencies are loaded, parquet and arrow. [SQL](https://github.com/techascent/tech.ml.dataset.sql)
+and [ClojureScript](https://github.com/cnuernber/tmdjs) support exists in separate libraries.
 * [write!](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-write.21) - Writes csv, tsv or
   nippy with gzipping. Depends on scanning file path string to determine options.
 * [dataset->data](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-dataset-.3Edata) - Useful if you want the entire
@@ -51,7 +51,7 @@ functions that are we find most useful.
 * [column-count](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-column-count) - number of columns.
 * [rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rows) - get the rows of the
  dataset as a `java.util.List` of persistent-map-like maps.  Implemented as a flyweight
- implementation of `clojure.lang.APersistentMap` where data is read out of the underlying dataset on demand.  This keeps the 
+ implementation of `clojure.lang.APersistentMap` where data is read out of the underlying dataset on demand.  This keeps the
  data in the backing store and lazily reads it so you will have relatively more expensive reading of the
  data but will not increase your memory working-set size.   Using negative values as indexes will index from the end similar to numpy and pandas.
 * [rowvecs](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rowvecs) - Get the rows of the
@@ -179,3 +179,13 @@ to float or double columns in order to support a missing value indicator.
 
  * [tech.v3.datatype/clone](https://github.com/cnuernber/dtype-next/blob/152f09f925041d41782e05009bbf84d7d6cfdbc6/src/tech/v3/datatype.clj#L95) - Clones the dataset realizing lazy operation and copying the data into
  java arrays.  Will clone datasets or columns.
+
+## Additional Selling Points
+
+Sophisticated support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html), including mmap support for JDK-8->JDK-17 although if you are on an M-1 Mac you will need to use JDK-17. Also, with arrow, per-column compression (LZ4, ZSTD) exists across all supported platforms. At the time of writing, the official Arrow SDK does not support mmap, or JDK-17, and has no user-accessible way to save a compressed streaming format file.
+
+Support is provided for operating on _sequences_ of datasets, enabling working on larger, potentially out-of-memory workloads. This is consistent with the design of the parquet and arrow data storage systems and aggregation operations for sequences of datasets are efficiently implemented in the
+[tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) namespace.
+
+Preliminary support for algorithms from the [Apache Data Sketches](https://datasketches.apache.org/) system can be found in the [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) namespace. Summations/means in this area are implemented using the
+[Kahan compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm) algorithm.
