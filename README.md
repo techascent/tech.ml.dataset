@@ -57,7 +57,7 @@ The "Quick Reference" topic summarizes many of the most frequently used function
 
 The API docs document every available function: [https://techascent.github.io/tech.ml.dataset/](https://techascent.github.io/tech.ml.dataset/)
 
-The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/javadoc/index.html)) and sample program ([source](java_test/java/jtest/TMDDemo.java)) show how to use TMD from Java.
+The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/javadoc/tech/v3/TMD.html) / [with frames](https://techascent.github.io/tech.ml.dataset/javadoc/index.html)) and sample program ([source](java_test/java/jtest/TMDDemo.java)) show how to use TMD from Java.
 
 ## Questions / Community
 
