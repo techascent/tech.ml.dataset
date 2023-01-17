@@ -1,6 +1,8 @@
 # tech.ml.dataset
 
-`tech.ml.dataset` is a Clojure library for tabular data processing similar to Python's Pandas, or R's `data.table`. It supports pragmatic data-intensive work on the JVM by providing powerful abstractions that simplify implementing efficient solutions to real problems. Datasets [shrink in memory](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) through columnar storage and the use of primitive arrays, packed datetime types, and string tables. Unlike in Python or R, datasets are _functional_, which means they're easier to reason about.
+`tech.ml.dataset` (TMD) is a Clojure library for tabular data processing similar to Python's Pandas, or R's `data.table`. It supports pragmatic data-intensive work on the JVM by providing powerful abstractions that simplify implementing efficient solutions to real problems. Datasets [shrink in memory](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) through columnar storage and the use of primitive arrays, packed datetime types, and string tables.
+
+Unlike in Python or R, TMD datasets are _functional_, which means they're easier to reason about.
 
 ## Installing
 
