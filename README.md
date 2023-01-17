@@ -1,13 +1,14 @@
 # tech.ml.dataset
 
-`tech.ml.dataset` is a Clojure library for tabular data processing similar to Python's Pandas, or R's `data.table`. It supports pragmatic and data-intensive work on the JVM by providing powerful abstractions that simplify implementing efficient solutions to real problems. Datasets [shrink in memory](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) through columnar storage and use of primitive arrays, packed datetime types, and string tables; moreover, column-wise operations on datasets are very fast.
+`tech.ml.dataset` is a Clojure library for tabular data processing similar to Python's Pandas, or R's `data.table`. It supports pragmatic and data-intensive work on the JVM by providing powerful abstractions that simplify implementing efficient solutions to real problems. Datasets [shrink in memory](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) through columnar storage and the use of primitive arrays, packed datetime types, and string tables; moreover, column-wise operations on datasets are very fast.
 
 ## Installing
 
 Installation instructions for your favorite build system (lein, deps.edn, etc...) can be found at Clojars, where the library is hosted:
 
+[![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
+
  - [https://clojars.org/techascent/tech.ml.dataset](https://clojars.org/techascent/tech.ml.dataset)
- - [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
 ## Verifying Installation
 
@@ -64,7 +65,9 @@ The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/ja
 * Visit the [zulip stream](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev).
 * Or the [slack data science channel](https://clojurians.slack.com/archives/C0BQDEJ8M).
 
-## Related Projects and Notes
+-----
+
+### Related Projects and Notes
 
 * An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
 * [tech.v3.datatype](https://github.com/cnuernber/dtype-next) provides the underlying numeric subsystem to TMD.
