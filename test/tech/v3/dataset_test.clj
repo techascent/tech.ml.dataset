@@ -1571,7 +1571,9 @@
 (deftest print-all-test
   (let [ds (ds/->dataset (for [i (range 1000)] {:a i}))]
     (is (= (meta (ds/print-all ds))
-           (meta (ds-print/print-range ds :all))))))
+           (meta (ds-print/print-range ds :all))))
+    (is (> (count (with-out-str (println (ds/print-all ds))))
+           1000))))
 
 (deftest column-copy-test
   []
