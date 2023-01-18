@@ -1,5 +1,5 @@
 #!/bin/bash
 
 scripts/compile
-clj -A:dev -X:codegen
-clj -A:dev -M:test
+clj -X:dev:codegen
+clj -M:dev:test
