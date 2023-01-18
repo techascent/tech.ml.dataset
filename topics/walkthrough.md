@@ -1,43 +1,21 @@
 # tech.ml.dataset Walkthrough
 
-
-Let's take a moment to walkthrough the `tech.ml.dataset` system.  This system was built
-over the course of a few months in order to make working with columnar data easier
-in the same manner as one would work with `data.table` in R or `pandas` in Python.  While
-it takes design inspiration from these sources it does not strive to be a copy in any
-way but rather an extension to the core Clojure language that is built for good
-performance when processing datasets of realistic sizes which in our case means
-millions of rows and tens of columns.
-
+`tech.ml.dataset` (TMD) is a Clojure library designed to ease working with tabular data, similar to `data.table` in R or Python's Pandas. TMD takes inspiration from the design of those tools, but does not aim to copy their functionality. Instead, TMD is a building block that increases Clojure's already considerable prowess for data processing tasks.
 
 ## High Level Design
 
+Logically, a dataset is a map of column name to column data. Column data is typed (e.g., a column of 16 bit integers, or a column of 64 bit floating point numbers), similar to a database. Column names may be any Java object - keywords and strings are typical - and column values may be any Java primitive type, or type supported by `tech.datatype`, datetimes, or arbitrary objects. Column data is stored contiguously in JVM arrays, and missing values are indicated with bitsets.
 
-Logically, a dataset is a map of column name to column data.  Column data is typed
-so for instance you may have a column of 16 bit integers or 64 bit floating point
-numbers.  Column names may be any java object and column values may be of the
-tech.datatype primitive, datetime, or objects.  Data is stored contiguously in jvm
-arrays while missing values are indicated with bitsets.
+The outline of the walkthrough follows typical Clojure workflows, showing how those ideas are expanded by TMD:
 
-
-Given this definition, the intention is to allow more or less normal flows familiar
-to most Clojure programmers:
-
-1.  Dataset creation in the form of csv,tsv (and gzipped varieties of these), maps of
-    column name to column values, and arbitrary sequences of maps.
-1.  Pretty printing of datasets and, to a lesser extent, columns.  Simple selection of
-    a given column and various functions describing the details of a column.
-1.  Access to the values in a column including eliding or erroring on missing values.
-1.  Select subrect of dataset defined by a sequence of columns and some sequence of
-    indexes.
-1.  `sort-by`, `filter`, `group-by` are modified operations that operate on a
-    logical sequence of maps and an arbitrary function but return a new dataset.
-1.  Efficient elementwise operations such as linear combinations of columns.
-1.  Statistical and ml-based analysis of some subset of columns either on their own
-    or as they relate to another `target` column.
-1.  Conversion of the dataset to sequences of maps, sequences of persistent vectors, and
-    rowwise sequences of java arrays of a chosen primitive datatype.
-
+1. Dataset creation from typical formats (csv, tsv, etc...), or sequences of maps, or maps of column name to column values.
+1. REPL-friendly printing of datasets
+1. Access to dataset values, including eliding or erroring on missing values.
+1. Selecting rows or columns of a dataset, or both at once.
+1. Functions familiar from `clojure.core` (e.g., `sort-by`, `filter`, `group-by`, etc...) that operate on datasets.
+1. Efficient elementwise operations and their use in adding or updating columns derived from data in the dataset.
+1. Statistical analysis of dataset data.
+1. Getting data back out of datasets for downstream consumers (via file/stream export with broad format support, or as sequences of maps or vectors or Java arrays).
 
 ## Dataset Creation
 
