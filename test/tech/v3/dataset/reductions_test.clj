@@ -16,6 +16,7 @@
             [clojure.core.protocols :as cl-proto])
   (:import [tech.v3.datatype UnaryPredicate FastStruct$FMapEntry]
            [java.time LocalDate YearMonth]
+           [ham_fisted Consumers$IncConsumer MutHashTable]
            [java.util ArrayList Map$Entry Arrays]
            [clojure.lang MapEntry]))
 
@@ -182,39 +183,59 @@
        (ds/->>dataset)))
 
 
-(defrecord YMC [year-month ^long count ^long _row-id]
+(defmacro reduced->
+  [rfn acc & data]
+  (reduce (fn [expr next-val]
+            `(let [val# ~expr]
+               (if (reduced? val#)
+                 val#
+                 (~rfn val# ~next-val))))
+          acc
+          data))
+
+
+(defrecord YMC [year-month ^long count]
   clojure.lang.IReduceInit
   (reduce [this rfn init]
-    (let [init (-> init
-                   (rfn (FastStruct$FMapEntry. :year-month year-month))
-                   (rfn (FastStruct$FMapEntry. :count count))
-                   (rfn (FastStruct$FMapEntry. :_row-id _row-id)))]
+    (let [init (reduced-> rfn init
+                   (clojure.lang.MapEntry/create :year-month year-month)
+                   (clojure.lang.MapEntry/create :count count))]
       (if (and __extmap (not (reduced? init)))
         (reduce rfn init __extmap)
-        init))))
+        init)))
+  )
 
 
+(def inc-cons-fn (hamf/function k (Consumers$IncConsumer.)))
 
 (defn- tally-days-as-year-months
   [{:keys [^LocalDate start ^LocalDate end]}]
-  (let [nd (.until start end java.time.temporal.ChronoUnit/DAYS)
-        tally (hamf/java-hashmap)
+  ;;Using a hash provider with equals semantics allows the hamf hashtable to
+  ;;compete on equal terms with the java hashtable.  In that we find that compute,
+  ;;computeIfAbsent and reduce
+  (let [tally (MutHashTable. hamf/equal-hash-provider)
         incrementor (hamf/bi-function k v
                                       (if v
                                         (unchecked-inc (long v))
                                         1))
-        _ (dotimes [idx nd]
+        _ (dotimes [idx (.until start end java.time.temporal.ChronoUnit/DAYS)]
             (let [ym (YearMonth/from (.plusDays start idx))]
-              (.compute tally ym incrementor)))]
-    (lznc/map #(let [^Map$Entry e %]
-                 (YMC. (.getKey e) (.getValue e) 0)) tally)))
+              ;;Compute if absent is every so slightly faster than compute as it involves
+              ;;less mutation of the original hashtable.  It does, however, require the
+              ;;value in the node itself to be mutable.
+              (.inc ^Consumers$IncConsumer (.computeIfAbsent tally ym inc-cons-fn))))]
+    (lznc/map-reducible #(let [^Map$Entry e %]
+                           (YMC. (.getKey e) (deref (.getValue e))))
+                        (.entrySet tally))))
 
 
 (defn- otfrom-pathway
   [ds]
   (->> (ds/row-mapcat ds tally-days-as-year-months
                       ;;generate a sequence of datasets
-                      {:result-type :as-seq})
+                      {:result-type :as-seq
+                       :parser-fn {:count :int32
+                                   :year-month :object}})
        ;;sequence of datasets
        (ds-reduce/group-by-column-agg
         [:simulation :placement :year-month]

@@ -211,12 +211,17 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
          line-policy (or print-line-policy *default-print-line-policy*)
          column-width (or print-column-max-width *default-print-column-max-width*)
          column-types? (or print-column-types? *default-print-column-types?*)
-         print-ds (ds-proto/select-rows dataset
-                                        (lznc/filter
-                                         (hamf/long-predicate
-                                          idx (and (< idx n-rows)
-                                                   (>= idx (- n-rows))))
-                                         index-range))
+         print-ds (if (keyword? index-range)
+                    (if (identical? index-range :all)
+                      dataset
+                      (throw (RuntimeException. (str "Unrecognized index range keyword: "
+                                                     index-range))))
+                    (ds-proto/select-rows dataset
+                                          (lznc/filter
+                                           (hamf/long-predicate
+                                            idx (and (< idx n-rows)
+                                                     (>= idx (- n-rows))))
+                                           index-range)))
          column-names (map #(when (some? %) (.toString ^Object %)) (keys print-ds))
          column-types (map #(str (when column-types? (:datatype (meta %))))
                            (vals print-ds))

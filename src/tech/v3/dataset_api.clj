@@ -951,15 +951,18 @@ user>
    (pmap-ds
     ds
     (fn [ds]
-      (let [nds (->> (rows ds options)
-                     (lznc/map-indexed (fn [^long rid row]
-                                         (->> (mapcat-fn row)
-                                              ;;make sure returned value has appropriate row id
-                                              (lznc/map #(assoc % :_row-id rid)))))
-                     (lznc/apply-concat)
-                     (->>dataset options))]
-        (->  (select-rows ds (nds :_row-id))
-             (merge (dissoc nds :_row-id)))))
+      (let [indexes (dtype/make-list :int32)
+            nds (transduce (comp (map-indexed
+                                  (fn [^long rid row]
+                                    (->> (mapcat-fn row)
+                                         (lznc/map-reducible
+                                          #(do (.addLong indexes rid)
+                                               %)))))
+                                 cat)
+                           (mapseq-rf options)
+                           (rows ds))]
+        (-> (select-rows ds indexes)
+            (merge nds))))
     options))
   ([ds mapcat-fn]
    (row-mapcat ds mapcat-fn nil)))
