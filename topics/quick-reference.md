@@ -189,3 +189,14 @@ Support is provided for operating on _sequences_ of datasets, enabling working o
 
 Preliminary support for algorithms from the [Apache Data Sketches](https://datasketches.apache.org/) system can be found in the [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) namespace. Summations/means in this area are implemented using the
 [Kahan compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm) algorithm.
+
+### Efficient Rowwise Operations
+
+TMD uses efficient parallelized mechanisms to operate on data for rowwise map and mapcat operations. Argument functions are passed maps that lazily read only the required data from the underlying dataset (huge savings over reading all the data). TMD scans the returned maps from the argument function for datatype and missing information. Columns derived from the mapping operation overwrite columns in the original dataset - the powerful `row-map` function works this way.
+
+The mapping operations are run in parallel using a primitive named `pmap-ds` and the resulting datasets can either be returned in a sequence or combined into a single larger dataset.
+
+* [row-map](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-map)
+* [row-mapcat](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-row-mapcat)
+* [rows](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rows)
+* [rowvecs](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.html#var-rowvecs)
