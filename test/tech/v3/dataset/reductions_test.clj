@@ -202,8 +202,7 @@
                    (clojure.lang.MapEntry/create :count count))]
       (if (and __extmap (not (reduced? init)))
         (reduce rfn init __extmap)
-        init)))
-  )
+        init))))
 
 
 (def inc-cons-fn (hamf/function k (Consumers$IncConsumer.)))
