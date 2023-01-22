@@ -43,25 +43,23 @@
 
 (defn- cat->num [table-args]
   (->
-            (ds/->dataset {:y [ :a :b :c :d]})
-            (ds/categorical->number  [:y] table-args)
-            :y
-            meta
-            :categorical-map
-            :lookup-table
-            clojure.set/map-invert))
+   (ds/->dataset {:y [:a :b :c :d]})
+   (ds/categorical->number  [:y] table-args)
+   :y
+   meta
+   :categorical-map
+   :lookup-table
+   clojure.set/map-invert))
 
 
 (t/deftest test-categorical->number []
-  (t/is (= {5 :a, 2 :b, 0 :c, 1 :d})
-        (cat->num  [[:a 5] [:b 2]]))
-  (t/is (= {5 :a, 0 :b, 1 :c, 2 :d}
+  (t/is (= {5 :a, 2 :b, 0 :d, 1 :c}
+           (cat->num  [[:a 5] [:b 2]])))
+  (t/is (= {5 :a, 0 :b, 1 :d, 2 :c}
            (cat->num  [[:a 5] [:b 0]])))
   (t/is (= (cat->num  [])
-           {0 :c, 1 :b, 2 :d, 3 :a}))
-  (t/is (=
-         (cat->num [[:not-present 1]])
-         {1 :not-present, 0 :c, 2 :b, 3 :d, 4 :a}))
-  (t/is (=
-         (cat->num [[:a 1 :b 1]])
-         {1 :a, 0 :c, 2 :b, 3 :d})))
+           {0 :d, 1 :c, 2 :a, 3 :b}))
+  (t/is (= (cat->num [[:not-present 1]])
+           {1 :not-present, 0 :d, 2 :c, 3 :a, 4 :b}))
+  (t/is (= (cat->num [[:a 1 :b 1]])
+           {1 :a, 0 :d, 2 :c, 3 :b})))

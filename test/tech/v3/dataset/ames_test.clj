@@ -331,7 +331,7 @@
    "TotalBath"
    "KitchenQual"
    "GarageArea"
-   "SimplExterGrade"])
+   "ExterGrade"])
 
 
 (defn full-ames-pt-2

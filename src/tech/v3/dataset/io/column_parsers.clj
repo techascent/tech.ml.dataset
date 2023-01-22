@@ -473,7 +473,7 @@
             packed-dtype (if (identical? container-dtype org-datatype)
                            org-datatype
                            (packing/pack-datatype org-datatype))
-            container-ecount (.size container)]
+            container-ecount (- (.size container) (.getCardinality missing))]
         (if (or (== 0 container-ecount)
                 (identical? container-dtype packed-dtype))
           (do
@@ -484,9 +484,15 @@
             (when-not (== container-ecount idx)
               (add-missing-values! container missing missing-value idx))
             (.add container value))
-          (let [widest-datatype (casting/widest-datatype
-                                 (packing/unpack-datatype container-dtype)
-                                 org-datatype)]
+          ;;boolean present a problem here.  We generally want to keep them as booleans
+          ;;and not promote them to full numbers.
+          (let [widest-datatype (if (identical? org-datatype :boolean)
+                                  (if (identical? container-dtype :boolean)
+                                    :boolean
+                                    :object)
+                                  (casting/widest-datatype
+                                   (packing/unpack-datatype container-dtype)
+                                   org-datatype))]
             (when-not (= widest-datatype container-dtype)
               (let [new-container (promote-container container
                                                      missing widest-datatype

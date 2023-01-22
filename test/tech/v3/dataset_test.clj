@@ -1651,3 +1651,7 @@
 (deftest head-tail-regression-343
   (let [ds (ds/->dataset {:a (repeat 1000 :a)
                           :b (range 1000)})]))
+
+
+(deftest mixed-boolean-values
+  (is (= :object (:datatype (meta ((ds/->dataset {:a [1 true false]}) :a))))))
