@@ -183,21 +183,12 @@
        (ds/->>dataset)))
 
 
-(defmacro reduced->
-  [rfn acc & data]
-  (reduce (fn [expr next-val]
-            `(let [val# ~expr]
-               (if (reduced? val#)
-                 val#
-                 (~rfn val# ~next-val))))
-          acc
-          data))
-
-
+;;Slightly less efficient than implementing an inline IReduceInit impl is to create
+;;a record with a custom IReduceInit implementation.
 (defrecord YMC [year-month ^long count]
   clojure.lang.IReduceInit
   (reduce [this rfn init]
-    (let [init (reduced-> rfn init
+    (let [init (hamf/reduced-> rfn init
                    (clojure.lang.MapEntry/create :year-month year-month)
                    (clojure.lang.MapEntry/create :count count))]
       (if (and __extmap (not (reduced? init)))
@@ -211,7 +202,8 @@
   [{:keys [^LocalDate start ^LocalDate end]}]
   ;;Using a hash provider with equals semantics allows the hamf hashtable to
   ;;compete on equal terms with the java hashtable.  In that we find that compute,
-  ;;computeIfAbsent and reduce
+  ;;computeIfAbsent and reduce perform as fast as anything on the jvm when we are using
+  ;;Object/equals and Object/hashCode for the map functionality.
   (let [tally (MutHashTable. hamf/equal-hash-provider)
         incrementor (hamf/bi-function k v
                                       (if v
@@ -219,13 +211,21 @@
                                         1))
         _ (dotimes [idx (.until start end java.time.temporal.ChronoUnit/DAYS)]
             (let [ym (YearMonth/from (.plusDays start idx))]
-              ;;Compute if absent is every so slightly faster than compute as it involves
+              ;;Compute if absent is ever so slightly faster than compute as it involves
               ;;less mutation of the original hashtable.  It does, however, require the
               ;;value in the node itself to be mutable.
               (.inc ^Consumers$IncConsumer (.computeIfAbsent tally ym inc-cons-fn))))]
-    (lznc/map-reducible #(let [^Map$Entry e %]
-                           (YMC. (.getKey e) (deref (.getValue e))))
-                        (.entrySet tally))))
+    (lznc/map-reducible
+     #(let [^Map$Entry e %]
+        ;;Dataset construction using the mapseq-rf only requires the 'map' type to correctly
+        ;;implement IReduceInit and for that function to produce implementations of Map$Entry.
+        (hamf/custom-ireduce
+         rfn acc
+         ;;Elided reduced? checks for a tiny bit of extra oomph.
+          (-> acc
+              (rfn (MapEntry/create :year-month (.getKey e)))
+              (rfn (MapEntry/create :count (deref (.getValue e)))))))
+     (.entrySet tally))))
 
 
 (defn- otfrom-pathway
