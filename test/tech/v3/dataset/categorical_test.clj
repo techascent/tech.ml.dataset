@@ -1,12 +1,14 @@
 (ns tech.v3.dataset.categorical-test
   (:require [tech.v3.dataset.categorical :as ds-cat]
             [tech.v3.dataset.modelling :as ds-mod]
-            [clojure.test :as t]
+            [tech.v3.datatype :as dtype]
+            [tech.v3.dataset.column-filters :as cf]
+            [clojure.test :refer [deftest is] :as t]
             [tech.v3.dataset :as ds]))
 
 
-(t/deftest prediction
-  (t/is (= [:no :yes]
+(deftest prediction
+  (is (= [:no :yes]
            (->
             (ds/->dataset {:yes [0.3 0.5] :no [0.7 0.5]})
             (ds-mod/probability-distributions->label-column :val)
@@ -15,7 +17,7 @@
 
 
 
-(t/deftest prob-dist
+(deftest prob-dist
   (let [prob
         (->
          (ds/->dataset {:yes [0.3 0.5] :no [0.7 0.5]})
@@ -23,14 +25,14 @@
          (ds-cat/reverse-map-categorical-xforms))]
 
 
-    (t/is (= (:yes prob) [0.3 0.5]))
-    (t/is (= (:no prob) [0.7 0.5]))
-    (t/is (= (:val prob) [:no :yes]))))
+    (is (= (:yes prob) [0.3 0.5]))
+    (is (= (:no prob) [0.7 0.5]))
+    (is (= (:val prob) [:no :yes]))))
 
 
 
-(t/deftest cat-to-number
-  (t/is (=
+(deftest cat-to-number
+  (is (=
          (set
           (->
            (ds/->dataset {:x [:a :b] :y ["1" "0"]})
@@ -52,14 +54,26 @@
    clojure.set/map-invert))
 
 
-(t/deftest test-categorical->number []
-  (t/is (= {5 :a, 2 :b, 0 :d, 1 :c}
+(deftest test-categorical->number []
+  (is (= {5 :a, 2 :b, 0 :d, 1 :c}
            (cat->num  [[:a 5] [:b 2]])))
-  (t/is (= {5 :a, 0 :b, 1 :d, 2 :c}
+  (is (= {5 :a, 0 :b, 1 :d, 2 :c}
            (cat->num  [[:a 5] [:b 0]])))
-  (t/is (= (cat->num  [])
+  (is (= (cat->num  [])
            {0 :d, 1 :c, 2 :a, 3 :b}))
-  (t/is (= (cat->num [[:not-present 1]])
+  (is (= (cat->num [[:not-present 1]])
            {1 :not-present, 0 :d, 2 :c, 3 :a, 4 :b}))
-  (t/is (= (cat->num [[:a 1 :b 1]])
-           {1 :a, 0 :d, 2 :c, 3 :b})))
+  (is (= (cat->num [[:a 1 :b 1]])
+         {1 :a, 0 :d, 2 :c, 3 :b})))
+
+
+(deftest cat-map-regression
+  (is (every? #(Double/isFinite %)
+              (-> (ds/->dataset "test/data/titanic.csv")
+                  (ds/update-column "Survived"
+                                    (fn [col]
+                                      (let [val-map {0 :drowned
+                                                     1 :survived}]
+                                        (dtype/emap val-map :keyword col))))
+                  (ds/categorical->number cf/categorical)
+                  (ds/column "Survived")))))
