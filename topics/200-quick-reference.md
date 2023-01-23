@@ -171,7 +171,7 @@ The mapping operations are run in parallel using a primitive named `pmap-ds` and
 
 The best place to start is the "Getting Started" topic in the documentation: [https://techascent.github.io/tech.ml.dataset/000-getting-started.html](https://techascent.github.io/tech.ml.dataset/000-getting-started.html)
 
-The "Walkthrough" topic provides long-form examples of processing real data: [https://techascent.github.io/tech.ml.dataset/walkthrough.html](https://techascent.github.io/tech.ml.dataset/100-walkthrough.html)
+The "Walkthrough" topic provides long-form examples of processing real data: [https://techascent.github.io/tech.ml.dataset/100-walkthrough.html](https://techascent.github.io/tech.ml.dataset/100-walkthrough.html)
 
 The API docs document every available function: [https://techascent.github.io/tech.ml.dataset/](https://techascent.github.io/tech.ml.dataset/)
 
