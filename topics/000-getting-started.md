@@ -169,8 +169,8 @@ In addition to `java.time` types, all Clojure types (e.g., keywords), UUIDs, as 
 
  - The [README](https://github.com/techascent/tech.ml.dataset#techmldataset) on GitHub has information about installing, and first steps with TMD.
 
- - The [walkthrough](https://techascent.github.io/tech.ml.dataset/walkthrough.html) topic has long-form examples of processing real data with TMD.
+ - The [walkthrough](https://techascent.github.io/tech.ml.dataset/100-walkthrough.html) topic has long-form examples of processing real data with TMD.
 
- - The [quick reference](https://techascent.github.io/tech.ml.dataset/quick-reference.html) summarizes many of the most frequently used functions with hints about their use.
+ - The [quick reference](https://techascent.github.io/tech.ml.dataset/200-quick-reference.html) summarizes many of the most frequently used functions with hints about their use.
 
  - The [API docs](https://techascent.github.io/tech.ml.dataset/index.html) list every function available in TMD.

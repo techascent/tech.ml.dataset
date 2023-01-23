@@ -1279,6 +1279,6 @@ For Parquet, see the [tech.v3.libs.parquet](https://techascent.github.io/tech.ml
 
 ## Further Reading
 
- - The [quick reference](https://techascent.github.io/tech.ml.dataset/quick-reference.html) summarizes many of the most frequently used functions with hints about their use.
+ - The [quick reference](https://techascent.github.io/tech.ml.dataset/200-quick-reference.html) summarizes many of the most frequently used functions with hints about their use.
 
  - The [API docs](https://techascent.github.io/tech.ml.dataset/index.html) list every function available in TMD.

@@ -53,9 +53,9 @@ My Truncated System Properties [53 2]:
 
 The best place to start is the "Getting Started" topic in the documentation: [https://techascent.github.io/tech.ml.dataset/000-getting-started.html](https://techascent.github.io/tech.ml.dataset/000-getting-started.html)
 
-The "Walkthrough" topic provides long-form examples of processing real data: [https://techascent.github.io/tech.ml.dataset/walkthrough.html](https://techascent.github.io/tech.ml.dataset/walkthrough.html)
+The "Walkthrough" topic provides long-form examples of processing real data: [https://techascent.github.io/tech.ml.dataset/100-walkthrough.html](https://techascent.github.io/tech.ml.dataset/100-walkthrough.html)
 
-The "Quick Reference" topic summarizes many of the most frequently used functions: [https://techascent.github.io/tech.ml.dataset/quick-reference.html](https://techascent.github.io/tech.ml.dataset/quick-reference.html)
+The "Quick Reference" topic summarizes many of the most frequently used functions: [https://techascent.github.io/tech.ml.dataset/200-quick-reference.html](https://techascent.github.io/tech.ml.dataset/200-quick-reference.html)
 
 The API docs document every available function: [https://techascent.github.io/tech.ml.dataset/](https://techascent.github.io/tech.ml.dataset/)
 
