@@ -204,17 +204,13 @@
   ;;compete on equal terms with the java hashtable.  In that we find that compute,
   ;;computeIfAbsent and reduce perform as fast as anything on the jvm when we are using
   ;;Object/equals and Object/hashCode for the map functionality.
-  (let [tally (MutHashTable. hamf/equal-hash-provider)
-        incrementor (hamf/bi-function k v
-                                      (if v
-                                        (unchecked-inc (long v))
-                                        1))
-        _ (dotimes [idx (.until start end java.time.temporal.ChronoUnit/DAYS)]
-            (let [ym (YearMonth/from (.plusDays start idx))]
-              ;;Compute if absent is ever so slightly faster than compute as it involves
-              ;;less mutation of the original hashtable.  It does, however, require the
-              ;;value in the node itself to be mutable.
-              (.inc ^Consumers$IncConsumer (.computeIfAbsent tally ym inc-cons-fn))))]
+  (let [tally (MutHashTable. hamf/equal-hash-provider)]
+    (dotimes [idx (.until start end java.time.temporal.ChronoUnit/DAYS)]
+      (let [ym (YearMonth/from (.plusDays start idx))]
+        ;;Compute if absent is ever so slightly faster than compute as it involves
+        ;;less mutation of the original hashtable.  It does, however, require the
+        ;;value in the node itself to be mutable.
+        (.inc ^Consumers$IncConsumer (.computeIfAbsent tally ym inc-cons-fn))))
     (lznc/map-reducible
      #(let [^Map$Entry e %]
         ;;Dataset construction using the mapseq-rf only requires the 'map' type to correctly
