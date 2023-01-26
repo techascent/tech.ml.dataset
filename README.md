@@ -1,326 +1,88 @@
 # tech.ml.dataset
 
+`tech.ml.dataset` (TMD) is a Clojure library for tabular data processing similar to Python's Pandas, or R's `data.table`. It supports pragmatic data-intensive work on the JVM by providing powerful abstractions that simplify implementing efficient solutions to real problems. Datasets [shrink in memory](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37) through columnar storage and the use of primitive arrays, packed datetime types, and string tables.
+
+Unlike in Python or R, TMD datasets are _functional_, which means they're easier to reason about.
+
+## Installing
+
+Installation instructions for your favorite build system (lein, deps.edn, etc...) can be found at Clojars, where the library is hosted:
 
 [![Clojars Project](https://img.shields.io/clojars/v/techascent/tech.ml.dataset.svg)](https://clojars.org/techascent/tech.ml.dataset)
 
+ - [https://clojars.org/techascent/tech.ml.dataset](https://clojars.org/techascent/tech.ml.dataset)
 
-* [API Documentation](https://techascent.github.io/tech.ml.dataset/)
-* Java API [Documentation](https://techascent.github.io/tech.ml.dataset/javadoc/index.html) and [Sample](java_test/java/jtest/TMDDemo.java).
-* Code-oriented [Walkthrough](https://techascent.github.io/tech.ml.dataset/walkthrough.html) and [Quick Reference](https://techascent.github.io/tech.ml.dataset/quick-reference.html).
-
-
-`tech.ml.dataset` is a Clojure library for data processing and machine learning.  Datasets are
-currently in-memory columnwise databases and we support parsing from file or
-input-stream.  We support these formats: **raw/gzipped csv/tsv, xls, xlsx, json,
-and sequences of maps** as input sources.  [SQL](https://github.com/techascent/tech.ml.dataset.sql)
-and [Clojurescript](https://github.com/cnuernber/tmdjs) bindings are provided as separate libraries.
-
-Data size in memory is [minimized](https://gist.github.com/cnuernber/26b88ed259dd1d0dc6ac2aa138eecf37)
-(primitive arrays), datetime types are often converted to an integer representation
-and strings are loaded into string tables.  These features together dramatically
-decrease the working set size in memory.  Because data is stored in columnar fashion
-columnwise operations on the dataset are very fast.
-
-
-Conversion back into sequences of maps is very efficient and we have support for
-writing the dataset back out to csv, tsv, and gzipped varieties of those.
-
-
-We have upgraded support for [Apache Arrow](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).  We have
-full support including mmap support for JDK-8->JDK-17 although if you are on an M-1 Mac you will need to use
-JDK-17.  We also support per-column compression (LZ4, ZSTD) across all supported platforms.  The official Arrow
-SDK does not support mmap, JDK-17, and has no user-accessible way to save a compressed streaming format
-file.
-
-
-Large aggregations of potentially out-of-memory datasets are represented by a sequence of datasets.
-This is consistent with the design of the parquet and arrow data storage systems and aggregation
-operations involving large-scale datasets are efficiently implemented in the
-[tech.v3.dataset.reductions](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.html) namespace.  We have
-started to integrate algorithms from the [Apache Data Sketches](https://datasketches.apache.org/) system in
-the [apache-data-sketch](https://techascent.github.io/tech.ml.dataset/tech.v3.dataset.reductions.apache-data-sketch.html) namespace.
-Summations/means in this area are implemented using the
-[Kahan compensated summation](https://en.wikipedia.org/wiki/Kahan_summation_algorithm) algorithm.
-
-
-* An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
-* Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
-* It's damn fast even with Parquet - [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/).
-* Graal native [example project](https://github.com/cnuernber/ds-graal).
-* Looking to jump straight into data science?  Check out the [sciclog.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials).
-
-
-## Mini Walkthrough
+## Verifying Installation
 
 ```clojure
-user> (require '[tech.v3.dataset :as ds])
+user> (require 'tech.v3.dataset)
 nil
-;; We support many file formats
-user> (def csv-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv"))
-#'user/csv-data
-user> (ds/head csv-data)
-test/data/stocks.csv [5 3]:
+user> (->> (System/getProperties)
+           (map (fn [[k v]] {:k k :v (apply str (take 40 (str v)))}))
+           (tech.v3.dataset/->>dataset {:dataset-name "My Truncated System Properties"}))
 
-| symbol |       date | price |
-|--------|------------|-------|
-|   MSFT | 2000-01-01 | 39.81 |
-|   MSFT | 2000-02-01 | 36.35 |
-|   MSFT | 2000-03-01 | 43.22 |
-|   MSFT | 2000-04-01 | 28.37 |
-|   MSFT | 2000-05-01 | 25.45 |
+My Truncated System Properties [53 2]:
 
-;; tech.v3.libs.poi registers xls, tech.v3.libs.fastexcel registers xlsx.  If you want
-;; to use poi for everything use workbook->datasets in the tech.v3.libs.poi namespace.
-user> (require '[tech.v3.libs.poi])
-nil
-user> (def xls-data (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"))
-#'user/xls-data
-user> (ds/head xls-data)
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
-
-| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
-|----------|------------|-----------|--------|---------------|------|------------|--------|
-|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 15/10/2017 | 1562.0 |
-|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 16/08/2016 | 1582.0 |
-|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 21/05/2015 | 2587.0 |
-|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 15/10/2017 | 3549.0 |
-|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 16/08/2016 | 2468.0 |
-
-;;And you have fine grained control over parsing
-
-user> (ds/head (ds/->dataset "https://github.com/techascent/tech.ml.dataset/raw/master/test/data/file_example_XLS_1000.xls"
-                             {:parser-fn {"Date" [:local-date "dd/MM/yyyy"]}}))
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/file_example_XLS_1000.xls [5 8]:
-
-| column-0 | First Name | Last Name | Gender |       Country |  Age |       Date |     Id |
-|----------|------------|-----------|--------|---------------|------|------------|--------|
-|      1.0 |      Dulce |     Abril | Female | United States | 32.0 | 2017-10-15 | 1562.0 |
-|      2.0 |       Mara | Hashimoto | Female | Great Britain | 25.0 | 2016-08-16 | 1582.0 |
-|      3.0 |     Philip |      Gent |   Male |        France | 36.0 | 2015-05-21 | 2587.0 |
-|      4.0 |   Kathleen |    Hanner | Female | United States | 25.0 | 2017-10-15 | 3549.0 |
-|      5.0 |    Nereida |   Magwood | Female | United States | 58.0 | 2016-08-16 | 2468.0 |
-user>
-
-
-;;Loading from the web is no problem
-user>
-user> (def airports (ds/->dataset "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat"
-                                  {:header-row? false :file-type :csv}))
-#'user/airports
-user> (ds/head airports)
-https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat [5 14]:
-
-| column-0 |                                    column-1 |     column-2 |         column-3 | column-4 | column-5 |    column-6 |     column-7 | column-8 | column-9 | column-10 |            column-11 | column-12 |   column-13 |
-|----------|---------------------------------------------|--------------|------------------|----------|----------|-------------|--------------|----------|----------|-----------|----------------------|-----------|-------------|
-|        1 |                              Goroka Airport |       Goroka | Papua New Guinea |      GKA |     AYGA | -6.08168983 | 145.39199829 |     5282 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
-|        2 |                              Madang Airport |       Madang | Papua New Guinea |      MAG |     AYMD | -5.20707989 | 145.78900147 |       20 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
-|        3 |                Mount Hagen Kagamuga Airport |  Mount Hagen | Papua New Guinea |      HGU |     AYMH | -5.82678986 | 144.29600525 |     5388 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
-|        4 |                              Nadzab Airport |       Nadzab | Papua New Guinea |      LAE |     AYNZ | -6.56980300 | 146.72597700 |      239 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
-|        5 | Port Moresby Jacksons International Airport | Port Moresby | Papua New Guinea |      POM |     AYPY | -9.44338036 | 147.22000122 |      146 |     10.0 |         U | Pacific/Port_Moresby |   airport | OurAirports |
-
-;;At any point you can get a sequence of maps back.  We implement a special version
-;;of Clojure's APersistentMap that is much more efficient than even records and shares
-;;the backing store with the dataset.
-
-user> (take 2 (ds/mapseq-reader csv-data))
-({"date" #object[java.time.LocalDate 0x4a998af0 "2000-01-01"],
-  "symbol" "MSFT",
-  "price" 39.81}
- {"date" #object[java.time.LocalDate 0x6d8c0bcd "2000-02-01"],
-  "symbol" "MSFT",
-  "price" 36.35})
-
-;;Datasets are comprised of named columns, and provide a Clojure hashmap-compatible
-;;collection.  Datasets allow reading and updating column data associated with a column name,
-;;and provide a sequential view of [column-name column] entries.
-
-;;You can look up columns via `get`, keyword lookup, and invoking the dataset as a function on
-;;a key (a column name). `keys` and `vals` retrieve respective sequences of column names and columns.
-;;The functions `assoc` and `dissoc` work to define new associations to conveniently
-;;add, update, or remove columns, with add/update semantics defined by`tech.v3.dataset/add-or-update-column`.
-
-;;Column data is stored in primitive arrays (even most datetimes!) and strings are stored
-;;in string tables.  You can load really large datasets with this thing!
-
-;;Columns themselves are sequences of their entries.
-user> (csv-data "symbol")
-#tech.v3.dataset.column<string>[560]
-symbol
-[MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
-user> (xls-data "Gender")
-#tech.v3.dataset.column<string>[1000]
-Gender
-[Female, Female, Male, Female, Female, Male, Female, Female, Female, Female, Female, Male, Female, Male, Female, Female, Female, Female, Female, Female, ...]
-user> (take 5 (xls-data "Gender"))
-("Female" "Female" "Male" "Female" "Female")
-
-
-;;Datasets and columns implement the clojure metadata interfaces (`meta`, `with-meta`, `vary-meta`)
-
-;;You can access a sequence of columns of a dataset with `ds/columns`, or `vals` like a map,
-;;and access the metadata with `meta`:
-
-user> (->> csv-data
-           vals  ;synonymous with ds/columns
-           (map (fn [column]
-                  (meta column))))
-({:categorical? true, :name "symbol", :size 560, :datatype :string}
- {:name "date", :size 560, :datatype :packed-local-date}
- {:name "price", :size 560, :datatype :float32})
-
-;;We can similarly destructure datasets like normal clojure
-;;maps:
-
-user> (for [[k column] csv-data]
-        [k (meta column)])
-(["symbol" {:categorical? true, :name "symbol", :size 560, :datatype :string}]
- ["date" {:name "date", :size 560, :datatype :packed-local-date}]
- ["price" {:name "price", :size 560, :datatype :float64}])
-
-user> (let [{:strs [symbol date]} csv-data]
-        [symbol (meta date)])
-[#tech.v3.dataset.column<string>[560]
-symbol
-[MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, MSFT, ...]
- {:name "date", :size 560, :datatype :packed-local-date}]
-
-;;We can get a brief description of the dataset:
-
-user> (ds/brief csv-data)
-({:min #object[java.time.LocalDate 0x5b2ea1d5 "2000-01-01"],
-  :n-missing 0,
-  :col-name "date",
-  :mean #object[java.time.LocalDate 0x729b7395 "2005-05-12"],
-  :datatype :packed-local-date,
-  :quartile-3 #object[java.time.LocalDate 0x6c75fa43 "2007-11-23"],
-  :n-valid 560,
-  :quartile-1 #object[java.time.LocalDate 0x13d9aabe "2002-11-08"],
-  :max #object[java.time.LocalDate 0x493bf7ef "2010-03-01"]}
- {:min 5.97,
-  :n-missing 0,
-  :col-name "price",
-  :mean 100.7342857142857,
-  :datatype :float64,
-  :skew 2.4130946430619233,
-  :standard-deviation 132.55477114107083,
-  :quartile-3 100.88,
-  :n-valid 560,
-  :quartile-1 24.169999999999998,
-  :max 707.0}
- {:mode "MSFT",
-  :values ["MSFT" "AMZN" "IBM" "AAPL" "GOOG"],
-  :n-values 5,
-  :n-valid 560,
-  :col-name "symbol",
-  :n-missing 0,
-  :datatype :string,
-  :histogram (["MSFT" 123] ["AMZN" 123] ["IBM" 123] ["AAPL" 123] ["GOOG" 68])})
-
-;;Another view of that brief:
-
-user> (ds/descriptive-stats csv-data)
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv: descriptive-stats [3 10]:
-
-| :col-name |          :datatype | :n-valid | :n-missing |       :min |      :mean | :mode |       :max | :standard-deviation |      :skew |
-|-----------|--------------------|----------|------------|------------|------------|-------|------------|---------------------|------------|
-|      date | :packed-local-date |      560 |          0 | 2000-01-01 | 2005-05-12 |       | 2010-03-01 |                     |            |
-|     price |           :float64 |      560 |          0 |      5.970 |      100.7 |       |      707.0 |        132.55477114 | 2.41309464 |
-|    symbol |            :string |      560 |          0 |            |            |  MSFT |            |                     |            |
-
-
-;;There are analogues of the clojure.core functions that apply to dataset:
-;;filter, group-by, sort-by.  These are all implemented efficiently.
-
-;;You can add/remove/update columns, or use the map idioms of `assoc` and `dissoc`
-
-user> (-> csv-data
-          (assoc "always-ten" 10) ;scalar values are expanded as needed
-          (assoc "random"   (repeatedly (ds/row-count csv-data) #(rand-int 100)))
-          ds/head)
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 5]:
-
-| symbol |       date | price | always-ten | random |
-|--------|------------|-------|------------|--------|
-|   MSFT | 2000-01-01 | 39.81 |         10 |     47 |
-|   MSFT | 2000-02-01 | 36.35 |         10 |     35 |
-|   MSFT | 2000-03-01 | 43.22 |         10 |     54 |
-|   MSFT | 2000-04-01 | 28.37 |         10 |      6 |
-|   MSFT | 2000-05-01 | 25.45 |         10 |     52 |
-
-user> (-> csv-data
-          (dissoc "price")
-          ds/head)
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 2]:
-
-| symbol |       date |
-|--------|------------|
-|   MSFT | 2000-01-01 |
-|   MSFT | 2000-02-01 |
-|   MSFT | 2000-03-01 |
-|   MSFT | 2000-04-01 |
-|   MSFT | 2000-05-01 |
-
-
-;;since `conj` works as with clojure maps and sequences of map-entries or pairs,
-;;you can use idioms like `reduce conj` or `into` to construct new datasets on the
-;;fly with familiar clojure idioms:
-
-user> (let [new-cols [["always-ten" 10] ["new-price" (map inc (csv-data "price"))]]
-            new-data (into (dissoc csv-data "price") new-cols)]
-            (ds/head new-data))
-https://github.com/techascent/tech.v3.dataset/raw/master/test/data/stocks.csv [5 4]:
-
-| symbol |       date | always-ten | new-price |
-|--------|------------|------------|-----------|
-|   MSFT | 2000-01-01 |         10 |     40.81 |
-|   MSFT | 2000-02-01 |         10 |     37.35 |
-|   MSFT | 2000-03-01 |         10 |     44.22 |
-|   MSFT | 2000-04-01 |         10 |     29.37 |
-|   MSFT | 2000-05-01 |         10 |     26.45 |
-
-;;You can write out the result back to csv, tsv, and gzipped variations of those.
-
-;;Joins (left, right, inner) are all implemented.
-
-;;Columnwise arithmetic manipulations (+,-, and many more) are provided via the
-;;tech.v2.datatype.functional namespace.
-
-;;Datetime columns can be operated on - plus,minus, get-years, get-days, and
-;;many more - uniformly via the tech.v2.datatype.datetime.operations namespace.
-
-;;There is much more.  Please checkout the walkthough and try it out!
+|                         :k |                                       :v |
+|----------------------------|------------------------------------------|
+|                sun.desktop |                                    gnome |
+|                awt.toolkit |                     sun.awt.X11.XToolkit |
+| java.specification.version |                                       11 |
+|            sun.cpu.isalist |                                          |
+|           sun.jnu.encoding |                                    UTF-8 |
+|            java.class.path | src:resources:target/classes:/home/harol |
+|             java.vm.vendor |                                   Ubuntu |
+|        sun.arch.data.model |                                       64 |
+|            java.vendor.url |                      https://ubuntu.com/ |
+|              user.timezone |                           America/Denver |
+|                        ... |                                      ... |
+|                    os.arch |                                    amd64 |
+| java.vm.specification.name |       Java Virtual Machine Specification |
+|        java.awt.printerjob |                   sun.print.PSPrinterJob |
+|         sun.os.patch.level |                                  unknown |
+|          java.library.path | /usr/java/packages/lib:/usr/lib/x86_64-l |
+|               java.vm.info |                      mixed mode, sharing |
+|                java.vendor |                                   Ubuntu |
+|            java.vm.version |      11.0.17+8-post-Ubuntu-1ubuntu222.04 |
+|    sun.io.unicode.encoding |                            UnicodeLittle |
+|        apple.awt.UIElement |                                     true |
+|         java.class.version |                                     55.0 |
 ```
 
-### Arrow Support
+## 📚 Documentation 📚
 
-JDK-17, compression and memory mapping are supported - [Arrow api](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.arrow.html).
+The best place to start is the "Getting Started" topic in the documentation: [https://techascent.github.io/tech.ml.dataset/000-getting-started.html](https://techascent.github.io/tech.ml.dataset/000-getting-started.html)
 
-### Parquet Support
+The "Walkthrough" topic provides long-form examples of processing real data: [https://techascent.github.io/tech.ml.dataset/100-walkthrough.html](https://techascent.github.io/tech.ml.dataset/100-walkthrough.html)
 
-Parquet now has [first class](https://techascent.github.io/tech.ml.dataset/tech.v3.libs.parquet.html) support.  That means we should be able to load most Parquet files and support their full range of datatypes.
+The "Quick Reference" topic summarizes many of the most frequently used functions: [https://techascent.github.io/tech.ml.dataset/200-quick-reference.html](https://techascent.github.io/tech.ml.dataset/200-quick-reference.html)
 
+The API docs document every available function: [https://techascent.github.io/tech.ml.dataset/](https://techascent.github.io/tech.ml.dataset/)
 
-## More Documentation
+The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/javadoc/tech/v3/TMD.html) / [with frames](https://techascent.github.io/tech.ml.dataset/javadoc/index.html)) and sample program ([source](java_test/java/jtest/TMDDemo.java)) show how to use TMD from Java.
 
-* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of `tech.v3.dataset`
-* [Summary of Comparison Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
+## Questions / Community
 
+* Log an [issue](https://github.com/techascent/tech.ml.dataset/issues)!
+* Visit the [zulip stream](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev).
+* Or the [slack data science channel](https://clojurians.slack.com/archives/C0BQDEJ8M).
 
-## Questions, Community
+-----
 
-* [zulip stream](https://clojurians.zulipchat.com/#narrow/stream/236259-tech.2Eml.2Edataset.2Edev)
-* [slack (data science channel)](https://clojurians.slack.com/archives/C0BQDEJ8M)
+### Related Projects and Notes
 
+* An alternative cutting-edge api with some important extra features is available via [tablecloth](https://github.com/scicloj/tablecloth).
+* [tech.v3.datatype](https://github.com/cnuernber/dtype-next) provides the underlying numeric subsystem to TMD.
+* Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
+* Some [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/) indicating TMD's _speed_.
+* A Graal native [example project](https://github.com/cnuernber/ds-graal).
+* The [sciclog.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials) may be a good way to jump straight into data science.
+* [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of TMD.
+* Another overview of some of the available functions from genme: [Some Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 
-## Further Reading
+### License
 
-* [tech.v3.datatype](https://github.com/cnuernber/dtype-next) numeric subsystem
-
-
-
-## License
-
-Copyright © 2021 Complements of TechAscent, LLC
+Copyright © 2023 Complements of TechAscent, LLC
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
