@@ -461,7 +461,7 @@
   (some->> dataset
            ds-readers/mapseq-reader
            (argops/argfilter predicate)
-           (select dataset :all)))
+           (select-rows dataset)))
 
 
 (defn filter-column
