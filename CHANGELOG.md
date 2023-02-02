@@ -1,9 +1,14 @@
 # Changelog
+
+# 7.000-beta-27
+ * New charred with faster json parsing.
+ * Updated ham-fisted - maps and vectors derive from the base Clojure classes.
+
 # 7.000-beta-24
  * NEW DOCS!!
  * Faster hamf map creation and mapv-type operations.
- 
-  
+
+
 # 7.000-beta-23
  * Categorical map producing NAN regression.
  * Column inference regression.
