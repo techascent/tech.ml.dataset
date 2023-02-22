@@ -76,7 +76,7 @@ The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/ja
 * Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
 * Some [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/) indicating TMD's _speed_.
 * A Graal native [example project](https://github.com/cnuernber/ds-graal).
-* The [sciclog.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials) may be a good way to jump straight into data science.
+* The [scicloj.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials) may be a good way to jump straight into data science.
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of TMD.
 * Another overview of some of the available functions from genme: [Some Functions](https://github.com/genmeblog/techtest/wiki/Summary-of-functions)
 
