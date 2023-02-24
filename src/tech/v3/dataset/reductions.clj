@@ -358,6 +358,110 @@ user> (ds-reduce/group-by-column-agg
        (FastStruct. cnames)))
 
 
+(defn group-by-column-agg-rf
+  "Produce a transduce-compatible rf that will perform the group-by-column-agg pathway.
+  See documentation for [[group-by-column-agg]].
+
+```clojure
+tech.v3.dataset.reductions-test> (def stocks (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword}))
+#'tech.v3.dataset.reductions-test/stocks
+tech.v3.dataset.reductions-test> (transduce (map identity)
+                                            (ds-reduce/group-by-column-agg-rf
+                                             :symbol
+                                             {:n-elems (ds-reduce/row-count)
+                                              :price-avg (ds-reduce/mean :price)
+                                              :price-sum (ds-reduce/sum :price)
+                                              :symbol (ds-reduce/first-value :symbol)
+                                              :n-dates (ds-reduce/count-distinct :date :int32)}
+                                             {:index-filter (fn [dataset]
+                                                              (let [rdr (dtype/->reader (dataset :price))]
+                                                                (hamf/long-predicate
+                                                                 idx (> (.readDouble rdr idx) 100.0))))})
+                                            [stocks stocks stocks])
+_unnamed [4 5]:
+
+| :symbol | :n-elems |   :price-avg | :price-sum | :n-dates |
+|---------|---------:|-------------:|-----------:|---------:|
+|    AAPL |       93 | 160.19096774 |   14897.76 |       31 |
+|     IBM |      120 | 111.03775000 |   13324.53 |       40 |
+|    AMZN |       18 | 126.97833333 |    2285.61 |        6 |
+|    GOOG |      204 | 415.87044118 |   84837.57 |       68 |
+```"
+  ([colname agg-map]
+   (group-by-column-agg-rf colname agg-map nil))
+  ([colname agg-map options]
+   (let [;;By default, we include the key-columns in the result.
+         ;;Users can override this by passing in the column in agg-map
+         agg-map (merge
+                  (->> (if (sequential? colname)
+                         colname
+                         [colname])
+                       (reduce (fn [agg-map cname]
+                                 (assoc agg-map
+                                        cname
+                                        (first-value cname)))
+                               {}))
+                  agg-map)
+         cnames (->> (hamf/keys agg-map)
+                     (reduce (hamf/indexed-accum
+                              acc idx v (.put ^Map acc v idx) acc)
+                             (LinkedHashMap.)))
+         ;;convert reducers to something with lightning fast reduction.
+         reducers (hamf/object-array-list (hamf/vals agg-map))
+         [combined-reducers rev-indexes] (combine-reducers reducers)
+         [colname ds-map-fn]
+         (if (sequential? colname)
+           (let [tmp-colname ::_temp_col]
+             [tmp-colname
+              #(assoc % tmp-colname
+                      (ds-col/new-column
+                       #:tech.v3.dataset{:name tmp-colname
+                                         :data
+                                         (-> (ds-base/select-columns % colname)
+                                             (ds-readers/value-reader {:copying? true}))
+                                         ;;no scanning for missing and no datatype
+                                         ;;detection
+                                         :missing (bitmap/->bitmap)
+                                         :force-datatype? true}))])
+           [colname identity])
+         finalize-fn #(finalize-combined-reducers reducers rev-indexes cnames %)]
+     (fn
+       ([] (ConcurrentHashMap. (int (get options :map-initial-capacity 10000))))
+       ([agg-map next-ds]
+        (let [next-ds (ds-map-fn next-ds)
+              group-col (dtype/->buffer (ds-base/column next-ds colname))
+              n-rows (ds-base/row-count next-ds)
+              idx-filter (when-let [filter-fn (get options :index-filter)]
+                           (filter-fn next-ds))
+              agg-reducer (->> combined-reducers
+                               (hamf/mapv #(ds-proto/ds->reducer % next-ds))
+                               (hamf/compose-reducers
+                                {:rfn-datatype :int64}))
+              group-col (-> (ds-base/column next-ds colname)
+                            (dtype/->reader))]
+          (->> (if idx-filter
+                 (lznc/filter idx-filter (hamf/range n-rows))
+                 (hamf/range n-rows))
+               (hamf/group-by-reducer
+                (hamf/long->obj idx (.readObject group-col idx))
+                agg-reducer
+                {:map-fn (constantly agg-map)
+                 :ordered? false
+                 :skip-finalize? true
+                 :min-n 1000}))))
+       ([agg-map]
+        (let [c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer nil)))]
+          ;;Also possible to parse N datasets in parallel and do a concat-copying
+          ;;operation but in my experience this steps takes up nearly no time.
+          (.forEach ^ConcurrentHashMap agg-map 32
+                    (hamf/bi-consumer
+                     k v
+                     (do
+                       (let [vv (finalize-fn v)]
+                         (locking c (.accept ^Consumer c vv))))))
+          @c))))))
+
+
 (defn group-by-column-agg
   "Group a sequence of datasets by a column and aggregate down into a new dataset.
 
@@ -425,83 +529,10 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 |  e | 99 |  3 |
 ```"
   ([colname agg-map options ds-seq]
-   (let [;;By default, we include the key-columns in the result.
-         ;;Users can override this by passing in the column in agg-map
-         agg-map (merge
-                  (->> (if (sequential? colname)
-                         colname
-                         [colname])
-                       (reduce (fn [agg-map cname]
-                                 (assoc agg-map
-                                        cname
-                                        (first-value cname)))
-                               {}))
-                  agg-map)
-         cnames (->> (hamf/keys agg-map)
-                     (reduce (hamf/indexed-accum
-                              acc idx v (.put ^Map acc v idx) acc)
-                             (LinkedHashMap.)))
-         ;;convert reducers to something with lightning fast reduction.
-         reducers (hamf/object-array-list (hamf/vals agg-map))
-         [combined-reducers rev-indexes] (combine-reducers reducers)
-
-         ;;allow a single dataset to be passed in without wrapping in seq notation
-         ds-seq (if (ds-impl/dataset? ds-seq)
-                  [ds-seq]
-                  ds-seq)
-         [colname ds-seq]
-         (if (sequential? colname)
-           (let [tmp-colname ::_temp_col]
-             [tmp-colname
-              (lznc/map
-               #(assoc % tmp-colname
-                       (ds-col/new-column
-                        #:tech.v3.dataset{:name tmp-colname
-                                          :data
-                                          (-> (ds-base/select-columns % colname)
-                                              (ds-readers/value-reader {:copying? true}))
-                                          ;;no scanning for missing and no datatype
-                                          ;;detection
-                                          :missing (bitmap/->bitmap)
-                                          :force-datatype? true}))
-                   ds-seq)])
-           [colname ds-seq])
-         result-map
-         (reduce (fn [agg-map next-ds]
-                   (let [group-col (dtype/->buffer (ds-base/column next-ds colname))
-                         n-rows (ds-base/row-count next-ds)
-                         idx-filter (when-let [filter-fn (get options :index-filter)]
-                                      (filter-fn next-ds))
-                         agg-reducer (->> combined-reducers
-                                          (hamf/mapv #(ds-proto/ds->reducer % next-ds))
-                                          (hamf/compose-reducers
-                                           {:rfn-datatype :int64}))
-                         group-col (-> (ds-base/column next-ds colname)
-                                       (dtype/->reader))]
-                     (->> (if idx-filter
-                            (lznc/filter idx-filter (hamf/range n-rows))
-                            (hamf/range n-rows))
-                          (hamf/group-by-reducer
-                           (hamf/long->obj idx (.readObject group-col idx))
-                           agg-reducer
-                           {:map-fn (constantly agg-map)
-                            :ordered? false
-                            :skip-finalize? true
-                            :min-n 1000}))))
-                 (ConcurrentHashMap. (int (get options :map-initial-capacity 10000)))
-                 ds-seq)
-         finalize-fn #(finalize-combined-reducers reducers rev-indexes cnames %)
-         ;;Create a parsing reducer
-         c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer nil)))]
-     ;;Also possible to parse N datasets in parallel and do a concat-copying
-     ;;operation but in my experience this steps takes up nearly no time.
-     (.forEach ^ConcurrentHashMap result-map 1000
-               (hamf/bi-consumer
-                k v
-                (do
-                  (let [vv (finalize-fn v)]
-                    (locking c (.accept ^Consumer c vv))))))
-     @c))
+   (hamf/reduce-reducer (group-by-column-agg-rf colname agg-map options)
+                        (if (ds-impl/dataset? ds-seq)
+                          [ds-seq]
+                          ds-seq)))
   ([colname agg-map ds-seq]
    (group-by-column-agg colname agg-map nil ds-seq)))
 
