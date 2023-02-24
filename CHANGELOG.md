@@ -1,4 +1,8 @@
 # Changelog
+# 7.000-beta-28
+ * m-1 mac support upgraded - arrow lz4 compression, zstd compression and snappy
+   support all tested.  dtype-next upgrade required for lz4, dependency upgrade required
+   for zstd, snappy.
 
 # 7.000-beta-27
  * New charred with faster json parsing.
