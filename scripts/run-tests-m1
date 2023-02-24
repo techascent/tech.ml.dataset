@@ -1,0 +1,5 @@
+#!/bin/bash
+
+scripts/compile
+clj -X:dev-m1-mac:codegen
+clj -M:dev-m1-mac:test

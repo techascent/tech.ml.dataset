@@ -1,5 +1,5 @@
 {:paths ["src" "resources" "target/classes"]
- :deps {cnuernber/dtype-next {:mvn/version "10.000-beta-35"}
+ :deps {cnuernber/dtype-next {:mvn/version "10.000-beta-36-SNAPSHOT"}
         techascent/tech.io {:mvn/version "4.28"
                             :exclusions [org.apache.commons/commons-compress]}
         org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}}
@@ -12,7 +12,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "7.000-beta-27"
+               :version "7.000-beta-28-SNAPSHOT"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}
@@ -95,6 +95,47 @@
     org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
     }
    :extra-paths ["neanderthal" "test"]}
+
+  :dev-m1-mac
+  {:extra-deps
+   {criterium/criterium {:mvn/version "0.4.5"}
+    net.java.dev.jna/jna {:mvn/version "5.12.1"}
+    ;uncomplicate/neanderthal {:mvn/version "0.45.0"}
+    ch.qos.logback/logback-classic {:mvn/version "1.3.5"}
+    com.clojure-goes-fast/clj-memory-meter {:mvn/version "0.1.0"}
+    com.cnuernber/benchmark {:mvn/version "1.000-beta-2"}
+    org.apache.poi/poi-ooxml {:mvn/version "5.2.3"
+                              :exclusions [commons-codec/commons-codec]}
+    com.univocity/univocity-parsers {:mvn/version "2.9.0"}
+    org.dhatim/fastexcel-reader {:mvn/version "0.12.8"
+                                 :exclusions [org.apache.poi/poi-ooxml]}
+    com.github.haifengl/smile-core {:mvn/version "2.6.0"
+                                    :exclusions [org.slf4j/slf4j-api]}
+    com.github.haifengl/smile-io   {:mvn/version "2.6.0"
+                                    :exclusions [com.github.haifengl/smile-core
+                                                 org.slf4j/slf4j-api]}
+    org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
+                                   :exclusions [commons-codec/commons-codec
+                                                com.fasterxml.jackson.core/jackson-core
+                                                com.fasterxml.jackson.core/jackson-annotations
+                                                com.fasterxml.jackson.core/jackson-databind
+                                                org.slf4j/slf4j-api]}
+    org.lz4/lz4-java {:mvn/version "1.8.0"}
+    com.github.luben/zstd-jni {:mvn/version "1.5.4-1"}
+    com.cnuernber/jarrow {:mvn/version "1.000"}
+    zero.one/geni  {:mvn/version "0.0.34"
+                    :exclusions [commons-codec/commons-codec]}
+    org.apache.spark/spark-avro_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-core_2.12 {:mvn/version "3.0.1"
+                                      :exclusions [org.slf4j/slf4j-log4j12]}
+    org.apache.spark/spark-hive_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-mllib_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-sql_2.12 {:mvn/version "3.0.1"}
+    org.apache.spark/spark-streaming_2.12 {:mvn/version "3.0.1"}
+    org.xerial.snappy/snappy-java {:mvn/version "1.1.8.4"}
+    ;org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
+    }
+   :extra-paths ["test"]}
 
   :jdk-17
   {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"

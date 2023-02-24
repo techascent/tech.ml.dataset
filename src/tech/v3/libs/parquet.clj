@@ -86,6 +86,8 @@ org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version \"3.3.0\"
                                                               org.apache.hadoop/hadoop-hdfs-client
                                                               io.netty/netty
                                                               com.google.inject.extensions/guice-servlet]}
+;; M-1 mac support for snappy
+org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 ```
 
 #### Logging

@@ -37,7 +37,7 @@
   [org.lz4/lz4-java \"1.8.0\"]
   ;;Required for decompressing lz4 streams with dependent blocks.
   [net.java.dev.jna/jna \"5.10.0\"]
-  [com.github.luben/zstd-jni \"1.5.1-1\"]
+  [com.github.luben/zstd-jni \"1.5.4-1\"]
 ```
   The lz4 decompression system will fallback to lz4-java if liblz4 isn't installed or if
   jna isn't loaded.  The lz4-java java library fail for arrow files that have dependent
