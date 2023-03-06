@@ -159,7 +159,9 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
            [org.roaringbitmap RoaringBitmap]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel]
+           [java.io OutputStream]
            [java.nio.file Paths StandardOpenOption OpenOption]
+           [java.util.concurrent.atomic AtomicLong]
            [java.time Instant LocalDate]
            [java.util Iterator List]))
 
@@ -1040,6 +1042,42 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
       (defaultBlockSize [f] 4096))))
 
 
+(defn- stream-out-stream
+  [os* ^AtomicLong al]
+  (proxy [PositionOutputStream] []
+    (getPos [] (.get al))
+    (close [] (.close ^OutputStream @os*))
+    (flush [] (.flush ^OutputStream @os*))
+    (write
+      ([data]
+       (if (bytes? data)
+         (let [^bytes data data
+               n-bytes (alength data)]
+           (.write ^OutputStream @os* data)
+           (.addAndGet al n-bytes))
+         (let [data (unchecked-byte data)
+               data-ary (byte-array [data])]
+           (.write ^OutputStream @os* data)
+           (.addAndGet al 1))))
+      ([data off len]
+       (.write ^OutputStream @os* data off len)
+       (.addAndGet al len)))))
+
+
+(defn- output-stream-output-file
+  [output-path options]
+  (let [os* (delay (apply io/output-stream! output-path (apply concat (seq options))))
+        n-bytes (AtomicLong.)]
+    (reify OutputFile
+      (create [f block-size-hint]
+        (stream-out-stream os* n-bytes))
+      (createOrOverwrite [f block-size-hint]
+        (stream-out-stream os*))
+      (supportsBlockSize [f] false)
+      ;;Fair roll of the dice
+      (defaultBlockSize [f] 4096))))
+
+
 
 (defn ds-seq->parquet
   "Write a sequence of datasets to a parquet file.  Parquet will break the data
@@ -1066,10 +1104,8 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
          ;;message type
          schema (ds->schema first-ds)
          row-writer (ParquetRowWriter. ds-row->parquet schema {})
-         builder (ParquetRowWriter$WriterBuilder. (local-file-output-file path)
+         builder (ParquetRowWriter$WriterBuilder. (output-stream-output-file path options)
                                                   row-writer)]
-     (when (.exists (io/file path))
-       (.delete (io/file path)))
      (doseq [[k v] (select-keys options
                                 [:hadoop-configuration
                                  :compression-codec
