@@ -1081,7 +1081,8 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
 
 (defn ds-seq->parquet
   "Write a sequence of datasets to a parquet file.  Parquet will break the data
-  stream up according to parquet file properties.
+  stream up according to parquet file properties.  Path may be a string path or
+  a java.io.OutputStream.
 
  Options:
 
