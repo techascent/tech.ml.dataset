@@ -525,6 +525,15 @@ null [6 3]:
   (tech.v3.dataset.base/dataset-name dataset)))
 
 
+(defn dataset-parser
+  "Implements protocols/PDatasetParser, Counted, Indexed, IReduceInit, and IDeref (returns the new dataset).
+  See documentation for [[mapseq-parser]]."
+  ([options]
+  (tech.v3.dataset-api/dataset-parser options))
+  ([]
+  (tech.v3.dataset-api/dataset-parser )))
+
+
 (defn dataset?
   ([ds]
   (tech.v3.dataset.impl.dataset/dataset? ds)))

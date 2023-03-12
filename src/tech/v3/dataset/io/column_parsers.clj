@@ -16,7 +16,7 @@
            [tech.v3.datatype Buffer]
            [ham_fisted IMutList Casts]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IFn]
+           [clojure.lang IFn Indexed]
            [java.time.format DateTimeFormatter]))
 
 
@@ -193,6 +193,14 @@
                           ^:unsynchronized-mutable ^long max-idx]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
+  Indexed
+  (nth [this idx] (.nth this idx nil))
+  (nth [this idx dv]
+    (let [cec (.size container)]
+      (if (or (>= idx cec)
+              (.contains missing idx))
+        nil
+        (.get container idx))))
   PParser
   (addValue [_this idx value]
     (let [idx (unchecked-long idx)]
@@ -374,6 +382,14 @@
                                   options]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
+  Indexed
+  (nth [this idx] (.nth this idx nil))
+  (nth [this idx dv]
+    (let [cec (.size container)]
+      (if (or (>= idx cec)
+              (.contains missing idx))
+        nil
+        (.get container idx))))
   PParser
   (addValue [_p idx value]
     (set! max-idx (max idx max-idx))
@@ -464,6 +480,14 @@
                                   options]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
+  Indexed
+  (nth [this idx] (.nth this idx nil))
+  (nth [this idx dv]
+    (let [cec (.size container)]
+      (if (or (>= idx cec)
+              (.contains missing idx))
+        nil
+        (.get container idx))))
   PParser
   (addValue [_p idx value]
     (set! max-idx (max idx max-idx))

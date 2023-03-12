@@ -1,10 +1,14 @@
 (ns tech.v3.dataset.io.context
   (:require [tech.v3.dataset.io.column-parsers :as column-parsers]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype :as dtype]
-            [tech.v3.dataset.impl.dataset :as ds-impl])
+            [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.impl.column :as col-impl]
+            [ham-fisted.api :as hamf])
   (:import [java.util.function Function]
            [java.util Map]
-           [tech.v3.datatype ObjectBuffer ArrayHelpers]))
+           [tech.v3.datatype ObjectBuffer ArrayHelpers]
+           [tech.v3.dataset.impl.dataset Dataset]))
 
 
 (set! *warn-on-reflection* true)
@@ -93,20 +97,31 @@
 
 
 (defn parsers->dataset
+  "Parsers are a sequence of maps of :column-name :column-parser; :columns-parser is an object that implement
+  tech.v3.dataset.io.column-parser.PParser/finalize! which returns the column data in map form
+  preferrably with :force-datatype? to avoid rescanning any data."
   ([options parsers row-count]
-   (let [parsers (if (instance? Map parsers)
-                   (vals parsers)
-                   parsers)
-         all-parsers (->> parsers
-                          (remove nil?))
-         row-count (long row-count)]
-     (->> all-parsers
-          (mapv (fn [{:keys [column-name column-parser]}]
-                  (assoc (column-parsers/finalize! column-parser row-count)
-                         :tech.v3.dataset/name column-name)))
-          ;;key-fn has already been applied
-          (ds-impl/new-dataset (assoc options :key-fn nil))
-          )))
+   (let [row-count (long row-count)
+         columns (hamf/mut-list)
+         cmap (hamf/mut-map)
+         dname (or (get options :name)
+                   (get options :dataset-name)
+                   "_unnamed")]
+     (transduce (remove nil?)
+                (fn
+                  ([] nil)
+                  ([acc] acc)
+                  ([acc ^Map parse-map]
+                   (let [column-name (.get parse-map :column-name)
+                         column-parser (.get parse-map :column-parser)]
+                     (.put cmap column-name (.size columns))
+                     (.add columns (-> (assoc (column-parsers/finalize! column-parser row-count)
+                                              :tech.v3.dataset/name column-name)
+                                       (col-impl/new-column))))))
+             (if (instance? Map parsers)
+               (vals parsers)
+               parsers))
+     (Dataset. (persistent! columns) (persistent! cmap) {:name dname} 0 0)))
   ([options parsers]
    (parsers->dataset options parsers
                      (apply max 0 (map (comp dtype/ecount :column-parser)

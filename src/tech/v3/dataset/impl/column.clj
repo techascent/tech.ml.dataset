@@ -20,7 +20,7 @@
   (:import [java.util Arrays]
            [ham_fisted Reductions Casts ChunkedList IMutList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO]
+           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO Named]
            [tech.v3.datatype Buffer LongBuffer]))
 
 

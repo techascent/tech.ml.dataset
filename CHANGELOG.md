@@ -1,7 +1,11 @@
 # Changelog
+# 7.000-beta-30
+ * Higher performance mapseq parsing and dataset creation for more efficient creation of smaller datasets
+   via transduce, mapseq-parser, ->dataset and the various csv parsing pathways.
+
 # 7.000-beta-29
  * parquet supports streaming data into output streams.
- 
+
 # 7.000-beta-28
  * m-1 mac support upgraded - arrow lz4 compression, zstd compression and snappy
    support all tested.  dtype-next upgrade required for lz4, dependency upgrade required

@@ -210,6 +210,14 @@ user> (ds/rowvec-at stocks -1)
                 write!)
 
 
+(defn dataset-parser
+  "Implements protocols/PDatasetParser, Counted, Indexed, IReduceInit, and IDeref (returns the new dataset).
+  See documentation for [[mapseq-parser]]."
+  ([options] (let [r (io-mapseq/mapseq-reducer options)]
+               ((hamf-proto/->init-val-fn r))))
+  ([] (dataset-parser nil)))
+
+
 (defn mapseq-parser
   "Return a clojure function that when called with one arg that arg must be the next map
   to add to the dataset.  When called with no args returns the current dataset.  This can be

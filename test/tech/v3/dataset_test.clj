@@ -6,6 +6,8 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset :as ds]
+            [tech.v3.dataset-api :as ds-api]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.tensor :as ds-tens]
@@ -1655,3 +1657,25 @@
 
 (deftest mixed-boolean-values
   (is (= :object (:datatype (meta ((ds/->dataset {:a [1 true false]}) :a))))))
+
+
+(deftest fast-parser-ds-creation
+  (let [test-ds (ds/->dataset {:a (range 2000) :b (range 2000) :c (range 2000)})
+        a-parser (ds-api/dataset-parser {:dataset-name "just/a/column"})
+        parser  (ds-api/dataset-parser {:dataset-name "all/three/columns"})]
+    (ds-proto/add-rows parser (ds/rows test-ds))
+    (ds-proto/add-rows a-parser (ds/rows (ds/select-columns test-ds [:a])))
+    (dotimes [idx 4000] @parser)
+    (dotimes [idx 4000] @a-parser)
+    (dotimes [idx 4000] (nth parser -1))
+    (dotimes [idx 10] (vec parser))
+    (println "3 column creation")
+    (time (dotimes [idx 1000] @parser))
+    (println "1 column creation")
+    (time (dotimes [idx 1000] @a-parser))
+    (println "row-at time")
+    (println (nth parser -1))
+    (time
+     (dotimes [idx 1000] (nth parser -1)))
+    (time (vec parser))
+    (is (= {:a 1999 :b 1999 :c 1999} (nth parser -1)))))

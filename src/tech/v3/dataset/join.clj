@@ -121,12 +121,27 @@
               lhs-join-colname)))
 
 
+(defn- append-str
+  [name-or-kwd data]
+  (let [rv (str (if (instance? clojure.lang.Named name-or-kwd)
+                  (name name-or-kwd)
+                  name-or-kwd) "-" data)]
+    (if (keyword? name-or-kwd)
+      (keyword rv)
+      rv)))
+
+
 (defn- finalize-join-result
   [lhs-colname rhs-colname lhs rhs lhs-indexes rhs-indexes lhs-missing rhs-missing]
   (let [lhs-columns (ds-base/columns (ds-base/remove-column lhs lhs-colname))
         rhs-columns (ds-base/columns (ds-base/remove-column rhs rhs-colname))
         lhs-table-name (default-table-name lhs "left")
         rhs-table-name (default-table-name rhs "right")
+        ;;The table names *must* be different
+        [lhs-table-name rhs-table-name] (if (= lhs-table-name rhs-table-name)
+                                          [(append-str lhs-table-name "left")
+                                           (append-str rhs-table-name "right")]
+                                          [lhs-table-name rhs-table-name])
         lhs-join-column (lhs lhs-colname)
         rhs-join-column (rhs rhs-colname)]
     (merge

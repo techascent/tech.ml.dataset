@@ -13,30 +13,51 @@
             [ham-fisted.protocols :as hamf-proto])
   (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap]
            [java.util.function Function Consumer]
-           [clojure.lang IDeref]
-           [ham_fisted Reductions$IndexedAccum Reducible]))
+           [tech.v3.dataset.protocols PDatasetParser]
+           [clojure.lang IDeref Counted Indexed]
+           [ham_fisted Reductions$IndexedAccum Reducible Consumers$IncConsumer
+            ITypedReduce]))
 
 
-(defrecord ^:private MapseqReducer [options
-                                    parse-context
-                                    ^Map parsers
-                                    key-fn
-                                    colname->parser
-                                    row-idx*]
+(defrecord ParseRecord [^long col-idx column-name column-parser])
+
+
+(deftype ^:private MapseqReducer [options parsers consumer ^Consumers$IncConsumer row-idx]
   Consumer
   (accept [this row]
-    (let [row-idx (long @row-idx*)]
-      (vswap! row-idx* unchecked-inc)
-      (hamf/consume!
-       (hamf/consumer
-        e
-        (let [^Map$Entry e e
-              parser (colname->parser (.getKey e))]
-          (column-parsers/add-value! parser row-idx (.getValue e))))
-       row)))
+    (hamf/consume! consumer row)
+    (.inc row-idx))
+  Counted
+  (count [this] (.value row-idx))
+  PDatasetParser
+  (add-row [this row] (.accept this row))
+  (add-rows [this rows] (hamf/consume! this rows))
+  Indexed
+  (nth [this idx] (nth this idx nil))
+  (nth [this idx dv]
+    (let [ec (.value row-idx)
+          idx (if (< idx 0)
+                (+ idx ec)
+                idx)]
+      (if (or (< idx 0)
+              (>= idx ec))
+        dv
+        (into {} (map (fn [^ParseRecord pr]
+                        [(.-column-name pr) (nth (.-column-parser pr)
+                                                 (unchecked-int idx))]))
+              (.values ^Map parsers)))))
+  ITypedReduce
+  (reduce [this rfn init]
+    (let [parser-vals (.values ^Map parsers)]
+      (reduce (fn [acc ^long idx]
+                (rfn acc (into {} (map (fn [^ParseRecord pr]
+                                         [(.-column-name pr) (nth (.-column-parser pr)
+                                                                  (unchecked-int idx))]))
+                               parser-vals)))
+              init (hamf/range (.value row-idx)))))
   IDeref
   (deref [this]
-    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers @row-idx*)))
+    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers (.value row-idx))))
 
 
 (defn mapseq-reducer
@@ -51,16 +72,18 @@
              key-fn (:key-fn options identity)
              colparser-compute-fn (hamf/function
                                    colname
-                                   (let [col-idx (.size parsers)]
-                                     {:column-idx col-idx
-                                      :column-name (key-fn colname)
-                                      :column-parser (parse-context colname)}))
+                                   (ParseRecord. (.size parsers) (key-fn colname) (parse-context colname)))
              colname->parser (fn [colname]
-                               (:column-parser
-                                (.computeIfAbsent parsers colname
-                                                  colparser-compute-fn)))
-             row-idx* (volatile! 0)]
-         (MapseqReducer. options parse-context parsers key-fn colname->parser row-idx*)))
+                               (.-column-parser ^ParseRecord
+                                                (.computeIfAbsent parsers colname
+                                                                  colparser-compute-fn)))
+             row-idx (hamf/inc-consumer)
+             consumer (hamf/consumer
+                       e
+                       (let [^Map$Entry e e
+                             parser (colname->parser (.getKey e))]
+                         (column-parsers/add-value! parser (.value row-idx) (.getValue e))))]
+         (MapseqReducer. options parsers consumer row-idx)))
     (->rfn [r] hamf/consumer-accumulator)
     hamf-proto/Finalize
     (finalize [r v] @v)))

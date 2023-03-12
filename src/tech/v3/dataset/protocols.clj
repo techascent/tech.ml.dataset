@@ -36,6 +36,14 @@
   (^Buffer rowvecs [ds options]))
 
 
+(defprotocol PDatasetParser
+  "Protocols for the dataset parser created via (dataset-parser)."
+  (add-row [p row]
+    "row needs to reduce to a sequence of objects implementing -key and -val")
+  (add-rows [p rows]
+    "rows need only be reducible"))
+
+
 (defprotocol PDatasetTransform
   (transform [t dataset]))
 
