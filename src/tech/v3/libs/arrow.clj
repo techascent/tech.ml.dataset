@@ -84,7 +84,7 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8 ArrowType$Null]
+            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
@@ -97,7 +97,7 @@
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
            [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
             FloatBuffer]
-           [java.util List ArrayList Map HashMap Map$Entry]
+           [java.util List ArrayList Map HashMap Map$Entry Iterator]
            [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
@@ -328,6 +328,8 @@ Dependent block frames are not supported!!")
 ;; Protocol extensions for arrow schema types
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defonce type-atom (atom nil))
+
 (extend-protocol clj-proto/Datafiable
   ArrowType$Int
   (datafy [this]
@@ -392,7 +394,10 @@ Dependent block frames are not supported!!")
   DictionaryEncoding
   (datafy [this] {:id (.getId this)
                   :ordered? (.isOrdered this)
-                  :index-type (datafy (.getIndexType this))}))
+                  :index-type (datafy (.getIndexType this))})
+  ArrowType$List
+  (datafy [this] (swap! type-atom conj this)
+    {:datatype :list}))
 
 
 (defn- pad
@@ -700,31 +705,34 @@ Dependent block frames are not supported!!")
            val))))
 
 
+(defn- datafy-field
+  [^Field field]
+  (let [df (datafy (.. field getFieldType getType))]
+    (when-not (map? df)
+      (throw (Exception. "Failed to dataty datatype %s" field)))
+    (merge
+     {:name (.getName field)
+      :nullable? (.isNullable field)
+      :field-type df
+      :metadata (->> (.getMetadata field)
+                     (map (fn [^Map$Entry entry]
+                            [(try-json-parse (.getKey entry))
+                             (try-json-parse (.getValue entry))]))
+                     (into {}))}
+     (when-let [c (seq (.getChildren field))]
+       {:children (mapv datafy-field c)})
+     (when-let [encoding (.getDictionary field)]
+       {:dictionary-encoding (datafy encoding)}))))
+
+
 (defn- read-schema
   "returns a pair of offset-data and schema"
   [{:keys [message _body _message-type]}]
   (let [schema (MessageSerializer/deserializeSchema ^Message message)
-        ;;_ (println schema)
+        ;; _ (println schema)
         fields
         (->> (.getFields schema)
-             (mapv (fn [^Field field]
-                     (let [arrow-type (.getType (.getFieldType field))
-                           datafied-data (datafy arrow-type)]
-                       (when-not (map? datafied-data)
-                         (throw (Exception.
-                                 (format "Failed to datafy datatype %s"
-                                         (type arrow-type)))))
-                       (merge
-                        {:name (.getName field)
-                         :nullable? (.isNullable field)
-                         :field-type datafied-data
-                         :metadata (->> (.getMetadata field)
-                                        (map (fn [^Map$Entry entry]
-                                               [(try-json-parse (.getKey entry))
-                                                (try-json-parse (.getValue entry))]))
-                                        (into {}))}
-                        (when-let [encoding (.getDictionary field)]
-                          {:dictionary-encoding (datafy encoding)}))))))]
+             (mapv datafy-field))]
     {:fields fields
      :encodings (->> (map :dictionary-encoding fields)
                      (remove nil?)
@@ -1278,7 +1286,8 @@ Dependent block frames are not supported!!")
 (defn- string-reader->text-reader
   ^Buffer [item]
   (let [data-buf (dtype/->reader item)]
-    (reify ObjectReader
+    (reify
+      ObjectReader
       (elemwiseDatatype [rdr] :text)
       (lsize [rdr] (.lsize data-buf))
       (readObject [rdr idx]
@@ -1345,74 +1354,162 @@ Dependent block frames are not supported!!")
                            false)))))
 
 
+(defn- field-node-count
+  [field]
+  (apply + 1 (map field-node-count
+                  (get field :children))))
+
+
+;;Work around the defmulti-failed to redefine dispatch issue
+#_(def  field->column-data nil)
+
+
+(defn- node-buf->missing
+  [node validity-buf]
+  (if (== 0 (long (:n-null-entries node)))
+    (bitmap/->bitmap)
+    (int8-buf->missing
+     validity-buf
+     (:n-elems node))))
+
+(defn- field-metadata
+  [field]
+  (-> (into (dissoc (:field-type field) :datatype) (:metadata field))
+      ;;Fixes issue 330
+      (with-meta nil)))
+
+(defmulti ^:private field->column
+  "Transform a field into a column."
+  (fn [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+    (get-in field [:field-type :datatype])))
+
+
+(defmethod ^:private field->column :string
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (assert (= 0 (count (:children field)))
+          (format "Field %s cannot be parsed with default parser" field))
+  (let [encoding (get field :dictionary-encoding)
+        node (.next node-iter)
+        [validity-buf data-buffers] (if (nil? encoding)
+                                      [(.next buf-iter) [(.next buf-iter) (.next buf-iter)]]
+                                      [(.next buf-iter) [(.next buf-iter)]])]
+
+    (col-impl/new-column
+     (:name field)
+     (string-data->column-data
+      dict-map encoding
+      (get-in field [:field-type :offset-buffer-datatype])
+      data-buffers
+      (:n-elems node))
+     (field-metadata field)
+     (node-buf->missing node validity-buf))))
+
+(defmethod ^:private field->column :boolean
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (assert (= 0 (count (:children field)))
+          (format "Field %s cannot be parsed with default parser" field))
+  (let [field-dtype (get-in field [:field-type :datatype])
+        field-dtype (if-not (:integer-datetime-types? options)
+                      (case field-dtype
+                        :time-microseconds :packed-local-time
+                        :epoch-microseconds :packed-instant
+                        :epoch-days :packed-local-date
+                        field-dtype)
+                      field-dtype)
+        node (.next node-iter)
+        n-elems (long (:n-elems node))]
+    ;;nil subtype means null column
+    (if (= :null (get-in field [:field-type :subtype]))
+      (col-impl/new-column
+       (:name field)
+       (dtype/const-reader false n-elems)
+       (field-metadata field)
+       (bitmap/->bitmap (range n-elems)))
+      (let [validity-buf (.next buf-iter)
+            data-buf (.next buf-iter)]
+        (col-impl/new-column
+         (:name field)
+         (byte-buffer->bitwise-boolean-buffer
+          data-buf n-elems)
+         (field-metadata field)
+         (node-buf->missing node validity-buf))))))
+
+
+(defn- clone-downcast-text
+  [dbuf]
+  (if (= :text (dtype/elemwise-datatype dbuf))
+    (dtype/make-container :string (dtype/emap str :string dbuf))
+    (dtype/clone dbuf)))
+
+
+(defmethod ^:private field->column :list
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (let [validity-buf (.next buf-iter)
+        offset-buf (.next buf-iter)
+        node (.next node-iter)
+        _ (assert (== 1 (count (:children field)))
+                  (format "List types are expected to have exactly 1 child - found %d"
+                          (count (:children field))))
+        sub-column (-> (field->column (first (:children field)) node-iter buf-iter dict-map options)
+                       ;;copy to jvm memory.  This is a quick insurance policy to ensure if this buffer
+                       ;;leaves the resource context it doesn't contain native memory as only the
+                       ;;parent buffer is cloned.
+                       ;;A faster but more involved option would be to make a custom reader
+                       ;;with an overloaded clone pathway.
+                       (clone-downcast-text)
+                       (dtype/->buffer))
+        n-elems (long (:n-elems node))
+        ;;For lists, int32 offsets with one extra if this works like the string buffers
+        offsets (-> (native-buffer/set-native-datatype
+                     offset-buf :int32)
+                    (dtype/sub-buffer 0 (inc n-elems))
+                    (dtype/->buffer))]
+    (col-impl/new-column
+     (:name field)
+     (dtype/make-reader :object n-elems
+                        (let [sidx (.readLong offsets idx)]
+                          (dtype/sub-buffer sub-column
+                                            sidx
+                                            (- (.readLong offsets (unchecked-inc idx))
+                                               sidx))))
+     (field-metadata field)
+     (node-buf->missing node validity-buf))))
+
+
+(defmethod ^:private field->column :default
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (assert (= 0 (count (:children field)))
+          (format "Field %s cannot be parsed with default parser" field))
+  (let [field-dtype (get-in field [:field-type :datatype])
+        field-dtype (if-not (:integer-datetime-types? options)
+                      (case field-dtype
+                        :time-microseconds :packed-local-time
+                        :epoch-microseconds :packed-instant
+                        :epoch-days :packed-local-date
+                        field-dtype)
+                      field-dtype)
+        node (.next node-iter)
+        validity-buf (.next buf-iter)
+        data-buf (.next buf-iter)
+        n-elems (long (:n-elems node))]
+    (col-impl/new-column
+     (:name field)
+     (-> (native-buffer/set-native-datatype
+          data-buf field-dtype)
+         (dtype/sub-buffer 0 n-elems))
+     (field-metadata field)
+     (node-buf->missing node validity-buf))))
+
+
 (defn- records->ds
   [schema dict-map record-batch options]
-  (let [{:keys [fields]} schema
-        {:keys [nodes buffers]} record-batch]
-    (assert (= (count fields) (count nodes)))
-    (->> (map vector fields nodes)
-         (reduce
-          (fn [[retval ^long buf-idx] [field node]]
-            (let [field-dtype (get-in field [:field-type :datatype])
-                  field-dtype (if-not (:integer-datetime-types? options)
-                                (case field-dtype
-                                  :time-microseconds :packed-local-time
-                                  :epoch-microseconds :packed-instant
-                                  :epoch-days :packed-local-date
-                                  field-dtype)
-                                field-dtype)
-                  field-subtype (get-in field [:field-type :subtype])
-                  col-metadata (dissoc (:field-type field) :datatype)
-                  encoding (get field :dictionary-encoding)
-                  nullcol? (and (= :boolean field-dtype)
-                                (= :null field-subtype))
-                  n-buffers (long (cond
-                                    (and (= :string field-dtype)
-                                         (not encoding))
-                                    3
-                                    nullcol?
-                                    0
-                                    :else
-                                    2))
-                  n-elems (long (:n-elems node))
-                  specific-bufs (subvec buffers buf-idx (+ buf-idx n-buffers))
-                  n-elems (long (:n-elems node))
-                  missing (cond
-                            nullcol?
-                            (bitmap/->bitmap (range n-elems))
-                            (== 0 (long (:n-null-entries node)))
-                            (bitmap/->bitmap)
-                            :else
-                            (int8-buf->missing
-                             (first specific-bufs)
-                             n-elems))
-                  metadata (-> (into col-metadata (:metadata field))
-                               ;;Fixes issue 330
-                               (with-meta nil))]
-              [(conj retval
-                     (col-impl/new-column
-                      (:name field)
-                      (cond
-                        (= field-dtype :string)
-                        (string-data->column-data
-                         dict-map encoding
-                         (get-in field [:field-type :offset-buffer-datatype])
-                         (drop 1 specific-bufs)
-                         n-elems)
-                        nullcol?
-                        (dtype/const-reader false n-elems)
-                        (= field-dtype :boolean)
-                        (byte-buffer->bitwise-boolean-buffer
-                         (second specific-bufs) n-elems)
-                        :else
-                        (-> (native-buffer/set-native-datatype
-                             (second specific-bufs) field-dtype)
-                            (dtype/sub-buffer 0 n-elems)))
-                      metadata
-                      missing))
-               (+ buf-idx n-buffers)]))
-          [[] 0])
-         (first)
+  (let [{:keys [nodes buffers]} record-batch
+        node-iter (.iterator ^Iterable (map-indexed #(assoc %2 :idx %1) nodes))
+        buf-iter (.iterator ^Iterable buffers)]
+    (->> (:fields schema)
+         ;;parsing has to be in order non-lazy
+         (mapv #(field->column % node-iter buf-iter
+                               dict-map options))
          (ds-impl/new-dataset options))))
 
 
@@ -1715,6 +1812,7 @@ Dependent block frames are not supported!!")
           (let [messages (->> (input->messages input)
                               (sequence (map parse-message)))
                 schema (first messages)]
+            ;; (println schema)
             (when-not (= :schema (:message-type schema))
               (throw (Exception. "Initial message is not a schema message.")))
             (parse-next-dataset schema (rest messages) fname 0 nil options)))]

@@ -1,4 +1,8 @@
 # Changelog
+# 7.000-beta-31
+ * large hamf upgrade for faster maps and faster map boolean operations.
+ * charred upgrade for faster json parsing when using `key-fn keyword`.
+
 # 7.000-beta-30
  * Higher performance mapseq parsing and dataset creation for more efficient creation of smaller datasets
    via transduce, mapseq-parser, ->dataset and the various csv parsing pathways.
