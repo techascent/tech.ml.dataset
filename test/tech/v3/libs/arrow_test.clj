@@ -295,3 +295,11 @@
   (let [ds (arrow/stream->dataset "test/data/withnullcol.arrow")]
     (is (= (vec (range (ds/row-count ds)))
            (vec (ds/missing (ds "nullcol")))))))
+
+
+(deftest list-datatypes-read-only
+  (let [ds (ds/->dataset "test/data/arrow_list.arrow")]
+    (is (= [["dog" "car"]
+            ["dog" "flower"]
+            ["car" "flower"]]
+           (mapv vec (ds "class-name"))))))
