@@ -84,7 +84,7 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8 ArrowType$Null]
+            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
@@ -328,6 +328,8 @@ Dependent block frames are not supported!!")
 ;; Protocol extensions for arrow schema types
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defonce type-atom (atom nil))
+
 (extend-protocol clj-proto/Datafiable
   ArrowType$Int
   (datafy [this]
@@ -392,7 +394,10 @@ Dependent block frames are not supported!!")
   DictionaryEncoding
   (datafy [this] {:id (.getId this)
                   :ordered? (.isOrdered this)
-                  :index-type (datafy (.getIndexType this))}))
+                  :index-type (datafy (.getIndexType this))})
+  ArrowType$List
+  (datafy [this] (swap! type-atom conj this)
+    {:datatype :list}))
 
 
 (defn- pad
@@ -700,31 +705,34 @@ Dependent block frames are not supported!!")
            val))))
 
 
+(defn- datafy-field
+  [^Field field]
+  (let [df (datafy (.. field getFieldType getType))]
+    (when-not (map? df)
+      (throw (Exception. "Failed to dataty datatype %s" field)))
+    (merge
+     {:name (.getName field)
+      :nullable? (.isNullable field)
+      :field-type df
+      :metadata (->> (.getMetadata field)
+                     (map (fn [^Map$Entry entry]
+                            [(try-json-parse (.getKey entry))
+                             (try-json-parse (.getValue entry))]))
+                     (into {}))}
+     (when-let [c (seq (.getChildren field))]
+       {:children (mapv datafy-field c)})
+     (when-let [encoding (.getDictionary field)]
+       {:dictionary-encoding (datafy encoding)}))))
+
+
 (defn- read-schema
   "returns a pair of offset-data and schema"
   [{:keys [message _body _message-type]}]
   (let [schema (MessageSerializer/deserializeSchema ^Message message)
-        ;;_ (println schema)
+        ;; _ (println schema)
         fields
         (->> (.getFields schema)
-             (mapv (fn [^Field field]
-                     (let [arrow-type (.getType (.getFieldType field))
-                           datafied-data (datafy arrow-type)]
-                       (when-not (map? datafied-data)
-                         (throw (Exception.
-                                 (format "Failed to datafy datatype %s"
-                                         (type arrow-type)))))
-                       (merge
-                        {:name (.getName field)
-                         :nullable? (.isNullable field)
-                         :field-type datafied-data
-                         :metadata (->> (.getMetadata field)
-                                        (map (fn [^Map$Entry entry]
-                                               [(try-json-parse (.getKey entry))
-                                                (try-json-parse (.getValue entry))]))
-                                        (into {}))}
-                        (when-let [encoding (.getDictionary field)]
-                          {:dictionary-encoding (datafy encoding)}))))))]
+             (mapv datafy-field))]
     {:fields fields
      :encodings (->> (map :dictionary-encoding fields)
                      (remove nil?)
@@ -1715,6 +1723,7 @@ Dependent block frames are not supported!!")
           (let [messages (->> (input->messages input)
                               (sequence (map parse-message)))
                 schema (first messages)]
+            ;; (println schema)
             (when-not (= :schema (:message-type schema))
               (throw (Exception. "Initial message is not a schema message.")))
             (parse-next-dataset schema (rest messages) fname 0 nil options)))]
