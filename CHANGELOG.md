@@ -2,6 +2,7 @@
 # 7.000-beta-31
  * large hamf upgrade for faster maps and faster map boolean operations.
  * charred upgrade for faster json parsing when using `key-fn keyword`.
+ * [issue 349](https://github.com/techascent/tech.ml.dataset/issues/349) - list types for arrow.
 
 # 7.000-beta-30
  * Higher performance mapseq parsing and dataset creation for more efficient creation of smaller datasets
