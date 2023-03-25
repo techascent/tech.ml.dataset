@@ -84,7 +84,7 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List]
+            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]
@@ -355,6 +355,9 @@ Dependent block frames are not supported!!")
     {:datatype :string
      :encoding :utf-8
      :offset-buffer-datatype :uint32})
+  ArrowType$Binary
+  (datafy [this]
+    {:datatype :binary})
   ArrowType$LargeUtf8
   (datafy [this]
     {:datatype :string
@@ -709,7 +712,8 @@ Dependent block frames are not supported!!")
   [^Field field]
   (let [df (datafy (.. field getFieldType getType))]
     (when-not (map? df)
-      (throw (Exception. "Failed to dataty datatype %s" field)))
+      (throw (Exception. (format "Failed to dataty datatype %s-%s"
+                                 field (type (.. field getFieldType getType))))))
     (merge
      {:name (.getName field)
       :nullable? (.isNullable field)
@@ -1451,11 +1455,11 @@ Dependent block frames are not supported!!")
                   (format "List types are expected to have exactly 1 child - found %d"
                           (count (:children field))))
         sub-column (-> (field->column (first (:children field)) node-iter buf-iter dict-map options)
-                       ;;copy to jvm memory.  This is a quick insurance policy to ensure if this buffer
-                       ;;leaves the resource context it doesn't contain native memory as only the
-                       ;;parent buffer is cloned.
-                       ;;A faster but more involved option would be to make a custom reader
-                       ;;with an overloaded clone pathway.
+                       ;;copy to jvm memory.  This is a quick insurance policy to ensure
+                       ;;if this buffer leaves the resource context it doesn't contain
+                       ;;native memory as only the parent buffer is cloned.  A faster
+                       ;;but more involved option would be to make a custom reader with
+                       ;;an overloaded clone pathway.
                        (clone-downcast-text)
                        (dtype/->buffer))
         n-elems (long (:n-elems node))
@@ -1475,6 +1479,29 @@ Dependent block frames are not supported!!")
      (field-metadata field)
      (node-buf->missing node validity-buf))))
 
+(defmethod ^:private field->column :binary
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (let [node (.next node-iter)
+        validity-buf (.next buf-iter)
+        offset-buf (.next buf-iter)
+        data-buf (.next buf-iter)
+        n-elems (long (:n-elems node))
+        offsets (-> (native-buffer/set-native-datatype
+                     offset-buf :int32)
+                    (dtype/sub-buffer 0 (inc n-elems))
+                    (dtype/->buffer))
+        data-buf (-> (dtype/clone data-buf)
+                     (dtype/->buffer))]
+    (col-impl/new-column
+     (:name field)
+     (dtype/make-reader :object n-elems
+                        (let [sidx (.readLong offsets idx)]
+                          (dtype/sub-buffer data-buf
+                                            sidx
+                                            (- (.readLong offsets (unchecked-inc idx))
+                                               sidx))))
+     (field-metadata field)
+     (node-buf->missing node validity-buf))))
 
 (defmethod ^:private field->column :default
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]

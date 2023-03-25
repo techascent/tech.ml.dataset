@@ -1,4 +1,8 @@
 # Changelog
+# 7.000-beta-32
+ * Arrow's binary datatype is supported so we can transmit images and such via arrow.
+
+
 # 7.000-beta-31
  * large hamf upgrade for faster maps and faster map boolean operations.
  * charred upgrade for faster json parsing when using `key-fn keyword`.
