@@ -115,6 +115,7 @@ as an options map.  The options map overrides the dataset metadata.
   * `:print-column-max-width` - set the max width of a column when printing.
   * `:print-column-types?` - show/hide column types.
   * `:maximum-precision` - When provided, the maximum double precision as an integer.
+  * `:elide-header?` - When true, the header such as `test/data/alldtypes.arrow-feather-compressed [1000 15]:` is hidden.
 
 
 Examples of print styles:
@@ -325,11 +326,15 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
              (ds-proto/dataset-name ds)
              ;;make row major shape to avoid confusion
              (vec (reverse (dtype/shape ds))))
-     (format "%s %s:\n\n%s"
-             (ds-proto/dataset-name ds)
-             ;;make row major shape to avoid confusion
-             (vec (reverse (dtype/shape ds)))
-             (dataset-data->str ds options))))
+     (let [options (merge (meta ds) options)
+           elide-header? (get options :elide-header?)
+           header (if elide-header?
+                    ""
+                    (format "%s %s:\n\n"
+                            (ds-proto/dataset-name ds)
+                            (vec (reverse (dtype/shape ds)))))]
+
+       (str header (dataset-data->str ds options)))))
   ([ds]
    (dataset->str ds {})))
 

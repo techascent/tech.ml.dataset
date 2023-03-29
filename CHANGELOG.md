@@ -1,5 +1,18 @@
 # Changelog
 
+# 7.000-beta-33
+ * Adding `elide-header?` option for printing:
+```clojure
+user> (vary-meta (ds/head ds) merge {:maximum-precision 3 :elide-header? true})
+|    :a |
+|------:|
+| 0.197 |
+| 0.463 |
+| 0.765 |
+| 0.546 |
+| 0.076 |
+```
+
 # 7.000-beta-32
  * Arrow's binary datatype is supported so we can read images and such via arrow.
  * Minor ham-fisted update.
