@@ -4,6 +4,8 @@
  * Arrow's binary datatype is supported so we can read images and such via arrow.
  * Minor ham-fisted update.
  * Minor charred write-json update.
+ * [issue 352](https://github.com/techascent/tech.ml.dataset/issues/352) - maximum-precision is supported to control dataset-wide maximum precision
+   when formatting doubles.
 
 # 7.000-beta-31
  * large hamf upgrade for faster maps and faster map boolean operations.
