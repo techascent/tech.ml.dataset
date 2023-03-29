@@ -1,7 +1,9 @@
 # Changelog
-# 7.000-beta-32
- * Arrow's binary datatype is supported so we can transmit images and such via arrow.
 
+# 7.000-beta-32
+ * Arrow's binary datatype is supported so we can read images and such via arrow.
+ * Minor ham-fisted update.
+ * Minor charred write-json update.
 
 # 7.000-beta-31
  * large hamf upgrade for faster maps and faster map boolean operations.
