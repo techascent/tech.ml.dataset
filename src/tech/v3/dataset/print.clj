@@ -48,10 +48,13 @@
 
 
 (defn- reader->string-lines
-  [reader-data ^RoaringBitmap missing line-policy column-max-width new-number-format?]
+  [reader-data ^RoaringBitmap missing line-policy column-max-width new-number-format?
+   maximum-precision]
   (let [reader-data (if (and new-number-format?
                              (#{:float32 :float64} (dtype/elemwise-datatype reader-data)))
-                      (vec (format-sequence/format-sequence reader-data))
+                      (vec (format-sequence/format-sequence
+                            reader-data
+                            (long (or maximum-precision 8))))
                       reader-data)]
     (reify ObjectReader
       (lsize [rdr] (dtype/ecount reader-data))
@@ -111,6 +114,7 @@ as an options map.  The options map overrides the dataset metadata.
      - `:single` - Only print first line
   * `:print-column-max-width` - set the max width of a column when printing.
   * `:print-column-types?` - show/hide column types.
+  * `:maximum-precision` - When provided, the maximum double precision as an integer.
 
 
 Examples of print styles:
@@ -188,7 +192,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
   ([dataset options]
    (let [options (merge (meta dataset) options)
          {:keys [print-index-range print-line-policy
-                 print-column-max-width print-column-types?]} options
+                 print-column-max-width print-column-types?
+                 maximum-precision]} options
          n-rows (long (second (dtype/shape dataset)))
          index-range (or print-index-range
                          (min n-rows *default-table-row-print-length*))
@@ -229,7 +234,8 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                   (reader->string-lines (ds-proto/missing %)
                                                         line-policy
                                                         column-width
-                                                        true)
+                                                        true
+                                                        maximum-precision)
                                   ;;Do the conversion to string once.
                                   (dtype/clone)
                                   (dtype/->reader))
