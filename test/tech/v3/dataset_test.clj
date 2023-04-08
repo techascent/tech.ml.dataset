@@ -1679,3 +1679,37 @@
      (dotimes [idx 1000] (nth parser -1)))
     (time (vec parser))
     (is (= {:a 1999 :b 1999 :c 1999} (nth parser -1)))))
+
+
+(comment
+  (require '[criterium.core :as crit])
+  (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
+  (def ds (ds/->dataset data))
+  (crit/quick-bench (group-by :a data))
+  (crit/quick-bench (ds/group-by-column ds :a))
+
+  (crit/quick-bench (transduce (comp (filter #(> (:a %) 10))
+                                     (map #(* (:b %) (:c %))))
+                               + 0.0 data))
+
+
+  (require '[tech.v3.datatype.functional :as dfn])
+
+  (crit/quick-bench (as-> ds ds
+                      (ds/filter-column ds :a #(> % 10))
+                      (dfn/+ (ds :b) (ds :c))
+                      (dfn/sum-fast ds)))
+
+
+  (require '[ham-fisted.api :as hamf])
+  (crit/quick-bench (as-> ds ds
+                      (ds/filter-column ds :a (hamf/long-predicate a (> a 10)))
+                      (dfn/+ (ds :b) (ds :c))
+                      (dfn/sum-fast ds)))
+
+
+  (crit/quick-bench (transduce (comp (filter #(> (long (:a %)) 10))
+                                     (map #(* (double (:b %)) (double (:c %)))))
+                               + 0.0 data))
+
+  )
