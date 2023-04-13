@@ -20,6 +20,7 @@
             [tech.v3.dataset.missing :as ds-missing]
             [ham-fisted.set :as set]
             [ham-fisted.api :as hamf]
+            [ham-fisted.function :as hamf-fn]
             [clj-commons.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
@@ -99,7 +100,7 @@
                  (remove nil?)
                  ;;Using a type-hinted key-fn allows the sort operator to use a double array
                  ;;which has a very fast indirect sort operation.
-                 (hamf/sort-by (hamf/obj->double
+                 (hamf/sort-by (hamf-fn/obj->double
                                 v (-> (second v)
                                       (double)
                                       (Math/abs))) >))])

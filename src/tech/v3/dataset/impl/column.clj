@@ -15,6 +15,7 @@
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
   (:import [java.util Arrays]
@@ -47,7 +48,7 @@
     (cond
       (instance? IFn$OLO rfn)
       (let [primitive-missing-value (Casts/longCast primitive-missing-value)]
-        (Reductions/serialReduction (hamf/long-accumulator
+        (Reductions/serialReduction (hamf-rf/long-accumulator
                                      acc idx
                                      (.invokePrim ^IFn$OLO rfn acc
                                                   (if (.contains missing idx)
@@ -57,7 +58,7 @@
                                     (hamf/range sidx eidx)))
       (instance? IFn$ODO rfn)
       (let [primitive-missing-value (Casts/doubleCast primitive-missing-value)]
-        (Reductions/serialReduction (hamf/long-accumulator
+        (Reductions/serialReduction (hamf-rf/long-accumulator
                                        acc idx
                                        (.invokePrim ^IFn$ODO rfn acc
                                                     (if (.contains missing idx)
@@ -66,7 +67,7 @@
                                       acc
                                       (hamf/range sidx eidx)))
       :else
-      (Reductions/serialReduction (hamf/long-accumulator
+      (Reductions/serialReduction (hamf-rf/long-accumulator
                                    acc idx
                                    (rfn acc (if (.contains missing idx)
                                               nil
@@ -217,7 +218,7 @@
                             (long (dtype-proto/constant-time-min selection))
                             -1))]
            (if (< (long minv) 0)
-             (->> (hamf/preduce-reducer (un-pred/index-reducer n-elems) selection)
+             (->> (hamf-rf/preduce-reducer (un-pred/index-reducer n-elems) selection)
                   (wrap-negative-access n-elems))
              ;;if the data indicates it has no negative values
              (dtype/->reader selection))))

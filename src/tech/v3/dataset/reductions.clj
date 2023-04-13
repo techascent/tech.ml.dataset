@@ -60,6 +60,8 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.dataset.reductions.apache-data-sketch :as sketch]
             [tech.v3.parallel.for :as parallel-for]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.lazy-noncaching :as lznc])
   (:import [tech.v3.datatype Buffer]
@@ -93,7 +95,7 @@ user> (ds-reduce/group-by-column-agg
         (reify
           hamf-proto/Reducer
           (->init-val-fn [r] (constantly nil))
-          (->rfn [r] (hamf/long-accumulator
+          (->rfn [r] (hamf-rf/long-accumulator
                       acc v (if (not acc) [(col v)] acc)))
           hamf-proto/ParallelReducer
           (->merge-fn [r] (fn [l r] l)))))
@@ -105,7 +107,7 @@ user> (ds-reduce/group-by-column-agg
 (defn sum
   "Create a double consumer which will sum the values."
   [colname]
-  (reducer->column-reducer (hamf/reducer-with-finalize
+  (reducer->column-reducer (hamf-rf/reducer-with-finalize
                             (Sum.)
                             #((deref %) :sum)) colname))
 
@@ -114,7 +116,7 @@ user> (ds-reduce/group-by-column-agg
   "Create a double consumer which will produce a mean of the column."
   [colname]
   (let [ds-fn (sum colname)]
-    (reducer->column-reducer (hamf/reducer-with-finalize
+    (reducer->column-reducer (hamf-rf/reducer-with-finalize
                               (Sum.)
                               #(let [m (deref %)]
                                  (/ (double (m :sum))
@@ -126,8 +128,8 @@ user> (ds-reduce/group-by-column-agg
   []
   (reify ds-proto/PDatasetReducer
     (ds->reducer [this ds]
-      (hamf/consumer-reducer #(Consumers$IncConsumer.)))
-    (merge [this l r] (hamf/reducible-merge l r))
+      (hamf-rf/consumer-reducer #(Consumers$IncConsumer.)))
+    (merge [this l r] (hamf-rf/reducible-merge l r))
     hamf-proto/Finalize
     (finalize [this v] (deref v))))
 
@@ -149,9 +151,9 @@ user> (ds-reduce/group-by-column-agg
   "Get the set of distinct items given you know the space is no larger than int32
   space.  The optional finalizer allows you to post-process the data."
   ([colname finalizer]
-   (let [r (hamf/long-consumer-reducer #(BitmapConsumer. (bitmap/->bitmap)))
+   (let [r (hamf-rf/long-consumer-reducer #(BitmapConsumer. (bitmap/->bitmap)))
          r (if finalizer
-             (hamf/reducer-with-finalize r (fn [b] (finalizer @b)))
+             (hamf-rf/reducer-with-finalize r (fn [b] (finalizer @b)))
              r)]
      (reducer->column-reducer r colname)))
   ([colname]
@@ -174,9 +176,9 @@ user> (ds-reduce/group-by-column-agg
 (defn distinct
   "Create a reducer that will return a set of values."
   ([colname finalizer]
-   (let [r (hamf/consumer-reducer #(SetConsumer. (HashSet.)))
+   (let [r (hamf-rf/consumer-reducer #(SetConsumer. (HashSet.)))
          r (if finalizer
-             (hamf/reducer-with-finalize r (fn [b] (finalizer @b)))
+             (hamf-rf/reducer-with-finalize r (fn [b] (finalizer @b)))
              r)]
      (reducer->column-reducer r colname)))
   ([colname]
@@ -252,7 +254,7 @@ user> (ds-reduce/group-by-column-agg
        ds-proto/PDatasetReducer
        (ds->reducer [this ds] (ds-proto/ds->reducer col-reducer ds))
        (merge [this lhs rhs]
-         (reduce hamf/double-consumer-accumulator
+         (reduce hamf-rf/double-consumer-accumulator
                  lhs
                  @rhs))
        hamf-proto/Finalize
@@ -278,7 +280,7 @@ user> (ds-reduce/group-by-column-agg
            (reify
              hamf-proto/Reducer
              (->init-val-fn [r] (hamf-proto/->init-val-fn sampler-reducer))
-             (->rfn [r] (hamf/long-accumulator
+             (->rfn [r] (hamf-rf/long-accumulator
                          acc idx (sampler-rfn acc (.readObject rows idx))))
              hamf-proto/ParallelReducer
              (->merge-fn [r] merge-fn))))
@@ -313,7 +315,7 @@ user> (ds-reduce/group-by-column-agg
            (reify
              hamf-proto/Reducer
              (->init-val-fn [r] init-val-fn)
-             (->rfn [r] (hamf/long-accumulator
+             (->rfn [r] (hamf-rf/long-accumulator
                          acc row-idx
                          (apply rfn acc (.readObject rvecs row-idx))))
              hamf-proto/ParallelReducer
@@ -403,7 +405,7 @@ _unnamed [4 5]:
                                {}))
                   agg-map)
          cnames (->> (hamf/keys agg-map)
-                     (reduce (hamf/indexed-accum
+                     (reduce (hamf-rf/indexed-accum
                               acc idx v (.put ^Map acc v idx) acc)
                              (LinkedHashMap.)))
          ;;convert reducers to something with lightning fast reduction.
@@ -435,7 +437,7 @@ _unnamed [4 5]:
                            (filter-fn next-ds))
               agg-reducer (->> combined-reducers
                                (hamf/mapv #(ds-proto/ds->reducer % next-ds))
-                               (hamf/compose-reducers
+                               (hamf-rf/compose-reducers
                                 {:rfn-datatype :int64}))
               group-col (-> (ds-base/column next-ds colname)
                             (dtype/->reader))]
@@ -443,7 +445,7 @@ _unnamed [4 5]:
                  (lznc/filter idx-filter (hamf/range n-rows))
                  (hamf/range n-rows))
                (hamf/group-by-reducer
-                (hamf/long->obj idx (.readObject group-col idx))
+                (hamf-fn/long->obj idx (.readObject group-col idx))
                 agg-reducer
                 {:map-fn (constantly agg-map)
                  :ordered? false
@@ -454,7 +456,7 @@ _unnamed [4 5]:
           ;;Also possible to parse N datasets in parallel and do a concat-copying
           ;;operation but in my experience this steps takes up nearly no time.
           (.forEach ^ConcurrentHashMap agg-map 32
-                    (hamf/bi-consumer
+                    (hamf-fn/bi-consumer
                      k v
                      (do
                        (let [vv (finalize-fn v)]
@@ -529,7 +531,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
 |  e | 99 |  3 |
 ```"
   ([colname agg-map options ds-seq]
-   (hamf/reduce-reducer (group-by-column-agg-rf colname agg-map options)
+   (hamf-rf/reduce-reducer (group-by-column-agg-rf colname agg-map options)
                         (if (ds-impl/dataset? ds-seq)
                           [ds-seq]
                           ds-seq)))
@@ -560,10 +562,10 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
          context-map (ConcurrentHashMap.)
          _ (reduce (fn [acc ds]
                      (let [rs (->> (map #(ds-proto/ds->reducer % ds) combined-reducers)
-                                   (hamf/compose-reducers {:rfn-datatype :int64}))
+                                   (hamf-rf/compose-reducers {:rfn-datatype :int64}))
                            rs-rfn (hamf-proto/->rfn rs)
                            rs-init (hamf-proto/->init-val-fn rs)
-                           init-fn (hamf/function _k (rs-init))]
+                           init-fn (hamf-fn/function _k (rs-init))]
                        (doall (hamf/pgroups
                                (ds-base/row-count ds)
                                (fn [^long sidx ^long eidx]

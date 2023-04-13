@@ -5,6 +5,7 @@
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.base :as ds-base]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.protocols :as hamf-proto])
   (:import [clojure.lang IFn$OLO IFn$ODO]
            [ham_fisted Transformables]))
@@ -37,7 +38,7 @@
                (reify
                  hamf-proto/Reducer
                  (->init-val-fn [r] init-fn)
-                 (->rfn [r] (hamf/long-accumulator
+                 (->rfn [r] (hamf-rf/long-accumulator
                              acc v (.invokePrim rfn acc (.readLong col v))))
                  hamf-proto/ParallelReducer
                  (->merge-fn [r] merge-fn)))
@@ -46,14 +47,14 @@
                (reify
                  hamf-proto/Reducer
                  (->init-val-fn [r] init-fn)
-                 (->rfn [r] (hamf/long-accumulator
+                 (->rfn [r] (hamf-rf/long-accumulator
                              acc v (.invokePrim rfn acc (.readDouble col v))))
                  hamf-proto/ParallelReducer
                  (->merge-fn [r] merge-fn)))
              (reify
                hamf-proto/Reducer
                (->init-val-fn [r] init-fn)
-               (->rfn [r] (hamf/long-accumulator
+               (->rfn [r] (hamf-rf/long-accumulator
                            acc v (rfn acc (.readObject col v))))
                hamf-proto/ParallelReducer
                (->merge-fn [r] merge-fn)))))

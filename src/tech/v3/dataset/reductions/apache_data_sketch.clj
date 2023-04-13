@@ -47,7 +47,9 @@ user> (ds-reduce/group-by-column-agg
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.reductions.impl :as impl]
             [ham-fisted.protocols :as hamf-proto]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf])
+
   (:import [org.apache.datasketches.hll HllSketch TgtHllType]
            [org.apache.datasketches.quantiles DoublesSketch UpdateDoublesSketch
             DoublesUnion]
@@ -108,9 +110,9 @@ user> (ds-reduce/group-by-column-agg
                                            6 TgtHllType/HLL_6
                                            8 TgtHllType/HLL_8))
         rfn (case datatype
-              :float64 (hamf/double-accumulator
+              :float64 (hamf-rf/double-accumulator
                         acc val (.update ^HllSketch acc val) acc)
-              :int64 (hamf/long-accumulator
+              :int64 (hamf-rf/long-accumulator
                       acc val (.update ^HllSketch acc val) acc)
               :string (fn [acc val] (.update ^HllSketch acc (str val)) acc))
         merge-fn (fn [lhs rhs]
@@ -161,7 +163,7 @@ user> (ds-reduce/group-by-column-agg
   (let [cons-fn #(-> (DoublesSketch/builder)
                      (.setK (long k))
                      (.build))
-        rfn (hamf/double-accumulator
+        rfn (hamf-rf/double-accumulator
              acc v (.update ^UpdateDoublesSketch acc v) acc)
         merge-fn (fn [lhs rhs]
                    (let [lhs (->doubles-union lhs)]

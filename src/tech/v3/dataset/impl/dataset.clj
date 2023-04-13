@@ -12,6 +12,8 @@
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.datatype.graal-native :as graal-native]
             [ham-fisted.api :as hamf]
+            [ham-fisted.function :as hamf-fn]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
@@ -125,11 +127,11 @@
                         [(with-meta (symbol (str "c" cidx))
                            {:tag 'Buffer}) `(~'readers ~cidx)]))
               (vec))
-     (hamf/long->obj ~'row-idx
-                     (hamf/vector ~@(->> (range n-cols)
-                                         (map (fn [cidx]
-                                                `(.readObject ~(symbol (str "c" cidx))
-                                                              ~'row-idx))))))))
+     (hamf-fn/long->obj ~'row-idx
+                        (hamf/vector ~@(->> (range n-cols)
+                                            (map (fn [cidx]
+                                                   `(.readObject ~(symbol (str "c" cidx))
+                                                                 ~'row-idx))))))))
 
 
 
@@ -304,7 +306,7 @@
           ^IFn$LO row-fn
           (if copying?
             (case n-cols
-              0 (hamf/long->obj row-idx [])
+              0 (hamf-fn/long->obj row-idx [])
               1 (row-vec-copying 1)
               2 (row-vec-copying 2)
               3 (row-vec-copying 3)
@@ -314,22 +316,22 @@
               7 (row-vec-copying 7)
               8 (row-vec-copying 8)
               (let [crange (hamf/range n-cols)]
-                (hamf/long->obj
+                (hamf-fn/long->obj
                  row-idx
                  (->> crange
-                      (lznc/map (hamf/long->obj
+                      (lznc/map (hamf-fn/long->obj
                                  col-idx (.readObject ^Buffer (.get readers col-idx) row-idx)))
                       (hamf/vec)))))
             ;;Non-copying in-place reader
             (let [crange (hamf/range n-cols)]
-              (hamf/long->obj
+              (hamf-fn/long->obj
                row-idx
                (reify ObjectReader
                  (lsize [this] n-cols)
                  (readObject [this col-idx]
                    (.readObject ^Buffer (.get readers col-idx) row-idx))
                  (reduce [this rfn acc]
-                   (reduce (hamf/long-accumulator
+                   (reduce (hamf-rf/long-accumulator
                             acc col-idx (rfn acc ((.get readers col-idx) row-idx)))
                            acc
                            crange))))))]
@@ -340,7 +342,7 @@
           (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
               (ds-proto/rowvecs options)))
         (reduce [rdr rfn acc]
-          (reduce (hamf/long-accumulator
+          (reduce (hamf-rf/long-accumulator
                    acc row-idx
                    (rfn acc (.invokePrim row-fn row-idx)))
                   acc (hamf/range n-rows))))))
@@ -349,7 +351,7 @@
   (rows [ds options]
     (let [^Buffer rvecs (.rowvecs ds options)
           colnamemap (LinkedHashMap.)
-          _ (reduce (hamf/indexed-accum
+          _ (reduce (hamf-rf/indexed-accum
                      acc idx cname
                      (.put colnamemap cname idx)
                      colnamemap)

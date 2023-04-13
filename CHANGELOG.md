@@ -1,5 +1,8 @@
 # Changelog
 
+# 7.000-beta-34
+ * Major hamf refactoring in preparation for bringing system out of beta.
+
 # 7.000-beta-33
  * Adding `elide-header?` option for printing:
 ```clojure

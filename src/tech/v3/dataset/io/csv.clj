@@ -12,6 +12,7 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.protocols :as ds-proto]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.lazy-noncaching :as lznc])
   (:import [tech.v3.datatype ArrayHelpers]
            [clojure.lang IReduceInit]
@@ -52,9 +53,9 @@
            options :string (fn [^long col-idx]
                              (when (< col-idx n-header-cols)
                                (header-row col-idx))))]
-      (reduce (hamf/indexed-accum
+      (reduce (hamf-rf/indexed-accum
                acc row-idx row
-               (reduce (hamf/indexed-accum
+               (reduce (hamf-rf/indexed-accum
                         acc col-idx field
                         (-> (col-idx->parser col-idx)
                             (column-parsers/add-value! row-idx field)))

@@ -10,6 +10,8 @@
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.protocols :as hamf-proto])
   (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap]
            [java.util.function Function Consumer]
@@ -25,13 +27,13 @@
 (deftype ^:private MapseqReducer [options parsers consumer ^Consumers$IncConsumer row-idx]
   Consumer
   (accept [this row]
-    (hamf/consume! consumer row)
+    (hamf-rf/consume! consumer row)
     (.inc row-idx))
   Counted
   (count [this] (.value row-idx))
   PDatasetParser
   (add-row [this row] (.accept this row))
-  (add-rows [this rows] (hamf/consume! this rows))
+  (add-rows [this rows] (hamf-rf/consume! this rows))
   Indexed
   (nth [this idx] (nth this idx nil))
   (nth [this idx dv]
@@ -70,7 +72,7 @@
       #(let [parse-context (parse-context/options->parser-fn options :object)
              parsers (LinkedHashMap.)
              key-fn (:key-fn options identity)
-             colparser-compute-fn (hamf/function
+             colparser-compute-fn (hamf-fn/function
                                    colname
                                    (ParseRecord. (.size parsers) (key-fn colname) (parse-context colname)))
              colname->parser (fn [colname]
@@ -78,20 +80,20 @@
                                                 (.computeIfAbsent parsers colname
                                                                   colparser-compute-fn)))
              row-idx (hamf/inc-consumer)
-             consumer (hamf/consumer
+             consumer (hamf-fn/consumer
                        e
                        (let [^Map$Entry e e
                              parser (colname->parser (.getKey e))]
                          (column-parsers/add-value! parser (.value row-idx) (.getValue e))))]
          (MapseqReducer. options parsers consumer row-idx)))
-    (->rfn [r] hamf/consumer-accumulator)
+    (->rfn [r] hamf-rf/consumer-accumulator)
     hamf-proto/Finalize
     (finalize [r v] @v)))
 
 
 (defn mapseq->dataset
   ([options mapseq]
-   (hamf/reduce-reducer (mapseq-reducer options) mapseq))
+   (hamf-rf/reduce-reducer (mapseq-reducer options) mapseq))
   ([mapseq]
    (mapseq->dataset {} mapseq)))
 

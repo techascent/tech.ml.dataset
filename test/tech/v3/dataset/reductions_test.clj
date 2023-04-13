@@ -11,6 +11,8 @@
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
             [tech.v3.parallel.for :as pfor]
             [ham-fisted.api :as hamf]
+            [ham-fisted.function :as hamf-fn]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.lazy-noncaching :as lznc]
             [clojure.test :refer [deftest is]]
             [clojure.core.protocols :as cl-proto])
@@ -60,7 +62,7 @@
                      :n-dates (ds-reduce/count-distinct :date :int32)}
                     {:index-filter (fn [dataset]
                                       (let [rdr (dtype/->reader (dataset :price))]
-                                        (hamf/long-predicate
+                                        (hamf-fn/long-predicate
                                          idx (> (.readDouble rdr idx) 100.0))))}
                     [stocks stocks stocks])
                    (ds/sort-by-column :symbol))
@@ -196,7 +198,7 @@
         init))))
 
 
-(def inc-cons-fn (hamf/function k (Consumers$IncConsumer.)))
+(def inc-cons-fn (hamf-fn/function k (Consumers$IncConsumer.)))
 
 (defn- tally-days-as-year-months
   [{:keys [^LocalDate start ^LocalDate end]}]
@@ -274,7 +276,7 @@
         (dotimes [day-idx nd]
           (let [ym (YearMonth/from (.plusDays start day-idx))]
             (jvm-map/compute! tally ym incrementor)))
-        (hamf/consume! (hamf/consumer
+        (hamf-rf/consume! (hamf-fn/consumer
                         kv (do
                              (.addLong indexes row-idx)
                              (.add year-months (key kv))

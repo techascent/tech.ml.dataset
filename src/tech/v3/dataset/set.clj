@@ -6,6 +6,8 @@
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype :as dtype]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.lazy-noncaching :as lznc])
   (:import [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiConsumer]
@@ -16,7 +18,7 @@
 
 (defn- concurrent-hashmap-frequencies
   [data]
-  (hamf/preduce
+  (hamf-rf/preduce
    (constantly (hamf/java-concurrent-hashmap))
    (fn [acc v]
      (.compute ^Map acc v BitmapTrieCommon/incBiFn)
@@ -32,7 +34,7 @@
         (if (< (.size l) (.size r))
           [l r] [r l])
         retval (hamf/java-concurrent-hashmap)
-        bifn (hamf/->bi-function bifn)]
+        bifn (hamf-fn/->bi-function bifn)]
     (.forEach minmap 100 (reify java.util.function.BiConsumer
                            (accept [this k v]
                              (let [ov (.getOrDefault maxmap k ::not-found)]
@@ -44,7 +46,7 @@
 (defn- concurrent-hashmap-union
   [bifn ^ConcurrentHashMap l ^ConcurrentHashMap r]
   (let [retval (hamf/java-concurrent-hashmap l)
-        bifn (hamf/->bi-function bifn)]
+        bifn (hamf-fn/->bi-function bifn)]
     (.forEach r 100 (reify BiConsumer
                       (accept [this k v]
                         (let [ov (.getOrDefault l k ::not-found)]
@@ -101,11 +103,11 @@ _unnamed [1 3]:
                   (let [rows (ds-proto/rows ds {:copying? true})]
                     (if acc
                       (->> rows
-                           (lznc/filter (hamf/predicate
+                           (lznc/filter (hamf-fn/predicate
                                          v (.containsKey ^java.util.Map acc v)))
                            (concurrent-hashmap-frequencies)
                            (concurrent-hashmap-intersection
-                            (hamf/bi-function l r (min (long l) (long r)))
+                            (hamf-fn/bi-function l r (min (long l) (long r)))
                             acc))
                       (concurrent-hashmap-frequencies rows))))
                 nil)
@@ -153,7 +155,7 @@ _unnamed [3 3]:
                       (->> rows
                            (concurrent-hashmap-frequencies)
                            (concurrent-hashmap-union
-                            (hamf/bi-function l r (min (long l) (long r)))
+                            (hamf-fn/bi-function l r (min (long l) (long r)))
                             acc))
                       (concurrent-hashmap-frequencies rows))))
                 nil)
@@ -189,4 +191,4 @@ _unnamed [3 3]:
                             (doto (HashSet.)
                               (.addAll (.subBuffer ^Buffer b-rows sidx eidx)))))
                          (reduce #(do (.addAll ^HashSet %1 ^HashSet %2) %1)))]
-     (ds-base/filter a (hamf/predicate r (not (.contains s r)))))))
+     (ds-base/filter a (hamf-fn/predicate r (not (.contains s r)))))))

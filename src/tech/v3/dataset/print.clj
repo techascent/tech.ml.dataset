@@ -9,7 +9,8 @@
             [tech.v3.datatype.graal-native :as graal-native]
             [clojure.string :as str]
             [ham-fisted.lazy-noncaching :as lznc]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.function :as hamf-fn])
   (:import [tech.v3.datatype ObjectReader]
            [java.util List ArrayList]
            [org.roaringbitmap RoaringBitmap]))
@@ -224,7 +225,7 @@ tech.ml.dataset.github-test> (def ds (with-meta ds
                                                      index-range))))
                     (ds-proto/select-rows dataset
                                           (lznc/filter
-                                           (hamf/long-predicate
+                                           (hamf-fn/long-predicate
                                             idx (and (< idx n-rows)
                                                      (>= idx (- n-rows))))
                                            index-range)))

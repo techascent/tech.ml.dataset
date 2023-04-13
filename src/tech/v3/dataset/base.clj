@@ -25,6 +25,7 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
   (:import [tech.v3.datatype ObjectReader PackedLocalDate]
@@ -879,7 +880,7 @@
         ^IMutList str-data-buf (dtype/make-container :list :int8 0)
         ^IMutList offset-buf (dtype/make-container :list :int32 0)
         data-ary (dtype-cmc/->array (dtype/->array-buffer (.data str-table)))]
-    (hamf/consume!
+    (hamf-rf/consume!
      #(do
         (.addLong offset-buf (.size str-data-buf))
         (when %

@@ -28,6 +28,8 @@
             [tech.v3.dataset.io.csv]
             [tech.v3.dataset.zip]
             [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.protocols :as hamf-proto]
             [clojure.set :as set])
@@ -282,7 +284,7 @@ user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 
 |  1 |  2 |
 ```"
   ([] (mapseq-rf nil))
-  ([options] (-> (io-mapseq/mapseq-reducer options) (hamf/reducer->rf))))
+  ([options] (-> (io-mapseq/mapseq-reducer options) (hamf-rf/reducer->rf))))
 
 
 (defn ^:no-doc group-by-column-consumer
@@ -294,7 +296,7 @@ user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 
         group-by-r (reify
                      hamf-proto/Reducer
                      (->init-val-fn [this] (hamf-proto/->init-val-fn mapseq-r))
-                     (->rfn [this] (hamf/long-accumulator
+                     (->rfn [this] (hamf-rf/long-accumulator
                                     acc idx
                                     (mapseq-rfn acc (.readObject rows idx))))
                      hamf-proto/Finalize
@@ -308,7 +310,7 @@ user> (transduce (map identity) (ds/mapseq-rf {:dataset-name :transduced}) [{:a 
                          (hamf/concatv
                           (if (vector? a) a [(hamf-proto/finalize mapseq-r a)])
                           (if (vector? b) b [(hamf-proto/finalize mapseq-r b)])))))]
-    (hamf/group-by-reducer (hamf/long->obj idx (.readObject col idx))
+    (hamf/group-by-reducer (hamf-fn/long->obj idx (.readObject col idx))
                             group-by-r
                             {:map-fn (constantly (hamf/java-concurrent-hashmap))}
                             (hamf/range (row-count ds)))))
@@ -577,7 +579,7 @@ test/data/stocks.csv [10 3]:
     (let [col (Column. (bitmap/->bitmap)
                        (dtype/clone (ds-proto/column-buffer col))
                        (meta col) nil)]
-      (reduce (hamf/long-accumulator
+      (reduce (hamf-rf/long-accumulator
                data idx (.writeObject ^Buffer data idx scalar-val) data)
               (dtype/->buffer col)
               missing)

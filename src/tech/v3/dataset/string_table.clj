@@ -5,7 +5,8 @@
             [tech.v3.dataset.dynamic-int-list :as int-list]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.datatype.errors :as errors]
-            [ham-fisted.api :as hamf])
+            [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf])
   (:import [java.util List HashMap Map ArrayList]
            [java.util.function Function]
            [tech.v3.datatype ObjectBuffer Buffer]
@@ -54,7 +55,7 @@
           (.subBuffer this (+ sidx ssidx) (+ sidx seidx)))
         (readObject [rdr idx] (.get int->str (.getLong data idx)))
         (reduce [this rfn acc]
-          (.reduce data (hamf/long-accumulator
+          (.reduce data (hamf-rf/long-accumulator
                          acc v
                          (rfn acc (.get int->str v)))
                    acc)))))
@@ -87,7 +88,7 @@
                                retval)))))]
         (.setLong data idx item-idx))))
   (reduce [this rfn acc]
-    (.reduce data (hamf/long-accumulator
+    (.reduce data (hamf-rf/long-accumulator
                    acc v
                    (rfn acc (.get int->str v)))
              acc)))

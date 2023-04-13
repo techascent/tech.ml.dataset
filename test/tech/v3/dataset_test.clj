@@ -1686,7 +1686,7 @@
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
   (def ds (ds/->dataset data))
   (crit/quick-bench (group-by :a data))
-  (crit/quick-bench (ds/group-by-column ds :a))
+  (crit/quick-bench (ds/group-by-column ds :a {:map-fn hamf/mut-long-hashtable-map}))
 
   (crit/quick-bench (transduce (comp (filter #(> (:a %) 10))
                                      (map #(* (:b %) (:c %))))
