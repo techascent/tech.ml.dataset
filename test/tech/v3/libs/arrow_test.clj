@@ -303,3 +303,7 @@
             ["dog" "flower"]
             ["car" "flower"]]
            (mapv vec (ds "class-name"))))))
+
+
+(deftest empty-array-dataset
+  (is (nil? (arrow/stream->dataset "test/data/empty.arrow"))))

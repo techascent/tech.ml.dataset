@@ -32,6 +32,8 @@
 
 ```clojure
   [org.apache.arrow/arrow-vector \"6.0.0\"]
+  [com.cnuernber \"1.000\"]
+  [org.apache.commons/commons-compress \"1.21\"]
 
   ;;Compression codecs
   [org.lz4/lz4-java \"1.8.0\"]
@@ -1866,18 +1868,18 @@ Dependent block frames are not supported!!")
   * `close-input-stream?` - When using `:input-stream` `:open-type`, close the input stream upon
   exception or when stream is fully realized.  Defaults to true.
 
-  * `:integer-datatime-types?` - when true arrow columns in the appropriate packed
+  * `:integer-datetime-types?` - when true arrow columns in the appropriate packed
   datatypes will be represented as their integer types as opposed to their respective
   packed types.  For example columns of type `:epoch-days` will be returned to the user
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
   ([fname options]
-   (let [ds-seq (stream->dataset-seq fname options)
-         ds (first ds-seq)]
-     (when-not (nil? (seq (rest ds-seq)))
-       (throw (Exception. "File contains multiple record batches.
+   (let [ds-seq (stream->dataset-seq fname options)]
+     (when-let [ds (first ds-seq)]
+       (when-not (nil? (seq (rest ds-seq)))
+         (throw (Exception. "File contains multiple record batches.
 Please use stream->dataset-seq.")))
-     (vary-meta ds assoc :name fname)))
+       (vary-meta ds assoc :name fname))))
   ([fname]
    (stream->dataset fname nil)))
 
