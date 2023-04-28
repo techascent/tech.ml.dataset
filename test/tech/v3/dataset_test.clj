@@ -1681,6 +1681,12 @@
     (is (= {:a 1999 :b 1999 :c 1999} (nth parser -1)))))
 
 
+(deftest select-columns-repeat-columns
+  (let [ds (-> (ds/->dataset {:a [1 2] :b [3 4]})
+               (ds/select-columns [:a :b :a]))]
+    (is (= [:a :b] (vec (ds/column-names ds))))))
+
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))

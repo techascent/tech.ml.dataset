@@ -1,5 +1,8 @@
 # Changelog
 
+# 7.000-beta-37
+ * Major fix to hamf hashtables fixing subtle issue resizing transient hashmaps.
+
 # 7.000-beta-34
  * Major hamf refactoring in preparation for bringing system out of beta.
 

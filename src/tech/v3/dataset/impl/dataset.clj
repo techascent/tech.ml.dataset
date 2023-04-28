@@ -18,7 +18,7 @@
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
   (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry IFn$LO]
-           [java.util Map List LinkedHashSet LinkedHashMap]
+           [java.util Map List LinkedHashSet LinkedHashMap HashSet]
            [tech.v3.datatype ObjectReader FastStruct Buffer]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
@@ -282,12 +282,16 @@
                                 (throw (Exception.
                                         (format "Failed to find column %s" old-name)))))))
              :else
-             (->> colnames
-                  (lznc/map (fn [colname]
-                              (if-let [col-idx (get colmap colname)]
-                                (.get columns (unchecked-int col-idx))
-                                (throw (Exception.
-                                        (format "Failed to find column %s" colname))))))))
+             (let [idx-set (HashSet.)]
+               (->> colnames
+                    (lznc/map (fn [colname]
+                                (if-let [col-idx (get colmap colname)]
+                                  (when-not (.contains idx-set col-idx)
+                                    (.add idx-set col-idx)
+                                    (.get columns (unchecked-int col-idx)))
+                                  (throw (Exception.
+                                          (format "Failed to find column %s" colname))))))
+                    (lznc/remove nil?))))
            (new-dataset (ds-proto/dataset-name dataset) metadata))))
 
   ds-proto/PDataset

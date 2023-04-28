@@ -348,3 +348,23 @@
             {:n-elems (ds-reduce/count-distinct :genre)}
             [(ds/->dataset "test/data/example-genres.nippy")])]
     (is (pos? (first (ds :n-elems))))))
+
+
+(deftest group-by-agg-changes-source
+  (let [ds (-> [{:job "Professional" :sex "Male" :age "[35-40)" :salary 3991.2}
+                {:job "Professional" :sex "Male" :age "[35-40)" :salary 2364.6}
+                {:job "Professional" :sex "Male" :age "[35-40)" :salary 3114.7}
+                {:job "Artist" :sex "Female" :age "[35-35)" :salary 2345.1}
+                {:job "Artist" :sex "Female" :age "[35-35)" :salary 4562.1}
+                {:job "Artist" :sex "Female" :age "[35-35)" :salary 1214.1}
+                {:job "Artist" :sex "Female" :age "[35-35)" :salary 4531.1}]
+               (ds/->dataset)
+               (assoc "salary (binned)" ["a" "b" "c" "d" "e" "f" "g"]))
+        ds2 (ds-reduce/group-by-column-agg
+             [:job :sex :age]
+             {:fj (ds-reduce/row-count)}
+             [ds])]
+    (is (= #{:job :sex :age :salary "salary (binned)"}
+           (set (keys (.-colmap ds)))))
+
+    ))
