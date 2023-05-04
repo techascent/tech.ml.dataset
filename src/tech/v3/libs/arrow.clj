@@ -76,7 +76,9 @@
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]]
             [charred.api :as json]
-            [ham-fisted.set :as set])
+            [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.set :as set]
+            [ham-fisted.protocols :as hamf-proto])
   (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -1968,19 +1970,27 @@ Please use stream->dataset-seq.")))
      (ds-base/columns ds))))
 
 
-(defn- do-prep-ds-seq
-  [prev-ds ds-schema options ds-seq]
-  (when-let [ds (first ds-seq)]
-    (cons (prepare-dataset-for-write ds prev-ds ds-schema options)
-          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+(deftype PrepDsIter [^:unsynchronized-mutable prev-ds
+                     ^:unsynchronized-mutable ds-schema
+                     ^Iterator ds-seq
+                     options]
+  Iterator
+  (hasNext [this] (.hasNext ds-seq))
+  (next [this] (let [nds (.next ds-seq)
+                     pds prev-ds
+                     dsc (if ds-schema
+                           ds-schema
+                           (do
+                             (set! ds-schema (mapv meta (vals nds)))
+                             ds-schema))
+                     prepared (prepare-dataset-for-write nds pds ds-schema options)]
+                 (set! prev-ds prepared)
+                 prepared)))
 
 
 (defn- prepare-ds-seq-for-write
-  [options ds-seq]
-  (let [ds (first ds-seq)
-        ds-schema (map meta (vals ds))]
-    (cons (prepare-dataset-for-write ds nil ds-schema options)
-          (lazy-seq (do-prep-ds-seq ds ds-schema options (rest ds-seq))))))
+  ^Iterator [options ds-seq]
+  (PrepDsIter. nil nil (.iterator ^Iterable (hamf-proto/->iterable ds-seq)) options))
 
 
 (defn ^:no-doc ds->schema
@@ -2102,35 +2112,33 @@ Please use stream->dataset-seq.")))
                                                  (if (nil? val)
                                                    true
                                                    val))))
-         ds-seq (prepare-ds-seq-for-write options ds-seq)
-         ds (first ds-seq)
-         ds-seq (rest ds-seq)
-         file-tag? (= :file (get options :format :file))]
+         ds-seq-iter (prepare-ds-seq-for-write options ds-seq)
+         ds (when (.hasNext ds-seq-iter)
+              (.next ds-seq-iter))
+         file-tag? (= :file (get options :format :file))
+         dict-blocks (ArrayList.)
+         record-blocks (ArrayList.)]
      ;;Any native mem allocated in this context will be released
      (with-open [ostream (io/output-stream! path)]
        (let [writer (arrow-output-stream-writer ostream)
              _ (when file-tag?
                  (.write writer (ByteBuffer/wrap arrow-file-begin-tag)))
-             {:keys [schema dictionaries]} (ds->schema ds options)
-             _ (write-schema writer schema)
-             dict-blocks (mapv #(write-dictionary writer % options) dictionaries)
-             ;;Release any native mem created during this step just after step completes
-             record-blocks [(resource/stack-resource-context
-                         (write-dataset writer ds options))]
+             {:keys [schema dictionaries]} (ds->schema ds options)]
+         (write-schema writer schema)
+         (.addAll dict-blocks (lznc/map #(write-dictionary writer % options) dictionaries))
+         (.add record-blocks (resource/stack-resource-context
+                              (write-dataset writer ds options)))
+         (loop [continue? (.hasNext ds-seq-iter)
+                options (assoc options :dictionaries dictionaries)]
+           (when continue?
+             (let [ds (.next ds-seq-iter)
+                   ;;Passing in previous dictionaries so we can chain them for differential
+                   ;;dictionary encoding
+                   {:keys [dictionaries]} (ds->schema ds (assoc options :dictionaries dictionaries))]
+               (.addAll dict-blocks (lznc/map #(write-dictionary writer % options) dictionaries))
+               (.add record-blocks (resource/stack-resource-context (write-dataset writer ds options)))
+               (recur (.hasNext ds-seq-iter) (assoc options :dictionaries dictionaries)))))
 
-             [dict-blocks record-blocks]
-             (reduce
-              (fn [[dict-blocks record-blocks dictionaries] ds]
-                (let [{:keys [dictionaries]} (ds->schema ds (assoc options :dictionaries dictionaries))
-                      dict-blocks (concat
-                                   dict-blocks
-                                   (mapv #(write-dictionary writer % options) dictionaries))
-                      record-blocks (concat record-blocks
-                                            [(resource/stack-resource-context
-                                              (write-dataset writer ds options))])]
-                  [dict-blocks record-blocks dictionaries]))
-              [dict-blocks record-blocks dictionaries]
-              ds-seq)]
          (when file-tag?
            (write-footer writer schema dict-blocks record-blocks))
          (.getCurrentPosition writer)))))
