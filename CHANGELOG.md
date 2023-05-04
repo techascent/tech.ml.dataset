@@ -1,5 +1,9 @@
 # Changelog
 
+# 7.000-beta-38
+ * Writing long sequences of datasets into a single arrow file no longer causes
+   stack overflow issues (clojure.core/concat is not used any more).
+
 # 7.000-beta-37
  * Major fix to hamf hashtables fixing subtle issue resizing transient hashmaps.
 
