@@ -76,12 +76,18 @@
   (let [parse-context (options->parser-fn options parse-type)
         parsers (ObjectArrayList. (object-array 16))
         key-fn (:key-fn options identity)
+        colname->idx (java.util.HashMap.)
         colparser-compute-fn (reify Function
                                (apply [this col-idx]
                                  (let [colname (col-idx->colname col-idx)
                                        colname (if (empty? colname)
                                                  (make-colname col-idx)
                                                  colname)]
+                                   (when (.containsKey colname->idx colname)
+                                     (let [prev-idx (.get colname->idx colname)]
+                                       (throw (RuntimeException. (format "Duplicate colname detected: \"%s\" is used on columns %d, %d"
+                                                                         colname prev-idx col-idx)))))
+                                   (.put colname->idx colname col-idx)
                                    {:column-idx col-idx
                                     :column-name (key-fn colname)
                                     :column-parser (parse-context colname)})))

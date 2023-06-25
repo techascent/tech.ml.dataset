@@ -697,7 +697,7 @@
 
 (deftest positional-column-rename
   (let [DS (ds/->dataset
-            (-> "id,a,a\n0,aa,bb\n1,cc,dd"
+            (-> "id,a,ab\n0,aa,bb\n1,cc,dd"
                 .getBytes
                 ByteArrayInputStream.)
             {:file-type :csv})
