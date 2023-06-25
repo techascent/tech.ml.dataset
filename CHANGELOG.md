@@ -1,4 +1,8 @@
 # Changelog
+# 7.000-beta-51
+ * Huge dtype-next upgrade - we fixed a lot of argument order issues which unforunately means
+   existing projects will have issues with latest version if they used the changed apis.  Please
+   check out the dtype-next changelog.
 
 # 7.000-beta-38
  * Writing long sequences of datasets into a single arrow file no longer causes
