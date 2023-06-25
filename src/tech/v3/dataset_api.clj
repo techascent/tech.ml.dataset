@@ -1302,7 +1302,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                                    ds-col)
                                   (and (not (:categorical? (meta ds-col)))
                                        (casting/numeric-type? col-dtype))
-                                  (dfn/descriptive-statistics numeric-stats ds-col)
+                                  (dfn/descriptive-statistics ds-col numeric-stats)
                                   :else
                                   (let [histogram (->> (frequencies ds-col)
                                                        (clojure.core/sort-by second >))

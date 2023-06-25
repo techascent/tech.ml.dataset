@@ -84,9 +84,9 @@
                                         (hamf/double-array (dtype/->reader col :float64))])))
         correlation-type (or correlation-type :pearson)
         corr-fn (case correlation-type
-                  :pearson #(statistics/pearsons-correlation {:nan-strategy :keep} %1 %2)
-                  :spearman #(statistics/spearmans-correlation {:nan-strategy :keep} %1 %2)
-                  :kendall #(statistics/kendalls-correlation {:nan-strategy :keep} %1 %2))]
+                  :pearson #(statistics/pearsons-correlation %1 %2 {:nan-strategy :keep})
+                  :spearman #(statistics/spearmans-correlation %1 %2 {:nan-strategy :keep})
+                  :kendall #(statistics/kendalls-correlation %1 %2 {:nan-strategy :keep}))]
     (->> (for [[lname ldata] lhs-colseq]
            [lname
             (->> rhs-colseq
@@ -251,7 +251,7 @@
       (->> (vals dataset)
            (map (fn [col]
                   [(:name (meta col))
-                   (statistics/descriptive-statistics stats-data options col)]))
+                   (statistics/descriptive-statistics col stats-data options)]))
            (into {})))))
   ([dataset]
    (fit-std-scale dataset nil)))
@@ -301,7 +301,7 @@
        (->> (vals dataset)
             (map (fn [col]
                    [(:name (meta col))
-                    (statistics/descriptive-statistics [:min :max] options col)]))
+                    (statistics/descriptive-statistics col [:min :max] options)]))
             (into {}))})))
   ([dataset]
    (fit-minmax dataset nil)))

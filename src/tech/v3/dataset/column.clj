@@ -86,7 +86,7 @@
 form.  Guaranteed support across implementations for :mean :variance :median :skew.
 Implementations should check their metadata before doing calculations."
   [col stats-set]
-  (stats/descriptive-statistics stats-set col))
+  (stats/descriptive-statistics col stats-set))
 
 
 (defn correlation

@@ -39,7 +39,6 @@ _unnamed [5 1]:
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.modelling :as modelling]
             [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.jvm-map :as jvm-map]
             [tech.v3.datatype.casting :as casting]
             [clojure.set :as set])
   (:import [tech.v3.datatype Buffer ArrayHelpers]
@@ -233,7 +232,7 @@ _unnamed [5 1]:
                   (let [scores (prediction-scores pred)]
                     (->> (.entrySet scores)
                          (map (fn [entry]
-                                (let [ekey (jvm-map/entry-key entry)]
+                                (let [ekey (key entry)]
                                   [ekey (-> (dtype/emap #(-> (prediction-scores %)
                                                              (.get ekey)
                                                              (label-score))

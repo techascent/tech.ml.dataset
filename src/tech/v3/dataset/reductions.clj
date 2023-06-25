@@ -259,7 +259,7 @@ user> (ds-reduce/group-by-column-agg
                  @rhs))
        hamf-proto/Finalize
        (finalize [this ctx]
-         ((dt-stats/descriptive-statistics [stat-name] options @ctx) stat-name))
+         ((dt-stats/descriptive-statistics @ctx [stat-name] options) stat-name))
        ds-proto/PReducerCombiner
        (reducer-combiner-key [reducer] [colname :reservoir-stats reservoir-size options]))))
   ([colname reservoir-size stat-name]

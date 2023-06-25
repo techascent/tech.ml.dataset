@@ -5,7 +5,6 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [tech.v3.datatype.jvm-map :as jvm-map]
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
@@ -261,11 +260,11 @@
         indexes (dtype/prealloc-list :int64 n-rows)
         year-months (dtype/prealloc-list :object n-rows) ;;ArrayList works fine here also.
         counts (dtype/prealloc-list :int32 n-rows)
-        incrementor (jvm-map/bi-function k v
+        incrementor (hamf-fn/bi-function k v
                                          (if v
                                            (unchecked-inc (long v))
                                            1))
-        tally (jvm-map/hash-map)]
+        tally (hamf/java-hashmap)]
     ;;Loop through dataset and append results columnwise.
     (dotimes [row-idx n-rows]
       ;;minimize hashtable resize operations
@@ -275,7 +274,7 @@
             nd (.until start end java.time.temporal.ChronoUnit/DAYS)]
         (dotimes [day-idx nd]
           (let [ym (YearMonth/from (.plusDays start day-idx))]
-            (jvm-map/compute! tally ym incrementor)))
+            (.compute tally ym incrementor)))
         (hamf-rf/consume! (hamf-fn/consumer
                         kv (do
                              (.addLong indexes row-idx)

@@ -1687,6 +1687,19 @@
     (is (= [:a :b] (vec (ds/column-names ds))))))
 
 
+(deftest vararg-column-map
+  (let [ds (ds/->dataset {:foo (range 0 5)
+                          :bar (repeatedly #(rand-int 100))
+                          :baz (repeatedly #(rand-int 100))})]
+    ;;This threw before.
+    (is (not (nil?
+              (ds/add-or-update-column ds :quz
+                                       (apply ds-col/column-map
+                                              (fn [foo bar baz]
+                                                (if (zero? (mod (+ foo bar baz) 7)) "mod 7" "not mod 7"))
+                                              nil (ds/columns ds))))))))
+
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
