@@ -553,7 +553,7 @@ tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
     :price-med (ds-reduce/prob-median :price)
     :price-iqr (ds-reduce/prob-interquartile-range :price)
     :n-dates (ds-reduce/count-distinct :date :int32)}
-   ds-seq])
+   [ds-seq])
 ```"
   ([agg-map options ds-seq]
    (let [cnames (vec (keys agg-map))
