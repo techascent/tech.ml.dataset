@@ -327,6 +327,13 @@
                                {:a (LocalDate/of 2022 10 20) :c 6}
                                {:a (LocalDate/of 2022 11 20) :c 7}])))))))
 
+(deftest issue-361
+  (let [ds1 (ds/->dataset {:a '(\1 \2 \3 \4 \5 \6 \7 \8 \9)})
+        ds2 (ds/->dataset {:a '(\0 \9 \8 \7 \6 \5 \4 \3 \2)})
+        jds (ds-join/left-join :a ds1 ds2)]
+    (is (= 9 (ds/row-count jds)))
+    (is (= 1 (dtype/ecount (ds/missing jds))))))
+
 
 (comment
 
