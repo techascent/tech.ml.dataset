@@ -4,6 +4,7 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.dataset :as ds]
+            [tech.v3.dataset.zip :as zip]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.libs.arrow :as arrow]
@@ -485,3 +486,8 @@
 (deftest issue-304
   (let [ds (ds/->dataset "test/data/issue-292.csv" {:n-initial-skip-rows 10})]
     (is (= 11 (-> (ds "10") (first))))))
+
+
+(deftest issue-362
+  (let [ds-seq (zip/zipfile->dataset-seq "test/data/unknown.zip")]
+    (is (= 2 (count ds-seq)))))

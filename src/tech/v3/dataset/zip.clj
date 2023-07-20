@@ -12,45 +12,32 @@
 (set! *warn-on-reflection* true)
 
 
-(defmethod ds-io/data->dataset :zip
-  [data options]
-  (with-open [is (-> (apply io/input-stream data (apply concat (seq options)))
-                     (ZipInputStream.))]
-    (let [zentry (.getNextEntry is)
-          ftype (-> (ds-io/str->file-info (.getName zentry))
-                    (get :file-type))
-          retval (ds-io/data->dataset (NoCloseInputStream. is)
-                                      (assoc options :file-type ftype))]
-      (when (.getNextEntry is)
-        (log/warnf "Multiple entries found in zipfile"))
-      retval)))
-
-
-(defmethod ds-io/dataset->data! :zip
-  [data output options]
-  (let [inner-name (.substring (str output) 0 (- (count output) 4))
-        ftype (-> (ds-io/str->file-info inner-name)
-                  (get :file-type))]
-    (with-open [os (-> (apply io/output-stream! output (apply concat (seq options)))
-                       (ZipOutputStream.))]
-      (.putNextEntry os (ZipEntry. inner-name))
-      (ds-io/dataset->data! data os (assoc options :file-type ftype)))))
+(defn- load-next-entry
+  [^ZipEntry entry ^ZipInputStream is options]
+  (let [fdata (ds-io/str->file-info (.getName entry))
+        ftype (:file-type fdata)]
+    (when-not (= (:file-type fdata) :unknown)
+      (try (ds-io/data->dataset (NoCloseInputStream. is)
+                                (merge (assoc options
+                                              :dataset-name (.getName entry))
+                                       fdata))
+           (catch Exception e
+             (log/warnf "Filed to load zip entry: %s" (.getName entry))
+             nil)))))
 
 
 (defn- load-zip-entry
   [^ZipInputStream is options]
   (try
-    (if-let [entry (.getNextEntry is)]
-      (let [ftype (-> (ds-io/str->file-info (.getName entry))
-                      (get :file-type))]
-        (cons (ds-io/data->dataset (NoCloseInputStream. is)
-                                   (assoc options
-                                          :file-type ftype
-                                          :dataset-name (.getName entry)))
-              (lazy-seq (load-zip-entry is options))))
-      (do
-        (.close is)
-        nil))
+    (loop [entry (.getNextEntry is)]
+      (if entry
+        (let [nds (load-next-entry entry is options)]
+          (if-not nds
+            (recur (.getNextEntry is))
+            (cons nds (lazy-seq (load-zip-entry is options)))))
+        (do
+          (.close is)
+          nil)))
     (catch Exception e
       (.close is)
       (throw e))))
@@ -64,6 +51,28 @@
      (load-zip-entry is options)))
   ([input]
    (zipfile->dataset-seq input nil)))
+
+
+(defmethod ds-io/data->dataset :zip
+  [data options]
+  (let [ds-seq (zipfile->dataset-seq data options)
+        rv (first ds-seq)]
+    (when (rest ds-seq)
+      ;;forces the input stream to close.
+      (dorun ds-seq)
+      (log/warnf "Multiple entries found in zipfile"))
+    rv))
+
+
+(defmethod ds-io/dataset->data! :zip
+  [data output options]
+  (let [inner-name (.substring (str output) 0 (- (count output) 4))
+        ftype (-> (ds-io/str->file-info inner-name)
+                  (get :file-type))]
+    (with-open [os (-> (apply io/output-stream! output (apply concat (seq options)))
+                       (ZipOutputStream.))]
+      (.putNextEntry os (ZipEntry. inner-name))
+      (ds-io/dataset->data! data os (assoc options :file-type ftype)))))
 
 
 (defn- ds-name->string
