@@ -1699,6 +1699,10 @@
                                                 (if (zero? (mod (+ foo bar baz) 7)) "mod 7" "not mod 7"))
                                               nil (ds/columns ds))))))))
 
+(deftest ioobe-issue-360
+  (is (thrown? IndexOutOfBoundsException (ds/select-rows (ds/->dataset {:a []}) [0])))
+  (is (thrown? IndexOutOfBoundsException (ds/select-rows (ds/->dataset []) [0]))))
+
 
 (comment
   (require '[criterium.core :as crit])

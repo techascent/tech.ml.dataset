@@ -258,6 +258,9 @@
   ds-proto/PSelectRows
   (select-rows [dataset rowidxs]
     (let [rowidxs (col-impl/simplify-row-indexes (ds-proto/row-count dataset) rowidxs)]
+      (when (== 0 (long (ds-proto/row-count dataset)))
+        (when-not (== 0 (dtype/ecount rowidxs))
+          (throw (IndexOutOfBoundsException. "Cannot select rows of empty dataset"))))
       (->> columns
            ;;select may be slower if we have to recalculate missing values.
            (lznc/map #(ds-proto/select-rows % rowidxs))
