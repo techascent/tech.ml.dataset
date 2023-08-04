@@ -1186,6 +1186,8 @@ user> (take 5 (ds/rowvecs stocks))
 
 (defn select-rows
   "Select rows from the dataset or column."
+  ([row-indexes options]
+  (tech.v3.dataset.metamorph-api/select-rows row-indexes options))
   ([row-indexes]
   (tech.v3.dataset.metamorph-api/select-rows row-indexes)))
 

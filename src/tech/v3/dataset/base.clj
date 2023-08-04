@@ -395,8 +395,13 @@
 
 (defn select-rows
   "Select rows from the dataset or column."
-  [dataset-or-col row-indexes]
-  (ds-proto/select-rows dataset-or-col row-indexes))
+  ([dataset-or-col row-indexes options]
+   (if (and (== 0 (row-count dataset-or-col))
+            (get options :allow-empty?))
+     dataset-or-col
+     (ds-proto/select-rows dataset-or-col row-indexes)))
+  ([dataset-or-col row-indexes]
+   (select-rows dataset-or-col row-indexes nil)))
 
 
 (defn drop-rows

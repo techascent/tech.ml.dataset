@@ -1323,6 +1323,8 @@ user> (take 5 (ds/rowvecs stocks))
 
 (defn select-rows
   "Select rows from the dataset or column."
+  ([dataset-or-col row-indexes options]
+  (tech.v3.dataset.base/select-rows dataset-or-col row-indexes options))
   ([dataset-or-col row-indexes]
   (tech.v3.dataset.base/select-rows dataset-or-col row-indexes)))
 

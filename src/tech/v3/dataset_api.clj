@@ -1233,7 +1233,7 @@ user> (-> (ds/->dataset [{:a 1 :b [2 3]}
                        (.addAll ^List lhs-idx-container ^List rhs-idx-container))
                      [lhs-indexes lhs-container lhs-idx-container])))]
      (-> (-> (remove-column dataset column-name)
-             (select-rows indexes))
+             (select-rows indexes {:allow-empty? true}))
          (add-or-update-column column-name (col-impl/new-column
                                             column-name
                                             container))
