@@ -310,13 +310,9 @@
 	   :right.a (LocalDate/of 2022 12 20)
 	   :c 5}
 	  {:a (LocalDate/of 2022 12 28)
-	   :b 3,
-	   :right.a nil,
-	   :c nil}
+	   :b 3}
 	  {:a (LocalDate/of 2022 12 30)
-	   :b 4,
-	   :right.a nil,
-	   :c nil}]
+	   :b 4}]
          (vec (ds/rows
                (tech.v3.dataset.join/left-join
                 :a
