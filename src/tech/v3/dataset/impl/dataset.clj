@@ -17,7 +17,8 @@
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
-  (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry IFn$LO]
+  (:import [clojure.lang IPersistentMap IObj IFn Counted MapEntry IFn$LO
+            IFn$LOO]
            [java.util Map List LinkedHashSet LinkedHashMap HashSet]
            [tech.v3.datatype ObjectReader FastStruct Buffer]
            [tech.v3.dataset.impl.column Column]
@@ -253,7 +254,8 @@
 
 
   ds-proto/PMissing
-  (missing [this] (apply set/reduce-union (lznc/map ds-proto/missing columns)))
+  (missing [this]
+    (RoaringBitmap/or (.iterator ^Iterable (lznc/map ds-proto/missing (vals this)))))
 
   ds-proto/PSelectRows
   (select-rows [dataset rowidxs]
@@ -364,17 +366,46 @@
                      colnamemap)
                     colnamemap
                     (lznc/map #(get (.-metadata ^Column %) :name) columns))
-          n-rows (dtype/ecount rvecs)]
+          n-rows (dtype/ecount rvecs)
+          nil-missing? (get options :nil-missing?)
+          ^RoaringBitmap ds-missing (when (not nil-missing?) (ds-proto/missing ds))
+          constant-cmap? (or nil-missing? (.isEmpty ds-missing))
+          ^IFn$LO cmap-fn (if constant-cmap?
+                            (fn [^long v] colnamemap)
+                            (let [col-fns
+                                  (->> (vals ds)
+                                       (lznc/map (fn [col]
+                                                   (let [^RoaringBitmap col-missing (ds-proto/missing col)]
+                                                     (when-not (.isEmpty col-missing)
+                                                       (let [ckey (ds-proto/column-name col)]
+                                                         (fn [^long row-idx ^Map colnamemap]
+                                                           (when (.contains col-missing (unchecked-int row-idx))
+                                                             (.remove colnamemap ckey))
+                                                           colnamemap))))))
+                                       (lznc/remove nil?)
+                                       (hamf/object-array))
+                                  n-fns (alength col-fns)]
+                              (fn [^long row-idx]
+                                (if (.contains ds-missing (unchecked-int row-idx))
+                                  (let [colnamemap (.clone colnamemap)]
+                                    (dotimes [idx n-fns]
+                                      (.invokePrim ^IFn$LOO (aget col-fns idx) row-idx colnamemap))
+                                    colnamemap)
+                                  colnamemap))))]
       (reify ObjectReader
         (lsize [rdr] n-rows)
         (readObject [rdr idx]
-          (FastStruct. colnamemap (.readObject rvecs idx)))
+          (FastStruct. (.invokePrim cmap-fn idx) (.readObject rvecs idx)))
         (subBuffer [rdr sidx eidx]
           (-> (ds-proto/select-rows ds (hamf/range sidx eidx))
               (ds-proto/rows options)))
         (reduce [rdr rfn acc]
-          (reduce (fn [acc vv]
-                    (rfn acc (FastStruct. colnamemap vv)))
+          (reduce (if constant-cmap?
+                    (fn [acc vv]
+                      (rfn acc (FastStruct. colnamemap vv)))
+                    (hamf-rf/indexed-accum
+                     acc row-idx vv
+                     (rfn acc (FastStruct. (.invokePrim cmap-fn row-idx) vv))))
                   acc
                   rvecs)))))
 

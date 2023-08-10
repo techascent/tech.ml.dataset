@@ -104,6 +104,7 @@
 
 (defn string-and-math
   [dataset]
+  (ds/column dataset "PoolQC")
   (let [initial-ds
         (-> dataset
             (ds/categorical->number ["Utilities"] [["NA" -1] "ELO" "NoSeWa"
@@ -167,7 +168,7 @@
         inference-dataset (-> (ds/select src-dataset
                                          inference-columns
                                          (range 10))
-                              (ds/mapseq-reader))
+                              (ds/rows {:nil-missing? true}))
 
         dataset (-> src-ds
                     missing-pipeline

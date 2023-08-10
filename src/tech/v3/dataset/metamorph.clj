@@ -1040,6 +1040,9 @@ user>
   row.  When false the data is only referenced upon each read of a particular key.  Copying
   is appropriate if you want to use the row values as keys a map and it is inappropriate if
   you are only going to read a very small portion of the row map.
+  * nil-missing? - When true, maps returned have nil values for missing entries as opposed
+    to eliding the missing keys entirely.  It is legacy behavior and slightly faster to
+    use `:nil-missing? true`.
 
 ```clojure
 user> (take 5 (ds/rows stocks))
@@ -1058,6 +1061,13 @@ user> (take 5 (ds/rows stocks))
  {\"date\" #object[java.time.LocalDate 0x47094da0 \"2000-05-01\"],
   \"symbol\" \"MSFT\",
   \"price\" 25.45})
+
+
+user> (ds/rows (ds/->dataset [{:a 1 :b 2} {:a 2} {:b 3}]))
+[{:a 1, :b 2} {:a 2} {:b 3}]
+
+user> (ds/rows (ds/->dataset [{:a 1 :b 2} {:a 2} {:b 3}]) {:nil-missing? true})
+[{:a 1, :b 2} {:a 2, :b nil} {:a nil, :b 3}]
 ```"
   ([options]
   (tech.v3.dataset.metamorph-api/rows options))
