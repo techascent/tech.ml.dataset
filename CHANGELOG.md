@@ -1,4 +1,9 @@
 # Changelog
+# 7.000-beta-53
+ * Fixes [issue-363](https://github.com/techascent/tech.ml.dataset/issues/363) - ds/rows will now elide keys
+   for missing values.  This imposes a small perf hit during read but allows things like the JSON serialization
+   system to work better and is a bit more idiomatic.
+ 
 # 7.000-beta-51
  * Huge dtype-next upgrade - we fixed a lot of argument order issues which unforunately means
    existing projects will have issues with latest version if they used the changed apis.  Please
