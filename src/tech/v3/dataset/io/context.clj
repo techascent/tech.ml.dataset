@@ -6,7 +6,7 @@
             [tech.v3.dataset.impl.column :as col-impl]
             [ham-fisted.api :as hamf])
   (:import [java.util.function Function]
-           [java.util Map]
+           [java.util Map Arrays]
            [tech.v3.datatype ObjectBuffer ArrayHelpers]
            [tech.v3.dataset.impl.dataset Dataset]))
 
@@ -50,21 +50,26 @@
 
 
 (deftype ObjectArrayList [^{:unsynchronized-mutable true
-                            :tag 'objects} data]
+                            :tag 'objects} data
+                          ^{:unsynchronized-mutable true
+                            :tag 'long} datalen]
   ObjectBuffer
   (lsize [_this] (alength ^objects data))
   (writeObject [_this idx value]
-    (when (>= idx (alength ^objects data))
-      (let [old-len (alength ^objects data)
+    (when (>= idx datalen)
+      (let [old-len datalen
             new-len (* 2 idx)
-            new-data (object-array new-len)]
-        (System/arraycopy data 0 new-data 0 old-len)
-        (set! data new-data)))
+            new-data (Arrays/copyOf ^objects data new-len)]
+        (set! data new-data)
+        (set! datalen (alength new-data))))
     (ArrayHelpers/aset ^objects data idx value))
   (readObject [_this idx]
-    (when (< idx (alength ^objects data))
+    (when (< idx datalen)
       (aget ^objects data idx))))
 
+(defrecord ^:private ParseRecord [^long col-idx
+                                  column-name
+                                  column-parser])
 
 (defn options->col-idx-parse-context
   "Given an option map and a parse type, return a map of parsers
@@ -74,7 +79,7 @@
    :col-idx->parser - given a column idx, get a parser.  Mutates parsers."
   [options parse-type col-idx->colname]
   (let [parse-context (options->parser-fn options parse-type)
-        parsers (ObjectArrayList. (object-array 16))
+        parsers (ObjectArrayList. (object-array 16) 16)
         key-fn (:key-fn options identity)
         colname->idx (java.util.HashMap.)
         colparser-compute-fn (reify Function
@@ -88,16 +93,13 @@
                                        (throw (RuntimeException. (format "Duplicate colname detected: \"%s\" is used on columns %d, %d"
                                                                          colname prev-idx col-idx)))))
                                    (.put colname->idx colname col-idx)
-                                   {:column-idx col-idx
-                                    :column-name (key-fn colname)
-                                    :column-parser (parse-context colname)})))
-        col-idx->parser (fn [col-idx]
-                          (let [col-idx (long col-idx)]
-                            (if-let [parser (.readObject parsers col-idx)]
-                              (parser :column-parser)
-                              (let [parser (.apply colparser-compute-fn col-idx)]
-                                (.writeObject parsers col-idx parser)
-                                (parser :column-parser)))))]
+                                   (ParseRecord. col-idx (key-fn colname) (parse-context colname)))))
+        col-idx->parser (fn cidx->parser [^long col-idx]
+                          (if-let [^ParseRecord parser (.readObject parsers col-idx)]
+                            (.-column-parser parser)
+                            (let [^ParseRecord parser (.apply colparser-compute-fn col-idx)]
+                              (.writeObject parsers col-idx parser)
+                              (.-column-parser parser))))]
     {:parsers parsers
      :col-idx->parser col-idx->parser}))
 

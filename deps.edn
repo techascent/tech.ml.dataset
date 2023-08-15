@@ -2,7 +2,9 @@
  :deps {cnuernber/dtype-next {:mvn/version "10.000"}
         techascent/tech.io {:mvn/version "4.30"
                             :exclusions [org.apache.commons/commons-compress]}
-        org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}}
+        org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}
+        com.cnuernber/charred {:mvn/version "1.031"}
+        com.cnuernber/ham-fisted {:mvn/version "1.001"}}
  :aliases
  {:codox
   {:extra-deps {codox-theme-rdash/codox-theme-rdash {:mvn/version "0.1.2"}

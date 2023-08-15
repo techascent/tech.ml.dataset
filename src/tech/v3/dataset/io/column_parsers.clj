@@ -41,13 +41,13 @@
 (def missing :tech.v3.dataset/missing)
 
 
-(defn make-safe-parse-fn
-  [parser-fn]
-  (fn [str-val]
-    (try
-      (parser-fn str-val)
-      (catch Throwable _e
-        parse-failure))))
+(defmacro make-safe-parser
+  [name parse-code]
+  `(fn ~name [~'v]
+     (try
+       ~parse-code
+       (catch Throwable _e#
+         parse-failure))))
 
 
 (def default-coercers
@@ -77,32 +77,33 @@
                     :else
                     parse-failure))
                 (boolean %))
-    :int16 (make-safe-parse-fn #(if (string? %)
-                                  (Short/parseShort %)
-                                  (short %)))
-    :int32 (make-safe-parse-fn  #(if (string? %)
-                                   (Integer/parseInt %)
-                                   (int %)))
-    :int64 (make-safe-parse-fn #(if (string? %)
-                                  (Long/parseLong %)
-                                  (long %)))
-    :float32 (make-safe-parse-fn #(if (string? %)
-                                    (let [fval (Float/parseFloat %)]
-                                      (if (Float/isNaN fval)
-                                        missing
-                                        fval))
-                                    (float %)))
-    :float64 (make-safe-parse-fn #(if (string? %)
-                                    (let [dval (Double/parseDouble %)]
-                                      (if (Double/isNaN dval)
-                                        missing
-                                        dval))
-                                    (double %)))
-    :uuid (make-safe-parse-fn #(if (string? %)
-                                 (UUID/fromString %)
-                                 (if (instance? UUID %)
-                                   %
-                                   parse-failure)))
+    :int16 (make-safe-parser int16
+                  (if (string? v)
+                    (Short/parseShort v)
+                    (short v)))
+    :int32 (make-safe-parser int32 (if (string? v)
+                                     (Integer/parseInt v)
+                                     (int v)))
+    :int64 (make-safe-parser int64 (if (string? v)
+                                       (Long/parseLong v)
+                                       (long v)))
+    :float32 (make-safe-parser float32 (if (string? v)
+                                         (let [fval (Float/parseFloat v)]
+                                           (if (Float/isNaN fval)
+                                             missing
+                                             fval))
+                                         (float v)))
+    :float64 (make-safe-parser float64 (if (string? v)
+                                         (let [dval (Double/parseDouble v)]
+                                           (if (Double/isNaN dval)
+                                             missing
+                                             dval))
+                                         (double v)))
+    :uuid (make-safe-parser uuid (if (string? v)
+                                   (UUID/fromString v)
+                                   (if (instance? UUID v)
+                                     v
+                                     parse-failure)))
     :keyword #(if-let [retval (keyword %)]
                 retval
                 parse-failure)
@@ -117,11 +118,11 @@
                  parse-failure))
     :text #(Text. (str %))}
    (->> parse-dt/datatype->general-parse-fn-map
-        (mapcat (fn [[k v]]
-                  (let [unpacked-parser (make-safe-parse-fn
-                                         #(if (= k (dtype/elemwise-datatype %))
-                                            %
-                                            (v %)))]
+        (mapcat (fn [[k vv]]
+                  (let [unpacked-parser (make-safe-parser packed
+                                         (if (= k (dtype/elemwise-datatype v))
+                                            v
+                                            (vv v)))]
                     ;;packing is now done at the container level.
                     (if (packing/unpacked-datatype? k)
                       [[k unpacked-parser]
@@ -251,7 +252,7 @@
   (let [unpacked-datatype (packing/unpack-datatype parser-datatype)
         parser-fn (parse-dt/datetime-formatter-parse-str-fn
                    unpacked-datatype formatter)]
-    [(make-safe-parse-fn parser-fn) false]))
+    [(make-safe-parser datetime (parser-fn v)) false]))
 
 
 (defn parser-entry->parser-tuple
@@ -378,10 +379,10 @@
                                   ;;List of datatype,parser-fn tuples
                                   ^List promotion-list
                                   column-name
-                                  ^:unsynchronized-mutable ^long max-idx
+                                  ^:unsynchronized-mutable ^long last-idx
                                   options]
   dtype-proto/PECount
-  (ecount [_this] (inc max-idx))
+  (ecount [_this] (inc last-idx))
   Indexed
   (nth [this idx] (.nth this idx nil))
   (nth [this idx dv]
@@ -392,7 +393,6 @@
         (.get container idx))))
   PParser
   (addValue [_p idx value]
-    (set! max-idx (max idx max-idx))
     (let [parsed-value
           (cond
             (missing-value? value)
@@ -438,7 +438,9 @@
         nil ;;Skip, will add missing on next valid value
         :else
         (do
-          (add-missing-values! container missing missing-value idx)
+          (when (> (- idx last-idx) 1)
+            (add-missing-values! container missing missing-value idx))
+          (set! last-idx idx)
           (try
             (.add container parsed-value)
             (catch Exception e

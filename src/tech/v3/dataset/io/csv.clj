@@ -80,7 +80,14 @@
             (when (.hasNext row-iter) (.next row-iter)))
         header-row (if (and header-row? (.hasNext row-iter))
                      (vec (.next row-iter))
-                     [])]
+                     [])
+        n-header-cols (count header-row)
+        {:keys [parsers col-idx->parser]}
+        (parse-context/options->col-idx-parse-context
+         options :string (fn [^long col-idx]
+                           (when (< col-idx n-header-cols)
+                             (header-row col-idx))))]
+
     (if (not (.hasNext row-iter))
       [(let [n-header-cols (count header-row)
              {:keys [parsers col-idx->parser]}
@@ -92,6 +99,42 @@
            (col-idx->parser idx))
          (parse-context/parsers->dataset options parsers))]
       (parse-next-batch row-iter header-row options))))
+
+
+(defn rows->dataset-fn
+  "Create an efficiently callable function to parse row-batches into datasets.
+  Returns function from row-iter->dataset"
+  [{:keys [header-row?]
+    :or {header-row? true}
+    :as options}]
+  (let [n-initial-skip-rows (long (get options :n-initial-skip-rows 0))]
+    (fn [row-iter]
+      (let [row-iter (pfor/->iterator row-iter)
+            header-row (if (and header-row? (.hasNext row-iter))
+                         (vec (.next row-iter))
+                         [])
+            n-header-cols (count header-row)
+            {:keys [parsers col-idx->parser]}
+            (parse-context/options->col-idx-parse-context
+             options :string (fn [^long col-idx]
+                               (when (< col-idx n-header-cols)
+                                 (header-row col-idx))))]
+        ;;initialize parsers so if there are no more rows we get a dataset with
+        ;;at least column names
+        (dotimes [idx n-header-cols]
+          (col-idx->parser idx))
+        (loop [continue? (.hasNext row-iter)
+               row-idx 0]
+          (if continue?
+            (do
+              (reduce (hamf-rf/indexed-accum
+                       acc col-idx field
+                       (-> (col-idx->parser col-idx)
+                           (column-parsers/add-value! row-idx field)))
+                      nil
+                      (.next row-iter))
+              (recur (.hasNext row-iter) (unchecked-inc row-idx)))
+            (parse-context/parsers->dataset options parsers)))))))
 
 
 (defn csv->dataset-seq
@@ -161,7 +204,9 @@
      :as options}]
    (apply charred/write-csv (io/writer! output)
           (if headers (lznc/concat [headers] rows) rows)
-          (apply concat (seq (assoc options :separator separator))))))
+          (apply concat (seq (merge {:close-writer? true
+                                     :separator separator}
+                                    options))))))
 
 
 (defn- data->string
@@ -219,3 +264,92 @@
 (defmethod ds-io/dataset->data! :txt
   [dataset output options]
   (write-csv! dataset output (assoc options :separator \tab)))
+
+
+(comment
+
+  (do
+    (import '[java.util.zip ZipFile ZipInputStream])
+    (import '[java.util.concurrent ArrayBlockingQueue])
+    (require '[charred.api :as charred])
+    (require '[charred.bulk :as bulk])
+
+    (defn- abq->iterable
+      [^ArrayBlockingQueue abq]
+      (reify
+        Iterable
+        (iterator [this]
+          (println "iterator requested")
+          (let [nv* (volatile! (.take abq))]
+            (reify
+              java.util.Iterator
+              (hasNext [this] (not= ::finished @nv*))
+              (next [this]
+                (let [nv @nv*]
+                  (vreset! nv* (.take abq))
+                  nv)))))
+        IReduceInit
+        (reduce [this rfn acc]
+          (println "reduce requested")
+          (loop [acc acc
+                 nv (.take abq)]
+            (if (or (identical? ::finished nv)
+                    (not (reduced? acc)))
+              (recur (rfn acc nv) (.take abq))
+              (if (reduced? acc)
+                @acc
+                acc))))))
+
+    (defn load-zip
+      [fname]
+      (let [zf (ZipInputStream. (io/input-stream fname))
+            fe (.getNextEntry zf)
+            _ (println (format "Found %s" (.getName fe)))
+            parse-fn (rows->dataset-fn nil)]
+        (reduce (fn [rc batch]
+                  (+ rc (ds-proto/row-count (parse-fn batch))))
+                0
+                (bulk/batch-csv-rows 10000 (charred/read-csv-supplier zf)))))
+
+
+    (defn load-zip-parallel
+      [fname]
+      (let [zf (ZipInputStream. (io/input-stream fname))
+            fe (.getNextEntry zf)
+            _ (println (format "Found %s" (.getName fe)))
+            s (charred/read-csv-supplier zf)
+            row-batches (bulk/batch-csv-rows 10000 s)
+            batch-queue (ArrayBlockingQueue. 16)
+            n-parse-threads 6
+            csv-thread
+            (Thread. ^java.lang.Runnable
+                     (fn []
+                       (let [rc
+                             (reduce (fn [rc row-batch]
+                                       (let [data (vec row-batch)
+                                             rc (+ rc (count data))]
+                                         (.put batch-queue data)
+                                         rc))
+                                     0
+                                     row-batches)]
+                         (.put batch-queue ::finished)
+                         (println "csv parse thread finished")))
+                     "CSV parse thread")
+            _ (.start csv-thread)
+            sum (->> (abq->iterable batch-queue)
+                     (hamf/pmap #(ds-proto/row-count (first (rows->dataset-seq nil %))))
+                     (reduce + 0))]
+        (.join csv-thread)
+        (println "csv thread joined")
+        sum))
+
+    )
+
+  (def result (load-zip "/home/chrisn/Downloads/bigcsv/full_data.zip"))
+
+
+  (def result (load-zip-parallel "/home/chrisn/Downloads/bigcsv/full_data.zip"))
+
+
+
+  )
