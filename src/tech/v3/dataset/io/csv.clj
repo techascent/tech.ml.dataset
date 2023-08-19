@@ -99,7 +99,7 @@
 
   Options:
 
-  * :dataset-tfn - dataset->x transformation function to be performed on
+  * :load-tfn - dataset->x transformation function to be performed on
     in the same thread context just after dataset is loaded.  Doing some operations
     in this transform function can be considerably more efficient than only loading
     the dataset when using multithreaded loading."
@@ -111,7 +111,7 @@
         threaded? (boolean (get options :csv-load-thread-name))
         batches (->> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
                      (bulk/batch-csv-rows (get options :batch-size 128000) options))
-        load-fn (if-let [tfn (get options :csv-load-tfn)]
+        load-fn (if-let [tfn (get options :load-tfn)]
                   #(tfn (load-fn %))
                   load-fn)]
     (if threaded?
@@ -119,7 +119,7 @@
                              options)
                       load-fn
                       batches)
-      (map load-fn batches))))
+      (lznc/map load-fn batches))))
 
 
 (defn csv->dataset
