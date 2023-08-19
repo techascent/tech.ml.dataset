@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.io.csv
   "CSV parsing based on [charred.api/read-csv](https://cnuernber.github.io/charred/)."
   (:require [charred.api :as charred]
+            [charred.bulk :as bulk]
             [charred.coerce :as coerce]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.parallel.for :as pfor]
@@ -23,106 +24,47 @@
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype ^:private TakeReducer [^Iterator src
-                                ^{:unsynchronized-mutable true
-                                  :tag long} count]
-  IReduceInit
-  (reduce [this rfn acc]
-    (let [cnt count]
-      (loop [idx 0
-             continue? (.hasNext src)
-             acc acc]
-        ;;Note no reduced? check.
-        (if (and continue? (< idx cnt))
-          (let [acc (rfn acc (.next src))]
-            (recur (unchecked-inc idx) (.hasNext src) acc))
-          (do
-            (set! count (- cnt idx))
-            acc))))))
 
-
-(defn- parse-next-batch
-  [^Iterator row-iter header-row options]
-  (when (.hasNext row-iter)
-    (let [n-header-cols (count header-row)
-          num-rows (long (get options :batch-size
-                              (get options :n-records
-                                   (get options :num-rows Long/MAX_VALUE))))
+(defn rows->dataset-fn
+  "Create an efficiently callable function to parse row-batches into datasets.
+  Returns function from row-iter->dataset.  Options passed in here are the
+  same as ->dataset."
+  [{:keys [header-row?]
+    :or {header-row? true}
+    :as options}]
+  (fn [row-iter]
+    (let [row-iter (coerce/->iterator row-iter)
+          header-row (if (and header-row? (.hasNext row-iter))
+                       (vec (.next row-iter))
+                       [])
+          n-header-cols (count header-row)
           {:keys [parsers col-idx->parser]}
           (parse-context/options->col-idx-parse-context
            options :string (fn [^long col-idx]
                              (when (< col-idx n-header-cols)
-                               (header-row col-idx))))]
-      (reduce (hamf-rf/indexed-accum
-               acc row-idx row
-               (reduce (hamf-rf/indexed-accum
-                        acc col-idx field
-                        (-> (col-idx->parser col-idx)
-                            (column-parsers/add-value! row-idx field)))
-                       nil
-                       row))
-              nil
-              (TakeReducer. row-iter num-rows))
-      (cons (parse-context/parsers->dataset options parsers)
-            (lazy-seq (parse-next-batch row-iter header-row options))))))
+                               (header-row col-idx))))
+          n-records (get options :n-records (get options :num-rows))]
+      ;;initialize parsers so if there are no more rows we get a dataset with
+      ;;at least column names
+      (dotimes [idx n-header-cols]
+        (col-idx->parser idx))
 
-
-(defn rows->dataset-seq
-  "Given a sequence of rows each row container a sequence of strings, parse into columnar data.
-  See csv->columns."
-  [{:keys [header-row?]
-    :or {header-row? true}
-    :as options}
-   row-seq]
-  (let [row-iter (pfor/->iterator row-seq)
-        n-initial-skip-rows (long (get options :n-initial-skip-rows 0))
-        _ (dotimes [idx n-initial-skip-rows]
-            (when (.hasNext row-iter) (.next row-iter)))
-        header-row (if (and header-row? (.hasNext row-iter))
-                     (vec (.next row-iter))
-                     [])
-        n-header-cols (count header-row)
-        {:keys [parsers col-idx->parser]}
-        (parse-context/options->col-idx-parse-context
-         options :string (fn [^long col-idx]
-                           (when (< col-idx n-header-cols)
-                             (header-row col-idx))))]
-
-    (if (not (.hasNext row-iter))
-      [(let [n-header-cols (count header-row)
-             {:keys [parsers col-idx->parser]}
-             (parse-context/options->col-idx-parse-context
-              options :string (fn [^long col-idx]
-                                (when (< col-idx n-header-cols)
-                                  (header-row col-idx))))]
-         (dotimes [idx n-header-cols]
-           (col-idx->parser idx))
-         (parse-context/parsers->dataset options parsers))]
-      (parse-next-batch row-iter header-row options))))
-
-
-(defn rows->dataset-fn
-  "Create an efficiently callable function to parse row-batches into datasets.
-  Returns function from row-iter->dataset"
-  [{:keys [header-row?]
-    :or {header-row? true}
-    :as options}]
-  (let [n-initial-skip-rows (long (get options :n-initial-skip-rows 0))]
-    (fn [row-iter]
-      (let [row-iter (pfor/->iterator row-iter)
-            header-row (if (and header-row? (.hasNext row-iter))
-                         (vec (.next row-iter))
-                         [])
-            n-header-cols (count header-row)
-            {:keys [parsers col-idx->parser]}
-            (parse-context/options->col-idx-parse-context
-             options :string (fn [^long col-idx]
-                               (when (< col-idx n-header-cols)
-                                 (header-row col-idx))))]
-        ;;initialize parsers so if there are no more rows we get a dataset with
-        ;;at least column names
-        (dotimes [idx n-header-cols]
-          (col-idx->parser idx))
+      (if n-records
+        (let [n-records (long n-records)]
+          (loop [continue? (.hasNext row-iter)
+                 row-idx 0]
+            (if continue?
+              (do
+                (reduce (hamf-rf/indexed-accum
+                         acc col-idx field
+                         (-> (col-idx->parser col-idx)
+                             (column-parsers/add-value! row-idx field)))
+                        nil
+                        (.next row-iter))
+                (recur (and (.hasNext row-iter)
+                            (< (inc row-idx) n-records))
+                       (unchecked-inc row-idx)))
+              (parse-context/parsers->dataset options parsers))))
         (loop [continue? (.hasNext row-iter)
                row-idx 0]
           (if continue?
@@ -137,27 +79,63 @@
             (parse-context/parsers->dataset options parsers)))))))
 
 
+
 (defn csv->dataset-seq
   "Read a csv into a lazy sequence of datasets.  All options of [[tech.v3.dataset/->dataset]]
-  are suppored with an additional option of `:batch-size` which defaults to 128000.
+  are suppored aside from `:n-initial-skip-rows` with an additional option of
+  `:batch-size` which defaults to 128000.
 
-  The input will only be closed once the entire sequence is realized."
+  Options are passed through to
+  [charred.bulk/batch-csv-rows](https://cnuernber.github.io/charred/charred.bulk.html#var-batch-csv-rows)
+  renaming where necessary.  This method defaults to using a load thread - see above method
+  for more options.  To disable the load thread use `:csv-load-thread-name nil`.
+
+  When using multithreaded loading, options are also passed through to
+  [ham-fisted.api/pmap-opts](https://cnuernber.github.io/ham-fisted/ham-fisted.api.html#var-pmap-opts)
+  so you can change the amount of `:n-lookahead` the pmap opteration uses when submitting jobs
+  to the thread pool.  By default this is set to 4 to decrease possible OOM sitations.
+
+  The input will only be closed once the entire sequence is realized.
+
+  Options:
+
+  * :dataset-tfn - dataset->x transformation function to be performed on
+    in the same thread context just after dataset is loaded.  Doing some operations
+    in this transform function can be considerably more efficient than only loading
+    the dataset when using multithreaded loading."
   [input & [options]]
-  (let [options (update options :batch-size #(or % 128000))]
-    (->> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
-         (coerce/->iterator)
-         (rows->dataset-seq options))))
+  (let [options (merge {:profile :mutable
+                        :csv-load-thread-name "TMD CSV load thread"}
+                       options)
+        load-fn (rows->dataset-fn options)
+        threaded? (boolean (get options :csv-load-thread-name))
+        batches (->> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
+                     (bulk/batch-csv-rows (get options :batch-size 128000) options))
+        load-fn (if-let [tfn (get options :csv-load-tfn)]
+                  #(tfn (load-fn %))
+                  load-fn)]
+    (if threaded?
+      (hamf/pmap-opts (merge {:n-lookahead (get options :csv-load-queue-size 4)}
+                             options)
+                      load-fn
+                      batches)
+      (map load-fn batches))))
 
 
 (defn csv->dataset
   "Read a csv into a dataset.  Same options as [[tech.v3.dataset/->dataset]]."
   [input & [options]]
-  (let [iter (-> (charred/read-csv-supplier (ds-io/input-stream-or-reader input) options)
-                 (coerce/->iterator))
-        retval (->> (rows->dataset-seq options iter)
-                    (first))]
-    (when (instance? AutoCloseable iter)
-      (.close ^AutoCloseable iter))
+  (let [s (charred/read-csv-supplier (ds-io/input-stream-or-reader input)
+                                     (merge {:profile :mutable} options))
+        iter (if-let [n-initial-skip-rows (get options :n-initial-skip-rows)]
+               (let [iter (coerce/->iterator s)]
+                 (dotimes [idx n-initial-skip-rows]
+                   (when (.hasNext iter) (.next iter)))
+                 iter)
+               s)
+        retval ((rows->dataset-fn options) iter)]
+    (when (instance? AutoCloseable s)
+      (.close ^AutoCloseable s))
     retval))
 
 
