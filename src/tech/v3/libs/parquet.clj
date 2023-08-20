@@ -989,9 +989,11 @@ To disable this warning use `:disable-parquet-warn-on-multiple-datasets`"
           ^Buffer col-rdr (col-data 3)]
       (when-not (.contains ^RoaringBitmap missing (unchecked-int row-idx))
         (.startField consumer colname col-idx)
-        (let [col-val (.readObject col-rdr row-idx)]
-          (writer consumer col-val))
-        (.endField consumer colname col-idx))))
+        (try
+          (writer consumer (.readObject col-rdr row-idx))
+          (.endField consumer colname col-idx)
+          (catch Exception e
+            (throw (RuntimeException. (str "Failed to write column " colname) e)))))))
   (.endMessage consumer))
 
 
