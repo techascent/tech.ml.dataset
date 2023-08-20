@@ -32,7 +32,7 @@
 
 ```clojure
   [org.apache.arrow/arrow-vector \"6.0.0\"]
-  [com.cnuernber \"1.000\"]
+  [com.cnuernber/jarrow \"1.000\"]
   [org.apache.commons/commons-compress \"1.21\"]
 
   ;;Compression codecs
@@ -42,7 +42,7 @@
   [com.github.luben/zstd-jni \"1.5.4-1\"]
 ```
   The lz4 decompression system will fallback to lz4-java if liblz4 isn't installed or if
-  jna isn't loaded.  The lz4-java java library fail for arrow files that have dependent
+  jna isn't loaded.  The lz4-java java library will fail for arrow files that have dependent
   block compression which are sometimes saved by python or R arrow implementations.
   On current ubuntu, in order to install the lz4 library you need to do:
 
