@@ -1,5 +1,5 @@
 {:paths ["src" "resources" "target/classes"]
- :deps {cnuernber/dtype-next {:mvn/version "10.001"}
+ :deps {cnuernber/dtype-next {:mvn/version "10.002"}
         techascent/tech.io {:mvn/version "4.30"
                             :exclusions [org.apache.commons/commons-compress]}
         org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}
