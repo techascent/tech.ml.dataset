@@ -1,4 +1,8 @@
 # Changelog
+# 7.001
+ * Big dtype-next upgrade bringing pass-by-value and return-by-value and fixing some API issues
+   in tech.v3.datatype.functional.
+
 # 7.000-beta-55
  * dataset->csv-seq now uses charred's batch loading system and is parallelized.  See docs.
 
