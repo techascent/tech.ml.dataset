@@ -1,4 +1,7 @@
 # Changelog
+# 7.002
+ * dtype-next upgrade.
+
 # 7.001
  * Big dtype-next upgrade bringing pass-by-value and return-by-value and fixing some API issues
    in tech.v3.datatype.functional.
