@@ -64,9 +64,9 @@
 
 
 (defn- coldata->column
-  [n-cols n-rows col-name new-col-data]
+  [^long n-cols ^long n-rows col-name new-col-data]
   (let [argtype (argtypes/arg-type new-col-data)
-        n-rows (if (= 0 n-cols)
+        n-rows (if (== 0 n-cols)
                  (cond
                    (dtype/reader? new-col-data)
                    (dtype/ecount new-col-data)
@@ -506,17 +506,20 @@
                                 (let [cname (ds-proto/column-name column)
                                       cname (if (or (nil? cname)
                                                     (and (string? cname)
-                                                         (empty? cname)))
+                                                         (== 0 (.length ^String cname))))
                                               (key-fn idx)
                                               (key-fn cname))]
                                   (coldata->column n-cols n-rows cname column))))
                              (hamf/vec))]
          (Dataset. column-seq
-                   (->> column-seq
-                        (lznc/map-indexed
-                         (fn [idx col]
-                           [(ds-proto/column-name col) idx]))
-                        (into {}))
+                   (do
+                     (let [hs (hamf/mut-map)]
+                       (reduce (hamf-rf/indexed-accum
+                                acc idx col
+                                (.put hs (ds-proto/column-name col) idx))
+                               nil
+                               column-seq)
+                       (persistent! hs)))
                    (assoc (col-impl/->persistent-map ds-metadata)
                           :name
                           dataset-name)
