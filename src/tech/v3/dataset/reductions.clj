@@ -472,6 +472,10 @@ _unnamed [4 5]:
   * agg-map - map of result column name to reducer.  All values in the agg map must be
     functions from dataset to hamf (non-parallel) reducers.  Note that transducer-compatible
     rf's - such as kixi.mean, are valid hamf reducers.
+  * ds-seq - Either a single dataset or sequence of datasets.
+
+
+  See also [[group-by-column-agg-rf]].
 
   Options:
 
@@ -485,50 +489,47 @@ _unnamed [4 5]:
   Example:
 
 ```clojure
+
 user> (require '[tech.v3.dataset :as ds])
 nil
 user> (require '[tech.v3.dataset.reductions :as ds-reduce])
 nil
-user> (def stocks (ds/->dataset \"test/data/stocks.csv\" {:key-fn keyword}))
-#'user/stocks
+user> (def ds (ds/->dataset \"https://github.com/techascent/tech.ml.dataset/raw/master/test/data/stocks.csv\"
+                            {:key-fn keyword}))
+
+#'user/ds
 user> (ds-reduce/group-by-column-agg
        :symbol
-       {:symbol (ds-reduce/first-value :symbol)
-        :price-avg (ds-reduce/mean :price)
+       {:price-avg (ds-reduce/mean :price)
         :price-sum (ds-reduce/sum :price)}
-       [stocks stocks stocks])
-:symbol-aggregation [5 3]:
+       ds)
+_unnamed [5 3]:
 
 | :symbol |   :price-avg | :price-sum |
-|---------|--------------|------------|
-|    MSFT |  24.73674797 |    9127.86 |
-|     IBM |  91.26121951 |   33675.39 |
-|    AAPL |  64.73048780 |   23885.55 |
-|    GOOG | 415.87044118 |   84837.57 |
-|    AMZN |  47.98707317 |   17707.23 |
+|---------|-------------:|-----------:|
+|    MSFT |  24.73674797 |    3042.62 |
+|    AAPL |  64.73048780 |    7961.85 |
+|     IBM |  91.26121951 |   11225.13 |
+|    AMZN |  47.98707317 |    5902.41 |
+|    GOOG | 415.87044118 |   28279.19 |
 
-
-
-tech.v3.dataset.reductions-test> (def tstds
-                                   (ds/->dataset {:a [\"a\" \"a\" \"a\" \"b\" \"b\" \"b\" \"c\" \"d\" \"e\"]
-                                                  :b [22   21  22 44  42  44   77 88 99]}))
-#'tech.v3.dataset.reductions-test/tstds
-tech.v3.dataset.reductions-test>  (ds-reduce/group-by-column-agg
-                                   [:a :b] {:a (ds-reduce/first-value :a)
-                                            :b (ds-reduce/first-value :b)
-                                            :c (ds-reduce/row-count)}
-                                   [tstds tstds tstds])
-:tech.v3.dataset.reductions/_temp_col-aggregation [7 3]:
+user> (def testds (ds/->dataset {:a [\"a\" \"a\" \"a\" \"b\" \"b\" \"b\" \"c\" \"d\" \"e\"]
+                                 :b [22   21  22 44  42  44   77 88 99]}))
+#'user/testds
+user> (ds-reduce/group-by-column-agg
+       [:a :b] {:c (ds-reduce/row-count)}
+       testds)
+_unnamed [7 3]:
 
 | :a | :b | :c |
 |----|---:|---:|
-|  a | 21 |  3 |
-|  a | 22 |  6 |
-|  b | 42 |  3 |
-|  b | 44 |  6 |
-|  c | 77 |  3 |
-|  d | 88 |  3 |
-|  e | 99 |  3 |
+|  e | 99 |  1 |
+|  a | 21 |  1 |
+|  c | 77 |  1 |
+|  d | 88 |  1 |
+|  b | 44 |  2 |
+|  b | 42 |  1 |
+|  a | 22 |  2 |
 ```"
   ([colname agg-map options ds-seq]
    (hamf-rf/reduce-reducer (group-by-column-agg-rf colname agg-map options)
