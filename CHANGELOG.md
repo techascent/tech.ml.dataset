@@ -1,4 +1,7 @@
 # Changelog
+# 7.006
+* dtype-next optimization for native-buffer->string
+
 # 7.005
  * various dtype-next upgrades.
 
