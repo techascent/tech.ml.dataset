@@ -1,4 +1,7 @@
 # Changelog
+# 7.005
+ * various dtype-next upgrades.
+
 # 7.002
  * dtype-next upgrade.
 
