@@ -175,7 +175,7 @@ user> (ds/row-at stocks -1)
  \"price\" 223.02}
 ```"
   [ds idx]
-  ((rows ds) idx))
+  ((rows ds {:copying? true}) idx))
 
 
 (defn rowvecs
