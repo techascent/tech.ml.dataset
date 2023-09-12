@@ -1704,6 +1704,19 @@
   (is (thrown? IndexOutOfBoundsException (ds/select-rows (ds/->dataset []) [0]))))
 
 
+(deftest failed-pmap-column-issue-367
+  (is (== (ds/row-count (ds/->dataset {:a (tech.v3.parallel.for/pmap identity [1 2 3])})) 3))
+  (is (== (ds/row-count (ds/->dataset {:a (list 1 2 3)
+                                       :b (cycle [1 2 3 4])}))
+          3))
+  (is (== (ds/row-count (ds/->dataset {:a [1 2 3]
+                                       :b (cycle [1 2 3 4])}))
+          3))
+  (is (== (ds/row-count (ds/->dataset {:a (list 1 2 3)
+                                       :b 2}))
+          3)))
+
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))

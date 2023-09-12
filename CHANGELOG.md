@@ -1,7 +1,9 @@
 # Changelog
-# 7.007 (UNRELEASED)
+
+# 7.007
  * row-at defaults to a copying operation so you can safely use this with datasets
    that may be zero-copied from other sources.
+ * Fix for [issue 367](https://github.com/techascent/tech.ml.dataset/issues/367)
    
 # 7.006
 * dtype-next optimization for native-buffer->string
