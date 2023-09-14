@@ -13,7 +13,7 @@
             [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.function :as hamf-fn]
             [ham-fisted.protocols :as hamf-proto])
-  (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap]
+  (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap Iterator]
            [java.util.function Function Consumer]
            [tech.v3.dataset.protocols PDatasetParser]
            [clojure.lang IDeref Counted Indexed]
@@ -101,41 +101,101 @@
 (defn column-map->dataset
   ([options column-map]
    (let [parse-context (parse-context/options->parser-fn options :object)
-         coltypes (->> (vals column-map)
-                       (group-by argtypes/arg-type))
-         n-rows (cond
-                  (:reader coltypes)
-                  (apply max (map dtype/ecount (coltypes :reader)))
-                  (:iterable coltypes)
-                  (count (apply map (constantly nil) (coltypes :iterable)))
-                  :else
-                  1)]
-     (->> column-map
-          (pfor/pmap
-           (fn [^Map$Entry mapentry]
-             (let [colname (.getKey mapentry)
-                   coldata (.getValue mapentry)
-                   argtype (argtypes/arg-type coldata)
-                   coldata (if (= argtype :iterable)
-                             (take n-rows coldata)
-                             coldata)]
-               (if (= :scalar argtype)
-                 #:tech.v3.dataset{:name colname
-                                   :data (dtype/const-reader coldata n-rows)}
-                 (if (and (= :reader argtype)
-                          (not= :object (dtype/elemwise-datatype coldata)))
-                   #:tech.v3.dataset{:name colname
-                                     :data coldata}
-                   ;;Actually attempt to parse the data
-                   (let [parser (parse-context colname)
-                         retval
-                         (do
-                           (pfor/consume!
-                            #(column-parsers/add-value! parser (first %) (second %))
-                            (map-indexed vector coldata))
-                           (assoc (column-parsers/finalize! parser (dtype/ecount parser))
-                                  :tech.v3.dataset/name colname))]
-                     retval))))))
-          (ds-impl/new-dataset options))))
+         coltypes (->> column-map
+                       (group-by (fn [e] (argtypes/arg-type (val e)))))
+         parse-scalar (fn [e ^long n-rows]
+                        #:tech.v3.dataset{:name (key e)
+                                          :data (dtype/const-reader (val e) n-rows)})]
+     ;;new rule - anything iterable can only be iterated once.  Not all iterables can be re-iterated
+     ;;without kicking off a potentially expensive process again
+     ;;This means that if we haven't decided on n-rows yet the iteration of all
+     ;;the iterables must both create columns *and* take the min length to be the new n-rows.
+
+     ;;If we have readers those dictate the dataset length
+     (if-let [rdr-cols (:reader coltypes)]
+       (let [n-rows (long (apply max (map (comp dtype/ecount val) rdr-cols)))]
+         (->> column-map
+              (pfor/pmap
+               (fn [e]
+                 (let [coldata (val e)
+                       colname (key e)]
+                   (case (argtypes/arg-type coldata)
+                     :scalar (parse-scalar e n-rows)
+                     :reader (if (identical? :object (dtype/elemwise-datatype coldata))
+                               (let [parser (parse-context colname)]
+                                 (reduce (hamf-rf/indexed-accum
+                                          acc idx v
+                                          (column-parsers/add-value! parser idx v))
+                                         nil
+                                         coldata)
+                                 (assoc (column-parsers/finalize! parser n-rows)
+                                        :tech.v3.dataset/name colname))
+                               #:tech.v3.dataset{:name colname
+                                                 :data coldata})
+                     :iterable (let [parser (parse-context colname)]
+                                 (reduce (hamf-rf/indexed-accum
+                                          acc idx v
+                                          (if (< idx n-rows)
+                                            (column-parsers/add-value! parser idx v)
+                                            (reduced true)))
+                                         nil coldata)
+                                 (assoc (column-parsers/finalize! parser n-rows)
+                                        :tech.v3.dataset/name colname))))))
+              (ds-impl/new-dataset options)))
+       ;;If we only have iterables the shortest one dictates dataset length
+       (if-let [iter-cols (:iterable coltypes)]
+         (let [[n-rows iterable-cols]
+               (let [iterable-cols iter-cols
+                     parse-contexts (mapv (fn [e]
+                                            (let [cname (key e)]
+                                              [cname
+                                               (parse-context cname)
+                                               (.iterator ^Iterable (ham-fisted.protocols/->iterable (val e)))]))
+                                          iterable-cols)
+                     val-data (object-array (count parse-contexts))
+                     next-valid?
+                     (fn [^long row-idx]
+                       (let [all-valid?
+                             (reduce (hamf-rf/indexed-accum
+                                      acc idx pctx
+                                      (let [^Iterator iter (nth pctx 2)]
+                                        (if (.hasNext iter)
+                                          (do
+                                            (aset val-data idx (.next iter))
+                                            true)
+                                          (reduced false))))
+                                     true
+                                     parse-contexts)]
+                         (when all-valid?
+                           (reduce (hamf-rf/indexed-accum
+                                    acc idx pctx
+                                    (column-parsers/add-value! (nth pctx 1) row-idx (aget val-data idx)))
+                                   nil
+                                   parse-contexts)
+                           true)))
+                     n-rows
+                     (loop [row-idx 0]
+                       (if (next-valid? row-idx)
+                         (recur (unchecked-inc row-idx))
+                         row-idx))]
+                 [n-rows
+                  (into {} (map (fn [val]
+                                  [(nth val 0)
+                                   (assoc (column-parsers/finalize! (nth val 1) n-rows)
+                                          :tech.v3.dataset/name (nth val 0))]))
+                        parse-contexts)])]
+           (->> column-map
+                (map
+                 (fn [e]
+                   (let [coldata (val e)
+                         colname (key e)]
+                     (case (argtypes/arg-type coldata)
+                       :scalar (parse-scalar e n-rows)
+                       :iterable (get iterable-cols colname)))))
+                (ds-impl/new-dataset options)))
+         ;;Finally constants have a dataset length of 1
+         (->> column-map
+              (map #(parse-scalar % 1))
+              (ds-impl/new-dataset options))))))
   ([column-map]
    (column-map->dataset nil column-map)))
