@@ -77,6 +77,7 @@ The provided Java API ([javadoc](https://techascent.github.io/tech.ml.dataset/ja
 * [tech.v3.datatype](https://github.com/cnuernber/dtype-next) provides the underlying numeric subsystem to TMD.
 * Simple regression/classification machine learning pathways are available in [tech.ml](https://github.com/techascent/tech.ml).
 * Some [independent benchmarks](https://github.com/zero-one-group/geni-performance-benchmark/) indicating TMD's _speed_.
+* Bindings to a [high performance in-process SQL database](https://github.com/techascent/tmducken).
 * A Graal native [example project](https://github.com/cnuernber/ds-graal).
 * The [scicloj.ml tutorials](https://github.com/scicloj/scicloj.ml-tutorials) may be a good way to jump straight into data science.
 * [Comparison](https://github.com/genmeblog/techtest/blob/master/src/techtest/datatable_dplyr.clj) between R's `data.table`, R's `dplyr`, and an older version of TMD.
