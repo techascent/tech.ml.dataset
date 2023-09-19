@@ -13,8 +13,8 @@
   Parsing parquet file options include more general io/->dataset options:
 
   * `:key-fn`
-  * `:column-whitelist`
-  * `:column-blacklist`
+  * `:column-allowlist` in preference to `:column-whitelist`
+  * `:column-blocklist` in preference to `:column-blacklist`
   * `:parser-fn`
 
 
@@ -534,16 +534,16 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 
 
 (defn- parse-parquet-column
-  [column-whitelist column-blacklist ^ColumnReadStoreImpl col-read-store
+  [column-allowlist column-blocklist ^ColumnReadStoreImpl col-read-store
    n-rows parse-context key-fn
    ^ColumnDescriptor col-def col-metadata]
   (let [n-rows (long n-rows)
         cname (key-fn (.. col-def getPrimitiveType getName))
-        whitelisted? (or (not column-whitelist)
-                         (column-whitelist cname))
-        blacklisted? (and column-blacklist
-                          (column-blacklist cname))]
-    (when (and whitelisted? (not blacklisted?))
+        allowlisted? (or (not column-allowlist)
+                         (column-allowlist cname))
+        blocklisted? (and column-blocklist
+                          (column-blocklist cname))]
+    (when (and allowlisted? (not blocklisted?))
       (try
         (let [reader (.getColumnReader col-read-store col-def)
               retval (parse-column-data reader col-def n-rows
@@ -646,11 +646,11 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
         n-rows (.getRowCount page)
         parse-context (io-context/options->parser-fn options nil)
         key-fn (or (:key-fn options) identity)
-        column-whitelist (when (seq (:column-whitelist options))
-                           (set (:column-whitelist options)))
-        column-blacklist (when (seq (:column-blacklist options))
-                           (set (:column-blacklist options)))
-        col-parser (partial parse-parquet-column column-whitelist column-blacklist
+        column-allowlist (when (seq (or (:column-allowlist options) (:column-whitelist options)))
+                           (set (or (:column-allowlist options) (:column-whitelist options))))
+        column-blocklist (when (seq (or (:column-blocklist options) (:column-blacklist options)))
+                           (set (or (:column-blocklist options) (:column-blacklist options))))
+        col-parser (partial parse-parquet-column column-allowlist  column-blocklist
                             col-read-store n-rows parse-context key-fn)
         initial-columns (->> (map col-parser
                                   (.getColumns schema)
@@ -819,9 +819,11 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 (defn parquet->ds
   "Load a parquet file.  Input must be a file on disk.
 
-  Options are a subset of the options used for loading datasets - specifically
-  `:column-whitelist` and `:column-blacklist` can be useful here.  The parquet
-  metadata ends up as metadata on the datasets."
+  Options are a subset of the options used for loading datasets -
+  specifically `:column-allowlist` and `:column-blocklist` can be
+  useful here.  The parquet metadata ends up as metadata on the
+  datasets. `:column-whitelist` and `:column-blacklist` are available
+  but not preferred."
   ([input options]
    (let [data-file (io/file input)
          _ (errors/when-not-errorf

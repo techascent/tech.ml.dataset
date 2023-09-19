@@ -53,10 +53,10 @@
       #{:csv :tsv :xlsx :xls :parquet}.
   - `:gzipped?` - for file formats that support it, override autodetection and force
      creation of a gzipped input stream as opposed to a normal input stream.
-  - `:column-whitelist` - either sequence of string column names or sequence of column
-     indices of columns to whitelist.
-  - `:column-blacklist` - either sequence of string column names or sequence of column
-     indices of columns to blacklist.
+  - `:column-allowlist` - either sequence of string column names or sequence of column
+     indices of columns to allowlist. This is preferred to `:column-whitelist`
+  - `:column-blocklist` - either sequence of string column names or sequence of column
+     indices of columns to blocklist. This is preferred to `:column-blacklist`
   - `:num-rows` - Number of rows to read
   - `:header-row?` - Defaults to true, indicates the first row is a header.
   - `:key-fn` - function to be applied to column names.  Typical use is:
