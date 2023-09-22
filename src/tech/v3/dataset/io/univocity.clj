@@ -80,6 +80,8 @@
                            num-rows
                            column-whitelist
                            column-blacklist
+                           column-allowlist
+                           column-blocklist
                            separator
                            n-initial-skip-rows]
                     :or {header-row? true
@@ -112,6 +114,18 @@
                    (seq column-blacklist))
           (throw (Exception.
                   "Either whitelist or blacklist can be provided but not both")))
+        (when (and (seq column-allowlist)
+                   (seq column-blocklist))
+          (throw (Exception.
+                  "Either allowlist or blocklist can be provided but not both")))
+        (when (and (seq column-allowlist)
+                   (seq column-whitelist))
+          (throw (Exception.
+                  "Either allowlist or whitelist can be provided but not both")))
+        (when (and (seq column-blacklist)
+                   (seq column-blocklist))
+          (throw (Exception.
+                  "Either blacklist or blocklist can be provided but not both")))
         (let [[string-fn! number-fn!]
               (if (seq column-whitelist)
                 [#(.selectFields
@@ -126,9 +140,9 @@
                  #(.excludeIndexes
                    settings
                    ^"[Ljava.lang.Integer;"(into-array Integer (map int %)))])
-              column-data (if (seq column-whitelist)
-                            column-whitelist
-                            column-blacklist)
+              column-data (if (seq (or column-allowlist column-whitelist))
+                            (or column-allowlist column-whitelist)
+                            (or column-blocklist column-blacklist))
               column-type (sequence-type column-data)]
           (case column-type
             :string (string-fn! column-data)
@@ -173,10 +187,10 @@
 
   options:
 
-  - `:column-whitelist` - either sequence of string column names or sequence of column
-     indices of columns to whitelist.
-  - `:column-blacklist` - either sequence of string column names or sequence of column
-     indices of columns to blacklist.
+  - `:column-allowlist` - either sequence of string column names or sequence of column
+     indices of columns to whitelist. In preference to `:column-whitelist`.
+  - `:column-blocklist` - either sequence of string column names or sequence of column
+     indices of columns to blacklist. In preference to `:column-blacklist`.
   - `:num-rows` - Number of rows to read
   - `:separator` - Add a character separator to the list of separators to auto-detect.
   - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
@@ -201,8 +215,8 @@
    :metadata - optional map with unparsed-indexes and unparsed-values
   }
   Supports a subset of tech.v3.dataset/->dataset options:
-  :column-whitelist
-  :column-blacklist
+  :column-allowlist in preference to :column-whitelist
+  :column-blocklist in preference to :column-blacklist
   :n-initial-skip-rows
   :num-rows
   :header-row?
