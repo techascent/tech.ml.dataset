@@ -17,7 +17,7 @@
             [clojure.core.protocols :as cl-proto])
   (:import [tech.v3.datatype UnaryPredicate FastStruct$FMapEntry]
            [java.time LocalDate YearMonth]
-           [ham_fisted Consumers$IncConsumer MutHashTable]
+           [ham_fisted Consumers$IncConsumer MutHashTable Reductions]
            [java.util ArrayList Map$Entry Arrays]
            [clojure.lang MapEntry]))
 
@@ -205,14 +205,25 @@
   ;;compete on equal terms with the java hashtable.  In that we find that compute,
   ;;computeIfAbsent and reduce perform as fast as anything on the jvm when we are using
   ;;Object/equals and Object/hashCode for the map functionality.
-  (let [tally (MutHashTable. hamf/equal-hash-provider)]
+  (let [tally (hamf/java-hashmap)]
     (dotimes [idx (.until start end java.time.temporal.ChronoUnit/DAYS)]
       (let [ym (YearMonth/from (.plusDays start idx))]
         ;;Compute if absent is ever so slightly faster than compute as it involves
         ;;less mutation of the original hashtable.  It does, however, require the
         ;;value in the node itself to be mutable.
         (.inc ^Consumers$IncConsumer (.computeIfAbsent tally ym inc-cons-fn))))
-    (lznc/map-reducible
+    (hamf/custom-ireduce
+     rfn acc
+     (Reductions/iterReduce (.entrySet tally)
+                            acc
+                            (fn [acc ^Map$Entry kv]
+                              (rfn acc
+                                   (hamf/custom-ireduce
+                                    rrfn aacc
+                                    (-> aacc
+                                        (rrfn (MapEntry/create :year-month (.getKey kv)))
+                                        (rrfn (MapEntry/create :count (deref (.getValue kv))))))))))
+    #_(lznc/map-reducible
      #(let [^Map$Entry e %]
         ;;Dataset construction using the mapseq-rf only requires the 'map' type to correctly
         ;;implement IReduceInit and for that function to produce implementations of Map$Entry.
@@ -273,16 +284,17 @@
             ^LocalDate end (ends row-idx)
             nd (.until start end java.time.temporal.ChronoUnit/DAYS)]
         (dotimes [day-idx nd]
-          (let [ym (YearMonth/from (.plusDays start day-idx))]
-            (.compute tally ym incrementor)))
-        (hamf-rf/consume! (hamf-fn/consumer
-                        kv (do
-                             (.addLong indexes row-idx)
-                             (.add year-months (key kv))
-                             (.add counts (val kv))))
-                       tally)))
+          (.inc ^Consumers$IncConsumer (.computeIfAbsent tally (YearMonth/from (.plusDays start day-idx)) inc-cons-fn)))
+        (.forEach tally (hamf-fn/bi-consumer
+                         k v
+                         (.addLong indexes row-idx)
+                         (.add year-months k)
+                         (.add counts (deref v))))))
     (-> (ds/select-rows ds indexes)
-        (assoc :year-month year-months
+        ;;avoid datatype and missing scans
+        (assoc :year-month #:tech.v3.dataset{:data year-months
+                                             :force-datatype? true
+                                             :missing (tech.v3.datatype.bitmap/->bitmap)}
                :count counts))))
 
 

@@ -968,22 +968,24 @@ _unnamed [9 3]:
 user>
 ```"
   ([ds mapcat-fn options]
-   (pmap-ds
-    ds
-    (fn [ds]
-      (let [indexes (dtype/make-list :int32)
-            nds (transduce (comp (map-indexed
-                                  (fn [^long rid row]
-                                    (->> (mapcat-fn row)
-                                         (lznc/map-reducible
-                                          #(do (.addLong indexes rid)
-                                               %)))))
-                                 cat)
-                           (mapseq-rf options)
-                           (rows ds))]
-        (-> (select-rows ds indexes)
-            (merge nds))))
-    options))
+   (let [rf (mapseq-rf options)]
+     (pmap-ds
+      ds
+      (fn [ds]
+        (let [indexes (dtype/make-list :int32)
+              nds (-> (reduce (hamf-rf/indexed-accum
+                               acc row-idx row
+                               (reduce (fn [acc new-row]
+                                         (.addLong indexes row-idx)
+                                         (rf acc new-row))
+                                       acc
+                                       (mapcat-fn row)))
+                              (rf)
+                              (rows ds))
+                      (rf))]
+          (-> (select-rows ds indexes)
+              (merge nds))))
+      options)))
   ([ds mapcat-fn]
    (row-mapcat ds mapcat-fn nil)))
 

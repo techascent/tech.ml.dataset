@@ -67,7 +67,7 @@ user> (ds-reduce/group-by-column-agg
   (:import [tech.v3.datatype Buffer]
            [java.util List HashSet ArrayList LinkedHashMap Map]
            [java.util.concurrent ConcurrentHashMap]
-           [java.util.function LongConsumer Consumer]
+           [java.util.function LongConsumer Consumer LongPredicate]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype LongReader BooleanReader ObjectReader DoubleReader
             FastStruct]
@@ -433,17 +433,47 @@ _unnamed [4 5]:
         (let [next-ds (ds-map-fn next-ds)
               group-col (dtype/->buffer (ds-base/column next-ds colname))
               n-rows (ds-base/row-count next-ds)
-              idx-filter (when-let [filter-fn (get options :index-filter)]
-                           (filter-fn next-ds))
+              ^LongPredicate idx-filter (when-let [filter-fn (get options :index-filter)]
+                                          (let [idx-filter (filter-fn next-ds)]
+                                            (if (instance? LongPredicate idx-filter)
+                                              idx-filter
+                                              (reify LongPredicate
+                                                (test [this v] (boolean (idx-filter v)))))))
               agg-reducer (->> combined-reducers
                                (hamf/mapv #(ds-proto/ds->reducer % next-ds))
-                               (hamf-rf/compose-reducers
-                                {:rfn-datatype :int64}))
+                               (hamf-rf/compose-reducers {:rfn-datatype :int64}))
               group-col (-> (ds-base/column next-ds colname)
-                            (dtype/->reader))]
-          (->> (if idx-filter
+                            (dtype/->reader))
+              agg-init (hamf-proto/->init-val-fn agg-reducer)
+              agg-rfn (hamf-proto/->rfn agg-reducer)]
+          (dorun (hamf/pgroups
+                  n-rows
+                  (fn [^long sidx ^long eidx]
+                    (if idx-filter
+                      (loop [sidx sidx]
+                        (when (< sidx eidx)
+                          (when (.test idx-filter sidx)
+                            (.compute ^Map agg-map (.readObject group-col sidx)
+                                      (hamf-fn/bi-function
+                                       k v
+                                       (agg-rfn (or v (agg-init)) sidx))))
+                          (recur (unchecked-inc sidx))))
+                      (loop [sidx sidx]
+                        (when (< sidx eidx)
+                          (.compute ^Map agg-map (.readObject group-col sidx)
+                                    (hamf-fn/bi-function
+                                     k v
+                                     (agg-rfn (or v (agg-init)) sidx)))
+                          (recur (unchecked-inc sidx))))))))
+          agg-map
+          #_(->> (if idx-filter
                  (lznc/filter idx-filter (hamf/range n-rows))
                  (hamf/range n-rows))
+               (hamf-rf/preduce (constantly nil)
+                                (fn [acc ^long idx]
+
+                                  )
+                                )
                (hamf/group-by-reducer
                 (hamf-fn/long->obj idx (.readObject group-col idx))
                 agg-reducer
