@@ -1,8 +1,7 @@
 {:paths ["src" "resources" "target/classes"]
- :deps {cnuernber/dtype-next {:mvn/version "10.012"}
+ :deps {cnuernber/dtype-next {:mvn/version "10.013"}
         techascent/tech.io {:mvn/version "4.31"
                             :exclusions [org.apache.commons/commons-compress]}
-        com.cnuernber/ham-fisted {:mvn/version "1.006-SNAPSHOT"}
         org.apache.datasketches/datasketches-java {:mvn/version "3.3.0"}}
  :aliases
  {:codox
@@ -13,7 +12,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "7.008"
+               :version "7.009"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}

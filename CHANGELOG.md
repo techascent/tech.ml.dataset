@@ -1,5 +1,8 @@
 # Changelog
-
+# 7.009
+ * Small optimizations to bring back some performance for group-by-column-agg that was lost
+   between 6 and 7.
+ 
 # 7.007
  * row-at defaults to a copying operation so you can safely use this with datasets
    that may be zero-copied from other sources.
