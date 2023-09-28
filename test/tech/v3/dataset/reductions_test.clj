@@ -222,18 +222,7 @@
                                     rrfn aacc
                                     (-> aacc
                                         (rrfn (MapEntry/create :year-month (.getKey kv)))
-                                        (rrfn (MapEntry/create :count (deref (.getValue kv))))))))))
-    #_(lznc/map-reducible
-     #(let [^Map$Entry e %]
-        ;;Dataset construction using the mapseq-rf only requires the 'map' type to correctly
-        ;;implement IReduceInit and for that function to produce implementations of Map$Entry.
-        (hamf/custom-ireduce
-         rfn acc
-         ;;Elided reduced? checks for a tiny bit of extra oomph.
-          (-> acc
-              (rfn (MapEntry/create :year-month (.getKey e)))
-              (rfn (MapEntry/create :count (deref (.getValue e)))))))
-     (.entrySet tally))))
+                                        (rrfn (MapEntry/create :count (deref (.getValue kv))))))))))))
 
 
 (defn- otfrom-pathway

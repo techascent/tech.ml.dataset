@@ -1,4 +1,11 @@
 # Changelog
+# 7.010
+ * Fix for serious error in fastruct equiv pathway.
+ * minimal, much faster pathways for column (tech.v3.dataset.impl.column/construct-column) 
+   and dataset (tech.v3.dataset.impl.dataset/construct-dataset) construction.  These pathways
+   will not detect errors nor will they detect missing values so use them with care.
+   
+ 
 # 7.009
  * Small optimizations to bring back some performance for group-by-column-agg that was lost
    between 6 and 7.

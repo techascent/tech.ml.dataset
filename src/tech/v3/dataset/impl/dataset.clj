@@ -456,6 +456,29 @@
     (ds-print/dataset->str item)))
 
 
+(defn construct-dataset
+  "Low-level construct a new dataset.
+
+  * 'columns' - java.util.List of [[tech.v3.dataset.impl.column.Column]] objects.
+  * 'colmap' - java.util.Map of column name to index in columns.
+  * 'metadata' - extra metadata for the dataset.  Dataset name is store as `:name`."
+  (^Dataset [columns colmap metadata]
+   ;;quick sanity check
+   (assert (== (count colmap) (count columns)))
+   (Dataset. columns colmap metadata 0 0))
+  (^Dataset [columns metadata]
+   (Dataset. columns (persistent!
+                      (reduce (hamf-rf/indexed-accum
+                               acc idx col
+                               (.put ^Map acc (or (:name (meta col)) idx) idx)
+                               acc)
+                              (hamf/mut-map)
+                              columns))
+             metadata 0 0)))
+
+
+
+
 
 (defn new-dataset
   "Create a new dataset from a sequence of columns.  Data will be converted

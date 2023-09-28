@@ -395,6 +395,15 @@
 (dtype-pp/implement-tostring-print Column)
 
 
+(defn construct-column
+  "Low level column construction.  No analysis is done of the data to detect
+  datatype or missing values - the onus is on you.  The column name should
+  be provided as the `:name` member of the metadata.  Data must have a
+  conversion to a buffer - [tech.v3.datatype.protocols/PToBuffer](https://github.com/cnuernber/dtype-next/blob/master/src/tech/v3/datatype/protocols.clj#L131)."
+  ^Column [missing data metadata]
+  (Column. (bitmap/->bitmap missing) data metadata nil))
+
+
 (defn new-column
   "Given a map of (something convertible to a long reader) missing indexes,
   (something convertible to a reader) data
