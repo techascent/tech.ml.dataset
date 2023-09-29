@@ -1,20 +1,25 @@
 # Changelog
+# 7.011
+ * Moved to custom linkedhashmap implementation in hamf that has optimized union *and*
+   has equiv semantics for the keys.  This is not a persistent map of any sort but is
+   at least a step closer.  Potential fix for issue 372.
+
 # 7.010
  * Fix for serious error in fastruct equiv pathway.
- * minimal, much faster pathways for column (tech.v3.dataset.impl.column/construct-column) 
+ * minimal, much faster pathways for column (tech.v3.dataset.impl.column/construct-column)
    and dataset (tech.v3.dataset.impl.dataset/construct-dataset) construction.  These pathways
    will not detect errors nor will they detect missing values so use them with care.
-   
- 
+
+
 # 7.009
  * Small optimizations to bring back some performance for group-by-column-agg that was lost
    between 6 and 7.
- 
+
 # 7.007
  * row-at defaults to a copying operation so you can safely use this with datasets
    that may be zero-copied from other sources.
  * Fix for [issue 367](https://github.com/techascent/tech.ml.dataset/issues/367)
-   
+
 # 7.006
 * dtype-next optimization for native-buffer->string
 
