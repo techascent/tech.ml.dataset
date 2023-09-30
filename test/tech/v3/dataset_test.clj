@@ -1716,6 +1716,12 @@
                                        :b 2}))
           3)))
 
+(deftest group-by-column->index-issue-372
+  (let [data (ds/group-by-column->indexes (ds/->dataset {:a (int-array (concat (range 10) (range 10) (range 10)))})
+                                          :a)]
+
+    (is (= 3 (count (get data (int 0)))))))
+
 
 (comment
   (require '[criterium.core :as crit])
