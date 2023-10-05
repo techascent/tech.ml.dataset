@@ -23,12 +23,12 @@ jobs:
       run: |
         scripts/get-data.sh
         scripts/run-tests
-    # - name: Cache dependencies
-    #   uses: actions/cache@v3
-    #   with:
-    #     path: |
-    #        ~/.m2/repository
-    #        ~/.gitlibs
-    #        ~/.deps.clj
-    #     key: cljdeps-${{ hashFiles('deps.edn') }}
-    #     restore-keys: cljdeps-
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+           ~/.m2/repository
+           ~/.gitlibs
+           ~/.deps.clj
+        key: cljdeps-${{ hashFiles('deps.edn') }}
+        restore-keys: cljdeps-
