@@ -6,8 +6,7 @@ on:
 jobs:
   test:
     steps:
-    - name: Code checkout
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
     - name: Additional dependencies
       run: DEBIAN_FRONTEND=noninteractive sudo -E apt-get install -y libopenblas-dev intel-mkl lz4
     - name: Java setup
