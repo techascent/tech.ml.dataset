@@ -8,6 +8,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v3
+    - name: Restore cached dependencies
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+           ~/.m2/repository
+           ~/.gitlibs
+           ~/.deps.clj
+        key: cljdeps-${{ hashFiles('deps.edn') }}
     - name: Additional dependencies
       run: DEBIAN_FRONTEND=noninteractive sudo -E apt-get install -y libopenblas-dev intel-mkl lz4
     - name: Java setup
