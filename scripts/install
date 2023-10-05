@@ -4,6 +4,6 @@ set -e
 
 
 # scripts/run-tests
-clj -T:build jar
+clojure -T:build jar
 cp target/classes/META-INF/maven/techascent/tech.ml.dataset/pom.xml .
-clj -X:install
+clojure -X:install

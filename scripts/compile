@@ -1,4 +1,4 @@
 #!/bin/bash
 
 rm -rf target/classes
-clj -T:build compile
+clojure -T:build compile
