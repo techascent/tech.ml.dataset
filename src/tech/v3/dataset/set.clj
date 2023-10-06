@@ -13,7 +13,7 @@
            [java.util.function BiConsumer]
            [java.util Map HashSet]
            [tech.v3.datatype Buffer]
-           [ham_fisted BitmapTrieCommon]))
+           [ham_fisted BiFunctions]))
 
 
 (defn- concurrent-hashmap-frequencies
@@ -21,7 +21,7 @@
   (hamf-rf/preduce
    (constantly (hamf/java-concurrent-hashmap))
    (fn [acc v]
-     (.compute ^Map acc v BitmapTrieCommon/incBiFn)
+     (.compute ^Map acc v BiFunctions/incBiFn)
      acc)
    (fn [l r] l)
    {:min-n 1000}

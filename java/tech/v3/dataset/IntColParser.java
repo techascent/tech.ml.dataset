@@ -5,12 +5,11 @@ import tech.v3.datatype.IndexConsumer;
 import tech.v3.datatype.ECount;
 import ham_fisted.Reducible;
 import ham_fisted.IMutList;
-import ham_fisted.MutArrayMap;
-import ham_fisted.BitmapTrieCommon;
 import org.roaringbitmap.RoaringBitmap;
 import clojure.lang.IDeref;
 import clojure.lang.IFn;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 
 public class IntColParser
   implements IDeref, PParser, ECount {
@@ -53,11 +52,10 @@ public class IntColParser
   }
 
   public Object deref() {
-    return MutArrayMap.createKV(BitmapTrieCommon.defaultHashProvider,
-				Keyword.intern("tech.v3.dataset", "data"), data.deref(),
-				Keyword.intern("tech.v3.dataset", "missing"), missing,
-				Keyword.intern("tech.v3.dataset", "name"), colname)
-      .persistent();
+    return new PersistentArrayMap(new Object[] {
+	Keyword.intern("tech.v3.dataset", "data"), data.deref(),
+	Keyword.intern("tech.v3.dataset", "missing"), missing,
+	Keyword.intern("tech.v3.dataset", "name"), colname});
   }
 
   public Object finalize(long rowcount) {
