@@ -17,9 +17,8 @@
             [clojure.core.protocols :as cl-proto])
   (:import [tech.v3.datatype UnaryPredicate FastStruct$FMapEntry]
            [java.time LocalDate YearMonth]
-           [ham_fisted Consumers$IncConsumer MutHashTable Reductions]
-           [java.util ArrayList Map$Entry Arrays]
-           [clojure.lang MapEntry]))
+           [ham_fisted Consumers$IncConsumer Reductions IAMapEntry]
+           [java.util ArrayList Map$Entry Arrays]))
 
 
 (deftest simple-reduction
@@ -221,8 +220,8 @@
                                    (hamf/custom-ireduce
                                     rrfn aacc
                                     (-> aacc
-                                        (rrfn (MapEntry/create :year-month (.getKey kv)))
-                                        (rrfn (MapEntry/create :count (deref (.getValue kv))))))))))))
+                                        (rrfn (hamf/make-map-entry :year-month (.getKey kv)))
+                                        (rrfn (hamf/make-map-entry :count (deref (.getValue kv))))))))))))
 
 
 (defn- otfrom-pathway
