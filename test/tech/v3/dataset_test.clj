@@ -32,7 +32,7 @@
            [java.time LocalDate]
            [java.io File ByteArrayInputStream]
            [tech.v3 TMD]
-           [ham_fisted IFnDef$OD IMutList BitmapTrieCommon]))
+           [ham_fisted IFnDef$OD IMutList]))
 
 
 (deftest datatype-parser

@@ -36,6 +36,7 @@ public class VectorFactory
   {
     return new StringVectorImpl(name, data);
   }
+  @SuppressWarnings("unchecked")
   public static Vector genericVector(StructField name, Object[] data)
   {
     return new VectorImpl(name, data);

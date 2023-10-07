@@ -23,7 +23,6 @@
            [tech.v3.datatype ObjectReader FastStruct Buffer]
            [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
-           [ham_fisted BitmapTrieCommon]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiConsumer]))
 

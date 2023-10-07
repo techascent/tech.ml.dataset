@@ -58,6 +58,7 @@ public class SimpleRDD
     IFn partToRows = Clojure.var(partitionToRows);
     Object data = partitions.get(partition.index());
     Iterable concrete = (Iterable)partToRows.invoke( data );
+    @SuppressWarnings("unchecked")
     java.util.Iterator<Row> src_iter = (java.util.Iterator<Row>)concrete.iterator();
     return JavaConverters.asScalaIterator(src_iter);
   }
