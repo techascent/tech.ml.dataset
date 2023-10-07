@@ -523,8 +523,10 @@
 
 
 (defn group-by
-  "Produce a map of key-fn-value->dataset.  key-fn is a function taking
-  a map of colname->column-value.
+  "Produce a map of key-fn-value->dataset.  The argument to key-fn 
+  is a map of colname->column-value representing a row in dataset.
+  Each dataset in the resulting map contains all and only rows 
+  that produce the same key-fn-value.
 
   Options - options are passed into dtype arggroup:
 
@@ -550,7 +552,9 @@
 
 
 (defn group-by-column
-  "Return a map of column-value->dataset.
+  "Return a map of column-value->dataset.  Each dataset in the
+  resulting map contains all and only rows with the same value in
+  column.
 
   * `:group-by-finalizer` - when provided this is run on each dataset immediately after the
      rows are selected.  This can be used to immediately perform a reduction on each new
