@@ -1,5 +1,22 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-scripts/compile
+set -eu
+
+java_version=$(java -version 2>&1 | awk '/version/ {print $3}')
+jdk_profile=""
+
+case "${java_version}" in
+    \"1.8*)
+	jdk_profile="jdk-8"
+	;;
+    \"11*)
+	jdk_profile="jdk-11"
+	;;
+    \"17*)
+	jdk_profile="jdk-17"
+	;;
+esac
+
+scripts/compile "${jdk_profile}"
 clojure -X:dev:codegen
-clojure -M:dev:test --dir test --dir neanderthal
+clojure -M:dev:"${jdk_profile}":test --dir test --dir neanderthal
