@@ -1,4 +1,10 @@
 # Changelog
+# 7.012
+ * hamf-2.0 upgrade.
+ * Fix for [issue-377](https://github.com/techascent/tech.ml.dataset/issues/377).
+ * Moved from broken Travis CI to Github CI thanks to @iperdomo.
+ * Documentation fix thanks to @mars0i.
+
 # 7.011
  * Moved to custom linkedhashmap implementation in hamf that has optimized union *and*
    has equiv semantics for the keys.  This is not a persistent map of any sort but is
