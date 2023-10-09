@@ -331,6 +331,15 @@
     (is (= 1 (dtype/ecount (ds/missing jds))))))
 
 
+(deftest issue-377
+  (let [j (ds-join/left-join :a
+                             (ds/->dataset {:a [nil 2]
+                                            :b [3 4]})
+                             (ds/->dataset {:a [nil 4]
+                                            :b [6 7]}))]
+    (is (= [6 nil] (vec (j :right.b))))))
+
+
 (comment
 
   (def lhs-fields

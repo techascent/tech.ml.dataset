@@ -6,6 +6,7 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt]
+            [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.base :as ds-base]
@@ -203,11 +204,13 @@
   (let [lhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype lhs-col))
         rhs-dtype (packing/unpack-datatype (dtype/elemwise-datatype rhs-col))
         op-dtype (casting/simple-operation-space
-                   (casting/widest-datatype lhs-dtype rhs-dtype))
-        ;;Ensure we group in same space if possible.
+                  (casting/widest-datatype lhs-dtype rhs-dtype))
+        ;;We have to group in operation in object space else missing values can
+        ;;cause issues with numeric columns.
         ^Map idx-groups (argops/arggroup
-                          (dtype/elemwise-cast lhs-col op-dtype))
-        rhs-col (dtype/->reader (dtype/elemwise-cast rhs-col op-dtype))
+                         {:operation-space :object}
+                         (dtype/elemwise-cast lhs-col op-dtype))
+        rhs-col (dtype/elemwise-cast rhs-col op-dtype)
         n-elems (dtype/ecount rhs-col)
         {lhs-indexes :lhs-indexes
          rhs-indexes :rhs-indexes
@@ -219,10 +222,14 @@
             (let [lhs-indexes (dtype/make-list operation-space)
                   rhs-indexes (dtype/make-list operation-space)
                   rhs-missing (dtype/make-list operation-space)
-                  lhs-found (HashSet.)]
+                  lhs-found (HashSet.)
+                  ;;Sub-buffer here gives us a chance to avoid missing index checks.
+                  rhs-col (dtype/->buffer (dtype/sub-buffer rhs-col outer-idx n-indexes))]
               (dotimes [inner-idx n-indexes]
                 (let [idx (+ outer-idx inner-idx)
-                      rhs-val (.readObject rhs-col idx)]
+                      ;;Note the reading is done in object space.  This means missing values will be nil
+                      ;;in all cases.
+                      rhs-val (.readObject rhs-col inner-idx)]
                   (if-let [^IMutList item (.get idx-groups rhs-val)]
                     (do
                       (when lhs-missing? (.add lhs-found rhs-val))
@@ -235,14 +242,13 @@
                :lhs-found lhs-found}))
           (partial reduce (fn [accum nextmap]
                             (->> accum
-                                 (map (fn [[k v]]
-                                        (if (= k :lhs-found)
-                                          (.addAll ^HashSet v
-                                                   ^HashSet (nextmap k))
-                                          (.addAll ^List v
-                                                   ^List (nextmap k)))
-                                        [k v]))
-                                 (into {})))))
+                                 (into {} (map (fn [[k v]]
+                                                 (if (= k :lhs-found)
+                                                   (.addAll ^HashSet v
+                                                            ^HashSet (nextmap k))
+                                                   (.addAll ^List v
+                                                            ^List (nextmap k)))
+                                                 [k v])))))))
          lhs-missing (when lhs-missing?
                        (reduce (fn [lhs-missing lhs-missing-key]
                                  (.addAll ^List lhs-missing
