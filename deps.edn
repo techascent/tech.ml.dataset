@@ -137,6 +137,9 @@
     }
    :extra-paths ["test"]}
 
+  :jdk-8 {}
+  :jdk-11
+  {:jvm-opts ["--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"]}
   :jdk-17
   {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
               "--enable-native-access=ALL-UNNAMED"
