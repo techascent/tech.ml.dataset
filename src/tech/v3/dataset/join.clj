@@ -13,13 +13,15 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.utils :as ds-utils]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.function :as hamf-fn]
             [clj-commons.primitive-math :as pmath]
             [clojure.set :as set])
   (:import [tech.v3.datatype ObjectReader Buffer
             BinaryPredicate BinaryOperator
             BinaryOperators$DoubleBinaryOperator]
            [ham_fisted IMutList]
-           [java.util List HashSet Map]))
+           [java.util List HashSet Map Set]))
 
 
 (set! *warn-on-reflection* true)
@@ -212,51 +214,51 @@
                          (dtype/elemwise-cast lhs-col op-dtype))
         rhs-col (dtype/elemwise-cast rhs-col op-dtype)
         n-elems (dtype/ecount rhs-col)
+
         {lhs-indexes :lhs-indexes
          rhs-indexes :rhs-indexes
          rhs-missing :rhs-missing
          lhs-found :lhs-found}
-        (parallel-for/indexed-map-reduce
-          n-elems
-          (fn [^long outer-idx ^long n-indexes]
-            (let [lhs-indexes (dtype/make-list operation-space)
-                  rhs-indexes (dtype/make-list operation-space)
-                  rhs-missing (dtype/make-list operation-space)
-                  lhs-found (HashSet.)
-                  ;;Sub-buffer here gives us a chance to avoid missing index checks.
-                  rhs-col (dtype/->buffer (dtype/sub-buffer rhs-col outer-idx n-indexes))]
-              (dotimes [inner-idx n-indexes]
-                (let [idx (+ outer-idx inner-idx)
-                      ;;Note the reading is done in object space.  This means missing values will be nil
-                      ;;in all cases.
-                      rhs-val (.readObject rhs-col inner-idx)]
-                  (if-let [^IMutList item (.get idx-groups rhs-val)]
-                    (do
-                      (when lhs-missing? (.add lhs-found rhs-val))
-                      (dotimes [_n-iters (.size item)] (.add rhs-indexes idx))
-                      (.addAll lhs-indexes item))
-                    (when rhs-missing? (.add rhs-missing idx)))))
-              {:lhs-indexes lhs-indexes
-               :rhs-indexes rhs-indexes
-               :rhs-missing rhs-missing
-               :lhs-found lhs-found}))
-          (partial reduce (fn [accum nextmap]
-                            (->> accum
-                                 (into {} (map (fn [[k v]]
-                                                 (if (= k :lhs-found)
-                                                   (.addAll ^HashSet v
-                                                            ^HashSet (nextmap k))
-                                                   (.addAll ^List v
-                                                            ^List (nextmap k)))
-                                                 [k v])))))))
-         lhs-missing (when lhs-missing?
-                       (reduce (fn [lhs-missing lhs-missing-key]
-                                 (.addAll ^List lhs-missing
-                                          ^List (get idx-groups lhs-missing-key))
-                                 lhs-missing)
-                               (dtype/make-list operation-space)
-                               (->> (keys idx-groups)
-                                    (remove #(.contains ^HashSet lhs-found %)))))]
+        ;;Directly from talks - parallelize building the maps then apply optimized
+        ;;union operations.
+        (->> (hamf/pgroups
+              n-elems
+              (fn [^long outer-idx ^long n-indexes]
+                (let [lhs-indexes (dtype/make-list operation-space)
+                      rhs-indexes (dtype/make-list operation-space)
+                      rhs-missing (dtype/make-list operation-space)
+                      lhs-found (hamf/mut-set)
+                      ;;Sub-buffer here gives us a chance to avoid missing index checks.
+                      rhs-col (dtype/->buffer (dtype/sub-buffer rhs-col outer-idx n-indexes))]
+                  (dotimes [inner-idx n-indexes]
+                    (let [idx (+ outer-idx inner-idx)
+                          ;;Note the reading is done in object space.  This means missing values will be nil
+                          ;;in all cases.
+                          rhs-val (.readObject rhs-col inner-idx)]
+                      (if-let [^IMutList item (.get idx-groups rhs-val)]
+                        (do
+                          (when lhs-missing? (.add lhs-found rhs-val))
+                          (when-not (.isEmpty item) (.addAllReducible rhs-indexes (hamf/repeat (.size item) idx)))
+                          (.addAll lhs-indexes item))
+                        (when rhs-missing? (.add rhs-missing idx)))))
+                  (hamf/hash-map :lhs-indexes lhs-indexes
+                                 :rhs-indexes rhs-indexes
+                                 :rhs-missing rhs-missing
+                                 :lhs-found lhs-found))))
+             (hamf/union-reduce-maps (hamf-fn/bi-function
+                                      lhs rhs
+                                      (if (instance? Set lhs)
+                                        (hamf/union lhs rhs)
+                                        (do (.addAll ^List lhs rhs) lhs)))))
+
+        ;;idx-groups is a hamf linked hashmap with highly optimized reduce-kv implementation
+        lhs-missing (when lhs-missing?
+                      (reduce-kv (fn [lhs-missing k v]
+                                   (when-not (.contains ^Set lhs-found k)
+                                     (.addAll ^List lhs-missing v))
+                                   lhs-missing)
+                                 (dtype/make-list operation-space)
+                                 idx-groups))]
     {:lhs-indexes lhs-indexes
      :rhs-indexes rhs-indexes
      :lhs-missing lhs-missing
