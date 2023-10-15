@@ -1,4 +1,7 @@
 # Changelog
+# 7.013
+ * Fixes join regression.  Join algorithm refactored to use hamf primitives.
+
 # 7.012
  * hamf-2.0 upgrade.
  * Fix for [issue-377](https://github.com/techascent/tech.ml.dataset/issues/377).
