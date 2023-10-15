@@ -6,7 +6,7 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [clojure.test :refer [deftest is]])
+            [clojure.test :refer [deftest is testing]])
   (:import [java.time LocalDate]))
 
 
@@ -281,7 +281,28 @@
                          {:name "c" :a 1.0 :b 2.0}])
         b (ds/->dataset [{:name "a" :c 1.0}
                          {:name "b" :c 1.0}])]
+    (is (= [1.0 1.0 nil]
+           (vec ((ds-join/left-join :name a b) :c))))
+    (is (= ["a" "b" nil]
+           (vec ((ds-join/left-join :name a b) :right.name))))
+    (is (= [2.0 2.0 2.0]
+           (vec ((ds-join/left-join :name a b) :b))))
+    (is (= [1.0 1.0 1.0]
+           (vec ((ds-join/left-join :name a b) :a))))
+    (is (= ["a" "b" "c"]
+           (vec ((ds-join/left-join :name a b) :name))))
     (ds-join/left-join :name a b)))
+
+(deftest eraderna-left-join
+  (testing "Changing the type of int shouldn't break the join"
+    (let [a (-> (ds/->dataset [{:y 2022}]))
+          a' (-> a
+                 (ds/column-cast :y :int16))
+          b (ds/->dataset [{:y 2022 :s "2022"}
+                           {:y 2023 :s "2023"}])]
+      (is (=
+           ((ds-join/left-join :y a b) :s)
+           ((ds-join/left-join :y a' b) :s))))))
 
 
 (deftest cross-join
