@@ -6,7 +6,7 @@
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype.datetime :as dtype-dt]
-            [clojure.test :refer [deftest is]])
+            [clojure.test :refer [deftest is testing]])
   (:import [java.time LocalDate]))
 
 
