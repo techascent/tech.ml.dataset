@@ -290,7 +290,19 @@
     (is (= [1.0 1.0 1.0]
            (vec ((ds-join/left-join :name a b) :a))))
     (is (= ["a" "b" "c"]
-           (vec ((ds-join/left-join :name a b) :name))))))
+           (vec ((ds-join/left-join :name a b) :name))))
+    (ds-join/left-join :name a b)))
+
+(deftest eraderna-left-join
+  (testing "Changing the type of int shouldn't break the join"
+    (let [a (-> (ds/->dataset [{:y 2022}]))
+          a' (-> a
+                 (ds/column-cast :y :int16))
+          b (ds/->dataset [{:y 2022 :s "2022"}
+                           {:y 2023 :s "2023"}])]
+      (is (=
+           ((ds-join/left-join :y a b) :s)
+           ((ds-join/left-join :y a' b) :s))))))
 
 
 (deftest cross-join
