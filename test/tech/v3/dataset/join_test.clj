@@ -361,6 +361,20 @@
     (is (= [6 nil] (vec (j :right.b))))))
 
 
+(deftest short-types
+  (let [lds (ds/->dataset [{:i "foo" :y (short 2022)}])
+        rds (ds/->dataset [{:i "foo" :y 2022 :s "2022"}
+                           {:i "foo" :y 2023 :s "2023"}])
+        jds (ds-join/pd-merge lds rds {:on [:i :y]})]
+    (is (= {:i "foo" :y 2022 :s "2022"}
+           (ds/row-at jds 0))))
+  (is (= 1 (ds/row-count
+            (ds-join/left-join :z
+                               (ds/->dataset [{:z ["foo" (short 2022)]}])
+                               (ds/->dataset [{:z ["foo" (long 2022)] :s "2022"}
+                                              {:z ["foo" (long 2023)] :s "2023"}]))))))
+
+
 (comment
 
   (def lhs-fields
