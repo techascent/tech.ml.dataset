@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 DATA_DIR=test/data/ames-house-prices
 
