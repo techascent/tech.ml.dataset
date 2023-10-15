@@ -281,7 +281,16 @@
                          {:name "c" :a 1.0 :b 2.0}])
         b (ds/->dataset [{:name "a" :c 1.0}
                          {:name "b" :c 1.0}])]
-    (ds-join/left-join :name a b)))
+    (is (= [1.0 1.0 nil]
+           (vec ((ds-join/left-join :name a b) :c))))
+    (is (= ["a" "b" nil]
+           (vec ((ds-join/left-join :name a b) :right.name))))
+    (is (= [2.0 2.0 2.0]
+           (vec ((ds-join/left-join :name a b) :b))))
+    (is (= [1.0 1.0 1.0]
+           (vec ((ds-join/left-join :name a b) :a))))
+    (is (= ["a" "b" "c"]
+           (vec ((ds-join/left-join :name a b) :name))))))
 
 
 (deftest cross-join
