@@ -375,6 +375,14 @@
                                               {:z ["foo" (long 2023)] :s "2023"}]))))))
 
 
+(deftest issue-381
+  (let [make-row (fn [] {:row 1})
+        left (ds/->dataset (repeatedly 10000 make-row))
+        right (ds/->dataset (repeatedly 1000 make-row))
+        jds (ds-join/left-join :row left right)]
+    (is (= (* 10000 1000) (ds/row-count jds)))))
+
+
 (comment
 
   (def lhs-fields

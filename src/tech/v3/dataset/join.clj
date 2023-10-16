@@ -223,15 +223,16 @@
         ;;union operations.
         (->> (hamf/pgroups
               n-elems
-              (fn [^long outer-idx ^long n-indexes]
+              (fn [^long sidx ^long eidx]
                 (let [lhs-indexes (dtype/make-list operation-space)
                       rhs-indexes (dtype/make-list operation-space)
                       rhs-missing (dtype/make-list operation-space)
                       lhs-found (hamf/mut-set)
+                      ne (- eidx sidx)
                       ;;Sub-buffer here gives us a chance to avoid missing index checks.
-                      rhs-col (dtype/->buffer (dtype/sub-buffer rhs-col outer-idx n-indexes))]
-                  (dotimes [inner-idx n-indexes]
-                    (let [idx (+ outer-idx inner-idx)
+                      rhs-col (dtype/->buffer (dtype/sub-buffer rhs-col sidx ne))]
+                  (dotimes [inner-idx ne]
+                    (let [idx (+ sidx inner-idx)
                           ;;Note the reading is done in object space.  This means missing values will be nil
                           ;;in all cases.
                           rhs-val (.readObject rhs-col inner-idx)]
