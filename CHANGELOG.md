@@ -1,4 +1,7 @@
 # Changelog
+# 7.015
+ * hamf fix for compose-reducers.
+
 # 7.013
  * Fixes join regression.  Join algorithm refactored to use hamf primitives.
 
