@@ -1,4 +1,7 @@
 # Changelog
+# 7.016
+ * hamf perf upgrades.
+
 # 7.015
  * hamf fix for compose-reducers.
 
