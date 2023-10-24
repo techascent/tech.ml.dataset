@@ -144,7 +144,7 @@ user> (ds-reduce/group-by-column-agg
   (if (instance? DoublesUnion v)
     v
     (doto (.. (DoublesUnion/builder) build)
-      (.update ^UpdateDoublesSketch v))))
+      (.union ^UpdateDoublesSketch v))))
 
 
 (defn- ->doubles-sketch
@@ -167,7 +167,7 @@ user> (ds-reduce/group-by-column-agg
              acc v (.update ^UpdateDoublesSketch acc v) acc)
         merge-fn (fn [lhs rhs]
                    (let [lhs (->doubles-union lhs)]
-                     (.update lhs (->doubles-sketch rhs))
+                     (.union lhs (->doubles-sketch rhs))
                      lhs))]
     (reify
       hamf-proto/Reducer
