@@ -329,7 +329,7 @@
   ([colname lhs rhs]
    (right-join colname lhs rhs {}))
   ([colname lhs rhs options]
-   (-> (hash-join colname lhs rhs (assoc options :rhs-missing? options))
+   (-> (hash-join colname lhs rhs (assoc options :rhs-missing? true))
        :right-outer)))
 
 
@@ -343,7 +343,7 @@
   ([colname lhs rhs]
    (left-join colname lhs rhs {}))
   ([colname lhs rhs options]
-   (-> (hash-join colname lhs rhs (assoc options :lhs-missing? options))
+   (-> (hash-join colname lhs rhs (assoc options :lhs-missing? true))
        :left-outer)))
 
 
