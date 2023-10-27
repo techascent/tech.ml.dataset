@@ -1,4 +1,7 @@
 # Changelog
+# 7.018
+ * hamf perf upgrades.
+
 # 7.017
  * hamf perf upgrades.
  * Fix for [critical CVE-2021-40531](https://nvd.nist.gov/vuln/detail/CVE-2021-40531).
