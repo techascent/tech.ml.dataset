@@ -1,4 +1,11 @@
 # Changelog
+# 7.020
+ * hamf perf upgrades.
+ * big perf upgrade for parsing sequences of maps.
+
+ # 7.019
+ * hamf perf upgrades.
+
 # 7.018
  * hamf perf upgrades.
 

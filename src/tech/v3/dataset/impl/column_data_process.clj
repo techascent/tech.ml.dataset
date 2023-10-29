@@ -114,11 +114,11 @@
          #:tech.v3.dataset{:force-datatype? true})))
     (ds-proto/is-column? obj-data)
     (let [cm (meta obj-data)]
-      #:tech.v3.datatype{:name (:name cm)
-                         :missing (ds-proto/missing obj-data)
-                         :force-datatype? true
-                         :data (ds-proto/column-buffer obj-data)
-                         :metadata cm})
+      #:tech.v3.dataset{:name (:name cm)
+                        :missing (ds-proto/missing obj-data)
+                        :force-datatype? true
+                        :data (ds-proto/column-buffer obj-data)
+                        :metadata cm})
     :else
     (scan-data obj-data nil)))
 

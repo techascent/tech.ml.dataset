@@ -478,6 +478,7 @@
                                   ^{:unsynchronized-mutable true} missing-value
                                   ^RoaringBitmap missing
                                   column-name
+                                  ^:unsynchronized-mutable ^long last-idx
                                   ^:unsynchronized-mutable ^long max-idx
                                   options]
   dtype-proto/PECount
@@ -492,44 +493,42 @@
         (.get container idx))))
   PParser
   (addValue [_p idx value]
-    (set! max-idx (max idx max-idx))
+    (set! max-idx idx)
     (when-not (missing-value? value)
-      (let [org-datatype (dtype/datatype value)
-            ;;Avoid the pack call if possible
-            packed-dtype (if (identical? container-dtype org-datatype)
-                           org-datatype
-                           (packing/pack-datatype org-datatype))
-            container-ecount (- (.size container) (.getCardinality missing))]
-        (if (or (== 0 container-ecount)
-                (identical? container-dtype packed-dtype))
-          (do
-            (when (== 0 container-ecount)
-              (set! container (column-base/make-container packed-dtype options))
-              (set! container-dtype packed-dtype)
-              (set! missing-value (column-base/datatype->missing-value packed-dtype)))
-            (when-not (== container-ecount idx)
-              (add-missing-values! container missing missing-value idx))
-            (.add container value))
-          ;;boolean present a problem here.  We generally want to keep them as booleans
-          ;;and not promote them to full numbers.
-          (let [widest-datatype (if (identical? org-datatype :boolean)
-                                  (if (identical? container-dtype :boolean)
-                                    :boolean
-                                    :object)
-                                  (casting/widest-datatype
-                                   (packing/unpack-datatype container-dtype)
-                                   org-datatype))]
-            (when-not (= widest-datatype container-dtype)
-              (let [new-container (promote-container container
-                                                     missing widest-datatype
-                                                     options)]
-                (set! container new-container)
-                (set! container-dtype widest-datatype)
-                (set! missing-value (column-base/datatype->missing-value
-                                     widest-datatype))))
-            (when-not (== container-ecount idx)
-              (add-missing-values! container missing missing-value idx))
-            (.add container value))))))
+      (let [val-dtype (fast-dtype value)]
+        ;;setup container for new data
+        (when-not (identical? container-dtype val-dtype)
+          (let [;;Avoid the pack call if possible
+                packed-dtype (packing/pack-datatype val-dtype)
+                container-ecount (.size container)
+                logical-ecount (- container-ecount (.getCardinality missing))]
+            ;;Setup container
+            (if (== 0 logical-ecount)
+              (do
+                (set! container (column-base/make-container packed-dtype options))
+                (set! container-dtype val-dtype)
+                (set! missing-value (column-base/datatype->missing-value packed-dtype)))
+              ;;boolean present a problem here.  We generally want to keep them as booleans
+              ;;and not promote them to full numbers.
+              (let [widest-datatype (if (identical? val-dtype :boolean)
+                                      (if (identical? container-dtype :boolean)
+                                        :boolean
+                                        :object)
+                                      (casting/widest-datatype
+                                       (packing/unpack-datatype container-dtype)
+                                       val-dtype))]
+                (when-not (= widest-datatype container-dtype)
+                  (let [new-container (promote-container container
+                                                         missing widest-datatype
+                                                         options)]
+                    (set! container new-container)
+                    (set! container-dtype widest-datatype)
+                    (set! missing-value (column-base/datatype->missing-value
+                                         widest-datatype))))))))
+        (when (> (- idx last-idx) 1)
+          (add-missing-values! container missing missing-value idx))
+        (set! last-idx idx)
+        (.add container value))))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil
                            missing-value rowcount)))
@@ -542,5 +541,6 @@
                             false
                             (bitmap/->bitmap)
                             column-name
+                            -1
                             -1
                             options))

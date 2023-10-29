@@ -62,7 +62,7 @@
   (add [this value]
     (errors/when-not-errorf
      (or (nil? value) (instance? String value))
-     "Value added to string table is not a string: %s" value)
+     "Value added to string table is not a string: %s" (type value))
     (let [value (or value "")
           item-idx (int (.computeIfAbsent
                          str->int
