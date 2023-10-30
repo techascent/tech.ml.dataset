@@ -1,4 +1,8 @@
 # Changelog
+# 7.021
+ * hamf typed-nth operations (dnth, fnth, etc) that are efficient
+   when input is the analogous primitive array.
+
 # 7.020
  * hamf perf upgrades.
  * big perf upgrade for parsing sequences of maps.
