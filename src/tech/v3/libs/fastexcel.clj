@@ -107,6 +107,8 @@
   (reify
     Spreadsheet$Sheet
     (name [this] (.getName sheet))
+    (id [this] (.getId sheet))
+    (stableId [this] (.getStableId sheet))
     (iterator [this]
       (let [iter (.iterator (.openStream sheet))]
         (reify java.util.Iterator
