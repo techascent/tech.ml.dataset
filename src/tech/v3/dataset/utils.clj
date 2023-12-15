@@ -65,3 +65,9 @@
     (if item-name "true" "false")
     :else
     (str item-name)))
+
+
+(defn rand-str
+  "Generates a random string of length `n` composed of alphanumeric characters."
+  [n]
+  (apply str (repeatedly n #(rand-nth "abcdefghijklmnopqrstuvwxyz0123456789"))))

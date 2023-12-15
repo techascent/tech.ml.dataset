@@ -4,13 +4,14 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is testing]]))
 
 
 (def xls-file "test/data/file_example_XLS_1000.xls")
 (def xlsx-file "test/data/file_example_XLSX_1000.xlsx")
 (def sparse-file "test/data/sparsefile.xlsx")
 (def stocks-file "test/data/stocks.xlsx")
+(def duplicate-headers-file "test/data/duplicate-headers.xls")
 
 
 (deftest happy-path-parse-test
@@ -88,3 +89,14 @@
            (->> (vals ds)
                 (map (comp :datatype meta))
                 set)))))
+
+
+(deftest ensure-unique-headers-test
+  (testing "that all headers are are forced to be unique"
+           (let [ds (first (xlsx-parse/workbook->datasets duplicate-headers-file
+                                                          {:ensure-unique-headers? true}))]
+             (is (ds/column-count ds) 7)
+             (is (count (set (ds/column-names ds))) 7)))
+
+  (testing "that exception is thrown on duplicate headers"
+           (is (thrown? RuntimeException (xlsx-parse/workbook->datasets duplicate-headers-file)))))
