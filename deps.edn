@@ -68,7 +68,7 @@
     org.apache.poi/poi-ooxml {:mvn/version "5.2.3"
                               :exclusions [commons-codec/commons-codec]}
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
-    org.dhatim/fastexcel-reader {:mvn/version "0.16.0"
+    org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
     com.github.haifengl/smile-core {:mvn/version "2.6.0"
                                     :exclusions [org.slf4j/slf4j-api]}
@@ -107,7 +107,7 @@
     org.apache.poi/poi-ooxml {:mvn/version "5.2.3"
                               :exclusions [commons-codec/commons-codec]}
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
-    org.dhatim/fastexcel-reader {:mvn/version "0.12.8"
+    org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
     com.github.haifengl/smile-core {:mvn/version "2.6.0"
                                     :exclusions [org.slf4j/slf4j-api]}
