@@ -1,4 +1,5 @@
 (ns ^:no-doc tech.v3.dataset.utils
+  (:require [clojure.string :as str])
   (:import [java.util Iterator]))
 
 
@@ -71,3 +72,14 @@
   "Generates a random string of length `n` composed of alphanumeric characters."
   [n]
   (apply str (repeatedly n #(rand-nth "abcdefghijklmnopqrstuvwxyz0123456789"))))
+
+(defn remove-zero-width-spaces
+  "Remove zero-width non-breaking spaces (ZWNBSP) from a string.
+  These non-breaking spaces often occur in the beginning of CSV-files."
+  [s]
+  (str/replace s #"\uFEFF" ""))
+
+(defn rand-str-column-name-postfix
+  "Generates a random string postfix for a column name."
+  [col-idx colname]
+  (str (column-safe-name colname) "_" (rand-str 5)))

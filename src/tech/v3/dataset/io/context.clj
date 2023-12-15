@@ -1,6 +1,8 @@
 (ns tech.v3.dataset.io.context
-  (:require [tech.v3.dataset.io.column-parsers :as column-parsers]
+  (:require [clojure.string :as str]
+            [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.protocols :as ds-proto]
+            [tech.v3.dataset.utils :as utils]
             [tech.v3.datatype :as dtype]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column :as col-impl]
@@ -77,7 +79,10 @@
   returns:
   {:parsers - parsers
    :col-idx->parser - given a column idx, get a parser.  Mutates parsers."
-  [options parse-type col-idx->colname]
+  [{:keys [ensure-unique-column-names? unique-column-name-fn]
+    :or {unique-column-name-fn utils/rand-str-column-name-postfix}
+    :as options}
+   parse-type col-idx->colname]
   (let [parse-context (options->parser-fn options parse-type)
         parsers (ObjectArrayList. (object-array 16) 16)
         key-fn (:key-fn options identity)
@@ -87,6 +92,10 @@
                                  (let [colname (col-idx->colname col-idx)
                                        colname (if (empty? colname)
                                                  (make-colname col-idx)
+                                                 (utils/remove-zero-width-spaces colname))
+                                       colname (if (and ensure-unique-column-names?
+                                                        (get colname->idx colname))
+                                                 (unique-column-name-fn col-idx colname)
                                                  colname)]
                                    (when (.containsKey colname->idx colname)
                                      (let [prev-idx (.get colname->idx colname)]

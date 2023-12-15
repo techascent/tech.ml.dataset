@@ -4,33 +4,16 @@
   are captured here."
   (:require [tech.v3.dataset.io.context :as parse-context]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
-            [tech.v3.datatype :as dtype]
-            [tech.v3.dataset.utils :as utils])
+            [tech.v3.datatype :as dtype])
   (:import [tech.v3.dataset Spreadsheet$Sheet Spreadsheet$Row Spreadsheet$Cell]))
 
 
 (set! *warn-on-reflection* true)
 
-(defn- maybe-ensure-unique-headers
-  "Ensures uniqueness of headers in the given collection.
-  If 'ensure-unique-headers?' is true, it modifies duplicate headers
-  by appending a random string to them."
-  [ensure-unique-headers? headers]
-  (if ensure-unique-headers?
-    (:headers (reduce (fn [{:keys [seen?] :as acc} [column-number header]]
-                        (let [header-value (if (seen? header)
-                                             (str (utils/column-safe-name header) "_" (utils/rand-str 5))
-                                             header)]
-                          (-> acc
-                              (update :seen? conj header)
-                              (update :headers conj [column-number header-value]))))
-                      {:seen? #{}}
-                      headers))
-    headers))
 
 (defn sheet->dataset
   [^Spreadsheet$Sheet sheet
-   {:keys [ensure-unique-headers? header-row? n-initial-skip-rows]
+   {:keys [header-row? n-initial-skip-rows]
     :or {header-row? true}
     :as options}]
   (let [ds-name (or (:dataset-name options)
@@ -51,7 +34,6 @@
                 (map (fn [^Spreadsheet$Cell cell]
                        (let [column-number (.getColumnNum cell)]
                          [column-number (.value cell)])))
-                (maybe-ensure-unique-headers ensure-unique-headers?)
                 (into {}))
             (rest rows)]
           [{} rows])

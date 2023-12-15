@@ -145,11 +145,7 @@
   * `:header-row?`
   * `:num-rows`
   * `:n-initial-skip-rows`
-  * `:parser-fn`
-
-  Additonal Excel parsing-specific options:
-
-  * `:ensure-unique-headers?` - Ensure unique header values by appending a postfix to non-unique values."
+  * `:parser-fn`"
   ([input options]
    (let [workbook (input->workbook input options)]
      (try
