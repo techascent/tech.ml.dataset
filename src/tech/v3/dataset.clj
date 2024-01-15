@@ -85,11 +85,6 @@
     added as a last resort to ensure the file is cleaned up.
   - `:n-initial-skip-rows` - Skip N rows initially.  This currently may include the
      header row.  Works across both csv and spreadsheet datasets.
-  - `:ensure-unique-column-names?` - Ensure column names are unique by applying the
-     specified `:unique-column-name-fn`
-  - `:unique-column-name-fn` - Function that takes `col-idx` and `colname` as input.
-     It should return an unique column name.
-     Default is `tech.v3.dataset.utils/rand-str-column-name-postfix`
   - `:parser-type` - Default parser to use if no parser-fn is specified for that column.
      For csv files, the default parser type is `:string` which indicates a promotional
      string parser.  For sequences of maps, the default parser type is :object.  It can
