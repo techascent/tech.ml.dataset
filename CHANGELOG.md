@@ -1,4 +1,7 @@
 # Changelog
+# 7.022
+ * Issue with pd-merge where exception is thrown if all columns are used for join.
+ 
 # 7.021
  * hamf typed-nth operations (dnth, fnth, etc) that are efficient
    when input is the analogous primitive array.

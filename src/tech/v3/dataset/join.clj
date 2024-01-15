@@ -514,9 +514,9 @@ outer-join [8 4]:
            :inner
            (let [lhs-cols (-> (ds-base/select-rows left-ds lhs-indexes)
                               (ds-base/columns))
-                 rhs-cols (-> (ds-base/remove-columns right-ds on-int)
-                              (ds-base/select-rows rhs-indexes)
-                              (ds-base/columns))]
+                 rhs-cols (->> (-> (ds-base/remove-columns right-ds on-int)
+                                   (ds-base/columns))
+                               (mapv #(ds-base/select-rows % rhs-indexes)))]
              (-> (ds-impl/new-dataset
                   "inner-join"
                   (nice-column-names

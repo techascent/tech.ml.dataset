@@ -383,76 +383,11 @@
     (is (= (* 10000 1000) (ds/row-count jds)))))
 
 
-(comment
+(deftest pd-merge-error
+  (let [ds1 (ds/->dataset {:customer ["A" "A" "A"]                           
+                           :product ["A" "B" "C"]})
+        ds2 (ds/->dataset {:product ["B" "C"]})
+        mm (ds-join/pd-merge ds1 ds2 {:on :product :how :inner})]
+    (is (= #{:product :customer}
+           (set (ds/column-names mm))))))
 
-  (def lhs-fields
-    [:size :day :operatorid :notes :more-notes :even-more-notes :how-can-there-be-more])
-
-  (defn customers []
-    (for [i (range 100000)]
-      (let [city   (str (rand-int 10))]
-        {:address    (str "Address" i)
-         :gender     (rand-nth ["m" "f" "n"])
-         :address-id i
-         :country-code "99"
-         :first-name (str "customer_" i "first")
-         :last-name  (str "customer_" i "last")
-         :city       city
-         :zip-code   (clojure.string/join (repeat 5 city))
-         :email      (str "customer_" i "@the-net")
-         :huge-field (str "this is a huge field containing a lot of dumb info for
-       bloat which will make the file so much larger for our poor machine how
-       unkind of us to do so in this day and age" i)})))
-
-  (def rhs-fields
-    [:operatorid
-     :address
-     :gender
-     :address-id
-     :country-code
-     :first-name
-     :last-name
-     :city
-     :zip-code
-     :email])
-
-  (defn random-lhs []
-    (for [i (range 200000)]
-      {:size           (rand-nth ["s" "m" "l"])
-       :day            (str (rand-int 100000))
-       :operatorid    (str "op" (rand-int 10000) "op")
-       :notes          "THis is some bloated information we'll add in"
-       :more-notes     "to make the table larger"
-       :even-more-notes "Also this will make things big as well"
-       :how-can-there-be-more "Yet another text field will add overhead jabroni"}))
-
-  (defn random-rhs []
-    (let [cs  (vec (customers))]
-      (for [i (range 500000)]
-        (let [c (rand-nth cs)]
-          (assoc c :operatorid (str "op" (rand-int 10000) "op"))))))
-
-  (with-open [w (clojure.java.io/writer "lhs.csv")]
-    (.write w (str (clojure.string/join "," (map name lhs-fields)) "\n"))
-    (run! (comp #(.write w (str % "\n"))
-                (partial clojure.string/join ",")
-                (apply juxt lhs-fields)) (random-lhs)))
-
-  (with-open [w (clojure.java.io/writer "rhs.csv")]
-    (.write w (str (clojure.string/join "," (map name rhs-fields)) "\n"))
-    (run! (comp #(.write w (str % "\n"))
-                (partial clojure.string/join ",")
-                (apply juxt rhs-fields)) (random-rhs)))
-
-
-  (def lhs (ds/->dataset "lhs.csv"))
-  (def rhs (ds/->dataset "rhs.csv"))
-
-  (defn run-join-test
-    [op-space]
-    (ds-join/hash-join "operatorid" lhs rhs {:operation-space op-space})
-    :ok)
-
-  (run-join-test :int32)
-  (run-join-test :int64)
-  )
