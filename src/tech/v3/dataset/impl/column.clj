@@ -195,7 +195,7 @@
        (cond
          (nil? selection) (hamf/range 0)
          ;;Cannot possibly be negative
-         (= (dtype/elemwise-datatype selection) :boolean)
+         (and (sequential? selection) (boolean? (first selection)))
          (un-pred/bool-reader->indexes (dtype/ensure-reader selection))
          (set/bitset? selection)
          (set/->integer-random-access selection)
