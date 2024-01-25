@@ -1,4 +1,7 @@
 # Changelog
+# 7.023
+ * [Issue 387](https://github.com/techascent/tech.ml.dataset/issues/387) - select now respects persistent vectors of booleans.
+ 
 # 7.022
  * Issue with pd-merge where exception is thrown if all columns are used for join.
  * Allow system to load duplicate headers - [PR 386](https://github.com/techascent/tech.ml.dataset/pull/386) - thanks ezrand.
