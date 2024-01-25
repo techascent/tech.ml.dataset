@@ -1722,6 +1722,16 @@
 
     (is (= 3 (count (get data (int 0)))))))
 
+(deftest select-bool-issue-387
+  (let [ds (ds/->dataset {:a (range 10)})
+        vec-of-bools [true false true false true false true false true false]
+        expected [0 2 4 6 8]]
+    (is (= expected
+           (-> (ds/select ds :all (dtype/make-list :boolean vec-of-bools))
+               :a)))
+    (is (= expected
+           (-> (ds/select ds :all vec-of-bools)
+               :a)))))
 
 (comment
   (require '[criterium.core :as crit])
