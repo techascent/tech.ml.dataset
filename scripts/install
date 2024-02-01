@@ -2,7 +2,8 @@
 
 set -e
 
-
+scripts/compile
+clojure -X:dev-mac-m1:codegen
 # scripts/run-tests
 clojure -T:build jar
 cp target/classes/META-INF/maven/techascent/tech.ml.dataset/pom.xml .
