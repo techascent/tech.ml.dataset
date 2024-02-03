@@ -10,7 +10,6 @@
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
-            [tech.v3.tensor :as dtt]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
             [ham-fisted.lazy-noncaching :as lznc]

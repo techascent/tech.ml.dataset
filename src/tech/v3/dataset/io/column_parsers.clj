@@ -8,7 +8,6 @@
             [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.argops :as argops]
-            [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.protocols :as dtype-proto]
             [ham-fisted.api :as hamf])
   (:import [java.util UUID List]
@@ -254,6 +253,8 @@
                    unpacked-datatype formatter)]
     [(make-safe-parser datetime (parser-fn v)) false]))
 
+(def ^:private datetime-datatype? (requiring-resolve 'tech.v3.datatype.datetime/datetime-datatype?))
+
 
 (defn parser-entry->parser-tuple
   [parser-kwd]
@@ -268,11 +269,11 @@
            [(find-fixed-parser parser-datatype) true]
            (instance? IFn parser-fn)
            [parser-fn true]
-           (and (dtype-dt/datetime-datatype? parser-datatype)
+           (and (datetime-datatype? parser-datatype)
                 (string? parser-fn))
            (datetime-formatter-parser-fn parser-datatype
                                          (DateTimeFormatter/ofPattern parser-fn))
-           (and (dtype-dt/datetime-datatype? parser-datatype)
+           (and (datetime-datatype? parser-datatype)
                 (instance? DateTimeFormatter parser-fn))
            (datetime-formatter-parser-fn parser-datatype parser-fn)
            (= :text parser-datatype)

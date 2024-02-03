@@ -1,7 +1,7 @@
 (ns tech.v3.dataset.io.datetime
   "Helpful and well tested string->datetime pathways."
   (:require [clojure.string :as s]
-            [tech.v3.datatype.datetime :as dtype-dt])
+            [tech.v3.datatype.datetime.constants :as dtype-dt])
   (:import [java.time LocalDate LocalDateTime LocalTime
             ZonedDateTime OffsetDateTime Instant Duration]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]))

@@ -1,6 +1,5 @@
 (ns tech.v3.dataset.string-table
-  (:require [tech.v3.datatype :as dtype]
-            [tech.v3.datatype.protocols :as dtype-proto]
+  (:require [tech.v3.datatype.protocols :as dtype-proto]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.dataset.dynamic-int-list :as int-list]
             [tech.v3.parallel.for :as parallel-for]
@@ -32,7 +31,7 @@
   (clone [this]
     ;;We do not need to dedup any more; a java array is a more efficient
     ;;storage mechanism
-    (dtype/make-container :jvm-heap :string this))
+    (dtype-proto/make-container :jvm-heap :string nil this))
   PStrTable
   (get-str-table [_this] {:int->str int->str
                          :str->int str->int})
