@@ -226,32 +226,33 @@
   "Given a dataset that has columns in which the column names describe labels and the
   rows describe a probability distribution, create a label column by taking the max
   value in each row and assign column that row value."
-  [prob-ds dst-colname]
-  (let [^List cnames (vec (ds-base/column-names prob-ds))
-        idx-col (->> (ds-readers/value-reader prob-ds)
-                     (dtype/emap
-                      (fn [valvec]
-                        (let [rdr (dtype/->reader valvec :float64)]
-                          ;;scan for missing and throw
-                          (dotimes [idx (.lsize rdr)]
-                            (errors/when-not-errorf
-                             (Double/isFinite (.readDouble rdr idx))
-                             "Nan/infinite values not allowed in probability distributions"))
-                          (argops/argmax rdr)))
-                      :float64)
-                     (dtype/clone))
-        cat-map (categorical/create-categorical-map
-                 (->> (map-indexed vector cnames)
-                      (into {})
-                      (set/map-invert))
+  ([prob-ds dst-colname label-column-datatype]
+   (let [^List cnames (vec (ds-base/column-names prob-ds))
+         idx-col (->> (ds-readers/value-reader prob-ds)
+                      (dtype/emap
+                       (fn [valvec]
+                         (let [rdr (dtype/->reader valvec :float64)]
+                           ;;scan for missing and throw
+                           (dotimes [idx (.lsize rdr)]
+                             (errors/when-not-errorf
+                              (Double/isFinite (.readDouble rdr idx))
+                              "Nan/infinite values not allowed in probability distributions"))
+                           (argops/argmax rdr)))
+                       label-column-datatype)
+                      (dtype/clone))
+         cat-map (categorical/create-categorical-map
+                  (->> (map-indexed vector cnames)
+                       (into {})
+                       (set/map-invert))
+                  dst-colname
+                  label-column-datatype)
+         retval
+         (assoc prob-ds dst-colname
+                (ds-col/new-column
                  dst-colname
-                 :float64)
-        retval
-        (assoc prob-ds dst-colname
-               (ds-col/new-column
-                dst-colname
-                idx-col
-                {:categorical? true
-                 :categorical-map cat-map}
-                (ds-base/missing prob-ds)))]
-    retval))
+                 idx-col
+                 {:categorical? true
+                  :categorical-map cat-map}
+                 (ds-base/missing prob-ds)))]
+     retval)
+   [prob-ds dst-colname] (probability-distributions->label-column prob-ds dst-colname :float64)))
