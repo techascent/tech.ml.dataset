@@ -254,5 +254,5 @@
                  {:categorical? true
                   :categorical-map cat-map}
                  (ds-base/missing prob-ds)))]
-     retval)
-   [prob-ds dst-colname] (probability-distributions->label-column prob-ds dst-colname :float64)))
+     retval))
+  ([prob-ds dst-colname] (probability-distributions->label-column prob-ds dst-colname :float64)))
