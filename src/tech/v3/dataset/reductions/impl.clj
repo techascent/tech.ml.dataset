@@ -42,12 +42,12 @@
                              acc v (.invokePrim rfn acc (.readLong col v))))
                  hamf-proto/ParallelReducer
                  (->merge-fn [r] merge-fn)))
-             :float32
+             :float64
              (let [rfn (Transformables/toDoubleReductionFn rfn)]
                (reify
                  hamf-proto/Reducer
                  (->init-val-fn [r] init-fn)
-                 (->rfn [r] (hamf-rf/long-accumulator
+                 (->rfn [r] (hamf-rf/double-accumulator
                              acc v (.invokePrim rfn acc (.readDouble col v))))
                  hamf-proto/ParallelReducer
                  (->merge-fn [r] merge-fn)))

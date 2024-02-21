@@ -135,7 +135,13 @@
     org.xerial.snappy/snappy-java {:mvn/version "1.1.8.4"}
     ;org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
     }
-   :extra-paths ["test"]}
+   :extra-paths ["test"]
+   :jvm-opts ["-Djdk.attach.allowAttachSelf=true" "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+              "--illegal-access=permit" "--add-opens=java.base/java.lang=ALL-UNNAMED"
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED"
+              ]
+   }
 
   :jdk-8 {}
   :jdk-11

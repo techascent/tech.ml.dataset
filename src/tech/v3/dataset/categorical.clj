@@ -6,6 +6,7 @@
 
   (:require [tech.v3.dataset.base :as ds-base]
             [tech.v3.dataset.protocols :as ds-proto]
+            [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.datatype :as dtype]
@@ -13,6 +14,7 @@
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
+            [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.set :as set]))
 
 
@@ -218,22 +220,44 @@ Non integers found: " (vec bad-mappings)))))
         one-hot-fit-data
         column (ds-base/column dataset src-column)
         missing (ds-proto/missing column)
-        dataset (dissoc dataset src-column)]
-    (->> one-hot-table
-         (mapcat
-          (fn [[k v]]
-            [v (col-impl/new-column
-                v
-                (dtype/emap
-                 #(if (= % k)
-                    1
-                    0)
-                 result-datatype
-                 column)
-                (assoc (meta column)
-                       :one-hot-map one-hot-fit-data)
-                missing)]))
-         (apply assoc dataset))))
+        dataset (dissoc dataset src-column)
+        n-elems (dtype/ecount column)
+        op-space (casting/simple-operation-space (dtype-proto/operational-elemwise-datatype column))]
+    (merge dataset 
+           (->> one-hot-table
+                (lznc/map
+                 (fn [[k v]]
+                   (col-impl/new-column
+                    v
+                    (case op-space
+                      :int64
+                      (let [buf (dtype/->reader column :int64)
+                            k (long k)]
+                        (reify tech.v3.datatype.LongBuffer
+                          (elemwiseDatatype [this] :int8)
+                          (lsize [this] n-elems)
+                          (readLong [this idx]
+                            (if (== k (.readLong buf idx))
+                              1 0))))
+                      :float64
+                      (let [buf (dtype/->reader column :float64)
+                            k (double k)]
+                        (reify tech.v3.datatype.DoubleBuffer
+                          (elemwiseDatatype [this] :int8)
+                          (lsize [this] n-elems)
+                          (readLong [this idx]
+                            (if (== k (.readDouble buf idx))
+                              1 0))))
+                      (dtype/emap
+                       #(if (= % k)
+                          1
+                          0)
+                       result-datatype
+                       column))
+                    (assoc (meta column)
+                           :one-hot-map one-hot-fit-data)
+                    missing)))
+                (ds-impl/new-dataset)))))
 
 
 (extend-type OneHotMap
