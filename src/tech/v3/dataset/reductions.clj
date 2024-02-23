@@ -485,7 +485,7 @@ _unnamed [4 5]:
        ([agg-map]
         (if (get options :skip-finalize?)
           agg-map
-          (let [c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer nil)))]
+          (let [c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer options)))]
             ;;Also possible to parse N datasets in parallel and do a concat-copying
             ;;operation but in my experience this steps takes up nearly no time.
             (.forEach ^ConcurrentHashMap agg-map 32

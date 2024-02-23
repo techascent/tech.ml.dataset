@@ -242,7 +242,7 @@ Non integers found: " (vec bad-mappings)))))
                       :float64
                       (let [buf (dtype/->reader column :float64)
                             k (double k)]
-                        (reify tech.v3.datatype.DoubleBuffer
+                        (reify tech.v3.datatype.LongBuffer
                           (elemwiseDatatype [this] :int8)
                           (lsize [this] n-elems)
                           (readLong [this idx]
@@ -252,7 +252,7 @@ Non integers found: " (vec bad-mappings)))))
                        #(if (= % k)
                           1
                           0)
-                       result-datatype
+                       :int8
                        column))
                     (assoc (meta column)
                            :one-hot-map one-hot-fit-data)

@@ -8,6 +8,7 @@
             [tech.v3.datatype.argops :as argops]
             [tech.v3.datatype.statistics :as stats]
             [tech.v3.dataset.reductions.apache-data-sketch :as ds-sketch]
+            [tech.v3.dataset.categorical :as dsc]
             [tech.v3.parallel.for :as pfor]
             [ham-fisted.api :as hamf]
             [ham-fisted.function :as hamf-fn]
@@ -367,3 +368,87 @@
            (set (keys (.-colmap ds)))))
 
     ))
+
+(comment
+
+  (do
+    (defn max-int64
+      [colname]
+      (ds-reduce/reducer->column-reducer
+       (hamf-rf/parallel-reducer (fn ^long [] Long/MIN_VALUE)
+                                 (fn ^long [^long a ^long b] (Long/max a b))
+                                 (fn ^long [^long a ^long b] (Long/max a b)))
+       :int64
+       colname))
+
+    (defn sum-int64
+      [colname]
+      (ds-reduce/reducer->column-reducer
+       (hamf-rf/parallel-reducer (fn ^long [] 0)
+                                 (fn ^long [^long a ^long b] (Long/sum a b))
+                                 (fn ^long [^long a ^long b] (Long/sum a b)))
+       :int64
+       colname))
+
+    (defn max-float64
+      [colname]
+      (ds-reduce/reducer->column-reducer
+       (hamf-rf/parallel-reducer (fn ^double [] 0.0)
+                                 (fn ^double [^double a ^double b] (Double/max a b))
+                                 (fn ^double [^double a ^double b] (Double/max a b)))
+       :float64
+       colname))
+
+    (defn sum-float64
+      [colname]
+      (ds-reduce/reducer->column-reducer
+       (hamf-rf/parallel-reducer (fn ^double [] 0.0)
+                                 (fn ^double [^double a ^double b] (Double/sum a b))
+                                 (fn ^double [^double a ^double b] (Double/sum a b)))
+       :float64
+       colname))
+
+    (deftype FloatSumObj [^{:unsynchronized-mutable true
+                            :tag double} dval]
+      java.util.function.DoubleConsumer
+      (accept [this v] (set! dval (+ dval v)))
+      ham_fisted.Reducible
+      (reduce [this other] (set! dval (+ dval (.- dval ^FloatSumObj other))))
+      clojure.lang.IDeref
+      (deref [this] dval))
+
+    (defn sum-float64-consumer
+      [colname]
+      (ds-reduce/reducer->column-reducer
+       (hamf-rf/double-consumer-reducer #(FloatSumObj. 0.0))
+       :float64
+       colname))
+
+    (def n-rows 500000)
+
+    (def ds (ds/->dataset (repeatedly n-rows
+                                      (fn [] {:a (rand-int 50000)
+                                              :b (rand-int 500)}))))
+
+    (def one-hot (dsc/fit-one-hot ds :b)))
+
+
+  (dotimes [idx 10]
+    (time 
+     (ds-reduce/group-by-column-agg
+      :a
+      (into {} (for [col (-> one-hot :one-hot-table vals)
+                     :when (not= col :a)]
+                 {col (sum-float64-consumer col)}))
+      {:parser-fn :float64}
+      (dsc/transform-one-hot ds one-hot))))
+
+  (for [[name reducer] {:ds-reduce/sum ds-reduce/sum
+                        :max-int64 max-int64
+                        :sum-int64 sum-int64
+                        :max-float64 max-float64
+                        :sum-float64 sum-float64}]
+    {name (repeatedly 3 (fn []
+                          ))})
+
+  )

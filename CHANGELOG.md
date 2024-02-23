@@ -1,4 +1,8 @@
 # Changelog
+# 7.024
+ * Faster group-by-column-agg when a large (500+ entries) agg map is passed in.
+ * Small optimizations to the categorical one-hot-encoding pathway.
+ 
 # 7.023
  * [Issue 387](https://github.com/techascent/tech.ml.dataset/issues/387) - select now respects persistent vectors of booleans.
  

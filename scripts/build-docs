@@ -2,4 +2,4 @@
 
 set -e
 
-clojure -A:dev -X:codox
+clojure -A:dev-mac-m1 -X:codox

@@ -2,7 +2,8 @@
 
 set -e
 
-scripts/run-tests
+scripts/run-tests-m1
+rm -rf pom.xml
 clojure -T:build jar
 cp target/classes/META-INF/maven/techascent/tech.ml.dataset/pom.xml .
 scripts/build-docs
