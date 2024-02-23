@@ -172,7 +172,7 @@
 
 (defn- missing-value?
   "Is this a missing value coming from a CSV file"
-  [value]
+  [value options]
   ;;fastpath for numbers
   (cond
     (or (instance? Double value) (instance? Float value))
@@ -181,7 +181,8 @@
     (or (nil? value)
         (.equals "" value)
         (identical? value :tech.v3.dataset/missing)
-        (and (string? value) (.equalsIgnoreCase ^String value "na")))))
+        (and (not (:disable-na-as-missing? options))
+             (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
 (deftype FixedTypeParser [^IMutList container
@@ -210,7 +211,7 @@
       ;;be in the space of the container or it could require the parse-fn
       ;;to make it.
       (let [parsed-value (cond
-                           (missing-value? value)
+                           (missing-value? value {})
                            :tech.v3.dataset/missing
                            (and (identical? (dtype/datatype value) container-dtype)
                                 (not (instance? String value)))
@@ -395,7 +396,7 @@
   (addValue [_p idx value]
     (let [parsed-value
           (cond
-            (missing-value? value)
+            (missing-value? value options)
             :tech.v3.dataset/missing
 
 
@@ -494,7 +495,7 @@
   PParser
   (addValue [_p idx value]
     (set! max-idx idx)
-    (when-not (missing-value? value)
+    (when-not (missing-value? value options)
       (let [val-dtype (fast-dtype value)]
         ;;setup container for new data
         (when-not (identical? container-dtype val-dtype)
