@@ -40,18 +40,26 @@ _unnamed [5 1]:
             [tech.v3.dataset.modelling :as modelling]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [cheshire.core :as json])
   (:import [tech.v3.datatype Buffer ArrayHelpers]
            [java.util HashMap Map List]
+           [java.nio.file Files]
+           [java.nio.file.attribute FileAttribute]
            [org.tribuo.classification Label LabelFactory]
            [org.tribuo DataSource Output OutputFactory Trainer Model MutableDataset
             Prediction]
            [org.tribuo.impl ArrayExample]
            [org.tribuo.provenance SimpleDataSourceProvenance]
            [org.tribuo.regression RegressionFactory Regressor]
-           [org.tribuo.regression.evaluation RegressionEvaluator RegressionEvaluation]))
+           [org.tribuo.regression.evaluation RegressionEvaluator RegressionEvaluation]
+           [com.oracle.labs.mlrg.olcut.config ConfigurationManager]
+           [com.oracle.labs.mlrg.olcut.config.json JsonConfigFactory]))
+   
 
 (set! *warn-on-reflection* true)
+
+(ConfigurationManager/addFileFormatFactory (JsonConfigFactory.)) ; allows json config
 
 (def ^:private str-ary-cls (Class/forName "[Ljava.lang.String;"))
 (def ^:private dbl-ary-cls (Class/forName "[D"))
@@ -293,3 +301,17 @@ _unnamed [5 1]:
     {:rmse (.rmse eval dim)
      :mae (.mae eval dim)
      :r2 (.r2 eval dim)}))
+
+
+
+(defn tribuo-trainer
+  "Creates a tribuo trainer from a list of config components
+  follwing OLCUT convention. One of the components should be a trainer,
+  which is the looked-up by `trainer-name` and returned."
+
+  [config-components trainer-name]
+  (let [config {:config {:components config-components}}
+        tmp (.toString (Files/createTempFile "config" ".json" (make-array FileAttribute 0)))
+        _ (->> config json/generate-string (spit tmp))
+        config-manager (ConfigurationManager. tmp)]
+    (.lookup config-manager trainer-name)))
