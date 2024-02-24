@@ -1733,6 +1733,13 @@
            (-> (ds/select ds :all vec-of-bools)
                :a)))))
 
+(deftest disable-na-as-missing
+  (let [expected-column ["foo" "NA"]
+        ds1 (ds/->dataset {:a expected-column} {:disable-na-as-missing? true})
+        ds2 (ds/->dataset (for [v expected-column] {:a v}) {:disable-na-as-missing? true})]
+    (is (= expected-column (:a ds1)))
+    (is (= expected-column (:a ds2)))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
