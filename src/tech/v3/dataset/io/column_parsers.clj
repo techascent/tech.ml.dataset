@@ -172,7 +172,7 @@
 
 (defn- missing-value?
   "Is this a missing value coming from a CSV file"
-  [value options]
+  [value disable-na-as-missing?]
   ;;fastpath for numbers
   (cond
     (or (instance? Double value) (instance? Float value))
@@ -181,7 +181,7 @@
     (or (nil? value)
         (.equals "" value)
         (identical? value :tech.v3.dataset/missing)
-        (and (not (:disable-na-as-missing? options))
+        (and (not disable-na-as-missing?)
              (string? value) (.equalsIgnoreCase ^String value "na")))))
 
 
@@ -211,7 +211,7 @@
       ;;be in the space of the container or it could require the parse-fn
       ;;to make it.
       (let [parsed-value (cond
-                           (missing-value? value {})
+                           (missing-value? value false)
                            :tech.v3.dataset/missing
                            (and (identical? (dtype/datatype value) container-dtype)
                                 (not (instance? String value)))
@@ -381,7 +381,8 @@
                                   ^List promotion-list
                                   column-name
                                   ^:unsynchronized-mutable ^long last-idx
-                                  options]
+                                  options
+                                  disable-na-as-missing?]
   dtype-proto/PECount
   (ecount [_this] (inc last-idx))
   Indexed
@@ -396,7 +397,7 @@
   (addValue [_p idx value]
     (let [parsed-value
           (cond
-            (missing-value? value options)
+            (missing-value? value disable-na-as-missing?)
             :tech.v3.dataset/missing
 
 
@@ -468,7 +469,8 @@
                                      parser-datatype-sequence)
                                column-name
                                -1
-                               options)))
+                               options
+                               (get options :disable-na-as-missing?))))
   (^PParser [column-name options]
    (promotional-string-parser column-name default-parser-datatype-sequence options)))
 
