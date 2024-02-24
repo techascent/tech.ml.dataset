@@ -67,3 +67,16 @@
                 (dfn/abs)
                 (dfn/mean))]
     (is (< mae 0.5))))
+
+(deftest tribuo-trainer
+  (let [config-components
+        [{:name "trainer"
+          :type "org.tribuo.classification.dtree.CARTClassificationTrainer"
+          :properties {:maxDepth "6"
+                       :seed "12345"
+                       :fractionFeaturesInSplit "0.5"}}]
+        trainer (tribuo/trainer config-components "trainer")]
+
+    (is (= "class org.tribuo.classification.dtree.CARTClassificationTrainer"
+           (str (class trainer))))))
+

@@ -1,4 +1,9 @@
 # Changelog
+# 7.025
+ * New option - `:disable-na-as-missing?` - to [disable treating NA as missing](https://github.com/techascent/tech.ml.dataset/pull/399).
+ * Pathway to generically get a [tribuo trainer](https://github.com/techascent/tech.ml.dataset/pull/393).
+ * Fix for tribuo changing [predicted column datatypes](https://github.com/techascent/tech.ml.dataset/pull/397).
+ 
 # 7.024
  * Faster group-by-column-agg when a large (500+ entries) agg map is passed in.
  * Small optimizations to the categorical one-hot-encoding pathway.

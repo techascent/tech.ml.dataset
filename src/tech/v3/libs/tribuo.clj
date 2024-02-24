@@ -304,7 +304,7 @@ _unnamed [5 1]:
 
 
 
-(defn tribuo-trainer
+(defn trainer
   "Creates a tribuo trainer from a list of config components
   follwing OLCUT convention. One of the components should be a trainer,
   which is the looked-up by `trainer-name` and returned."
