@@ -142,10 +142,18 @@ Non integers found: " (vec bad-mappings)))))
     (transform-categorical-map dataset t)))
 
 
-(defn ^:no-doc dataset->categorical-maps
-  "Given a dataset, return a map of column names to categorical label maps.
-  This aids in inverting all of the label maps in a dataset.
-  The source column name is src-column."
+(defn dataset->categorical-maps
+  "Given a dataset, return a sequence of categorical map entries.
+
+```clojure
+user> (ds-cat/dataset->categorical-maps catds)
+({:lookup-table {:a 0, :b 1, :c 2, :d 3},
+  :src-column :x,
+  :result-datatype :float64}
+ {:lookup-table {:a 0, :b 1, :c 2, :d 3},
+  :src-column :y,
+  :result-datatype :float64})
+```"
   [dataset]
   (->> (vals dataset)
        (map (comp :categorical-map meta))
