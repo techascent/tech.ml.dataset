@@ -1,4 +1,7 @@
 # Changelog
+# 7.026
+ * column sub-buffer failed to offset roaring bitmap missing indexes.
+ 
 # 7.025
  * New option - `:disable-na-as-missing?` - to [disable treating NA as missing](https://github.com/techascent/tech.ml.dataset/pull/399).
  * Pathway to generically get a [tribuo trainer](https://github.com/techascent/tech.ml.dataset/pull/393).

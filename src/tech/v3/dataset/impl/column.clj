@@ -297,10 +297,11 @@
       (if (and (== offset 0) (== len (dtype/ecount this)))
         this
         ;;TODO - use bitmap operations to perform this calculation
-        (let [new-missing (RoaringBitmap/and
-                           missing
-                           (doto (RoaringBitmap.)
-                             (.add offset (+ offset len))))
+        (let [new-missing (-> (RoaringBitmap/and
+                               missing
+                               (doto (RoaringBitmap.)
+                                 (.add offset (+ offset len))))
+                              (RoaringBitmap/addOffset (- offset)))
               new-data  (dtype-proto/sub-buffer data offset len)]
           (Column. new-missing
                    new-data

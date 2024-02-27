@@ -4,6 +4,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.struct :as dt-struct]
             [tech.v3.datatype.argops :as argops]
+            [tech.v3.datatype.bitmap :as bitmap]
             [tech.v3.tensor :as dtt]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset-api :as ds-api]
@@ -1739,6 +1740,16 @@
         ds2 (ds/->dataset (for [v expected-column] {:a v}) {:disable-na-as-missing? true})]
     (is (= expected-column (:a ds1)))
     (is (= expected-column (:a ds2)))))
+
+
+(deftest sub-buffer-col-incorrect-missing
+  (let [ds (-> (ds/->dataset {:a (range 20)})
+               (ds/row-map (fn [m] (if (>= (:a m) 10)
+                                     nil m))))
+        col (ds :a)
+        subcol (dtype/sub-buffer col 10 5)]
+    (is (= (range 5)
+           (bitmap/->random-access (ds/missing subcol))))))
 
 (comment
   (require '[criterium.core :as crit])
