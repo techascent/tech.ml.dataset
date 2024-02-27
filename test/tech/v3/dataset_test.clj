@@ -1745,7 +1745,8 @@
 (deftest sub-buffer-col-incorrect-missing
   (let [ds (-> (ds/->dataset {:a (range 20)})
                (ds/row-map (fn [m] (if (>= (:a m) 10)
-                                     nil m))))
+                                     nil m))
+                           {:debug-print-row-map true}))
         col (ds :a)
         subcol (dtype/sub-buffer col 10 5)]
     (println "dataset is:" ds "\ncol:" col)
