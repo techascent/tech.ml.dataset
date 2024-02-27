@@ -842,16 +842,16 @@ _unnamed [3 3]:
      - `:as-seq` - Return a sequence of datasets, one for each batch.
      - `:as-ds` - Return a single datasets with all results in memory (default option)."
   ([ds ds-map-fn options]
-   (some-> ds
-           row-count
-           (pfor/indexed-map-reduce (fn [^long start-idx ^long group-len]
-                                      (-> ds
-                                          (select-rows (range start-idx (+ start-idx group-len)))
-                                          (ds-map-fn)))
-                                    (case (get options :result-type :as-ds)
-                                      :as-ds #(apply concat-copying %)
-                                      :as-seq identity)
-                                    options)))
+   (when ds
+     (let [groups (->> (hamf/pgroups (row-count ds)
+                                     (fn [^long sidx ^long eidx]
+                                       (-> ds
+                                           (select-rows (range sidx eidx))
+                                           (ds-map-fn)))
+                                     options))]
+       (case (get options :result-type :as-ds)
+         :as-ds (apply concat-copying groups)
+         :as-seq groups))))
   ([ds ds-map-fn]
    (pmap-ds ds ds-map-fn nil)))
 
@@ -906,9 +906,9 @@ test/data/stocks.csv [5 4]:
                        (let [row-data (->> (rows % options)
                                            (lznc/map map-fn))
                              rv (->dataset row-data options)]
-                         (when (get options :debug-print-row-map))
-                           (println "row-map: " (vec row-data) "ds:" rv)
-                           rv))
+                         (when (get options :debug-print-row-map)
+                           (println "row-map: " (vec row-data) "ds:" rv))
+                         rv))
             options))
   ([ds map-fn]
    (row-map ds map-fn nil)))

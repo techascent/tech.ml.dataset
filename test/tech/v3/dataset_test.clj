@@ -1744,12 +1744,12 @@
 
 (deftest sub-buffer-col-incorrect-missing
   (let [ds (-> (ds/->dataset {:a (range 20)})
-               (ds/row-map (fn [m] (if (>= (:a m) 10)
-                                     nil m))
-                           {:debug-print-row-map true}))
+               (ds/row-map (fn [m] {:a (if (>= (:a m) 10)
+                                         nil (:a m))})
+                           {:parallelism 2
+                            :min-n 1}))
         col (ds :a)
         subcol (dtype/sub-buffer col 10 5)]
-    (println "dataset is:" ds "\ncol:" col)
     (is (= (range 10 20)
            (bitmap/->random-access (ds/missing col))))
     (is (= (range 5)
