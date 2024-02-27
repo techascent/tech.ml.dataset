@@ -1748,6 +1748,7 @@
                                      nil m))))
         col (ds :a)
         subcol (dtype/sub-buffer col 10 5)]
+    (println "dataset is:" ds "\ncol:" col)
     (is (= (range 10 20)
            (bitmap/->random-access (ds/missing col))))
     (is (= (range 5)
