@@ -61,6 +61,7 @@
   :dev
   {:extra-deps
    {criterium/criterium {:mvn/version "0.4.5"}
+    com.cognitect/transit-clj {:mvn/version "1.0.333"}
     net.java.dev.jna/jna {:mvn/version "5.12.1"}
     uncomplicate/neanderthal {:mvn/version "0.45.0"}
     ch.qos.logback/logback-classic {:mvn/version "1.3.5"}
@@ -100,6 +101,7 @@
   :dev-m1-mac
   {:extra-deps
    {criterium/criterium {:mvn/version "0.4.5"}
+    com.cognitect/transit-clj {:mvn/version "1.0.333"}
     net.java.dev.jna/jna {:mvn/version "5.12.1"}
     ;uncomplicate/neanderthal {:mvn/version "0.45.0"}
     ch.qos.logback/logback-classic {:mvn/version "1.3.5"}

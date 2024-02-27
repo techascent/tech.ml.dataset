@@ -8,7 +8,7 @@
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.libs.arrow :as arrow]
-
+            [tech.v3.libs.clj-transit :as ds-transit]
             [taoensso.nippy :as nippy]
             [clojure.set :as set]
             [clojure.java.io :as io])
@@ -491,3 +491,12 @@
 (deftest issue-362
   (let [ds-seq (zip/zipfile->dataset-seq "test/data/unknown.zip")]
     (is (= 2 (count ds-seq)))))
+
+
+(deftest issue-388-transit-support
+  (let [ds (ds/->dataset {:a [1 2 3]
+                          :b [:one :two :three]})
+        str-data (ds-transit/dataset->transit-str ds)
+        nds (ds-transit/transit-str->dataset str-data)]
+    (is (= (ds :a) (nds :a)))
+    (is (= (ds :b) (nds :b)))))
