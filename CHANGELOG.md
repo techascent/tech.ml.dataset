@@ -1,24 +1,27 @@
 # Changelog
+# 7.027
+ * Moved transit bindings from tmdjs into tech.v3.libs.clj-transit.
+
 # 7.026
  * column sub-buffer failed to offset roaring bitmap missing indexes.
- 
+
 # 7.025
  * New option - `:disable-na-as-missing?` - to [disable treating NA as missing](https://github.com/techascent/tech.ml.dataset/pull/399).
  * Pathway to generically get a [tribuo trainer](https://github.com/techascent/tech.ml.dataset/pull/393).
  * Fix for tribuo changing [predicted column datatypes](https://github.com/techascent/tech.ml.dataset/pull/397).
- 
+
 # 7.024
  * Faster group-by-column-agg when a large (500+ entries) agg map is passed in.
  * Small optimizations to the categorical one-hot-encoding pathway.
- 
+
 # 7.023
  * [Issue 387](https://github.com/techascent/tech.ml.dataset/issues/387) - select now respects persistent vectors of booleans.
- 
+
 # 7.022
  * Issue with pd-merge where exception is thrown if all columns are used for join.
  * Allow system to load duplicate headers - [PR 386](https://github.com/techascent/tech.ml.dataset/pull/386) - thanks ezrand.
  * Bump fastexcel version and expose [StableID](https://github.com/techascent/tech.ml.dataset/pull/385) - thanks again ezrand.
- 
+
 # 7.021
  * hamf typed-nth operations (dnth, fnth, etc) that are efficient
    when input is the analogous primitive array.

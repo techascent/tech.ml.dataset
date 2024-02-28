@@ -13,7 +13,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "7.026"
+               :version "7.027"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}
@@ -56,7 +56,8 @@
                             tech.v3.libs.fastexcel
                             tech.v3.libs.arrow
                             tech.v3.libs.guava.cache
-                            tech.v3.libs.tribuo]}}
+                            tech.v3.libs.tribuo
+                            tech.v3.libs.clj-transit]}}
   ;; Run with clj -T:build function-in-build
   :dev
   {:extra-deps
