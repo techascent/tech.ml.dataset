@@ -902,14 +902,17 @@ test/data/stocks.csv [5 4]:
 |  :MSFT | 2000-05-01 | 25.45 |  647.7025 |
 ```"
   ([ds map-fn options]
-   (pmap-ds ds #(merge %
-                       (let [row-data (->> (rows % options)
-                                           (lznc/map map-fn))
-                             rv (->dataset row-data options)]
-                         (when (get options :debug-print-row-map)
-                           (println "row-map: " (vec row-data) "ds:" rv))
-                         rv))
-            options))
+   (case (get options :result-type :as-ds)
+     ;;Common case - this is somewhat more correct as the concat operation
+     ;;fill fill out empty columns if the returned dataset itself is empty.
+     :as-ds (merge ds (pmap-ds ds #(->> (rows % options)
+                                        (lznc/map map-fn)
+                                        (->>dataset options))
+                               options))
+     :as-seq (pmap-ds ds #(merge % (->> (rows % options)
+                                        (lznc/map map-fn)
+                                        (->>dataset options)))
+                      options)))
   ([ds map-fn]
    (row-map ds map-fn nil)))
 
