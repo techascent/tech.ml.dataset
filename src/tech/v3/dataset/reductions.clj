@@ -91,17 +91,18 @@ user> (ds-reduce/group-by-column-agg
   [colname]
   (reify ds-proto/PDatasetReducer
     (ds->reducer [this ds]
-      (let [col (ds-base/column ds colname)]
+      (let [col (ds-base/column ds colname)
+            fv (if (empty? col) nil (col 0))
+            rf (fn [acc v] fv)]
         (reify
           hamf-proto/Reducer
-          (->init-val-fn [r] (constantly nil))
-          (->rfn [r] (hamf-rf/long-accumulator
-                      acc v (if (not acc) [(col v)] acc)))
+          (->init-val-fn [r] (constantly fv))
+          (->rfn [r] rf)
           hamf-proto/ParallelReducer
-          (->merge-fn [r] (fn [l r] l)))))
+          (->merge-fn [r] rf))))
     (merge [this l r] l)
     hamf-proto/Finalize
-    (finalize [this v] (first v))))
+    (finalize [this v] v)))
 
 
 (defn sum

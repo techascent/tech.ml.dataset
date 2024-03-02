@@ -433,13 +433,13 @@
     (def one-hot (dsc/fit-one-hot ds :b)))
 
 
-  (dotimes [idx 10]
+  (dotimes [idx 100]
     (time 
      (ds-reduce/group-by-column-agg
       :a
       (into {} (for [col (-> one-hot :one-hot-table vals)
                      :when (not= col :a)]
-                 {col (sum-float64-consumer col)}))
+                 {col (sum-float64 col)}))
       {:parser-fn :float64}
       (dsc/transform-one-hot ds one-hot))))
 
