@@ -91,18 +91,16 @@ user> (ds-reduce/group-by-column-agg
   [colname]
   (reify ds-proto/PDatasetReducer
     (ds->reducer [this ds]
-      (let [col (ds-base/column ds colname)
-            fv (if (empty? col) nil (col 0))
-            rf (fn [acc v] fv)]
+      (let [col (ds-base/column ds colname)]
         (reify
           hamf-proto/Reducer
-          (->init-val-fn [r] (constantly fv))
-          (->rfn [r] rf)
+          (->init-val-fn [r] (constantly nil))
+          (->rfn [r] (fn [acc v] (if acc acc (clojure.lang.Box. v))))
           hamf-proto/ParallelReducer
-          (->merge-fn [r] rf))))
+          (->merge-fn [r] (fn [l r] l)))))
     (merge [this l r] l)
     hamf-proto/Finalize
-    (finalize [this v] v)))
+    (finalize [this v] (if v (.-val ^clojure.lang.Box v) v))))
 
 
 (defn sum
