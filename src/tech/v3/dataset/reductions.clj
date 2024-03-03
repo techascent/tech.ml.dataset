@@ -95,7 +95,7 @@ user> (ds-reduce/group-by-column-agg
         (reify
           hamf-proto/Reducer
           (->init-val-fn [r] (constantly nil))
-          (->rfn [r] (fn [acc v] (if acc acc (clojure.lang.Box. v))))
+          (->rfn [r] (fn [acc v] (if acc acc (clojure.lang.Box. (col v)))))
           hamf-proto/ParallelReducer
           (->merge-fn [r] (fn [l r] l)))))
     (merge [this l r] l)

@@ -33,6 +33,7 @@
                      :n-dates (ds-reduce/count-distinct :date :int32)}
                     [stocks stocks stocks])
                    (ds/sort-by-column :symbol))
+        _ (println agg-ds)
         single-price (-> (->> (ds/group-by-column stocks :symbol)
                               (map (fn [[k ds]]
                                      {:symbol k
