@@ -3,7 +3,8 @@
         cnuernber/dtype-next {:mvn/version "10.111"}
         techascent/tech.io {:mvn/version "4.31"
                             :exclusions [org.apache.commons/commons-compress]}
-        org.apache.datasketches/datasketches-java {:mvn/version "4.2.0"}}
+        org.apache.datasketches/datasketches-java {:mvn/version "4.2.0"}
+        com.cnuernber/charred {:mvn/version "1.034"}}
  :aliases
  {:codox
   {:extra-deps {codox-theme-rdash/codox-theme-rdash {:mvn/version "0.1.2"}
