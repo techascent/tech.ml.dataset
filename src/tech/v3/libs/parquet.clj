@@ -362,6 +362,8 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
                     (let [col-min (long col-min)
                           col-max (long col-max)]
                       (cond
+                        ;;Default min/max values are 0,0
+                        (== col-min col-max) :int32
                         (byte-range? col-min col-max) :int8
                         (ubyte-range? col-min col-max) :uint8
                         (short-range? col-min col-max) :int16

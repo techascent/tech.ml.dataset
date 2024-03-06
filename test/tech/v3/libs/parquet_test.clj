@@ -119,3 +119,7 @@
   (let [table (ds/->dataset "test/data/decimaltable.parquet")
         decimals (table "decimals")]
     (is (dfn/equals [3.420 1.246] decimals))))
+
+
+(deftest issue-401-paruet-missing-column
+  (is (= 4 (ds/column-count (ds/->dataset "test/data/2024-03-03.parquet")))))
