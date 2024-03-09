@@ -641,33 +641,34 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 
 (defn- row-group->ds
   [^PageReadStore page ^ParquetFileReader reader options block-metadata]
-  (let [file-metadata (.getFileMetaData reader)
-        schema (.getSchema file-metadata)
-        col-read-store (ColumnReadStoreImpl. page (group-converter) schema
-                                             (.getCreatedBy file-metadata))
-        n-rows (.getRowCount page)
-        parse-context (io-context/options->parser-fn options nil)
-        key-fn (or (:key-fn options) identity)
-        column-allowlist (when (seq (or (:column-allowlist options) (:column-whitelist options)))
-                           (set (or (:column-allowlist options) (:column-whitelist options))))
-        column-blocklist (when (seq (or (:column-blocklist options) (:column-blacklist options)))
-                           (set (or (:column-blocklist options) (:column-blacklist options))))
-        col-parser (partial parse-parquet-column column-allowlist  column-blocklist
-                            col-read-store n-rows parse-context key-fn)
-        initial-columns (->> (map col-parser
-                                  (.getColumns schema)
-                                  (:columns block-metadata))
-                             (remove nil?)
-                             (vec))
-        rep-counts (->> (map (comp :row-rep-counts meta) initial-columns)
-                        (remove nil?)
-                        (vec))
-        columns (if (seq rep-counts)
-                  (scatter-rows initial-columns rep-counts)
-                  ;;handle repetitions
-                  initial-columns)
-        retval (ds-impl/new-dataset options columns)]
-    (vary-meta retval assoc :parquet-metadata (dissoc block-metadata :columns))))
+  (with-open [page page]
+    (let [file-metadata (.getFileMetaData reader)
+          schema (.getSchema file-metadata)
+          col-read-store (ColumnReadStoreImpl. page (group-converter) schema
+                                               (.getCreatedBy file-metadata))
+          n-rows (.getRowCount page)
+          parse-context (io-context/options->parser-fn options nil)
+          key-fn (or (:key-fn options) identity)
+          column-allowlist (when (seq (or (:column-allowlist options) (:column-whitelist options)))
+                             (set (or (:column-allowlist options) (:column-whitelist options))))
+          column-blocklist (when (seq (or (:column-blocklist options) (:column-blacklist options)))
+                             (set (or (:column-blocklist options) (:column-blacklist options))))
+          col-parser (partial parse-parquet-column column-allowlist  column-blocklist
+                              col-read-store n-rows parse-context key-fn)
+          initial-columns (->> (map col-parser
+                                    (.getColumns schema)
+                                    (:columns block-metadata))
+                               (remove nil?)
+                               (vec))
+          rep-counts (->> (map (comp :row-rep-counts meta) initial-columns)
+                          (remove nil?)
+                          (vec))
+          columns (if (seq rep-counts)
+                    (scatter-rows initial-columns rep-counts)
+                    ;;handle repetitions
+                    initial-columns)
+          retval (ds-impl/new-dataset options columns)]
+      (vary-meta retval assoc :parquet-metadata (dissoc block-metadata :columns)))))
 
 
 (defn- read-next-dataset
