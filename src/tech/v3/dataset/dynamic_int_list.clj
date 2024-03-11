@@ -11,22 +11,12 @@
             [tech.v3.parallel.for :as parallel-for]
             [clj-commons.primitive-math :as pmath])
   (:import [tech.v3.datatype LongBuffer]
+           [tech.v3.dataset IntRanges]
            [ham_fisted IMutList]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
-
-(defmacro ^:private byte-range?
-  [number]
-  `(and (<= ~number Byte/MAX_VALUE)
-        (>= ~number Byte/MIN_VALUE)))
-
-
-(defmacro ^:private short-range?
-  [number]
-  `(and (<= ~number Short/MAX_VALUE)
-        (>= ~number Short/MIN_VALUE)))
 
 
 (deftype DynamicIntList [^:unsynchronized-mutable ^IMutList backing-store
@@ -53,9 +43,9 @@
   (addLong [_this value]
     ;;perform container conversion
     (cond
-      (byte-range? value)
+      (IntRanges/byteRange value)
       nil
-      (short-range? value)
+      (IntRanges/shortRange value)
       (when (pmath/< int-width 16)
         (set! backing-store (dtype/make-list :int16 backing-store))
         (set! int-width 16))
@@ -73,9 +63,9 @@
   (writeLong [this idx value]
     (locking this
       (cond
-        (byte-range? value)
+        (IntRanges/byteRange value)
         nil
-        (short-range? value)
+        (IntRanges/shortRange value)
         (when (pmath/< int-width 16)
           (set! backing-store (dtype/make-list :int16 backing-store))
           (set! int-width 16))
