@@ -144,7 +144,7 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
   (:import [tech.v3.datatype Buffer]
            [tech.v3.dataset Text ParquetRowWriter ParquetRowWriter$WriterBuilder
             LocalInputFile]
-           [tech.v3.dataset.io.column_parsers PParser]
+           [tech.v3.dataset PParser PParser$LongParser PParser$DoubleParser]
            [org.apache.hadoop.conf Configuration]
            [java.time LocalTime]
            [java.time.temporal TemporalAccessor ChronoField]
@@ -165,8 +165,9 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
            [java.io OutputStream]
            [java.nio.file Paths StandardOpenOption OpenOption]
            [java.util.concurrent.atomic AtomicLong]
+           [java.util.function Supplier DoubleSupplier LongSupplier]
            [java.time Instant LocalDate]
-           [java.util Iterator List]))
+           [java.util Iterator List HashMap]))
 
 
 
@@ -191,24 +192,6 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
     (asGroupConverter [] (group-converter))))
 
 
-(deftype ^:private ColumnIterator [^ColumnReader col-rdr
-                                   read-fn
-                                   ^long max-def-level
-                                   ^{:unsynchronized-mutable true
-                                     :tag long} n-rows]
-  Iterator
-  (hasNext [_it] (> n-rows 0))
-  (next [_it]
-    (if (> n-rows 0)
-      (let [retval (if (== max-def-level (.getCurrentDefinitionLevel col-rdr))
-                     (read-fn col-rdr)
-                     :tech.v3.dataset/missing)]
-        (set! n-rows (unchecked-dec n-rows))
-        (.consume col-rdr)
-        retval)
-      (throw (java.util.NoSuchElementException.)))))
-
-
 (defn- read-byte-array
   ^bytes [^ColumnReader rdr]
   (.. rdr getBinary getBytes))
@@ -216,6 +199,12 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 (defn- read-str
   ^String [^ColumnReader rdr]
   (String. (read-byte-array rdr)))
+
+
+(defn- read-unique-str
+  ^String[^java.util.Map m ^ColumnReader rdr]
+  (let [s (read-str rdr)]
+    (or (.putIfAbsent m s s) s)))
 
 
 (defn- read-instant
@@ -230,31 +219,13 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
         nanos (rem nano-of-day dtype-dt/nanoseconds-in-second)]
     (Instant/ofEpochSecond epoch-second nanos)))
 
-
-(defn- read-boolean
-  [^ColumnReader rdr]
-  (.getBoolean rdr))
-
-
-(defn- read-int
-  [^ColumnReader rdr]
-  (.getInteger rdr))
-
-(defn- read-long
-  ^long [^ColumnReader rdr]
-  (.getLong rdr))
-
-(defn- read-float
-  [^ColumnReader rdr]
-  (.getFloat rdr))
-
-(defn- read-double
-  ^double [^ColumnReader rdr]
-  (.getDouble rdr))
-
 (defn- read-decimal
   [scale ^ColumnReader rdr]
   (java.math.BigDecimal. (java.math.BigInteger. (read-byte-array rdr)) (int scale)))
+
+(defn- read-boolean
+  [rdr]
+  (.getBoolean ^ColumnReader rdr))
 
 (defn- byte-range?
   [^long cmin ^long cmax]
@@ -301,118 +272,118 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
   (when (get-in metadata [:decimal-metadata :scale])
     (get-in metadata [:decimal-metadata :scale])))
 
-(defn- make-column-iterator
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def read-fn]
-  (ColumnIterator. col-rdr read-fn
-                   (.getMaxDefinitionLevel col-def)
-                   (.getTotalValueCount col-rdr)))
 
-
-(defn- make-column-iterable
-  [^ColumnReader col-rdr ^ColumnDescriptor col-def dtype read-fn]
+(defn- read-fn-supplier
+  [col-rdr dtype read-fn]
   (reify
+    Supplier
+    (get [this] (read-fn col-rdr))
     dtype-proto/PElemwiseDatatype
-    (elemwise-datatype [rdr] dtype)
-    Iterable
-    (iterator [rdr] (make-column-iterator col-rdr col-def read-fn))))
+    (elemwise-datatype [this] dtype)))
 
 
-(defmulti ^:private typed-col->iterable
+(defmulti ^:private typed-col->supplier
   (fn [_col-rdr col-def _metadata]
     (col-def->col-type col-def)))
 
 
-(defmethod typed-col->iterable :default
+(defmethod typed-col->supplier :default
   [col-rdr col-def _metadata]
-  (make-column-iterable col-rdr col-def :object read-byte-array))
+  (read-fn-supplier col-rdr :object read-byte-array))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BOOLEAN
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/BOOLEAN
   [col-rdr col-def _metadata]
-  (make-column-iterable col-rdr col-def :boolean read-boolean))
+  (read-fn-supplier col-rdr :boolean read-boolean))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/BINARY
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/BINARY
   [col-rdr col-def _metadata]
   (let [org-type (col-def->col-orig-type col-def)
         scale (col-metadata->scale _metadata)]
     (cond
-      (= org-type OriginalType/UTF8) (make-column-iterable col-rdr col-def :string read-str)
-      (= org-type OriginalType/DECIMAL) (make-column-iterable col-rdr col-def :decimal (partial read-decimal scale))
-      :else (make-column-iterable col-rdr col-def :object read-byte-array))))
+      (= org-type OriginalType/UTF8)
+      (let [unique-table (java.util.HashMap.)]
+        (read-fn-supplier col-rdr :string #(read-unique-str unique-table %)))
+      (= org-type OriginalType/DECIMAL)
+      (read-fn-supplier col-rdr :decimal #(read-decimal scale %))
+      :else
+      (read-fn-supplier col-rdr :object read-byte-array))))
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/FIXED_LEN_BYTE_ARRAY
+
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/FIXED_LEN_BYTE_ARRAY
   [col-rdr col-def _metadata]
   (let [org-type (col-def->col-orig-type col-def)
         scale (col-metadata->scale _metadata)]
-    (if  (= org-type OriginalType/DECIMAL)
-      (make-column-iterable col-rdr col-def :decimal (partial read-decimal scale))
-      (make-column-iterable col-rdr col-def :object read-byte-array))))
+    (if (= org-type OriginalType/DECIMAL)
+      (read-fn-supplier col-rdr :decimal #(read-decimal scale %))
+      (read-fn-supplier col-rdr :object read-byte-array))))
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT96
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/INT96
   [col-rdr col-def _metadata]
-  (make-column-iterable col-rdr col-def :instant read-instant))
+  (read-fn-supplier col-rdr :instant read-instant))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT32
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/INT32
   [col-rdr col-def metadata]
-  (let [org-type (col-def->col-orig-type col-def)]
-    (if (= org-type OriginalType/DATE)
-      (make-column-iterable col-rdr col-def :packed-local-date read-int)
-      (let [[col-min col-max] (col-metadata->min-max metadata)
-            dtype (cond
-                    (and col-min col-max)
-                    (let [col-min (long col-min)
-                          col-max (long col-max)]
-                      (cond
-                        ;;Default min/max values are 0,0
-                        (== col-min col-max) :int32
-                        (byte-range? col-min col-max) :int8
-                        (ubyte-range? col-min col-max) :uint8
-                        (short-range? col-min col-max) :int16
-                        (ushort-range? col-min col-max) :uint16
-                        :else :int32))
-                    (= org-type OriginalType/INT_8)
-                    :int8
-                    (= org-type OriginalType/UINT_8)
-                    :uint8
-                    (= org-type OriginalType/INT_16)
-                    :int16
-                    (= org-type OriginalType/UINT_16)
-                    :uint16
-                    :else
-                    :int32)]
-        (make-column-iterable col-rdr col-def dtype read-int)))))
+  (let [org-type (col-def->col-orig-type col-def)
+        [col-min col-max] (col-metadata->min-max metadata)
+        dtype (cond
+                (= org-type OriginalType/DATE)
+                :packed-local-date
+                (and col-min col-max)
+                (let [col-min (long col-min)
+                      col-max (long col-max)]
+                  (cond
+                    ;;Default min/max values are 0,0
+                    (== col-min col-max) :int32
+                    (byte-range? col-min col-max) :int8
+                    (ubyte-range? col-min col-max) :uint8
+                    (short-range? col-min col-max) :int16
+                    (ushort-range? col-min col-max) :uint16
+                    :else :int32))
+                (= org-type OriginalType/INT_8)
+                :int8
+                (= org-type OriginalType/UINT_8)
+                :uint8
+                (= org-type OriginalType/INT_16)
+                :int16
+                (= org-type OriginalType/UINT_16)
+                :uint16
+                :else
+                :int32)]
+    (reify
+      LongSupplier
+      (getAsLong [this] (.getInteger ^ColumnReader col-rdr))
+      dtype-proto/PElemwiseDatatype
+      (elemwise-datatype [this] dtype))))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/INT64
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/INT64
   [col-rdr col-def metadata]
   (let [org-type (col-def->col-orig-type col-def)
         [col-min col-max] (col-metadata->min-max metadata)]
     (condp = org-type
       OriginalType/TIMESTAMP_MILLIS
-      (make-column-iterable col-rdr col-def :instant
-                            #(-> (read-long %)
-                                 (dtype-dt/milliseconds-since-epoch->instant)))
+      (read-fn-supplier col-rdr :instant #(-> (.getLong ^ColumnReader %)
+                                              (dtype-dt/milliseconds-since-epoch->instant)))
       OriginalType/TIMESTAMP_MICROS
-      (make-column-iterable col-rdr col-def :instant
-                            #(-> (read-long %)
-                                 (dtype-dt/microseconds-since-epoch->instant)))
+      (read-fn-supplier col-rdr :instant #(-> (.getLong ^ColumnReader %)
+                                              (dtype-dt/microseconds-since-epoch->instant)))
       OriginalType/TIME_MILLIS
-      (make-column-iterable col-rdr col-def :local-time
-                            #(-> (read-long %)
-                                 (* datetime-constants/nanoseconds-in-millisecond)
-                                 (LocalTime/ofNanoOfDay)))
+      (read-fn-supplier col-rdr :local-time #(-> (.getLong ^ColumnReader %)
+                                                 (* datetime-constants/nanoseconds-in-millisecond)
+                                                 (LocalTime/ofNanoOfDay)))
       OriginalType/TIME_MICROS
-      (make-column-iterable col-rdr col-def :local-time
-                            #(-> (read-long %)
-                                 (* datetime-constants/nanoseconds-in-microsecond)
-                                 (LocalTime/ofNanoOfDay)))
+      (read-fn-supplier col-rdr :local-time #(-> (.getLong ^ColumnReader %)
+                                                 (* datetime-constants/nanoseconds-in-microsecond)
+                                                 (LocalTime/ofNanoOfDay)))
       (let [dtype (cond
                     (and col-min col-max)
                     (let [col-min (long col-min)
                           col-max (long col-max)]
                       (cond
+                        (== col-min col-max) :int64
                         (byte-range? col-min col-max) :int8
                         (ubyte-range? col-min col-max) :uint8
                         (short-range? col-min col-max) :int16
@@ -422,17 +393,29 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
                     :uint32
                     :else
                     :int64)]
-        (make-column-iterable col-rdr col-def dtype read-long)))))
+        (reify
+          LongSupplier
+          (getAsLong [this] (.getLong ^ColumnReader col-rdr))
+          dtype-proto/PElemwiseDatatype
+          (elemwise-datatype [this] dtype))))))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/DOUBLE
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/DOUBLE
   [col-rdr col-def _metadata]
-  (make-column-iterable col-rdr col-def :float64 read-double))
+  (reify
+    DoubleSupplier
+    (getAsDouble [this] (.getDouble ^ColumnReader col-rdr))
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [this] :float64)))
 
 
-(defmethod typed-col->iterable PrimitiveType$PrimitiveTypeName/FLOAT
+(defmethod typed-col->supplier PrimitiveType$PrimitiveTypeName/FLOAT
   [col-rdr col-def _metadata]
-  (make-column-iterable col-rdr col-def :float32 read-float))
+  (reify
+    DoubleSupplier
+    (getAsDouble [this] (.getFloat ^ColumnReader col-rdr))
+    dtype-proto/PElemwiseDatatype
+    (elemwise-datatype [this] :float32)))
 
 
 (defn- dot-notation
@@ -443,17 +426,18 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
 (defn- fixed-datatype-parser
   [dtype]
   (let [container-dtype (packing/pack-datatype dtype)
-        container (col-base/make-container container-dtype)
+        container (if (identical? :string container-dtype)
+                    (dtype/make-list :string)
+                    (col-base/make-container container-dtype))
         missing-value (col-base/datatype->missing-value
                        (packing/unpack-datatype container-dtype))
         missing (bitmap/->bitmap)]
     (reify PParser
       (addValue [p idx value]
-        (if (identical? value :tech.v3.dataset/missing)
-          (do
-            (.add container missing-value)
-            (.add missing (unchecked-int idx)))
-          (.add container value)))
+        (.add container value))
+      (addMissing [p idx]
+        (.add container missing-value)
+        (.add missing (unchecked-int idx)))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
                                            missing-value n-rows)))))
@@ -466,13 +450,12 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
         missing-value (long (col-base/datatype->packed-missing-value
                              container-dtype))
         missing (bitmap/->bitmap)]
-    (reify PParser
-      (addValue [p idx value]
-        (if (identical? value :tech.v3.dataset/missing)
-          (do
-            (.addLong container missing-value)
-            (.add missing (unchecked-int idx)))
-          (.addLong container (unchecked-long value))))
+    (reify PParser$LongParser
+      (addLong [p idx value]
+        (.addLong container value))
+      (addMissing [p idx]
+        (.addLong container missing-value)
+        (.add missing (unchecked-int idx)))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
                                            missing-value n-rows)))))
@@ -485,16 +468,52 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
         missing-value (double (col-base/datatype->packed-missing-value
                                container-dtype))
         missing (bitmap/->bitmap)]
-    (reify PParser
-      (addValue [p idx value]
-        (if (identical? value :tech.v3.dataset/missing)
-          (do
-            (.addDouble container missing-value)
-            (.add missing (unchecked-int idx)))
-          (.addDouble container (unchecked-double value))))
+    (reify PParser$DoubleParser
+      (addDouble [p idx value]
+        (if (Double/isNaN value)
+          (.addMissing p idx)
+          (.addDouble container value)))
+      (addMissing [p idx]
+        (.addDouble container missing-value)
+        (.add missing (unchecked-int idx)))
       (finalize [p n-rows]
         (col-parsers/finalize-parser-data! container missing nil nil
                                            missing-value n-rows)))))
+
+(defmacro ^:private implement-column-parser
+  [add-sym get-sym]
+  `(let [~'max-def-level (.getMaxDefinitionLevel ~'col-def)
+         ~'n-rows (.getTotalValueCount ~'col-rdr)]
+     (loop [~'row-idx -1
+            ~'row 0]
+       (if (< ~'row ~'n-rows)
+         (let [~'rep-level (.getCurrentRepetitionLevel ~'col-rdr)
+               ~'row-idx (if (== 0 ~'rep-level) (unchecked-inc ~'row-idx) ~'row-idx)]
+           (if (== ~'max-def-level (.getCurrentDefinitionLevel ~'col-rdr))
+             (~add-sym ~'col-parser ~'row (~get-sym ~'supplier))
+             (.addMissing ~'col-parser ~'row))
+           (.consume ~'col-rdr)
+           (when ~'row-rep-counts
+             (.accumPlusLong ~'row-rep-counts ~'row-idx 1))
+           (recur ~'row-idx (unchecked-inc ~'row)))
+         (col-parsers/finalize! ~'col-parser ~'n-rows)))))
+
+(defn- parse-object-column
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^Supplier supplier ^PParser col-parser
+   ^Buffer row-rep-counts]
+  (implement-column-parser .addValue .get))
+
+
+(defn- parse-double-column
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^DoubleSupplier supplier ^PParser col-parser
+   ^Buffer row-rep-counts]
+  (implement-column-parser .addDouble .getAsDouble))
+
+
+(defn- parse-long-column
+  [^ColumnReader col-rdr ^ColumnDescriptor col-def ^LongSupplier supplier ^PParser col-parser
+   ^Buffer row-rep-counts]
+  (implement-column-parser .addLong .getAsLong))
 
 
 (defn- parse-column-data
@@ -502,34 +521,25 @@ org.xerial.snappy/snappy-java {:mvn/version \"1.1.8.4\"}
    parse-context key-fn metadata]
   (let [n-rows (long n-rows)
         col-name (dot-notation (.getPath col-def))
-        ^Iterable iterable (typed-col->iterable col-rdr col-def metadata)
-        iterator (.iterator iterable)
-        col-parser (or (parse-context col-name)
-                       (let [iter-dtype (dtype/elemwise-datatype iterable)]
-                         (cond
-                           (casting/integer-type? iter-dtype)
-                           (fixed-datatype-parser-long iter-dtype)
-                           (casting/float-type? iter-dtype)
-                           (fixed-datatype-parser-double iter-dtype)
-                           :else
-                           (fixed-datatype-parser iter-dtype))))
+        supplier (typed-col->supplier col-rdr col-def metadata)
+        ^PParser col-parser (or (parse-context col-name)
+                                (let [iter-dtype (dtype/elemwise-datatype supplier)]
+                                  (cond
+                                    (casting/integer-type? iter-dtype)
+                                    (fixed-datatype-parser-long iter-dtype)
+                                    (casting/float-type? iter-dtype)
+                                    (fixed-datatype-parser-double iter-dtype)
+                                    :else
+                                    (fixed-datatype-parser iter-dtype))))
         ^Buffer row-rep-counts (when-not (== n-rows (.getTotalValueCount col-rdr))
                                  (-> (int-array n-rows)
                                      (dtype/->buffer)))
-        coldata
-        ;;The user specified a specific parser for this datatype
-        (loop [continue? (.hasNext iterator)
-               row-idx -1
-               row 0]
-          (if continue?
-            (let [rep-level (.getCurrentRepetitionLevel col-rdr)
-                  col-data (.next iterator)
-                  row-idx (if (== 0 rep-level) (unchecked-inc row-idx) row-idx)]
-              (col-parsers/add-value! col-parser row col-data)
-              (when row-rep-counts
-                (.accumPlusLong row-rep-counts row-idx 1))
-              (recur (.hasNext iterator) row-idx (unchecked-inc row)))
-            (col-parsers/finalize! col-parser n-rows)))]
+        coldata (cond
+                  (instance? DoubleSupplier supplier)
+                  (parse-double-column col-rdr col-def supplier col-parser row-rep-counts)
+                  (instance? LongSupplier supplier)
+                  (parse-long-column col-rdr col-def supplier col-parser row-rep-counts)
+                  :else (parse-object-column col-rdr col-def supplier col-parser row-rep-counts))]
     (col-impl/new-column (cond-> (assoc coldata
                                         :tech.v3.dataset/name
                                         (key-fn col-name))

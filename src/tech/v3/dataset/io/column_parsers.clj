@@ -12,7 +12,7 @@
             [tech.v3.datatype.protocols :as dtype-proto]
             [ham-fisted.api :as hamf])
   (:import [java.util UUID List]
-           [tech.v3.dataset Text]
+           [tech.v3.dataset Text PParser]
            [tech.v3.datatype Buffer]
            [ham_fisted IMutList Casts]
            [org.roaringbitmap RoaringBitmap]
@@ -131,10 +131,6 @@
         (into {}))))
 
 
-(definterface PParser
-  (addValue [^long idx value])
-  (finalize [^long rowcount]))
-
 (defn add-value!
   [^PParser p ^long idx value]
   (.addValue p idx value))
@@ -205,35 +201,39 @@
         (.get container idx))))
   PParser
   (addValue [_this idx value]
-    (let [idx (unchecked-long idx)]
-      (set! max-idx (max idx max-idx))
-      ;;First pass is to potentially parse the value.  It could already
-      ;;be in the space of the container or it could require the parse-fn
-      ;;to make it.
-      (let [parsed-value (cond
-                           (missing-value? value false)
-                           :tech.v3.dataset/missing
-                           (and (identical? (dtype/datatype value) container-dtype)
-                                (not (instance? String value)))
-                           value
-                           :else
-                           (parse-fn value))]
-        (cond
-          ;;ignore it; we will add missing when we see the first valid value
-          (identical? :tech.v3.dataset/missing parsed-value)
-          nil
-          ;;Record the original incoming value if we are parsing in relaxed mode.
-          (identical? :tech.v3.dataset/parse-failure parsed-value)
-          (if failed-values
-            (do
-              (.add failed-values value)
-              (.add failed-indexes (unchecked-int idx)))
-            (errors/throwf "Failed to parse value %s as datatype %s on row %d"
-                           value container-dtype idx))
-          :else
+    (set! max-idx (max idx max-idx))
+    ;;First pass is to potentially parse the value.  It could already
+    ;;be in the space of the container or it could require the parse-fn
+    ;;to make it.
+    (let [parsed-value (cond
+                         (missing-value? value false)
+                         :tech.v3.dataset/missing
+                         (and (identical? (dtype/datatype value) container-dtype)
+                              (not (instance? String value)))
+                         value
+                         :else
+                         (parse-fn value))]
+      (cond
+        ;;ignore it; we will add missing when we see the first valid value
+        (identical? :tech.v3.dataset/missing parsed-value)
+        nil
+        ;;Record the original incoming value if we are parsing in relaxed mode.
+        (identical? :tech.v3.dataset/parse-failure parsed-value)
+        (if failed-values
           (do
-            (add-missing-values! container missing missing-value idx)
-            (.add container parsed-value))))))
+            (.add failed-values value)
+            (.add failed-indexes (unchecked-int idx)))
+          (errors/throwf "Failed to parse value %s as datatype %s on row %d"
+                         value container-dtype idx))
+        :else
+        (do
+          (add-missing-values! container missing missing-value idx)
+          (.add container parsed-value)))))
+  (addMissing [_p idx]   
+    (when (> (- idx max-idx) 1)
+      (add-missing-values! container missing missing-value idx))
+    (.add missing (unchecked-int idx))
+    (set! max-idx idx))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing failed-values failed-indexes
                            missing-value rowcount)))

@@ -121,5 +121,5 @@
     (is (dfn/equals [3.420 1.246] decimals))))
 
 
-(deftest issue-401-paruet-missing-column
+(deftest issue-401-parquet-missing-column
   (is (= 4 (ds/column-count (ds/->dataset "test/data/2024-03-03.parquet")))))
