@@ -1,4 +1,7 @@
 # Changelog
+# 7.029
+ * large parquet files now load - slowly as loading can't be parallelized - without holding onto more memory than they should.
+ 
 # 7.028
  * [issue 400](https://github.com/techascent/tech.ml.dataset/issues/400) - CSV parser issue and upgrade.
  * [issue 401](https://github.com/techascent/tech.ml.dataset/issues/401) - parquet file failed to parse - missing columns.
