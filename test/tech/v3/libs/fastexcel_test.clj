@@ -92,3 +92,8 @@
       (is (some? (ds/column ds "column::2")))
       (is (some? (ds/column ds "column::4")))
       (is (some? (ds/column ds "column-1::6"))))))
+
+
+(deftest number-colname
+  (let [ds (ds/->dataset "test/data/number_column.xlsx")]
+    (is (= (first (ds/column-names ds)) 0.0))))

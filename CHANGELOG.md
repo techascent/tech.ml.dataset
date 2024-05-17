@@ -1,4 +1,8 @@
 # Changelog
+# 7.030
+ * [issue-408](https://github.com/techascent/tech.ml.dataset/issues/408) - xlsx files with numberic column names now load.
+ * dtype-next upgrade fixing a few issues, most notably [issue-99](https://github.com/cnuernber/dtype-next/issues/99).
+ 
 # 7.029
  * large parquet files now load - slowly as loading can't be parallelized - without holding onto more memory than they should.
  
