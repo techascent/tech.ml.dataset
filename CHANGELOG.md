@@ -1,15 +1,20 @@
 # Changelog
+# 7.031
+ * [issue-413](https://github.com/techascent/tech.ml.dataset/issues/413) - reduce with packed columns.
+ * [issue-414](https://github.com/techascent/tech.ml.dataset/issues/414) - categorical maps are now integers.
+ * [issue-410](https://github.com/techascent/tech.ml.dataset/issues/410) - json parsing fails if parser-fn is provided.
+
 # 7.030
  * [issue-408](https://github.com/techascent/tech.ml.dataset/issues/408) - xlsx files with numberic column names now load.
  * dtype-next upgrade fixing a few issues, most notably [issue-99](https://github.com/cnuernber/dtype-next/issues/99).
- 
+
 # 7.029
  * large parquet files now load - slowly as loading can't be parallelized - without holding onto more memory than they should.
- 
+
 # 7.028
  * [issue 400](https://github.com/techascent/tech.ml.dataset/issues/400) - CSV parser issue and upgrade.
  * [issue 401](https://github.com/techascent/tech.ml.dataset/issues/401) - parquet file failed to parse - missing columns.
- 
+
 # 7.027
  * Moved transit bindings from tmdjs into tech.v3.libs.clj-transit.
 
