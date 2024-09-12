@@ -1755,6 +1755,12 @@
     (is (= (range 5)
            (bitmap/->random-access (ds/missing subcol))))))
 
+
+(deftest issue-413-reduction-on-instant-column
+  (let [ds (ds/->dataset {:x (range 5)
+                          :y (repeatedly 5 #(java.time.Instant/now))})]
+    (is (= 3 (count (into [] (take 3) (:y ds)))))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
