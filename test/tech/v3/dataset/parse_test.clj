@@ -500,3 +500,9 @@
         nds (ds-transit/transit-str->dataset str-data)]
     (is (= (ds :a) (nds :a)))
     (is (= (ds :b) (nds :b)))))
+
+
+(deftest issue-414-json-parser-fn
+  (is (= [1 2 3] (get (ds/->dataset "test/data/local_date.json"
+                                    {:parser-fn {:time-period :local-date}})
+                      "test"))))
