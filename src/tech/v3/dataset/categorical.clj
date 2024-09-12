@@ -104,7 +104,7 @@ Non integers found: " (vec bad-mappings)))))
                m
                (set/unique (ds-base/column dataset colname)))
        colname
-       (or res-dtype :float64))))
+       (or res-dtype :int64))))
 
 
 
@@ -112,7 +112,7 @@ Non integers found: " (vec bad-mappings)))))
   "Apply a categorical mapping transformation fit with fit-categorical-map."
   [dataset fit-data]
   (let [colname (:src-column fit-data)
-        result-datatype (or (:result-datatype fit-data) :float64)
+        result-datatype (or (:result-datatype fit-data) :int64)
         lookup-table (:lookup-table fit-data)
         column (ds-base/column dataset colname)
         missing (ds-proto/missing column)
@@ -231,7 +231,7 @@ user> (ds-cat/dataset->categorical-maps catds)
         dataset (dissoc dataset src-column)
         n-elems (dtype/ecount column)
         op-space (casting/simple-operation-space (dtype-proto/operational-elemwise-datatype column))]
-    (merge dataset 
+    (merge dataset
            (->> one-hot-table
                 (lznc/map
                  (fn [[k v]]

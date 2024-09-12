@@ -77,3 +77,13 @@
                                         (dtype/emap val-map :keyword col))))
                   (ds/categorical->number cf/categorical)
                   (ds/column "Survived")))))
+(deftest categorical-assignments-are-integers
+  (is (= #{0 1 2 3}
+         (->
+          (ds/->dataset {:x1 [1 2 4 5 6 5 6 7]
+                         :x2 [5 6 6 7 8 2 4 6]
+                         :y [:a :b :b :a :c :a :b :d]})
+          (ds/categorical->number [:y])
+          (get :y)
+          distinct
+          set))))
