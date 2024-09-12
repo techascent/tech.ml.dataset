@@ -97,7 +97,7 @@
     org.apache.spark/spark-mllib_2.12 {:mvn/version "3.0.1"}
     org.apache.spark/spark-sql_2.12 {:mvn/version "3.0.1"}
     org.apache.spark/spark-streaming_2.12 {:mvn/version "3.0.1"}
-    org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
+    org.tribuo/tribuo-all {:mvn/version "4.3.1" :extension "pom"}
     }
    :extra-paths ["neanderthal" "test"]}
 

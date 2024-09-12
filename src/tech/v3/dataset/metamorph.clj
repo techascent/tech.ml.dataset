@@ -318,8 +318,8 @@ null [6 3]:
 
 
 (defn concat
-  "Concatenate datasets in place using a copying-concatenation.
-  See also concat-inplace as it may be more efficient for your use case if you have
+  "Concatenate datasets using a copying-concatenation.
+  See also [[concat-inplace]] as it may be more efficient for your use case if you have
   a small number (like less than 3) of datasets."
   ([& args]
   (apply tech.v3.dataset.metamorph-api/concat args))
@@ -489,9 +489,9 @@ null [6 3]:
 
 
 (defn group-by
-  "Produce a map of key-fn-value->dataset.  The argument to key-fn 
+  "Produce a map of key-fn-value->dataset.  The argument to key-fn
   is a map of colname->column-value representing a row in dataset.
-  Each dataset in the resulting map contains all and only rows 
+  Each dataset in the resulting map contains all and only rows
   that produce the same key-fn-value.
 
   Options - options are passed into dtype arggroup:

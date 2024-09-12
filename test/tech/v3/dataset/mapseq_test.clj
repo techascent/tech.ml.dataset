@@ -80,8 +80,7 @@
 
     ;;forward map from input value to encoded value.
     ;;After ETL, column values are all doubles
-    (let [apple-value (-> (get (ds-mod/inference-target-label-map dataset) :apple)
-                          double)]
+    (let [apple-value (get (ds-mod/inference-target-label-map dataset) :apple)]
       (is (= #{:apple}
              (as-> dataset ds
                  (ds/filter ds #(= apple-value (:fruit-name %)))
@@ -172,7 +171,7 @@
                :apple :fruit-name-apple,
                :lemon :fruit-name-lemon},
               :src-column :fruit-name,
-              :result-datatype :float64}
+              :result-datatype :int64}
              (into {} (first (ds-cat/dataset->one-hot-maps dataset)))))
       (is (= #{:mass :fruit-name-orange :fruit-name-mandarin :width :fruit-name-apple :color-score
 	     :fruit-name-lemon :height}

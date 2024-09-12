@@ -73,8 +73,6 @@
   - `:disable-comment-skipping?` - As default, the `#` character is recognised as a
      line comment when found in the beginning of a line of text in a CSV file,
      and the row will be ignored. Set `true` to disable this behavior.
-  - `:disable-na-as-missing?` - As default, the string \"NA\" is (case-insensitively)
-     parsed as `nil`. Set `false` to disable this behavior.
   - `:max-chars-per-column` - Defaults to 4096.  Columns with more characters that this
      will result in an exception.
   - `:max-num-columns` - Defaults to 8192.  CSV,TSV files with more columns than this
@@ -477,8 +475,8 @@ null [6 3]:
 
 
 (defn concat
-  "Concatenate datasets in place using a copying-concatenation.
-  See also concat-inplace as it may be more efficient for your use case if you have
+  "Concatenate datasets using a copying-concatenation.
+  See also [[concat-inplace]] as it may be more efficient for your use case if you have
   a small number (like less than 3) of datasets."
   ([dataset & args]
   (apply tech.v3.dataset.base/concat dataset args))
@@ -644,9 +642,9 @@ null [6 3]:
 
 
 (defn group-by
-  "Produce a map of key-fn-value->dataset.  The argument to key-fn 
+  "Produce a map of key-fn-value->dataset.  The argument to key-fn
   is a map of colname->column-value representing a row in dataset.
-  Each dataset in the resulting map contains all and only rows 
+  Each dataset in the resulting map contains all and only rows
   that produce the same key-fn-value.
 
   Options - options are passed into dtype arggroup:
