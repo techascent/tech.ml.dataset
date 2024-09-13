@@ -21,7 +21,10 @@ jobs:
            ~/.deps.clj
         key: cljdeps-${{ hashFiles('deps.edn') }}
     - name: Additional dependencies
-      run: DEBIAN_FRONTEND=noninteractive sudo -E apt-get install -y libopenblas-dev intel-mkl lz4
+      run: |
+        DEBIAN_FRONTEND=noninteractive sudo -E apt-get install -y libopenblas-dev lz4
+        wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
     - name: Java setup
       uses: actions/setup-java@v3
       with:
