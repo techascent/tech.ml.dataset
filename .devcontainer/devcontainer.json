@@ -1,0 +1,24 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/scicloj/devcontainer-templates/tree/main/src/basecloj
+{
+	"name": "Base clojure dev env",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			"BASE_IMAGE": "temurin-21-tools-deps-jammy",
+			"USERNAME": "${localEnv:USER}"
+		}
+	},
+	"remoteUser": "${localEnv:USER}",
+	"containerUser": "${localEnv:USER}",
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"betterthantomorrow.calva"
+			]
+		}
+	}
+}

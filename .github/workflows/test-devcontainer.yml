@@ -1,0 +1,22 @@
+name: Run tests in devcontainer
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  run-tests:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: render tutorial in projects/noj
+      uses: devcontainers/ci@v0.3
+      with:    
+         runCmd: bash -c 'scripts/get-data.sh && scripts/run-tests'
+         push: never
+
+
