@@ -87,3 +87,62 @@
           (get :y)
           distinct
           set))))
+
+
+(defn- =-invert-cat [target-1 target-2
+                         lookup-one lookup-two
+                         result-datatype
+                      expected-result
+                      ]
+  (let [ds (ds/->dataset {:target [target-1 target-2]})
+        inverted
+        (ds-cat/invert-categorical-map ds
+                                       {:lookup-table {:one lookup-one
+                                                       :two lookup-two},
+                                        :src-column :target,
+                                        :result-datatype result-datatype})
+        inverted-target (-> inverted :target)]
+    (= expected-result inverted-target)))
+    ;(format "expected %s,  found: %s" expected-result) (seq inverted-target)))
+
+(deftest invert-cat--works
+  (is
+   (=-invert-cat 1 2
+                  1 2
+                  :int
+                  [:one :two]))
+  ; TODO - should pass ?
+  (is (=-invert-cat 1.0 2.0
+                     1 2
+                     :int
+                     [:one :two]))
+  
+  ; TODO - should pass ?
+  (is (=-invert-cat 1.99999 2.99999
+                     1 2
+                     :int
+                     [:one :two]))
+  
+  ; TODO - should pass ?
+  (is (=-invert-cat 1.2 1.3
+                     1 2
+                     :int
+                     [:one :one])))
+
+(deftest invert-cat--throws
+  (is (thrown? Exception
+                (=-invert-cat 1 2
+                               4 5
+                               :int
+                               [:one :two])))
+;; => Execution error at tech.v3.dataset.categorical/invert-categorical-map$fn (categorical.clj:177).
+;;    Unable to find src value for numeric value 1
+  
+  (is (thrown? Exception
+       (=-invert-cat 1 2
+                      1.0 2.0
+                      :int
+                      [:one :two]))))
+;; => Execution error at tech.v3.dataset.categorical/invert-categorical-map$fn (categorical.clj:177).
+;;    Unable to find src value for numeric value 1
+
