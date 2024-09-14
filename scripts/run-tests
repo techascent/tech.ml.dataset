@@ -17,6 +17,8 @@ case "${java_version}" in
 	;;
 esac
 
+echo "java version detected ${java_version} -- jdk profile detected: ${jdk_profile}"
+
 scripts/compile "${jdk_profile}"
 clojure -X:dev:codegen
 clojure -M:dev:"${jdk_profile}":test --dir test --dir neanderthal
