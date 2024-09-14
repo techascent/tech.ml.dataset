@@ -2,9 +2,6 @@ name: Run tests in devcontainer
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   run-tests:
