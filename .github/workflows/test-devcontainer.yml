@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: render tutorial in projects/noj
+    - name: run tests
       uses: devcontainers/ci@v0.3
       with:    
          runCmd: bash -c 'scripts/get-data.sh && scripts/run-tests'
