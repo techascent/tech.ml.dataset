@@ -15,7 +15,7 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
     
-RUN DEBIAN_FRONTEND=noninteractive  apt-get install -y libopenblas-dev lz4 gnupg libgomp1
+RUN DEBIAN_FRONTEND=noninteractive  apt-get install -y libopenblas-dev lz4 gnupg libgomp1 unzip
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BAC6F0C353D04109
 RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
 RUN echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
