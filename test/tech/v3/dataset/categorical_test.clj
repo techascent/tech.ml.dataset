@@ -106,11 +106,14 @@
     ;(format "expected %s,  found: %s" expected-result) (seq inverted-target)))
 
 (deftest invert-cat--works
+  
   (is
    (=-invert-cat 1 2
                   1 2
                   :int
                   [:one :two]))
+    
+  
   ; TODO - should pass ?
   (is (=-invert-cat 1.0 2.0
                      1 2
@@ -130,6 +133,17 @@
                      [:one :one])))
 
 (deftest invert-cat--throws
+  
+
+(is (thrown? Exception
+     (=-invert-cat 1.0 2.0
+                   1.0 2.0
+                   :float
+                   [:one :two])
+     ;; => Execution error at tech.v3.dataset.categorical/invert-categorical-map$fn (categorical.clj:177).
+     ;;    Unable to find src value for numeric value 1.0
+))
+
   (is (thrown? Exception
                 (=-invert-cat 1 2
                                4 5
@@ -145,4 +159,34 @@
                       [:one :two]))))
 ;; => Execution error at tech.v3.dataset.categorical/invert-categorical-map$fn (categorical.clj:177).
 ;;    Unable to find src value for numeric value 1
+
+
+(defn- is-roundtrip-ok [raw-model-prediction]
+  (let [
+        train-ds
+        (->
+         (ds/->dataset {:target [:a :b :c]})
+         (ds/categorical->number [:target])
+         )
+        cat-map (-> train-ds :target meta :categorical-map)
+
+        prediction-ds  
+        (->
+         (ds/->dataset {:target raw-model-prediction})
+         (ds/assoc-metadata [:target] :categorical-map cat-map)
+         (ds-cat/reverse-map-categorical-xforms))]
+    (is (= [:c :a :b] (:target prediction-ds)))
+    ))
+
+
+(deftest round-trip 
+;; only this should pass
+  (is-roundtrip-ok [0 1 2])
+
+;; currently these all pass, while I would like them to all fail
+  (is-roundtrip-ok [0.0 1.2 2.2])
+  (is-roundtrip-ok [0.9 1.9 2.9])
+  (is-roundtrip-ok (float-array [0 1 2]))
+  (is-roundtrip-ok (float-array [0 1.9 2.9]))
+  (is-roundtrip-ok (double-array [0 1.5 2.2])))
 
