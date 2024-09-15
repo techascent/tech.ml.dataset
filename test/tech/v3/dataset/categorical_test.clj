@@ -106,14 +106,11 @@
     ;(format "expected %s,  found: %s" expected-result) (seq inverted-target)))
 
 (deftest invert-cat--works
-  
   (is
    (=-invert-cat 1 2
                   1 2
                   :int
                   [:one :two]))
-    
-  
   ; TODO - should pass ?
   (is (=-invert-cat 1.0 2.0
                      1 2
