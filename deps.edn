@@ -157,6 +157,11 @@
               "--enable-native-access=ALL-UNNAMED"
               "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
               "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+  :jdk-21
+  {:jvm-opts ["--add-modules" "jdk.incubator.foreign,jdk.incubator.vector"
+              "--enable-native-access=ALL-UNNAMED"
+              "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+              "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
   :codegen
   {:extra-paths ["src" "dev"]
    :exec-fn tech.v3.dataset.codegen/-main}
