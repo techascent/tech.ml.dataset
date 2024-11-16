@@ -1,4 +1,7 @@
 # Changelog
+# 7.033
+ * [issue-434](https://github.com/techascent/tech.ml.dataset/issues/413) - bad transit encoding - packed instants are microseconds since epoch and have been for a while - not milliseconds since epoch.
+ 
 # 7.031
  * [issue-413](https://github.com/techascent/tech.ml.dataset/issues/413) - reduce with packed columns.
  * [issue-414](https://github.com/techascent/tech.ml.dataset/issues/414) - categorical maps are now integers.

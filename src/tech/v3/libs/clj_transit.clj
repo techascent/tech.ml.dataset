@@ -141,7 +141,7 @@
        (#{:packed-local-date :local-date} col-dt)
        (obj-col->numeric-b64 col :int32 dtype-dt/local-date->days-since-epoch)
        (#{:packed-instant :instant} col-dt)
-       (obj-col->numeric-b64 col :int64 dtype-dt/instant->milliseconds-since-epoch)
+       (obj-col->numeric-b64 col :int64 dtype-dt/instant->microseconds-since-epoch)
        :else ;;Punt!!
        (vec col))}))
 
@@ -260,12 +260,12 @@
 (def ^{:doc "Transit write handlers for java.time.LocalDate and java.time.Instant"}
   java-time-write-handlers
   {LocalDate (t/write-handler "java.time.LocalDate" dtype-dt/local-date->days-since-epoch)
-   Instant (t/write-handler "java.time.Instant" dtype-dt/instant->milliseconds-since-epoch)})
+   Instant (t/write-handler "java.time.Instant" dtype-dt/instant->microseconds-since-epoch)})
 
 (def ^{:doc "Transit read handlers for java.time.LocalDate and java.time.Instant"}
   java-time-read-handlers
   {"java.time.LocalDate" (t/read-handler dtype-dt/days-since-epoch->local-date)
-   "java.time.Instant" (t/read-handler dtype-dt/milliseconds-since-epoch->instant)})
+   "java.time.Instant" (t/read-handler dtype-dt/microseconds-since-epoch->instant)})
 
 
 (defn dataset->transit
@@ -315,17 +315,18 @@
 (comment
   (defn master-ds
     []
-    (ds/->dataset {:a (mapv double (range 5))
-                   :b (repeat 5 :a)
-                   :c (repeat 5 "hey")
-                   :d (repeat 5 {:a 1 :b 2})
-                   :e (repeat 4 [1 2 3])
-                   :f (repeat 5 (dtype-dt/local-date))
-                   :g (repeat 5 (dtype-dt/instant))
-                   :h [true false true true false]
-                   :i (repeat 5 "text")
-                   :j [1 nil 2 nil 3]}
+    (ds/->dataset (array-map :a (mapv double (range 5))
+                             :b (repeat 5 :a)
+                             :c (repeat 5 "hey")
+                             :d (repeat 5 {:a 1 :b 2})
+                             :e (repeat 4 [1 2 3])
+                             :f (repeat 5 (dtype-dt/local-date))
+                             :g (repeat 5 (dtype-dt/instant))
+                             :h [true false true true false]
+                             :i (repeat 5 "text")
+                             :j [1 nil 2 nil 3])
                   {:parser-fn {:i :text}}))
+  
 
 
   (-> (master-ds)

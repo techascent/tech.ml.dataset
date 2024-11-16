@@ -502,6 +502,17 @@
     (is (= (ds :b) (nds :b)))))
 
 
+(deftest issue-434-transit-support
+  (let [ds (ds/->dataset {:a [1 2 3]
+                          :b [:one :two :three]
+                          :c [(java.time.Instant/now) (java.time.Instant/now)]})
+        str-data (ds-transit/dataset->transit-str ds)
+        nds (ds-transit/transit-str->dataset str-data)]
+    (is (= (ds :a) (nds :a)))
+    (is (= (ds :b) (nds :b)))
+    (is (= (ds :c) (nds :c)))))
+
+
 (deftest issue-414-json-parser-fn
   (is (= [1 2 3] (get (ds/->dataset "test/data/local_date.json"
                                     {:parser-fn {:time-period :local-date}})
