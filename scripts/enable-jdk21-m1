@@ -1,0 +1,14 @@
+#!/bin/bash
+
+
+VERSION="21.0.2"
+
+if [ ! -e jdk-$VERSION ]; then
+   echo "Downloading JDK $VERSION"	
+    wget https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_macos-aarch64_bin.tar.gz
+    tar -xvzf openjdk-21.0.2_macos-aarch64_bin.tar.gz
+    rm openjdk-21.0.2_macos-aarch64_bin.tar.gz
+fi
+
+export PATH=$(pwd)/jdk-$VERSION/bin:$PATH
+export JAVA_HOME=$(pwd)/jdk-$VERSION/

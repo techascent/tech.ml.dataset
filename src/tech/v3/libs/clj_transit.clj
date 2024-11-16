@@ -140,8 +140,8 @@
        (text-col->data col)
        (#{:packed-local-date :local-date} col-dt)
        (obj-col->numeric-b64 col :int32 dtype-dt/local-date->days-since-epoch)
-       (#{:packed-instant :instant} col-dt)
-       (obj-col->numeric-b64 col :int64 dtype-dt/instant->microseconds-since-epoch)
+       (#{:packed-instant :instant :packed-milli-instant} col-dt)
+       (obj-col->numeric-b64 col :int64 dtype-dt/instant->milliseconds-since-epoch)
        :else ;;Punt!!
        (vec col))}))
 
@@ -238,7 +238,7 @@
                                     (= :instant dtype)
                                     (-> (b64->numeric-data data :int64)
                                         (dtype/->array-buffer)
-                                        (abuf/set-datatype :packed-instant))
+                                        (abuf/set-datatype :packed-milli-instant))
                                     :else
                                     (dtype/make-container dtype data))
                                  :name            (:name metadata)})))
@@ -260,12 +260,12 @@
 (def ^{:doc "Transit write handlers for java.time.LocalDate and java.time.Instant"}
   java-time-write-handlers
   {LocalDate (t/write-handler "java.time.LocalDate" dtype-dt/local-date->days-since-epoch)
-   Instant (t/write-handler "java.time.Instant" dtype-dt/instant->microseconds-since-epoch)})
+   Instant (t/write-handler "java.time.Instant" dtype-dt/instant->milliseconds-since-epoch)})
 
 (def ^{:doc "Transit read handlers for java.time.LocalDate and java.time.Instant"}
   java-time-read-handlers
   {"java.time.LocalDate" (t/read-handler dtype-dt/days-since-epoch->local-date)
-   "java.time.Instant" (t/read-handler dtype-dt/microseconds-since-epoch->instant)})
+   "java.time.Instant" (t/read-handler dtype-dt/milliseconds-since-epoch->instant)})
 
 
 (defn dataset->transit

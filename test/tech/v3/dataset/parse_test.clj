@@ -505,7 +505,8 @@
 (deftest issue-434-transit-support
   (let [ds (ds/->dataset {:a [1 2 3]
                           :b [:one :two :three]
-                          :c [(java.time.Instant/now) (java.time.Instant/now)]})
+                          ;;transit encoding is milli instants
+                          :c (dtype/make-container :packed-milli-instant [(java.time.Instant/now) (java.time.Instant/now)])})
         str-data (ds-transit/dataset->transit-str ds)
         nds (ds-transit/transit-str->dataset str-data)]
     (is (= (ds :a) (nds :a)))

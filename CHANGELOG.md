@@ -1,4 +1,7 @@
 # Changelog
+#7.034
+ * Reverted transit encoding of instant back to milliseconds since epoch as js api doesn't support microseconds since epoch.
+
 # 7.033
  * [issue-434](https://github.com/techascent/tech.ml.dataset/issues/413) - bad transit encoding - packed instants are microseconds since epoch and have been for a while - not milliseconds since epoch.
  
