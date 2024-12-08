@@ -3,6 +3,7 @@
  * Latest dtype-next (10.124) - contains upgrades to ham-fisted which allow pmap et al. to accept arbitrary executor services.
  * Fix for [issue 438](https://github.com/techascent/tech.ml.dataset/issues/438) - keyword dataset names in tribuo.
  * Fix for [issue 435](https://github.com/techascent/tech.ml.dataset/issues/435) - pd-merge's outer must accept empty datasets.
+ * Fix for issues 432 and 371 - select-row-type operations don't remove `:print-index-range :all` metadata.
  
  
  
