@@ -346,6 +346,32 @@
    (-> (hash-join colname lhs rhs (assoc options :lhs-missing? true))
        :left-outer)))
 
+(defn- col-or-data->reader
+  ([tuple-data ds])
+  ([tuple-data ds outer?]
+   ;;Else not having the column is an error
+   (if (and (sequential? tuple-data)
+            (not= 1 (count tuple-data)))
+     (-> (ds-base/select-columns ds tuple-data)
+         (ds-readers/value-reader {:copying? true}))
+     (let [tuple-data (if (sequential? tuple-data)
+                        (first tuple-data)
+                        tuple-data)]
+       (if outer?
+         (get ds tuple-data [])
+         (ds-base/column ds tuple-data))))))
+
+(defn- ensure-sequential
+  [colname]
+  (if-not (sequential? colname) [colname] colname))
+
+(defn- filter-columns
+  [ds collist outer?]
+  (when collist
+    (if outer?
+      (vec (filter (set (ds-base/column-names ds)) collist))
+      collist)))
+
 
 (defn pd-merge
   "Pandas-style [merge](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html).
@@ -419,15 +445,6 @@ outer-join [8 4]:
   ([left-ds right-ds options]
    (let [lhs-table-name (default-table-name left-ds "left")
          rhs-table-name (default-table-name right-ds "right")
-         col-or-data->reader
-         (fn [tuple-data ds]
-           (if (and (sequential? tuple-data)
-                    (not= 1 (count tuple-data)))
-             (-> (ds-base/select-columns ds tuple-data)
-                 (ds-readers/value-reader {:copying? true}))
-             (if (sequential? tuple-data)
-               (ds-base/column ds (first tuple-data))
-               (ds-base/column ds tuple-data))))
          how (get options :how :inner)]
      (if (identical? how :cross)
        (do
@@ -453,10 +470,10 @@ outer-join [8 4]:
                  [lhs-table-name lhs-columns]
                  [rhs-table-name rhs-columns]))
                (update-join-metadata lhs-table-name rhs-table-name))))
-       (let [left-on (get options :left-on (get options :on))
-             right-on (get options :right-on (get options :on))
-             left-on (when left-on (if-not (sequential? left-on) [left-on] left-on))
-             right-on (when right-on (if-not (sequential? right-on) [right-on] right-on))
+       (let [left-on (ensure-sequential (get options :left-on (get options :on)))
+             right-on (ensure-sequential (get options :right-on (get options :on)))
+             
+             outer? (identical? :outer (get options :how))
              on-int (->> (concat left-on right-on)
                          (filter (set/intersection (set left-on) (set right-on)))
                          (distinct)
@@ -465,8 +482,10 @@ outer-join [8 4]:
                 (== (count left-on) (count right-on))
                 "Number of left join columns (%d) doesn't equal number of right join columns %d"
                 (count left-on) (count right-on))
-             left-join-data (col-or-data->reader left-on left-ds)
-             right-join-data (col-or-data->reader right-on right-ds)
+             left-on (filter-columns left-ds left-on outer?)
+             right-on (filter-columns right-ds right-on outer?)
+             left-join-data (col-or-data->reader left-on left-ds outer?)
+             right-join-data (col-or-data->reader right-on right-ds outer?)
 
 
              {:keys [lhs-indexes rhs-indexes lhs-missing rhs-missing]}
@@ -524,30 +543,36 @@ outer-join [8 4]:
                    [rhs-table-name rhs-cols]))
                  (update-join-metadata lhs-table-name rhs-table-name)))
            :outer
-           (let [n-left-empty (count rhs-missing)
-                 n-right-empty (count lhs-missing)
-                 ;;Order is intersection, left-missing, right-missing
-                 lhs-indexes (add-all! (dtype/clone lhs-indexes) lhs-missing)
-                 left-valid (ds-base/select-rows left-ds lhs-indexes)
-                 right-valid (ds-base/select-rows right-ds rhs-indexes)
-                 right-missing (ds-base/select-rows right-ds rhs-missing)
-                 ;;For the columns we perhaps joined on
-                 intersection-ds (-> (ds-base/select-columns left-valid on-int)
-                                     (ds-base/concat-copying (ds-base/select-columns
-                                                              right-missing on-int)))
-                 left-full (-> (ds-base/remove-columns left-valid on-int)
-                               (ds-base/extend-with-empty n-left-empty))
-                 right-full (-> (ds-base/remove-columns right-valid on-int)
-                                (ds-base/extend-with-empty n-right-empty)
-                                (ds-base/concat-copying (ds-base/remove-columns
-                                                         right-missing on-int)))]
-             (-> (ds-impl/new-dataset
-                  "outer-join"
-                  (nice-column-names
-                   [lhs-table-name (concat (ds-base/columns intersection-ds)
-                                           (ds-base/columns left-full))]
-                   [rhs-table-name (ds-base/columns right-full)]))
-                 (update-join-metadata lhs-table-name rhs-table-name))))))))
+           (cond
+             (== 0 (ds-base/row-count left-ds))
+             (vary-meta right-ds assoc :name "outer-join")
+             (== 0 (ds-base/row-count right-ds))
+             (vary-meta left-ds assoc :name "outer-join")
+             :else 
+             (let [n-left-empty (count rhs-missing)
+                   n-right-empty (count lhs-missing)
+                   ;;Order is intersection, left-missing, right-missing
+                   lhs-indexes (add-all! (dtype/clone lhs-indexes) lhs-missing)
+                   left-valid (ds-base/select-rows left-ds lhs-indexes)
+                   right-valid (ds-base/select-rows right-ds rhs-indexes)
+                   right-missing (ds-base/select-rows right-ds rhs-missing)
+                   ;;For the columns we perhaps joined on
+                   intersection-ds (-> (ds-base/select-columns left-valid on-int)
+                                       (ds-base/concat-copying (ds-base/select-columns
+                                                                right-missing on-int)))
+                   left-full (-> (ds-base/remove-columns left-valid on-int)
+                                 (ds-base/extend-with-empty n-left-empty))
+                   right-full (-> (ds-base/remove-columns right-valid on-int)
+                                  (ds-base/extend-with-empty n-right-empty)
+                                  (ds-base/concat-copying (ds-base/remove-columns
+                                                           right-missing on-int)))]
+               (-> (ds-impl/new-dataset
+                    "outer-join"
+                    (nice-column-names
+                     [lhs-table-name (concat (ds-base/columns intersection-ds)
+                                             (ds-base/columns left-full))]
+                     [rhs-table-name (ds-base/columns right-full)]))
+                   (update-join-metadata lhs-table-name rhs-table-name)))))))))
   ([left-ds right-ds]
    (pd-merge left-ds right-ds {:on (set/intersection
                                     (set (ds-base/column-names left-ds))

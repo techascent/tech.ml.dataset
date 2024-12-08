@@ -391,3 +391,11 @@
     (is (= #{:product :customer}
            (set (ds/column-names mm))))))
 
+
+(deftest pd-merge-issue-435
+  (is (ds-join/pd-merge (ds/empty-dataset)
+                        (ds/->dataset {:t [0 1] :x [:a :b]})
+                        {:on :t :how :outer}))
+  (is (ds-join/pd-merge (ds/->dataset {:t [0 1] :x [:a :b]})
+                        (ds/empty-dataset)                        
+                        {:on :t :how :outer})))
