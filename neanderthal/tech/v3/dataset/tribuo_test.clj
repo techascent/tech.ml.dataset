@@ -11,7 +11,6 @@
            [org.tribuo.regression.xgboost XGBoostRegressionTrainer]))
 
 
-
 (defn classification-example-ds
   [x]
   (let [x (if (integer? x)
@@ -80,3 +79,11 @@
     (is (= "class org.tribuo.classification.dtree.CARTClassificationTrainer"
            (str (class trainer))))))
 
+
+(deftest test-keyword-name
+  (testing "string name (OK)"
+    (is (-> (ds/->dataset [{"a" 1}] {:dataset-name "string name"})
+            (tribuo/make-regression-datasource "a"))))
+  (testing "keyword name (Error)"
+    (is (-> (ds/->dataset [{"a" 1}] {:dataset-name :keyword/name})
+            (tribuo/make-regression-datasource "a")))))

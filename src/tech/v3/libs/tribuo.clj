@@ -55,7 +55,7 @@ _unnamed [5 1]:
            [org.tribuo.regression.evaluation RegressionEvaluator RegressionEvaluation]
            [com.oracle.labs.mlrg.olcut.config ConfigurationManager]
            [com.oracle.labs.mlrg.olcut.config.json JsonConfigFactory]))
-   
+
 
 (set! *warn-on-reflection* true)
 
@@ -157,13 +157,22 @@ _unnamed [5 1]:
                                         cnames (->double-array (feat-data idx))))
       (meta outputs))))
 
+(defn- safe-str
+  [n]
+  (cond (string? n)
+    n
+    (or (keyword? n) (symbol? n))
+    (if-let [nn (namespace n)]
+      (str nn "/" (name n))
+      (str (name n)))))
+
 
 (defn- ds->datasource
   ^DataSource [ds ds->outputs]
   (let [examples (ds->examples ds ds->outputs)
         {:keys [output-factory provenance]} (meta examples)
         provenance (or provenance
-                       (SimpleDataSourceProvenance. (:name (meta ds)) output-factory))]
+                       (SimpleDataSourceProvenance. (safe-str (:name (meta ds))) output-factory))]
     (when-not output-factory
       (throw (RuntimeException. "Output factory not present in example metadata")))
     (reify DataSource
