@@ -1,5 +1,9 @@
 # Changelog
-#7.034
+# 7.035 - UNRELEASED
+ * Latest dtype-next (10.124) - contains upgrades to ham-fisted which allow pmap et al. to accept arbitrary executor services.
+ 
+ 
+# 7.034
  * Reverted transit encoding of instant back to milliseconds since epoch as js api doesn't support microseconds since epoch.
 
 # 7.033
