@@ -1761,6 +1761,12 @@
                           :y (repeatedly 5 #(java.time.Instant/now))})]
     (is (= 3 (count (into [] (take 3) (:y ds)))))))
 
+
+(deftest issue-432-issue-371
+  (let [sds (ds/print-all (ds/->dataset {:x (repeatedly 50 rand)}))]
+    (is (= :all (:print-index-range (meta (ds/sort-by-column sds :x)))))
+    (is (= :all (:print-index-range (meta (ds/filter-column sds :x pos?)))))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))

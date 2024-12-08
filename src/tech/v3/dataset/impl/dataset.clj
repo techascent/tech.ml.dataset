@@ -266,7 +266,9 @@
            ;;select may be slower if we have to recalculate missing values.
            (lznc/map #(ds-proto/select-rows % rowidxs))
            (new-dataset (ds-proto/dataset-name dataset)
-                        (dissoc metadata :print-index-range)))))
+                        (if-not (identical? :all (get metadata :print-index-range))
+                          (dissoc metadata :print-index-range)
+                          metadata)))))
 
 
   ds-proto/PSelectColumns
