@@ -1,4 +1,4 @@
-name: Run tests in devcontainer
+name: Run all tests in devcontainer
 
 on:
   push:
