@@ -216,10 +216,26 @@ user> (ds/rowvec-at stocks -1)
   ((rowvecs ds) idx))
 
 
+(defn empty-column-names
+  "Return a sequence of column names whose empty set length matches the row count of the dataset."
+  [ds]
+  (let [rc (row-count ds)]
+    (->> (columns ds)
+         (lznc/map #(when (== rc (long (dtype/ecount (missing %))))
+                      (:name (meta %))))
+         (lznc/remove nil?))))
+
+
+(defn remove-empty-columns
+  "Remove all columns that have no data - missing set length equals row count."
+  [ds]
+  (remove-columns ds (empty-column-names ds)))
+
+
 (export-symbols tech.v3.dataset.io
-                ->dataset
-                ->>dataset
-                write!)
+  ->dataset
+  ->>dataset
+  write!)
 
 
 (defn dataset-parser
