@@ -31,7 +31,8 @@
   flatbuffer and schema definitions:
 
 ```clojure
-  [org.apache.arrow/arrow-vector \"6.0.0\"]
+  ;; netty isn't required and will inevitably conflict with some more recent version
+  [org.apache.arrow/arrow-vector \"6.0.0\":exclusions [netty/netty io.netty/netty-common]]
   [com.cnuernber/jarrow \"1.000\"]
   [org.apache.commons/commons-compress \"1.21\"]
 
