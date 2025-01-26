@@ -1,4 +1,7 @@
 # Changelog
+# 7.036
+ * Major optimization (>9x!) loading of arrow files when large string tables/dictionaries are used.
+ 
 # 7.035
  * Latest dtype-next (10.124) - contains upgrades to ham-fisted which allow pmap et al. to accept arbitrary executor services.
  * Fix for [issue 438](https://github.com/techascent/tech.ml.dataset/issues/438) - keyword dataset names in tribuo.

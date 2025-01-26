@@ -420,6 +420,12 @@ null [6 3]:
   (tech.v3.dataset.metamorph-api/drop-rows row-indexes)))
 
 
+(defn empty-column-names
+  "Return a sequence of column names whose empty set length matches the row count of the dataset."
+  ([]
+  (tech.v3.dataset.metamorph-api/empty-column-names )))
+
+
 (defn empty-dataset
   ([]
   (tech.v3.dataset.metamorph-api/empty-dataset )))
@@ -837,6 +843,12 @@ test/data/stocks.csv [10 3]:
 ```"
   ([colname-seq-or-fn]
   (tech.v3.dataset.metamorph-api/remove-columns colname-seq-or-fn)))
+
+
+(defn remove-empty-columns
+  "Remove all columns that have no data - missing set length equals row count."
+  ([]
+  (tech.v3.dataset.metamorph-api/remove-empty-columns )))
 
 
 (defn remove-rows

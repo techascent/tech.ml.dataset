@@ -580,6 +580,12 @@ null [6 3]:
   (tech.v3.dataset.base/drop-rows dataset-or-col row-indexes)))
 
 
+(defn empty-column-names
+  "Return a sequence of column names whose empty set length matches the row count of the dataset."
+  ([ds]
+  (tech.v3.dataset-api/empty-column-names ds)))
+
+
 (defn empty-dataset
   ([]
   (tech.v3.dataset.impl.dataset/empty-dataset )))
@@ -972,6 +978,12 @@ test/data/stocks.csv [10 3]:
 ```"
   ([dataset colname-seq-or-fn]
   (tech.v3.dataset.base/remove-columns dataset colname-seq-or-fn)))
+
+
+(defn remove-empty-columns
+  "Remove all columns that have no data - missing set length equals row count."
+  ([ds]
+  (tech.v3.dataset-api/remove-empty-columns ds)))
 
 
 (defn remove-rows

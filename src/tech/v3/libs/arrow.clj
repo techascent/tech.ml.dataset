@@ -1244,16 +1244,24 @@ Dependent block frames are not supported!!")
   ^List [offsets data n-elems]
   (let [n-elems (long n-elems)
         offsets (dtype/->reader offsets)]
-    (reify ObjectReader
-      (elemwiseDatatype [rdr] :string)
-      (lsize [rdr] n-elems)
-      (readObject [rdr idx]
-        (let [start-off (long (offsets idx))
-              end-off (long (offsets (inc idx)))]
-          (-> (dtype/sub-buffer data start-off
-                                (- end-off start-off))
-              (dtype/->byte-array)
-              (String.)))))))
+    (if (instance? NativeBuffer data)
+      (reify ObjectReader
+        (elemwiseDatatype [rdr] :string)
+        (lsize [rdr] n-elems)
+        (readObject [rdr idx]
+          (let [start-off (long (offsets idx))
+                end-off (long (offsets (inc idx)))]
+            (native-buffer/native-buffer->string data start-off (- end-off start-off)))))
+      (reify ObjectReader
+        (elemwiseDatatype [rdr] :string)
+        (lsize [rdr] n-elems)
+        (readObject [rdr idx]
+          (let [start-off (long (offsets idx))
+                end-off (long (offsets (inc idx)))]
+            (-> (dtype/sub-buffer data start-off
+                                  (- end-off start-off))
+                (dtype/->byte-array)
+                (String.))))))))
 
 (defn- offsets-data->bytedata-reader
   ^List [offsets data n-elems]
@@ -1306,15 +1314,13 @@ Dependent block frames are not supported!!")
 (defn- string-data->column-data
   [dict-map encoding offset-buf-dtype buffers n-elems]
   (if encoding
-    (let [str-list (get-in dict-map [(:id encoding) :strings])
-          index-data (-> (first buffers)
-                         (native-buffer/set-native-datatype
-                          (get-in encoding [:index-type :datatype]))
-                         (dtype/sub-buffer 0 n-elems)
-                         (dtype/clone))
-          retval (StringTable. str-list nil (dyn-int-list/make-from-container
-                                             index-data))]
-      retval)
+    (StringTable. (get-in dict-map [(:id encoding) :strings])
+                  nil
+                  (-> (first buffers)
+                      (native-buffer/set-native-datatype
+                       (get-in encoding [:index-type :datatype]))
+                      (native-buffer/->jvm-array 0 n-elems)
+                      (dyn-int-list/make-from-container)))
     (let [[offsets varchar-data] buffers]
       (-> (offsets-data->string-reader (native-buffer/set-native-datatype
                                         offsets offset-buf-dtype)
