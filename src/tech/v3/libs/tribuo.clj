@@ -41,7 +41,7 @@ _unnamed [5 1]:
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
             [clojure.set :as set]
-            [cheshire.core :as json])
+            [charred.api :as charred])
   (:import [tech.v3.datatype Buffer ArrayHelpers]
            [java.util HashMap Map List]
            [java.nio.file Files]
@@ -321,6 +321,6 @@ _unnamed [5 1]:
   [config-components trainer-name]
   (let [config {:config {:components config-components}}
         tmp (.toString (Files/createTempFile "config" ".json" (make-array FileAttribute 0)))
-        _ (->> config json/generate-string (spit tmp))
+        _ (charred/write-json tmp config)
         config-manager (ConfigurationManager. tmp)]
     (.lookup config-manager trainer-name)))
