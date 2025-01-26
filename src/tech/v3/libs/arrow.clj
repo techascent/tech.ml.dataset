@@ -1313,7 +1313,7 @@ Dependent block frames are not supported!!")
 
 
 (defn- string-data->column-data
-  [dict-map encoding offset-buf-dtype buffers n-elems]
+  [dict-map encoding offset-buf-dtype buffers n-elems options]
   (if encoding
     (StringTable. (get-in dict-map [(:id encoding) :strings])
                   nil
@@ -1322,11 +1322,13 @@ Dependent block frames are not supported!!")
                        (get-in encoding [:index-type :datatype]))
                       (native-buffer/->jvm-array 0 n-elems)
                       (dyn-int-list/make-from-container)))
-    (let [[offsets varchar-data] buffers]
-      (-> (offsets-data->string-reader (native-buffer/set-native-datatype
-                                        offsets offset-buf-dtype)
-                                       varchar-data n-elems)
-          (string-reader->text-reader)))))
+    (let [[offsets varchar-data] buffers
+          str-rdr (offsets-data->string-reader (native-buffer/set-native-datatype
+                                                offsets offset-buf-dtype)
+                                               varchar-data n-elems)]
+      (if-not (:text-as-strings? options)
+        (string-reader->text-reader)
+        str-rdr))))
 
 
 (defn- int8-buf->missing
@@ -1415,7 +1417,8 @@ Dependent block frames are not supported!!")
       dict-map encoding
       (get-in field [:field-type :offset-buffer-datatype])
       data-buffers
-      (:n-elems node))
+      (:n-elems node)
+      options)
      (field-metadata field)
      (node-buf->missing node validity-buf))))
 

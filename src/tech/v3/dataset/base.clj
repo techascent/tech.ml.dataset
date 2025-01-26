@@ -918,17 +918,20 @@
             string-data ^bytes string-data
             offsets (dtype/->buffer offsets)
             n-elems (dec (.lsize offsets))
-            ^IMutList int->str
-            (->> (dtype/make-reader
-                  :string n-elems
-                  (let [start-off (.readLong offsets idx)
-                        end-off (.readLong offsets (inc idx))]
-                    (String. string-data start-off (- end-off start-off))))
-                 (dtype/make-container :list :string))
-            str->int (HashMap. (dtype/ecount int->str))]
-        (dotimes [idx n-elems]
-          (.put str->int (.get int->str idx) idx))
-        (StringTable. int->str str->int int-data))
+            str-rdr (dtype/make-reader
+                     :string n-elems
+                     (let [start-off (.readLong offsets idx)
+                           end-off (.readLong offsets (inc idx))]
+                       (String. string-data start-off (- end-off start-off))))
+            str-ary (hamf/object-array n-elems)]
+        (hamf/pgroups n-elems (fn [^long sidx ^long eidx]
+                                (loop [idx sidx]
+                                  (when (< idx eidx)
+                                    (let [start-off (.readLong offsets idx)
+                                          end-off (.readLong offsets (inc idx))]
+                                      (aset str-ary idx (String. string-data start-off (- end-off start-off))))
+                                    (recur (inc idx))))))
+        (StringTable. (ham_fisted.ArrayLists/toList str-ary) nil int-data))
       (= version 2)
       (let [^List int->str (dtype-list/wrap-container string-table)
             str->int (HashMap. (dtype/ecount int->str))

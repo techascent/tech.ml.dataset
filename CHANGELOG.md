@@ -1,4 +1,8 @@
 # Changelog
+# 7.037
+ * Nippy loading is about 2x faster in the case of large string tables.
+ * Arrow read pathways support :text-as-strings? to mirror :strings-as-text? on the write side so you can save out uncompressed data in the fastest-to-read format.
+ 
 # 7.036
  * Major optimization (>9x!) loading of arrow files when large string tables/dictionaries are used.
  
