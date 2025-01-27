@@ -24,6 +24,14 @@
   loaded.  Appropriate JVM arguments can be found
   [here](https://github.com/techascent/tech.ml.dataset/blob/0524ddd5bbcb9421a0f11290ec8a01b7795dcff9/project.clj#L69).
 
+  Example (with zstd compression):
+
+```clojure
+  ;; Writing
+  (arrow/dataset->stream! ds fname {:compression :zstd})
+  ;; Reading
+  (arrow/stream->dataset path)
+```
 
   ## Required Dependencies
 
@@ -49,7 +57,25 @@
 
 ```console
   sudo apt install liblz4-1
-```"
+  ```  
+
+  ## Performance 
+
+  Arrow has hands down highest performance of any of the formats although nippy comes very close when using
+  any compression.  The highest performance pathway is to save out data with :strings-as-text? true and zero
+  compression then read them in using mmap - optionally with :text-as-strings? if you never want to see 
+  tech.v3.datatype.Text objects in your dataset.  This avoids the creation of string dictionaries during 
+  deserialization as these have to be done greedily.  It can dramatically increase many dataset sizes but
+  when mmap is used the overall size is irrelevant aside from iteration which can be heavily parallelized.
+
+  Example:
+
+```clojure
+  ;; Writing
+  (arrow/dataset->stream! ds fname {:strings-as-text? true})
+  ;; Reading
+  (arrow/stream->dataset path {:text-as-strings? true :open-type :mmap})
+  ```"
   (:require [tech.v3.datatype.mmap :as mmap]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype :as dtype]
@@ -1327,7 +1353,7 @@ Dependent block frames are not supported!!")
                                                 offsets offset-buf-dtype)
                                                varchar-data n-elems)]
       (if-not (:text-as-strings? options)
-        (string-reader->text-reader)
+        (string-reader->text-reader str-rdr)
         str-rdr))))
 
 
@@ -1841,7 +1867,12 @@ Dependent block frames are not supported!!")
   datatypes will be represented as their integer types as opposed to their respective
   packed types.  For example columns of type `:epoch-days` will be returned to the user
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
-  will return integers as opposed to `java.time.LocalDate`s."
+  will return integers as opposed to `java.time.LocalDate`s.
+
+  * `:text-as-strings?` - Return strings instead of Text objects.  This breaks automatic round-tripping
+  as it changes datatypes *but* can be useful when used with `:strings-as-text?` when writing data out.
+  When used like this uncompressed mmap pathways typically have the highest performance - roughly 100x
+  any other method."
   [fname & [options]]
   (let [input (case (get options :open-type :input-stream)
                 :mmap (mmap/mmap-file fname options)
