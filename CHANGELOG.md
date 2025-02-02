@@ -1,4 +1,8 @@
 # Changelog
+# 7.038
+ * Upgrade to hamf 2.020.
+ * Fix for [issue 447](https://github.com/techascent/tech.ml.dataset/issues/447) - filter column by keyword.
+
 # 7.037
  * Nippy loading is about 2x faster in the case of large string tables.
  * Arrow read pathways support :text-as-strings? to mirror :strings-as-text? on the write side so you can save out uncompressed data in the fastest-to-read format.

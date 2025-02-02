@@ -1767,6 +1767,14 @@
     (is (= :all (:print-index-range (meta (ds/sort-by-column sds :x)))))
     (is (= :all (:print-index-range (meta (ds/filter-column sds :x pos?)))))))
 
+
+(deftest issue-447-filter-column-by-keyword
+  (is (= [:a :a :a :a :a]
+         (-> (ds/->dataset {:a [:a :b :a :c :a :d :a :e :a :f]})
+             (ds/filter-column :a :a)
+             (ds/column :a)
+             (vec)))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
