@@ -1,4 +1,7 @@
 # Changelog
+# 7.039
+ * Fix error in dtype-next/native-buffer/native-buffer->byte-array
+ 
 # 7.038
  * Upgrade to hamf 2.020.
  * Fix for [issue 447](https://github.com/techascent/tech.ml.dataset/issues/447) - filter column by keyword.
