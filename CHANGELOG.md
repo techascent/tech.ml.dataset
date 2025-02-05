@@ -1,4 +1,9 @@
 # Changelog
+# 7.040
+ * Fix for [issue 450](https://github.com/techascent/tech.ml.dataset/issues/450) - emapped columns could reduce as
+   a different type than declared in the emap declaration. 
+ * Small perf improvements for unique-by.
+ 
 # 7.039
  * Fix error in dtype-next/native-buffer/native-buffer->byte-array
  

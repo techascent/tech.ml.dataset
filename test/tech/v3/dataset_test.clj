@@ -1775,6 +1775,15 @@
              (ds/column :a)
              (vec)))))
 
+(deftest issue-450-incorrect-distinct
+    (is (= 2
+           (->
+            (ds/->dataset {:y [:a :b :b :a :a :a :b :b]})
+            (ds/categorical->number [:y] [] :float64)
+            :y
+            distinct
+            count))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
