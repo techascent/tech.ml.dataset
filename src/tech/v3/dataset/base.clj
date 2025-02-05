@@ -25,6 +25,7 @@
             [tech.v3.dataset.readers :as ds-readers]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
             [ham-fisted.api :as hamf]
+            [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.protocols :as hamf-proto]
             [ham-fisted.set :as set])
@@ -767,7 +768,7 @@
     map-fn]
    (when dataset
      (->> (group-by->indexes dataset map-fn)
-          (map (fn [[k v]] (keep-fn k v)))
+          (lznc/map (fn [kv] (keep-fn (key kv) (val kv))))
           (sorted-int32-sequence)
           (select-rows dataset))))
   ([dataset map-fn]
@@ -786,7 +787,7 @@
     colname]
    (when dataset
      (->> (group-by-column->indexes dataset colname)
-          (map (fn [[k v]] (keep-fn k v)))
+          (lznc/map (fn [kv] (keep-fn (key kv) (val kv))))
           (sorted-int32-sequence)
           (select dataset :all))))
   ([dataset colname]
