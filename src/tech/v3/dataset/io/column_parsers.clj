@@ -146,12 +146,13 @@
 
 
 (defn add-missing-values!
-  [^IMutList container ^RoaringBitmap missing
+  ^long [^IMutList container ^RoaringBitmap missing
    missing-value ^long idx]
   (let [n-elems (.size container)]
     (when (< n-elems idx)
       (.add missing (long n-elems) idx)
-      (.addAllReducible container (hamf/repeat (- idx n-elems) missing-value)))))
+      (.addAllReducible container (hamf/repeat (- idx n-elems) missing-value)))
+    (- idx n-elems)))
 
 
 (defn finalize-parser-data!
@@ -483,6 +484,7 @@
                                   column-name
                                   ^:unsynchronized-mutable ^long last-idx
                                   ^:unsynchronized-mutable ^long max-idx
+                                  ^:unsynchronized-mutable ^long mc
                                   options]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
@@ -504,7 +506,7 @@
           (let [;;Avoid the pack call if possible
                 packed-dtype (packing/pack-datatype val-dtype)
                 container-ecount (.size container)
-                logical-ecount (- container-ecount (.getCardinality missing))]
+                logical-ecount (- container-ecount mc)]
             ;;Setup container
             (if (== 0 logical-ecount)
               (do
@@ -529,7 +531,7 @@
                     (set! missing-value (column-base/datatype->missing-value
                                          widest-datatype))))))))
         (when (> (- idx last-idx) 1)
-          (add-missing-values! container missing missing-value idx))
+          (set! mc (+ mc (add-missing-values! container missing missing-value idx))))
         (set! last-idx idx)
         (.add container value))))
   (finalize [_p rowcount]
@@ -546,4 +548,5 @@
                             column-name
                             -1
                             -1
+                            0
                             options))
