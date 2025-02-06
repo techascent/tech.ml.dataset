@@ -1,4 +1,7 @@
 # Changelog
+# 7.042
+ * Upgrade hamf to get new api methods - lines and re-matches.
+ 
 # 7.041
  * Slightly faster promotional object parser.
  
