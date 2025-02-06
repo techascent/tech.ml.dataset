@@ -1,4 +1,7 @@
 # Changelog
+# 7.041
+ * Slightly faster promotional object parser.
+ 
 # 7.040
  * Fix for [issue 450](https://github.com/techascent/tech.ml.dataset/issues/450) - emapped columns could reduce as
    a different type than declared in the emap declaration. 
