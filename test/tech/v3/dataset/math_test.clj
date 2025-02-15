@@ -6,8 +6,7 @@
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.tensor :as dtt]
-            [clojure.test :refer [deftest is]])
-  (:import  [smile.projection PCA]))
+            [clojure.test :refer [deftest is]]))
 
 
 (deftest basic-interp

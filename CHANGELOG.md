@@ -1,4 +1,7 @@
 # Changelog
+# 7.043 
+ * Legacy smile -- 2.6.0 -- support was removed.  Support for later smile versions has moved to the scicloj system and operations like PCA are best implemented at this time using neanderthal.
+ 
 # 7.042
  * Upgrade hamf to get new api methods - lines and re-matches.
  

@@ -51,7 +51,6 @@
                             tech.v3.dataset.set
                             tech.v3.dataset.print
                             tech.v3.dataset.zip
-                            tech.v3.libs.smile.data
                             tech.v3.libs.poi
                             tech.v3.libs.parquet
                             tech.v3.libs.fastexcel
@@ -75,11 +74,6 @@
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
     org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
-    com.github.haifengl/smile-core {:mvn/version "2.6.0"
-                                    :exclusions [org.slf4j/slf4j-api]}
-    com.github.haifengl/smile-io   {:mvn/version "2.6.0"
-                                    :exclusions [com.github.haifengl/smile-core
-                                                 org.slf4j/slf4j-api]}
     org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
                                    :exclusions [commons-codec/commons-codec
                                                 com.fasterxml.jackson.core/jackson-core
@@ -115,11 +109,6 @@
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
     org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
-    com.github.haifengl/smile-core {:mvn/version "2.6.0"
-                                    :exclusions [org.slf4j/slf4j-api]}
-    com.github.haifengl/smile-io   {:mvn/version "2.6.0"
-                                    :exclusions [com.github.haifengl/smile-core
-                                                 org.slf4j/slf4j-api]}
     org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
                                    :exclusions [commons-codec/commons-codec
                                                 com.fasterxml.jackson.core/jackson-core
