@@ -225,7 +225,9 @@
 (defn probability-distributions->label-column
   "Given a dataset that has columns in which the column names describe labels and the
   rows describe a probability distribution, create a label column by taking the max
-  value in each row and assign column that row value."
+  value in each row and assign column that row value.
+  Creates a categorical label column which has a catgeorical map in its meta.
+  "
   ([prob-ds dst-colname label-column-datatype]
    (let [^List cnames (vec (ds-base/column-names prob-ds))
          idx-col (->> (ds-readers/value-reader prob-ds)
