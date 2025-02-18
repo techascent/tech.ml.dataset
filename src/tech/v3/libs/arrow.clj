@@ -359,7 +359,6 @@ Dependent block frames are not supported!!")
 ;; Protocol extensions for arrow schema types
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defonce type-atom (atom nil))
 
 (extend-protocol clj-proto/Datafiable
   ArrowType$Int
@@ -430,7 +429,7 @@ Dependent block frames are not supported!!")
                   :ordered? (.isOrdered this)
                   :index-type (datafy (.getIndexType this))})
   ArrowType$List
-  (datafy [this] (swap! type-atom conj this)
+  (datafy [this]
     {:datatype :list}))
 
 
