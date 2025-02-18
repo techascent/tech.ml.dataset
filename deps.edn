@@ -173,15 +173,68 @@
     org.lz4/lz4-java {:mvn/version "1.8.0"}
     com.github.luben/zstd-jni {:mvn/version "1.5.4-1"}
     com.cnuernber/jarrow {:mvn/version "1.000"}
-    zero.one/geni  {:mvn/version "0.0.34"
-                    :exclusions [commons-codec/commons-codec]}
-    org.apache.spark/spark-avro_2.12 {:mvn/version "3.0.1"}
-    org.apache.spark/spark-core_2.12 {:mvn/version "3.0.1"
-                                      :exclusions [org.slf4j/slf4j-log4j12]}
-    org.apache.spark/spark-hive_2.12 {:mvn/version "3.0.1"}
-    org.apache.spark/spark-mllib_2.12 {:mvn/version "3.0.1"}
-    org.apache.spark/spark-sql_2.12 {:mvn/version "3.0.1"}
-    org.apache.spark/spark-streaming_2.12 {:mvn/version "3.0.1"}
+        org.apache.parquet/parquet-hadoop {:mvn/version "1.12.0"
+                                       :exclusions [org.slf4j/slf4j-log4j12]}
+    org.apache.hadoop/hadoop-common              {:mvn/version "3.3.0"
+                                                  :exclusions  [com.sun.jersey/jersey-core
+                                                                com.sun.jersey/jersey-json
+                                                                com.sun.jersey/jersey-server
+                                                                com.sun.jersey/jersey-servlet
+
+                                                                dnsjava/dnsjava
+
+                                                                org.eclipse.jetty/jetty-server
+                                                                org.eclipse.jetty/jetty-servlet
+                                                                org.eclipse.jetty/jetty-util
+                                                                org.eclipse.jetty/jetty-webapp
+
+                                                                javax.activation/javax.activation-api
+                                                                javax.servlet.jsp/jsp-api
+                                                                javax.servlet/javax.servlet-api
+
+                                                                io.netty/netty-codec
+                                                                io.netty/netty-handler
+                                                                io.netty/netty-transport
+                                                                io.netty/netty-transport-native-epoll
+
+                                                                org.codehaus.jettison/jettison
+
+                                                                org.apache.zookeeper/zookeeper
+
+                                                                org.apache.curator/curator-recipes
+                                                                org.apache.curator/curator-client
+                                                                org.apache.htrace/htrace-core4
+
+                                                                org.apache.hadoop.thirdparty/hadoop-shaded-protobuf_3_7
+                                                                org.apache.hadoop/hadoop-auth
+
+
+                                                                org.apache.kerby/kerb-core
+
+                                                                commons-cli/commons-cli
+                                                                commons-net/commons-net
+                                                                org.apache.commons/commons-lang3
+                                                                org.apache.commons/commons-text
+                                                                org.apache.commons/commons-configuration2
+
+                                                                com.google.re2j/re2j
+                                                                com.google.code.findbugs/jsr305
+
+                                                                com.jcraft/jsch
+
+                                                                log4j/log4j
+                                                                org.slf4j/slf4j-log4j12]
+                                                  }
+    ;; We literally need this for 1 POJO formatting object.
+    org.apache.hadoop/hadoop-mapreduce-client-core {:mvn/version "3.3.0"
+                                                    :exclusions  [org.slf4j/slf4j-log4j12
+                                                                  org.apache.avro/avro
+                                                                  org.apache.hadoop/hadoop-yarn-client
+                                                                  org.apache.hadoop/hadoop-yarn-common
+                                                                  org.apache.hadoop/hadoop-annotations
+                                                                  org.apache.hadoop/hadoop-hdfs-client
+                                                                  io.netty/netty
+                                                                  com.google.inject.extensions/guice-servlet]}
     org.xerial.snappy/snappy-java {:mvn/version "1.1.8.4"}
     ;org.tribuo/tribuo-all {:mvn/version "4.2.0" :extension "pom"}
     }
