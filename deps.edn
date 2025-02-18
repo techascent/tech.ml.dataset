@@ -80,6 +80,7 @@
                                                 com.fasterxml.jackson.core/jackson-annotations
                                                 com.fasterxml.jackson.core/jackson-databind
                                                 org.slf4j/slf4j-api]}
+    com.github.luben/zstd-jni {:mvn/version "1.5.4-1"}
     org.lz4/lz4-java {:mvn/version "1.8.0"}
     com.cnuernber/jarrow {:mvn/version "1.000"}
     
