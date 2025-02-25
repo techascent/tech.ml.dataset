@@ -5,6 +5,7 @@
   (:require [tech.v3.datatype :as dtype]
             [tech.v3.dataset.io.column-parsers :as column-parsers]
             [tech.v3.dataset.io.context :as parse-context]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.parallel.for :as pfor]
             [tech.v3.datatype.argtypes :as argtypes]
             [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -15,13 +16,15 @@
             [ham-fisted.protocols :as hamf-proto])
   (:import [java.util HashMap Map$Entry Map Map$Entry LinkedHashMap Iterator]
            [java.util.function Function Consumer]
-           [tech.v3.dataset.protocols PDatasetParser]
+           [tech.v3.dataset.protocols PDatasetParser PClearable]
            [clojure.lang IDeref Counted Indexed]
            [ham_fisted Reductions$IndexedAccum Reducible Consumers$IncConsumer
             ITypedReduce]))
 
 
-(defrecord ParseRecord [^long col-idx column-name column-parser])
+(defrecord ParseRecord [^long col-idx column-name column-parser]
+  ds-proto/PClearable
+  (ds-clear [this] (ds-proto/ds-clear column-parser)))
 
 
 (deftype ^:private MapseqReducer [options parsers consumer ^Consumers$IncConsumer row-idx]
@@ -59,7 +62,12 @@
               init (hamf/range (.value row-idx)))))
   IDeref
   (deref [this]
-    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers (.value row-idx))))
+    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers (.value row-idx)))
+  PClearable
+  (ds-clear [this]
+    (reduce (fn [_ p] (ds-proto/ds-clear p)) nil (.values ^Map parsers))
+    (.setValue row-idx 0)
+    this))
 
 
 (defn mapseq-reducer

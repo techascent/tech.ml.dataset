@@ -90,12 +90,8 @@
         colparser-compute-fn (reify Function
                                (apply [this col-idx]
                                  (let [colname (col-idx->colname col-idx)
-                                       colname (cond
-                                                 (number? colname)
-                                                 colname
-                                                 (empty? colname)
+                                       colname (if (empty? colname)
                                                  (make-colname col-idx)
-                                                 :else
                                                  (utils/remove-zero-width-spaces colname))
                                        colname (if (and ensure-unique-column-names?
                                                         (get colname->idx colname))

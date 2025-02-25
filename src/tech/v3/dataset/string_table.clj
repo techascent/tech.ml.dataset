@@ -39,6 +39,10 @@
   ObjectBuffer
   (elemwiseDatatype [_this] :string)
   (lsize [_this] (.size data))
+  (clear [this]
+    (.clear int->str)
+    (.clear str->int)
+    (.clear data))
   (size [_this] (.size data))
   (subBuffer [this sidx eidx]
     (ChunkedList/sublistCheck sidx eidx (.lsize this))

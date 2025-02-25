@@ -1,4 +1,7 @@
 # Changelog
+# 7.044
+ * initial support for clearing dataset parsers - resets their row count but does not reset the schema.  Use tech.v3.dataset.protocols/ds-clear.
+ 
 # 7.043 
  * Legacy smile -- 2.6.0 -- support was removed.  Support for later smile versions has moved to the [scicloj system](https://github.com/scicloj/scicloj.ml.smile) and operations like PCA are best implemented at this time using neanderthal.
  

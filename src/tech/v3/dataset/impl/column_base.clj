@@ -73,26 +73,28 @@
 
 (defn make-container
   (^IMutList [dtype options]
-   (case dtype
-     :string (str-table/make-string-table 0 "")
-     :text
-     (let [^IMutList list-data
-           (try
-             (if (and (not= false (get options :text-temp-dir false))
-                      @file-backed-text-enabled*)
-               (let [tmp-dir (:text-temp-dir options)]
-                 (file-backed-text/file-backed-text (merge
-                                                     {:suffix ".txt"}
-                                                     (when tmp-dir
-                                                       {:temp-dir tmp-dir}))))
-               (dtype/make-list :text))
-             (catch Throwable e
-               (when-not @warn-atom*
-                 (reset! warn-atom* true)
-                 (log/warn e "File backed text failed.  Falling back to in-memory"))
-               (dtype/make-list :text)))]
-             list-data)
-     (dtype/make-list dtype)))
+   (if-let [rv (get-in options [:datatype-parsers dtype])]
+     (rv dtype options)
+     (case dtype
+       :string (str-table/make-string-table 0 "")
+       :text
+       (let [^IMutList list-data
+             (try
+               (if (and (not= false (get options :text-temp-dir false))
+                        @file-backed-text-enabled*)
+                 (let [tmp-dir (:text-temp-dir options)]
+                   (file-backed-text/file-backed-text (merge
+                                                       {:suffix ".txt"}
+                                                       (when tmp-dir
+                                                         {:temp-dir tmp-dir}))))
+                 (dtype/make-list :text))
+               (catch Throwable e
+                 (when-not @warn-atom*
+                   (reset! warn-atom* true)
+                   (log/warn e "File backed text failed.  Falling back to in-memory"))
+                 (dtype/make-list :text)))]
+         list-data)
+       (dtype/make-list dtype))))
   (^IMutList [dtype]
    (make-container dtype nil)))
 

@@ -2,6 +2,7 @@
   "Per-column parsers."
   (:require [tech.v3.dataset.io.datetime :as parse-dt]
             [tech.v3.dataset.impl.column-base :as column-base]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.casting :as casting]
@@ -162,7 +163,9 @@
   (merge
    #:tech.v3.dataset{:data (or (dtype/as-array-buffer container)
                                (dtype/as-native-buffer container)
-                               container)
+                               (if (instance? clojure.lang.IDeref container)
+                                 @container
+                                 container))
                      :missing missing
                      :force-datatype? true}
    (when (and failed-values
@@ -496,6 +499,13 @@
               (.contains missing idx))
         nil
         (.get container idx))))
+  ds-proto/PClearable
+  (ds-clear [this]
+    (.clear container)
+    (.clear missing)
+    (set! last-idx -1)
+    (set! max-idx -1)
+    (set! mc 0))
   PParser
   (addValue [_p idx value]
     (set! max-idx idx)

@@ -43,6 +43,10 @@
   (add-rows [p rows]
     "rows need only be reducible"))
 
+(defprotocol PClearable
+  (ds-clear [p]
+    "Reset to initial state.  Avoid conflict with collection/clear"))
+
 
 (defprotocol PDatasetTransform
   (transform [t dataset]))

@@ -1193,7 +1193,9 @@ Dependent block frames are not supported!!")
 
         buf-entries (buffers->buf-entries buffers)
         last-entry (last buf-entries)
-        body-len (pad (+ (long (last-entry :offset)) (long (last-entry :length))))
+        body-len (if last-entry
+                   (pad (+ (long (last-entry :offset)) (long (last-entry :length))))
+                   0)
         builder (FlatBufferBuilder.)
         msg-start (.getCurrentPosition writer)
         _ (write-message-header writer

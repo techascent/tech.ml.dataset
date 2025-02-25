@@ -45,6 +45,9 @@
     (dtype-proto/->native-buffer backing-store))
   LongBuffer
   (elemwiseDatatype [_this] (dtype-proto/elemwise-datatype backing-store))
+  (clear [this]
+    (set! backing-store (abuf/as-growable-list (dtype/make-list :int8 1500) 0))
+    (set! int-width 8))
   (lsize [_this] (.size backing-store))
   (size [_this] (.size backing-store))
   (subBuffer [this sidx eidx]
