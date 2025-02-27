@@ -1,4 +1,7 @@
 # Changelog
+# 7.045
+ * Bulk add-constant! method used for adding missing values.
+ 
 # 7.044
  * initial support for clearing dataset parsers - resets their row count but does not reset the schema.  Use tech.v3.dataset.protocols/ds-clear.
  

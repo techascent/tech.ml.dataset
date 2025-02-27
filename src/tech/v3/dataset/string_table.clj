@@ -78,6 +78,17 @@
                                retval)))))]
       (.addLong data item-idx))
     true)
+  (add [this idx ct value]
+    (let [value (or value "")
+          item-idx (int (.computeIfAbsent
+                         str->int
+                         value
+                         (reify Function
+                           (apply [this keyval]
+                             (let [retval (.size int->str)]
+                               (.add int->str keyval)
+                               retval)))))]
+      (.add data (.size data) ct item-idx)))
   (readObject [_this idx]
     (.get int->str (.getLong data idx)))
   (writeObject [this idx value]

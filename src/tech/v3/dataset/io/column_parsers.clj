@@ -148,11 +148,11 @@
 
 (defn add-missing-values!
   ^long [^IMutList container ^RoaringBitmap missing
-   missing-value ^long idx]
+         missing-value ^long idx]
   (let [n-elems (.size container)]
     (when (< n-elems idx)
       (.add missing (long n-elems) idx)
-      (.addAllReducible container (hamf/repeat (- idx n-elems) missing-value)))
+      (.add container n-elems (- idx n-elems) missing-value))
     (- idx n-elems)))
 
 

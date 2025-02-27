@@ -11,7 +11,7 @@
             [tech.v3.parallel.for :as parallel-for]
             [clj-commons.primitive-math :as pmath])
   (:import [tech.v3.datatype LongBuffer]
-           [ham_fisted IMutList]))
+           [ham_fisted IMutList Casts]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -68,6 +68,12 @@
         (set! backing-store (dtype/make-list :int32 backing-store))
         (set! int-width 32)))
     (.addLong backing-store value))
+  (add [this idx ct value]
+    (when-not (== idx (.size this))
+      (throw (RuntimeException. "Insertion other than at end is not supported.")))
+    (let [lv (Casts/longCast value)]
+      (dotimes [c ct]
+        (.addLong this lv))))
   (getLong [_this idx]
     (.getLong backing-store idx))
   (readLong [_this idx]
