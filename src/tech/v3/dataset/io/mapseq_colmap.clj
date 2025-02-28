@@ -62,7 +62,10 @@
               init (hamf/range (.value row-idx)))))
   IDeref
   (deref [this]
-    (parse-context/parsers->dataset (assoc options :key-fn nil) parsers (.value row-idx)))
+    (if (.isEmpty ^Map parsers)
+      {:tech.v3.dataset/row-count (.value row-idx)
+       :tech.v3.dataset/missing :all}
+      (parse-context/parsers->dataset (assoc options :key-fn nil) parsers (.value row-idx))))
   PClearable
   (ds-clear [this]
     (reduce (fn [_ p] (ds-proto/ds-clear p)) nil (.values ^Map parsers))

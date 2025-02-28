@@ -1,4 +1,7 @@
 # Changelog
+# 7.046
+ * dataset parsers return something that is not a dataset when the internal datasets have no columns.
+ 
 # 7.045
  * Bulk add-constant! method used for adding missing values.
  
