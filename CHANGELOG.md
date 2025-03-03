@@ -1,4 +1,7 @@
 # Changelog
+# 7.047
+ * hamf bugfix for update-values.
+ 
 # 7.046
  * dataset parsers return something that is not a dataset when the internal datasets have no columns.
  
