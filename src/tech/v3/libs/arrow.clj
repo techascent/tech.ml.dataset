@@ -103,10 +103,13 @@
             [clojure.core.protocols :as clj-proto]
             [clojure.datafy :refer [datafy]]
             [charred.api :as json]
+            [ham-fisted.api :as hamf]
+            [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
-  (:import [org.apache.arrow.vector.ipc.message MessageSerializer]
+  (:import [ham_fisted ArrayLists]
+           [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
            [org.roaringbitmap RoaringBitmap]
@@ -118,7 +121,7 @@
             ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
-           [org.apache.arrow.vector.ipc WriteChannel]
+           [org.apache.arrow.vector.ipc WriteChannel]           
            [tech.v3.dataset.string_table StringTable]
            [tech.v3.dataset.impl.column Column]
            [tech.v3.dataset Text]
@@ -988,7 +991,7 @@ Dependent block frames are not supported!!")
 
 
 (defn- compress-record-batch-buffers
-  [buffers options]
+  [options buffers]
   (if-let [comp-map (get options :compression)]
     {:compression-type (compression-kwd->file-type (comp-map :compression-type))
      ;;parallelize buffer compression
@@ -1001,7 +1004,7 @@ Dependent block frames are not supported!!")
               data-len (byte-array 8)
               ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
               data-len-buf (dtype/->buffer data-len)]
-          (first
+          (nth
            (reduce (fn [[res writer-cache] buffer]
                      (let [buffer (serialize-to-bytes buffer)
                            uncomp-len (dtype/ecount buffer)
@@ -1017,10 +1020,11 @@ Dependent block frames are not supported!!")
                        [(conj res (nio-buffer/as-nio-buffer dst-buffer))
                         writer-cache]))
                    [[] nil]
-                   buffers)))))}
-    {:buffers (vec (pmap #(-> (serialize-to-bytes %)
-                              (nio-buffer/as-nio-buffer))
-                         buffers))}))
+                   buffers)
+           0))))}
+    {:buffers (vec (hamf/pmap #(-> (serialize-to-bytes %)
+                                   (nio-buffer/as-nio-buffer))
+                              buffers))}))
 
 (defn- buffers->buf-entries
   [buffers]
@@ -1055,7 +1059,7 @@ Dependent block frames are not supported!!")
   (let [n-elems (dec (count offsets))
         missing (no-missing n-elems)
         {:keys [compression-type buffers]}
-        (compress-record-batch-buffers [missing offsets byte-data] options)
+        (->> [missing offsets byte-data] (compress-record-batch-buffers options))
         buffer-entries (buffers->buf-entries buffers)
         enc-id (.getId ^DictionaryEncoding encoding)
         offset-len (pad (byte-length offsets))
@@ -1116,13 +1120,13 @@ Dependent block frames are not supported!!")
     retval))
 
 
-(defn- col->buffers
+(defn col->buffers
   [col options]
   (let [col-dt (casting/un-alias-datatype (dtype/elemwise-datatype col))
         col-dt (if (and (:strings-as-text? options) (= col-dt :string))
                  :text
                  col-dt)
-        cbuf (dtype/->buffer col)]
+        cbuf (tech.v3.datatype.protocols/->buffer col)]
     ;;Get the data as a datatype safe for conversion into a
     ;;nio buffer.
     (if (casting/numeric-type? col-dt)
@@ -1150,11 +1154,10 @@ Dependent block frames are not supported!!")
         :text
         (let [byte-data (dtype/make-list :int8)
               offsets (dtype/make-list :int32)]
-          (pfor/doiter
-           strdata cbuf
-           (let [strdata (str (or strdata ""))]
-             (.add offsets (.size byte-data))
-             (.addAll byte-data (dtype/->buffer (.getBytes strdata)))))
+          (reduce (fn [_ strdata]
+                    (let [strdata (str (or strdata ""))]
+                      (.add offsets (.size byte-data))
+                      (.addAllReducible byte-data (ArrayLists/toList (.getBytes strdata))))) nil cbuf)
           (.add offsets (.size byte-data))
           [(nio-buffer/as-nio-buffer offsets)
            (nio-buffer/as-nio-buffer byte-data)])))))
@@ -1171,25 +1174,25 @@ Dependent block frames are not supported!!")
                           (dtype/->byte-array))
         nodes-buffs-lens
         (->> (ds-base/columns dataset)
-             (map (fn [col]
-                    (let [col-missing (ds-proto/missing col)
-                          n-missing (dtype/ecount col-missing)
-                          valid-buf (if (== 0 n-missing)
-                                      all-valid-buf
-                                      (missing-bytes col-missing all-valid-buf))
-                          buffers (vec (concat [valid-buf]
-                                               (col->buffers col options)))
-                          lengths (map (comp pad byte-length) buffers)
-                          col-len (long (apply + lengths))]
-                      {:node {:n-elems n-rows
-                              :n-null-entries n-missing}
-                       :buffers buffers
-                       :length col-len}))))
-        nodes (map :node nodes-buffs-lens)
+             (hamf/pmap (fn [col]
+                          (let [col-missing (ds-proto/missing col)
+                                n-missing (dtype/ecount col-missing)
+                                valid-buf (if (== 0 n-missing)
+                                            all-valid-buf
+                                            (missing-bytes col-missing all-valid-buf))
+                                buffers (hamf/concatv [valid-buf] (col->buffers col options))
+                                lengths (hamf/mapv (comp pad byte-length) buffers)
+                                col-len (long (reduce + 0 lengths))]
+                            {:node {:n-elems n-rows
+                                    :n-null-entries n-missing}
+                             :buffers buffers
+                             :length col-len})))
+             (vec))
+        nodes (lznc/map :node nodes-buffs-lens)
         {:keys [compression-type buffers]}
-        (compress-record-batch-buffers
-         (mapcat :buffers nodes-buffs-lens)
-         options)
+        (->> (lznc/map :buffers nodes-buffs-lens)
+             (lznc/apply-concat)
+             (compress-record-batch-buffers options))
 
         buf-entries (buffers->buf-entries buffers)
         last-entry (last buf-entries)
