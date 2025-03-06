@@ -590,7 +590,7 @@ Dependent block frames are not supported!!")
                   (throw (Exception. "Invalid string table - missing entries.")))
               str-bytes (.getBytes (str strdata))
               soff (dtype/ecount byte-data)]
-          (.addAll byte-data (dtype/->reader str-bytes))
+          (.addAllReducible byte-data (ArrayLists/toList str-bytes))
           (.add offsets soff)))
       (let [prev-int->str (str-table/int->string prev-str-t)
             start-offset (dtype/ecount prev-int->str)
@@ -602,7 +602,7 @@ Dependent block frames are not supported!!")
                     (throw (Exception. "Invalid string table - missing entries.")))
                 str-bytes (.getBytes (str strdata))
                 soff (dtype/ecount byte-data)]
-            (.addAll byte-data (dtype/->reader str-bytes))
+            (.addAllReducible byte-data (ArrayLists/toList str-bytes))
             (.add offsets soff)))))
     ;;Make everyone's life easier by adding an extra offset.
     (.add offsets (dtype/ecount byte-data))

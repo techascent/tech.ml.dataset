@@ -6,11 +6,12 @@
             [tech.v3.parallel.for :as parallel-for]
             [tech.v3.datatype.errors :as errors]
             [ham-fisted.api :as hamf]
-            [ham-fisted.reduce :as hamf-rf])
+            [ham-fisted.reduce :as hamf-rf]
+            [clojure.tools.logging :as log])
   (:import [java.util List HashMap Map ArrayList]
            [java.util.function Function]
            [tech.v3.datatype ObjectBuffer Buffer]
-           [ham_fisted IMutList ChunkedList Casts]))
+           [ham_fisted IMutList ChunkedList Casts ArrayHelpers ArrayLists]))
 
 
 (set! *warn-on-reflection* true)
@@ -32,7 +33,16 @@
   (clone [this]
     ;;We do not need to dedup any more; a java array is a more efficient
     ;;storage mechanism
-    (dtype/make-container :jvm-heap :string this))
+    (let [sz (.size this)
+          ^objects rv (make-array String sz)
+          local-int->str int->str
+          local-data data]
+      (hamf/pgroups sz (fn string-table-clone [^long sidx ^long eidx]
+                         (loop [sidx sidx]
+                           (when (< sidx eidx)
+                             (ArrayHelpers/aset rv sidx (.get int->str (.getLong local-data sidx)))
+                             (recur (inc sidx))))))
+      (ArrayLists/toList rv)))
   PStrTable
   (get-str-table [_this] {:int->str int->str
                          :str->int str->int})
@@ -123,18 +133,77 @@
   (^Buffer []
    (make-string-table 0 "" (hamf/object-array-list) (HashMap.))))
 
+(defn compress-indexes
+  ^IMutList [^IMutList indexes ^long max-idx]
+  (cond
+    (<= max-idx Byte/MAX_VALUE) (ArrayLists/toList (hamf/byte-array indexes))
+    (<= max-idx Short/MAX_VALUE) (ArrayLists/toList (hamf/short-array indexes))
+    (<= max-idx Integer/MAX_VALUE) (ArrayLists/toList (hamf/int-array indexes))
+    :else (.toLongArray indexes)))
+
+(definterface IDof
+  (idOf ^long [s]))
+
+(defn fast-str
+  ^String [s]
+  (cond
+    (nil? s) ""
+    (instance? String s) s
+    :else (.toString ^Object s)))
+
+(deftype FastStringContainer [^IMutList indexes ^List int->str ^HashMap str->int]
+  IDof
+  (idOf [this s]
+    (let [s (fast-str s)
+          sz (long (.size str->int))
+          lookup (.putIfAbsent str->int s sz)]
+      (if lookup
+        lookup
+        (do
+          (.add int->str s)
+          sz))))
+  java.util.function.Consumer
+  (accept [this v] (.add this v))
+  IMutList
+  (add [this v]
+    (.addLong indexes (.idOf this v))
+    true)
+  (add [this idx ct v]
+    (.add indexes (.size indexes) ct (.idOf this v)))
+  (get [this idx]
+    (let [rv (.get int->str (.getLong indexes idx))]
+      (when (nil? rv)
+        (throw (RuntimeException. (str "Index out of range: " idx))))
+      rv))
+  (size [this] (.size indexes))
+  (clear [this]
+    (.clear indexes)
+    (.clear int->str)
+    (.clear str->int))
+  tech.v3.datatype.protocols/PElemwiseDatatype
+  (elemwise-datatype [this] :string)
+  clojure.lang.IDeref
+  (deref [this]
+    (StringTable. (hamf/vec int->str) (.clone str->int)
+                  (compress-indexes indexes (long (.size str->int))))))
+
+(defn fast-string-container []
+  (let [str->int (hamf/java-hashmap)
+        int->str (ArrayList.)
+        _ (do (.put str->int "" 0)
+              (.add int->str ""))]
+    (FastStringContainer. (hamf/long-array-list)
+                          int->str str->int)))
 
 (defn string-table-from-strings
   [str-data]
-  (let [n-elems (long (or (hamf/constant-count str-data) 0))]
-    (doto (make-string-table n-elems)
-      (.addAllReducible str-data))))
+  (hamf-rf/reduce-reducer (hamf-rf/consumer-reducer fast-string-container) str-data))
 
 
 (defn ->string-table
   ^StringTable [str-t]
   (errors/when-not-errorf (instance? StringTable str-t)
-    "string table is wrong type: %s" str-t)
+                          "string table is wrong type: %s" str-t)
   str-t)
 
 
@@ -151,3 +220,6 @@
   ^List [^StringTable str-t]
   (-> (->string-table str-t)
       (.int->str)))
+
+
+

@@ -1,4 +1,7 @@
 # Changelog
+# 7.049
+ * Optimizations to string table clone, string table create and arrow serialization.
+ 
 # 7.047
  * hamf bugfix for update-values.
  
