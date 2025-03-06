@@ -1173,7 +1173,7 @@ Dependent block frames are not supported!!")
                             (dtype/set-constant! -1))
                           (dtype/->byte-array))
         nodes-buffs-lens
-        (->> (ds-base/columns dataset)
+        (->> (.values ^Map dataset)
              (hamf/pmap (fn [col]
                           (let [col-missing (ds-proto/missing col)
                                 n-missing (dtype/ecount col-missing)
