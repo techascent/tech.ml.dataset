@@ -37,11 +37,12 @@
           ^objects rv (make-array String sz)
           local-int->str int->str
           local-data data]
-      (hamf/pgroups sz (fn string-table-clone [^long sidx ^long eidx]
-                         (loop [sidx sidx]
-                           (when (< sidx eidx)
-                             (ArrayHelpers/aset rv sidx (.get int->str (.getLong local-data sidx)))
-                             (recur (inc sidx))))))
+      (dorun
+       (hamf/pgroups sz (fn string-table-clone [^long sidx ^long eidx]
+                          (loop [sidx sidx]
+                            (when (< sidx eidx)
+                              (ArrayHelpers/aset rv sidx (.get int->str (.getLong local-data sidx)))
+                              (recur (inc sidx)))))))
       (ArrayLists/toList rv)))
   PStrTable
   (get-str-table [_this] {:int->str int->str

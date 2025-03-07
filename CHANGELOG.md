@@ -1,4 +1,7 @@
 # Changelog
+# 7.050
+ * fix bug in stringtable clone.
+ 
 # 7.049
  * Optimizations to string table clone, string table create and arrow serialization.
  
