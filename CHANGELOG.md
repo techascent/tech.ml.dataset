@@ -1,4 +1,7 @@
 # Changelog
+# 7.052
+ * Fixing update-values - found untested (on mac) pathway that failed when run in cloud.
+ 
 # 7.051
  * Much faster string table clone and much faster arrow write of string tables.
  
