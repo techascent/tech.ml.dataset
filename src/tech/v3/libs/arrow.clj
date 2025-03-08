@@ -585,7 +585,7 @@ Dependent block frames are not supported!!")
         offsets (dtype/make-list :int32)]
     (if (nil? prev-str-t)
       (dotimes [str-idx (count int->str)]
-        (let [strdata (int->str str-idx)
+        (let [strdata (.get int->str str-idx)
               _ (when (= strdata :failure)
                   (throw (Exception. "Invalid string table - missing entries.")))
               str-bytes (.getBytes (str strdata))
@@ -1990,7 +1990,7 @@ Please use stream->dataset-seq.")))
                  metadata (meta col)]
              (if (nil? prev-ds)
                (assoc ds (metadata :name)
-                      #:tech.v3.dataset{:data (str-table/string-table-from-strings col)
+                      #:tech.v3.dataset{:data (tech.v3.dataset.base/ensure-column-string-table col)
                                         :missing missing
                                         :metadata metadata
                                         :name (metadata :name)})

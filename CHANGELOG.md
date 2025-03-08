@@ -1,4 +1,7 @@
 # Changelog
+# 7.051
+ * Much faster string table clone and much faster arrow write of string tables.
+ 
 # 7.050
  * fix bug in stringtable clone.
  

@@ -1032,7 +1032,7 @@
    :columns
    (->>
     (columns ds)
-    (pmap column->data)
+    (hamf/pmap column->data)
     (vec))})
 
 

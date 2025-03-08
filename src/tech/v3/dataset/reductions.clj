@@ -599,7 +599,7 @@ _unnamed [7 3]:
                            rs-rfn (hamf-proto/->rfn rs)
                            rs-init (hamf-proto/->init-val-fn rs)
                            init-fn (hamf-fn/function _k (rs-init))]
-                       (doall (hamf/pgroups
+                       (dorun (hamf/pgroups
                                (ds-base/row-count ds)
                                (fn [^long sidx ^long eidx]
                                  (let [tid (.getId (Thread/currentThread))]
