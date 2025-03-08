@@ -857,6 +857,12 @@
     (is (= [5.0 5.0 5.0 1.0 2.0 5.0 5.0 5.0 5.0 5.0 4.0 5.0 11.0 5.0 5.0]
            (vec ((ds/replace-missing ds :all :value 5.0) :a))))))
 
+(deftest replace-missing-string-table
+  (is (= ["one" "two" "three"]
+         (-> (ds/->dataset {:a ["one" nil "three"]})
+             (ds/replace-missing-value "two")
+             (ds/column :a)))))
+
 
 (deftest replace-missing-all-values-missing
   (let [empty-col (ds/->dataset {:a [nil nil]})]

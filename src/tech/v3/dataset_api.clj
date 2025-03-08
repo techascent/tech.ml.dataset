@@ -600,30 +600,41 @@ test/data/stocks.csv [10 3]:
 
 (defn- update-values
   [col missing scalar-val]
-  (if (== 0 (dtype/ecount missing))
-    col
-    (let [col (Column. (bitmap/->bitmap)
-                       (dtype/clone (ds-proto/column-buffer col))
-                       (meta col) nil)]
-      (reduce (hamf-rf/long-accumulator
-               data idx (.writeObject ^Buffer data idx scalar-val) data)
-              (dtype/->buffer col)
-              missing)
-      col)))
+  (let [missing (bitmap/->bitmap missing)]
+    (if (.isEmpty missing)
+      col      
+      (let [cbuf (dtype/->buffer (ds-proto/column-buffer col))
+            col-dt (dtype/elemwise-datatype col)
+            ec (.lsize cbuf)]
+        (Column. (bitmap/->bitmap)
+                 (dtype/make-reader-fn
+                  col-dt col-dt ec
+                  (case (casting/simple-operation-space col-dt)
+                    :int64 (let [sv (long scalar-val)]
+                             (hamf-fn/long-unary-operator
+                              idx
+                              (if (.contains missing idx)
+                                sv
+                                (.readLong cbuf idx))))
+                    :float64 (let [sv (double scalar-val)]
+                               (hamf-fn/long->double
+                                idx
+                                (if (.contains missing idx)
+                                  sv
+                                  (.readDouble cbuf idx))))
+                    (hamf-fn/long->obj
+                     idx
+                     (if (.contains missing idx)
+                       scalar-val
+                       (.readObject cbuf idx)))))
+                 (meta col) nil)))))
 
 
 (defn replace-missing-value
   ([dataset filter-fn-or-ds scalar-value]
    (update-columnwise dataset filter-fn-or-ds
                       (fn [col]
-                        (let [missing (ds-col/missing col)]
-                          (if (.isEmpty missing)
-                            col
-                            (ds-col/new-column
-                             (:name (meta col))
-                             (update-values col missing scalar-value)
-                             (meta col)
-                             (bitmap/->bitmap)))))))
+                        (update-values col (missing col) scalar-value))))
   ([dataset scalar-value]
    (replace-missing-value dataset identity scalar-value)))
 
