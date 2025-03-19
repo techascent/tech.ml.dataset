@@ -518,9 +518,13 @@
                 container-ecount (.size container)
                 logical-ecount (- container-ecount mc)]
             ;;Setup container
-            (if (== 0 logical-ecount)
+            (if (== 0 logical-ecount)              
               (do
-                (set! container (column-base/make-container packed-dtype options))
+                (set! container (column-base/make-container (if (identical? container-dtype :boolean)
+                                                              packed-dtype
+                                                              (casting/widest-datatype container-dtype
+                                                                                       packed-dtype))
+                                                            options))
                 (set! container-dtype val-dtype)
                 (set! missing-value (column-base/datatype->missing-value packed-dtype)))
               ;;boolean present a problem here.  We generally want to keep them as booleans
