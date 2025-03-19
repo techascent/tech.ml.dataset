@@ -1,4 +1,7 @@
 # Changelog
+# 7.053
+ * Column parsers are more rigorous in promoting their datatypes after clear op.
+ 
 # 7.052
  * Fixing update-values - found untested (on mac) pathway that failed when run in cloud.
  
