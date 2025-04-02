@@ -7,6 +7,7 @@
             [tech.v3.datatype.errors :as errors]
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.lazy-noncaching :as lznc]
             [clojure.tools.logging :as log])
   (:import [java.util List HashMap Map ArrayList]
            [java.util.function Function]
@@ -221,6 +222,12 @@
   ^List [^StringTable str-t]
   (-> (->string-table str-t)
       (.int->str)))
+
+(defn merge-string-tables
+  "Return new string table with strings from lhs and rhs.  Neither input is changed."
+  [^StringTable lhs ^StringTable rhs]
+  (string-table-from-strings (lznc/concat (.-int->str lhs)
+                                          (.-int->str rhs))))
 
 
 

@@ -131,7 +131,7 @@
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
            [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
             FloatBuffer]
-           [java.util List ArrayList Map HashMap Map$Entry Iterator]
+           [java.util List ArrayList Map HashMap Map$Entry Iterator Set]
            [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
@@ -465,36 +465,41 @@ Dependent block frames are not supported!!")
 ;; Readings messages from native buffers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- read-message
-  "returns a pair of offset-data and message."
+(defn- read-msg-size
   [data]
-  (when-not (== 0 (dtype/ecount data))
-    (let [msg-size (native-buffer/read-int data)
-          [msg-size offset] (if (== -1 msg-size)
-                              [(native-buffer/read-int data 4) 8]
-                              [msg-size 4])
+  (let [msg-size (native-buffer/read-int data)]
+    (if (== -1 msg-size)
+      [(native-buffer/read-int data 4) 8]
+      [msg-size 4])))
+
+(deftype MessageIter [^:unsynchronized-mutable data]
+  java.util.Iterator
+  (hasNext [this]
+    (and (> (dtype/ecount data) 4)
+         (not (== 0 (long (nth (read-msg-size data) 0))))))
+  (next [this]
+    (let [[msg-size offset] (read-msg-size data)
           offset (long offset)
           msg-size (long msg-size)]
-      (when (> msg-size 0)
-        (let [new-msg (Message/getRootAsMessage
-                       (-> (dtype/sub-buffer data offset msg-size)
-                           (nio-buffer/native-buf->nio-buf)))
-              next-buf (dtype/sub-buffer data (+ offset msg-size))
-              body-length (.bodyLength new-msg)
-              aligned-offset (pad (+ offset msg-size body-length))]
-          (merge
-           {:next-data (dtype/sub-buffer data aligned-offset)
-            :message new-msg
-            :message-type (message-id->message-type (.headerType new-msg))}
-           (when-not (== 0 body-length)
-             {:body (dtype/sub-buffer next-buf 0 (.bodyLength new-msg))})))))))
+      (let [new-msg (Message/getRootAsMessage
+                     (-> (dtype/sub-buffer data offset msg-size)
+                         (nio-buffer/native-buf->nio-buf)))
+            next-buf (dtype/sub-buffer data (+ offset msg-size))
+            body-length (.bodyLength new-msg)
+            aligned-offset (pad (+ offset msg-size body-length))
+            rv {:message new-msg
+                :message-type (message-id->message-type (.headerType new-msg))}]
+        (set! data (dtype/sub-buffer data aligned-offset))
+        (if-not (== 0 body-length)
+          (assoc rv :body (dtype/sub-buffer next-buf 0 (.bodyLength new-msg)))
+          rv)))))
 
 
-(defn- message-seq
+(defn- message-iterable
   "Given a native buffer of arrow stream data, produce a sequence of flatbuf messages"
-  [^NativeBuffer data]
-  (when-let [msg (read-message data)]
-    (cons msg (lazy-seq (message-seq (:next-data msg))))))
+  ^Iterable [^NativeBuffer data]
+  (reify Iterable
+    (iterator [this] (MessageIter. data))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -504,59 +509,68 @@ Dependent block frames are not supported!!")
 (defn- read-int-LE
   (^long [^InputStream is byte-buf]
    (let [^bytes byte-buf (or byte-buf (byte-array 4))]
-     (.read is byte-buf)
-     (ByteConversions/intFromBytesLE (aget byte-buf 0) (aget byte-buf 1)
-                                     (aget byte-buf 2) (aget byte-buf 3))))
+     (if (== 4 (.read is byte-buf))       
+       (ByteConversions/intFromBytesLE (aget byte-buf 0) (aget byte-buf 1)
+                                       (aget byte-buf 2) (aget byte-buf 3))
+       0)))
   (^long [^InputStream is]
    (read-int-LE is nil)))
 
+(defn- read-stream-msg-size
+  ^long [^InputStream is]
+  (let [msg-size (read-int-LE is)]
+    (if (== -1 msg-size)
+      (read-int-LE is)
+      msg-size)))
 
-(defn- read-stream-message
-  [^InputStream is]
-  (let [msg-size (read-int-LE is)
-        [msg-size offset] (if (== -1 msg-size)
-                            [(read-int-LE is) 8]
-                            [msg-size 4])
-        msg-size (long msg-size)]
-    (when (> msg-size 0)
-      (let [pad-msg-size (pad msg-size)
-            bytes (byte-array pad-msg-size)
-            _ (.read is bytes)
-            new-msg (Message/getRootAsMessage (nio-buffer/as-nio-buffer
-                                               (dtype/sub-buffer bytes 0 msg-size)))
-            body-len (.bodyLength new-msg)
-            pad-body-len (pad body-len)
-            nbuf (when-not (== 0 body-len)
-                   (dtype/make-container :native-heap :int8 pad-body-len))
-            read-chunk-size (* 1024 1024 100)
-            read-buffer (byte-array (min body-len read-chunk-size))
-            bytes-read (when nbuf
-                         (loop [offset 0]
-                           (let [amount-to-read (min (- pad-body-len offset) read-chunk-size)
-                                 n-read (long (if-not (== 0 amount-to-read)
-                                                (.read is read-buffer 0 amount-to-read)
-                                                0))]
-                             (if-not (== 0 n-read)
-                               (do (dtype/copy! (dtype/sub-buffer read-buffer 0 n-read)
-                                                (dtype/sub-buffer nbuf offset n-read))
-                                   (recur (+ offset n-read)))
-                               offset))))]
-        (when (and nbuf (not= bytes-read pad-body-len))
-          (throw (Exception. (format "Unable to read entire buffer - Expected %d got %d"
-                                     pad-body-len bytes-read))))
-        (merge {:message new-msg
-                :message-type (message-id->message-type (.headerType new-msg))}
-               (when nbuf
-                 {:body (dtype/sub-buffer nbuf 0 body-len)}))))))
+(deftype StreamMessageIter [^InputStream is ^{:unsynchronized-mutable true
+                                              :tag long} msg-size
+                            close-input-stream?]
+  Iterator
+  (hasNext [this]    
+    (if (== 0 msg-size)
+      (do 
+        (when close-input-stream? (.close is))
+        false)
+      true))
+  (next [this]
+    (let [pad-msg-size (pad msg-size)
+          bytes (byte-array pad-msg-size)
+          _ (.read is bytes)
+          new-msg (Message/getRootAsMessage (nio-buffer/as-nio-buffer
+                                             (dtype/sub-buffer bytes 0 msg-size)))
+          body-len (.bodyLength new-msg)
+          pad-body-len (pad body-len)
+          nbuf (when-not (== 0 body-len)
+                 (dtype/make-container :native-heap :int8 pad-body-len))
+          read-chunk-size (* 1024 1024 100)
+          read-buffer (byte-array (min body-len read-chunk-size))
+          bytes-read (when nbuf
+                       (loop [offset 0]
+                         (let [amount-to-read (min (- pad-body-len offset) read-chunk-size)
+                               n-read (long (if-not (== 0 amount-to-read)
+                                              (.read is read-buffer 0 amount-to-read)
+                                              0))]
+                           (if-not (== 0 n-read)
+                             (do (dtype/copy! (dtype/sub-buffer read-buffer 0 n-read)
+                                              (dtype/sub-buffer nbuf offset n-read))
+                                 (recur (+ offset n-read)))
+                             offset))))]
+      (when (and nbuf (not= bytes-read pad-body-len))
+        (when close-input-stream? (.close is))
+        (throw (Exception. (format "Unable to read entire buffer - Expected %d got %d"
+                                   pad-body-len bytes-read))))
+      (set! msg-size (read-stream-msg-size is))
+      (merge {:message new-msg
+              :message-type (message-id->message-type (.headerType new-msg))}
+             (when nbuf
+               {:body (dtype/sub-buffer nbuf 0 body-len)})))))
 
-(defn- stream-message-seq
-  [is]
-  (if-let [msg (try (read-stream-message is)
-                    (catch Throwable e
-                      (.close ^InputStream is)
-                      (throw e)))]
-    (cons msg (lazy-seq (stream-message-seq is)))
-    (do (.close ^InputStream is) nil)))
+(defn- stream-message-iterable
+  ^Iterable [is options]
+  (reify Iterable
+    (iterator [this] (StreamMessageIter. is (read-stream-msg-size is)
+                                         (get options :close-input-stream? true)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -800,90 +814,58 @@ Dependent block frames are not supported!!")
   (write-message-header writer (MessageSerializer/serializeMetadata ^Schema schema)))
 
 
-(defn- parallelize-buffer-process
-  "map-fn must be a fn from buffer-seq->buffer-seq.  Then we can parallelize it
-  by handing map-fn sub sequences of buffers."
-  [buffers map-fn]
-  (if (ForkJoinTask/inForkJoinPool)
-    (map-fn buffers)
-    (let [buffers (vec buffers)
-          n-buffers (count buffers)
-          parallelism (pfor/common-pool-parallelism)
-          buffers-per-thread (quot (+ n-buffers (dec parallelism)) parallelism)]
-      (pfor/cpu-pool-map-reduce
-       (fn [^long thread-idx]
-         (let [buf-start (* thread-idx buffers-per-thread)
-               buf-end (min n-buffers (+ buf-start buffers-per-thread))]
-           (when (< buf-start n-buffers)
-             (map-fn (subvec buffers buf-start buf-end)))))
-       #(vec (apply concat %))
-       nil))))
-
-
 (defn- decompress-buffers
   [^BodyCompression compression buffers]
-  (when-not (== 0 (.method compression))
-    (throw (Exception. (format "Only buffer batch compression supported - got %d"
-                               (.method compression)))))
-  (parallelize-buffer-process
-   buffers
-   (fn [buffers]
-     (let [decompressor (create-decompressor (.codec compression))
-           buffers (mapv (fn [buffer]
-                           (if (> (dtype/ecount buffer) 8)
-                             (let [orig-len (native-buffer/read-long buffer)]
-                               {:orig-len orig-len
-                                :buffer (dtype/sub-buffer buffer 8)})
-                             {:orig-len (dtype/ecount buffer)
-                              :buffer buffer}))
-                         buffers)
-           ;;All results get decompressed into one final buffer
-           decomp-buf-len (->> (map :orig-len buffers)
-                               (remove #(== -1 (long %)))
-                               (apply +)
-                               (long))
-           decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
-       (->> buffers
-            (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
-                      ;;-1 indicates the buffer isn't actually compressed.
-                      ;;And some buffers are just empty with size of 0
-                      #_(println orig-len (dtype/ecount buffer)
-                                 (when (> (dtype/ecount buffer) 32)
-                                   (-> (native-buffer/set-native-datatype buffer :int32)
-                                       (dtype/sub-buffer 0 8)
-                                       (vec))))
-                      (if (<= (long orig-len) 0)
-                        [(conj res buffer) decomp-buf]
-                        [(conj res (decompressor
-                                    buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
-                         (dtype/sub-buffer decomp-buf orig-len)]))
-                    [[] decomp-buf])
-            (first))))))
+  (if-not compression
+    buffers
+    (do 
+      (when-not (== 0 (.method compression))
+        (throw (Exception. (format "Only buffer batch compression supported - got %d"
+                                   (.method compression)))))
+      (let [decompressor (create-decompressor (.codec compression))
+            buffers (mapv (fn [buffer]
+                            (if (> (dtype/ecount buffer) 8)
+                              (let [orig-len (native-buffer/read-long buffer)]
+                                {:orig-len orig-len
+                                 :buffer (dtype/sub-buffer buffer 8)})
+                              {:orig-len (dtype/ecount buffer)
+                               :buffer buffer}))
+                          buffers)
+            ;;All results get decompressed into one final buffer
+            decomp-buf-len (->> (lznc/map :orig-len buffers)
+                                (lznc/remove #(== -1 (long %)))
+                                (reduce + 0)
+                                (long))
+            decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
+        (->> buffers
+             (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
+                       ;;-1 indicates the buffer isn't actually compressed.
+                       ;;And some buffers are just empty with size of 0
+                       #_(println orig-len (dtype/ecount buffer)
+                                  (when (> (dtype/ecount buffer) 32)
+                                    (-> (native-buffer/set-native-datatype buffer :int32)
+                                        (dtype/sub-buffer 0 8)
+                                        (vec))))
+                       (if (<= (long orig-len) 0)
+                         [(conj res buffer) decomp-buf]
+                         [(conj res (decompressor
+                                     buffer (dtype/sub-buffer decomp-buf 0 orig-len)))
+                          (dtype/sub-buffer decomp-buf orig-len)]))
+                     [[] decomp-buf])
+             (first))))))
 
 
 (defn- read-record-batch
   ([^RecordBatch record-batch ^NativeBuffer data]
-   (let [compression (.compression record-batch)
-         ;; _ (println (->> (range (.buffersLength record-batch))
-         ;;                 (mapv #(let [buffer (.buffers record-batch %)]
-         ;;                          (hash-map :offset (.offset buffer)
-         ;;                                    :length (.length buffer))))))
-         buffers (->> (range (.buffersLength record-batch))
-                      (mapv #(let [buffer (.buffers record-batch (int %))]
-                               (dtype/sub-buffer data (.offset buffer)
-                                                 (.length buffer)))))
-         ;; _ (println (->> (range (.nodesLength record-batch))
-         ;;                 (mapv #(let [node (.nodes record-batch (int %))]
-         ;;                          {:n-elems (.length node)
-         ;;                           :n-null-entries (.nullCount node)}))))
-         buffers (if compression
-                   (decompress-buffers compression buffers)
-                   buffers)]
-     {:nodes (->> (range (.nodesLength record-batch))
-                  (mapv #(let [node (.nodes record-batch (int %))]
-                           {:n-elems (.length node)
-                            :n-null-entries (.nullCount node)})))
-      :buffers buffers}))
+   {:compression (.compression record-batch)
+    :nodes (->> (hamf/range (.nodesLength record-batch))
+                (mapv #(let [node (.nodes record-batch (unchecked-int %))]
+                         {:n-elems (.length node)
+                          :n-null-entries (.nullCount node)})))
+    :buffers (->> (hamf/range (.buffersLength record-batch))
+                  (mapv #(let [buffer (.buffers record-batch (unchecked-int %))]
+                           (dtype/sub-buffer data (.offset buffer)
+                                             (.length buffer)))))})
   ([{:keys [message body _message-type]}]
    (read-record-batch (.header ^Message message (RecordBatch.)) body)))
 
@@ -993,35 +975,39 @@ Dependent block frames are not supported!!")
 (defn- compress-record-batch-buffers
   [options buffers]
   (if-let [comp-map (get options :compression)]
-    {:compression-type (compression-kwd->file-type (comp-map :compression-type))
-     ;;parallelize buffer compression
-     :buffers
-     (parallelize-buffer-process
-      buffers
-      (fn [buffers]
-        (let [comp-fn (create-compressor comp-map)
-              os (ByteArrayOutputStream.)
-              data-len (byte-array 8)
-              ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
-              data-len-buf (dtype/->buffer data-len)]
-          (nth
-           (reduce (fn [[res writer-cache] buffer]
-                     (let [buffer (serialize-to-bytes buffer)
-                           uncomp-len (dtype/ecount buffer)
-                           _ (ByteConversions/longToWriterLE uncomp-len data-len-buf 0)
-                           {:keys [writer-cache dst-buffer]} (comp-fn buffer writer-cache)
-                           dst-bytes (dtype/as-array-buffer dst-buffer)
-                           _ (.write os data-len)
-                           _ (.write os ^bytes (.ary-data dst-bytes)
-                                     (unchecked-int (.offset dst-bytes))
-                                     (unchecked-int (.n-elems dst-bytes)))
-                           dst-buffer (.toByteArray os)]
-                       (.reset os)
-                       [(conj res (nio-buffer/as-nio-buffer dst-buffer))
-                        writer-cache]))
-                   [[] nil]
-                   buffers)
-           0))))}
+    (let [buffers (vec buffers)
+          n-buffers (count buffers)]
+      {:compression-type (compression-kwd->file-type (comp-map :compression-type))
+       ;;parallelize buffer compression
+       :buffers 
+       (->> (hamf/pgroups
+             n-buffers
+             (fn [^long sidx ^long eidx]             
+               (let [buffers (subvec buffers sidx eidx)
+                     comp-fn (create-compressor comp-map)
+                     os (ByteArrayOutputStream.)
+                     data-len (byte-array 8)
+                     ^ByteBuffer nio-buf (nio-buffer/as-nio-buffer data-len)
+                     data-len-buf (dtype/->buffer data-len)]
+                 (-> (reduce (fn [[res writer-cache] buffer]
+                               (let [buffer (serialize-to-bytes buffer)
+                                     uncomp-len (dtype/ecount buffer)
+                                     _ (ByteConversions/longToWriterLE uncomp-len data-len-buf 0)
+                                     {:keys [writer-cache dst-buffer]} (comp-fn buffer writer-cache)
+                                     dst-bytes (dtype/as-array-buffer dst-buffer)
+                                     _ (.write os data-len)
+                                     _ (.write os ^bytes (.ary-data dst-bytes)
+                                               (unchecked-int (.offset dst-bytes))
+                                               (unchecked-int (.n-elems dst-bytes)))
+                                     dst-buffer (.toByteArray os)]
+                                 (.reset os)
+                                 [(conj res (nio-buffer/as-nio-buffer dst-buffer))
+                                  writer-cache]))
+                             [[] nil]
+                             buffers)
+                     (first)))))
+            (lznc/apply-concat)
+            (vec))})
     {:buffers (vec (hamf/pmap #(-> (serialize-to-bytes %)
                                    (nio-buffer/as-nio-buffer))
                               buffers))}))
@@ -1276,23 +1262,20 @@ Dependent block frames are not supported!!")
   (let [n-elems (long n-elems)
         offsets (dtype/->reader offsets)]
     (if (instance? NativeBuffer data)
-      (reify ObjectReader
-        (elemwiseDatatype [rdr] :string)
-        (lsize [rdr] n-elems)
-        (readObject [rdr idx]
-          (let [start-off (long (offsets idx))
-                end-off (long (offsets (inc idx)))]
-            (native-buffer/native-buffer->string data start-off (- end-off start-off)))))
-      (reify ObjectReader
-        (elemwiseDatatype [rdr] :string)
-        (lsize [rdr] n-elems)
-        (readObject [rdr idx]
-          (let [start-off (long (offsets idx))
-                end-off (long (offsets (inc idx)))]
-            (-> (dtype/sub-buffer data start-off
-                                  (- end-off start-off))
-                (dtype/->byte-array)
-                (String.))))))))
+      (dtype/make-reader-fn
+       :string :string n-elems
+       (if (instance? NativeBuffer data)
+         (fn [^long idx]
+           (let [start-off (long (offsets idx))
+                 end-off (long (offsets (inc idx)))]
+             (native-buffer/native-buffer->string data start-off (- end-off start-off))))
+         (fn [^long idx]
+           (let [start-off (long (offsets idx))
+                 end-off (long (offsets (inc idx)))]
+             (-> (dtype/sub-buffer data start-off
+                                   (- end-off start-off))
+                 (dtype/->byte-array)
+                 (String.)))))))))
 
 (defn- offsets-data->bytedata-reader
   ^List [offsets data n-elems]
@@ -1313,7 +1296,7 @@ Dependent block frames are not supported!!")
   "Returns a map of {:id :strings}"
   [{:keys [id delta? records]}]
   (let [nodes (:nodes records)
-        buffers (:buffers records)
+        buffers (decompress-buffers (:compression records) (:buffers records))
         _ (assert (== 1 (count nodes)))
         _ (assert (== 3 (count buffers)))
         node (first nodes)
@@ -1322,9 +1305,7 @@ Dependent block frames are not supported!!")
         offsets (-> (native-buffer/set-native-datatype offsets :int32)
                     (dtype/sub-buffer 0 (inc n-elems)))
         data (native-buffer/set-native-datatype databuf :int8)
-        str-data (dtype/make-list :string
-                                  (-> (offsets-data->string-reader offsets data n-elems)
-                                      (dtype/clone)))]
+        str-data (dtype/make-list :string (offsets-data->string-reader offsets data n-elems))]
     {:id id
      :delta? delta?
      :strings str-data}))
@@ -1345,13 +1326,15 @@ Dependent block frames are not supported!!")
 (defn- string-data->column-data
   [dict-map encoding offset-buf-dtype buffers n-elems options]
   (if encoding
-    (StringTable. (get-in dict-map [(:id encoding) :strings])
+    (StringTable. (-> (get dict-map (get encoding :id))
+                      deref
+                      (get :strings))
                   nil
                   (-> (first buffers)
                       (native-buffer/set-native-datatype
                        (get-in encoding [:index-type :datatype]))
                       (native-buffer/->jvm-array 0 n-elems)
-                      (dyn-int-list/make-from-container)))
+                      (ArrayLists/toList)))
     (let [[offsets varchar-data] buffers
           str-rdr (offsets-data->string-reader (native-buffer/set-native-datatype
                                                 offsets offset-buf-dtype)
@@ -1425,34 +1408,38 @@ Dependent block frames are not supported!!")
       ;;Fixes issue 330
       (with-meta nil)))
 
-(defmulti ^:private field->column
+(defmulti ^:private preparse-field
   "Transform a field into a column."
   (fn [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
     (get-in field [:field-type :datatype])))
 
 
-(defmethod ^:private field->column :string
+(defmethod ^:private preparse-field :string
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
   (let [encoding (get field :dictionary-encoding)
-        node (.next node-iter)
-        [validity-buf data-buffers] (if (nil? encoding)
-                                      [(.next buf-iter) [(.next buf-iter) (.next buf-iter)]]
-                                      [(.next buf-iter) [(.next buf-iter)]])]
+        buffers (if (nil? encoding)
+                  [(.next buf-iter) (.next buf-iter) (.next buf-iter)]
+                  [(.next buf-iter) (.next buf-iter)])
+        node (.next node-iter)]
+    (fn parse-string-field
+      [decompressor]
+      (let [buffers (decompressor buffers)
+            validity-buf (nth buffers 0)
+            data-buffers (subvec buffers 1)]         
+        (col-impl/new-column
+         (:name field)
+         (string-data->column-data
+          dict-map encoding
+          (get-in field [:field-type :offset-buffer-datatype])
+          data-buffers
+          (:n-elems node)
+          options)
+         (field-metadata field)
+         (node-buf->missing node validity-buf))))))
 
-    (col-impl/new-column
-     (:name field)
-     (string-data->column-data
-      dict-map encoding
-      (get-in field [:field-type :offset-buffer-datatype])
-      data-buffers
-      (:n-elems node)
-      options)
-     (field-metadata field)
-     (node-buf->missing node validity-buf))))
-
-(defmethod ^:private field->column :boolean
+(defmethod ^:private preparse-field :boolean
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
@@ -1465,22 +1452,26 @@ Dependent block frames are not supported!!")
                         field-dtype)
                       field-dtype)
         node (.next node-iter)
-        n-elems (long (:n-elems node))]
-    ;;nil subtype means null column
-    (if (= :null (get-in field [:field-type :subtype]))
-      (col-impl/new-column
-       (:name field)
-       (dtype/const-reader false n-elems)
-       (field-metadata field)
-       (bitmap/->bitmap (range n-elems)))
-      (let [validity-buf (.next buf-iter)
-            data-buf (.next buf-iter)]
-        (col-impl/new-column
-         (:name field)
-         (byte-buffer->bitwise-boolean-buffer
-          data-buf n-elems)
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+        n-elems (long (:n-elems node))
+        nil-subtype? (identical? :null (get-in field [:field-type :subtype]))
+        buffers (when-not nil-subtype?
+                  [(.next buf-iter) (.next buf-iter)])]
+    (fn parse-boolean-field
+      [decompressor]
+      ;;nil subtype means null column
+      (if 
+          (col-impl/new-column
+           (:name field)
+           (dtype/const-reader false n-elems)
+           (field-metadata field)
+           (bitmap/->bitmap (range n-elems)))
+        (let [[validity-buf data-buf] (decompressor buffers)]
+          (col-impl/new-column
+           (:name field)
+           (byte-buffer->bitwise-boolean-buffer
+            data-buf n-elems)
+           (field-metadata field)
+           (node-buf->missing node validity-buf)))))))
 
 
 (defn- clone-downcast-text
@@ -1490,64 +1481,69 @@ Dependent block frames are not supported!!")
     (dtype/clone dbuf)))
 
 
-(defmethod ^:private field->column :list
+(defmethod ^:private preparse-field :list
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
-  (let [validity-buf (.next buf-iter)
-        offset-buf (.next buf-iter)
+  (let [buffers [(.next buf-iter) (.next buf-iter)]
         node (.next node-iter)
         _ (assert (== 1 (count (:children field)))
                   (format "List types are expected to have exactly 1 child - found %d"
                           (count (:children field))))
-        sub-column (-> (field->column (first (:children field)) node-iter buf-iter dict-map options)
-                       ;;copy to jvm memory.  This is a quick insurance policy to ensure
-                       ;;if this buffer leaves the resource context it doesn't contain
-                       ;;native memory as only the parent buffer is cloned.  A faster
-                       ;;but more involved option would be to make a custom reader with
-                       ;;an overloaded clone pathway.
-                       (clone-downcast-text)
-                       (dtype/->buffer))
-        n-elems (long (:n-elems node))
-        ;;For lists, int32 offsets with one extra if this works like the string buffers
-        offsets (-> (native-buffer/set-native-datatype
-                     offset-buf :int32)
-                    (dtype/sub-buffer 0 (inc n-elems))
-                    (dtype/->buffer))]
-    (col-impl/new-column
-     (:name field)
-     (dtype/make-reader :object n-elems
-                        (let [sidx (.readLong offsets idx)]
-                          (dtype/sub-buffer sub-column
-                                            sidx
-                                            (- (.readLong offsets (unchecked-inc idx))
-                                               sidx))))
-     (field-metadata field)
-     (node-buf->missing node validity-buf))))
+        sub-column-parse-fn (preparse-field (first (:children field)) node-iter buf-iter dict-map options)]
+    (fn parse-list-field
+      [decompressor]
+      (let [sub-column (-> (sub-column-parse-fn decompressor)
+                           ;;copy to jvm memory.  This is a quick insurance policy to ensure
+                           ;;if this buffer leaves the resource context it doesn't contain
+                           ;;native memory as only the parent buffer is cloned.  A faster
+                           ;;but more involved option would be to make a custom reader with
+                           ;;an overloaded clone pathway.
+                           (clone-downcast-text)
+                           (dtype/->buffer))
+            [validity-buf offset-buf] (decompressor buffers)
+            n-elems (long (:n-elems node))
+            ;;For lists, int32 offsets with one extra if this works like the string buffers
+            offsets (-> (native-buffer/set-native-datatype
+                         offset-buf :int32)
+                        (dtype/sub-buffer 0 (inc n-elems))
+                        (dtype/->buffer))]
+        (col-impl/new-column
+         (:name field)
+         (dtype/make-reader :object n-elems
+                            (let [sidx (.readLong offsets idx)]
+                              (dtype/sub-buffer sub-column
+                                                sidx
+                                                (- (.readLong offsets (unchecked-inc idx))
+                                                   sidx))))
+         (field-metadata field)
+         (node-buf->missing node validity-buf))))))
 
-(defmethod ^:private field->column :binary
+(defmethod ^:private preparse-field :binary
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
-        validity-buf (.next buf-iter)
-        offset-buf (.next buf-iter)
-        data-buf (.next buf-iter)
-        n-elems (long (:n-elems node))
-        offsets (-> (native-buffer/set-native-datatype
-                     offset-buf :int32)
-                    (dtype/sub-buffer 0 (inc n-elems))
-                    (dtype/->buffer))
-        data-buf (-> (dtype/clone data-buf)
-                     (dtype/->buffer))]
-    (col-impl/new-column
-     (:name field)
-     (dtype/make-reader :object n-elems
-                        (let [sidx (.readLong offsets idx)]
-                          (dtype/sub-buffer data-buf
-                                            sidx
-                                            (- (.readLong offsets (unchecked-inc idx))
-                                               sidx))))
-     (field-metadata field)
-     (node-buf->missing node validity-buf))))
+        buffers [(.next buf-iter) (.next buf-iter) (.next buf-iter)]
+        
+        n-elems (long (:n-elems node))]
+    (fn parse-binary-field
+      [decompressor]
+      (let [[validity-buf offset-buf data-buf] (decompressor buffers)
+            offsets (-> (native-buffer/set-native-datatype
+                         offset-buf :int32)
+                        (dtype/sub-buffer 0 (inc n-elems))
+                        (dtype/->buffer))
+            data-buf (-> (dtype/clone data-buf)
+                         (dtype/->buffer))]
+        (col-impl/new-column
+         (:name field)
+         (dtype/make-reader :object n-elems
+                            (let [sidx (.readLong offsets idx)]
+                              (dtype/sub-buffer data-buf
+                                                sidx
+                                                (- (.readLong offsets (unchecked-inc idx))
+                                                   sidx))))
+         (field-metadata field)
+         (node-buf->missing node validity-buf))))))
 
-(defmethod ^:private field->column :default
+(defmethod ^:private preparse-field :default
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
@@ -1560,27 +1556,44 @@ Dependent block frames are not supported!!")
                         field-dtype)
                       field-dtype)
         node (.next node-iter)
-        validity-buf (.next buf-iter)
-        data-buf (.next buf-iter)
+        buffers [(.next buf-iter)
+                 (.next buf-iter)]
         n-elems (long (:n-elems node))]
-    (col-impl/new-column
-     (:name field)
-     (-> (native-buffer/set-native-datatype
-          data-buf field-dtype)
-         (dtype/sub-buffer 0 n-elems))
-     (field-metadata field)
-     (node-buf->missing node validity-buf))))
+    (fn parse-default-field
+      [decompressor]
+      (let [[validity-buf data-buf] (decompressor buffers)]
+        (col-impl/new-column
+         (:name field)
+         (-> (native-buffer/set-native-datatype data-buf field-dtype)
+             (dtype/sub-buffer 0 n-elems))
+         (field-metadata field)
+         (node-buf->missing node validity-buf))))))
+
+(defn- iter ^Iterator [^Iterable i] (when i (.iterator i)))
 
 
 (defn- records->ds
   [schema dict-map record-batch options]
   (let [{:keys [nodes buffers]} record-batch
-        node-iter (.iterator ^Iterable (map-indexed #(assoc %2 :idx %1) nodes))
-        buf-iter (.iterator ^Iterable buffers)]
+        node-iter (iter (lznc/map-indexed #(assoc %2 :idx %1) nodes))
+        buf-iter (iter buffers)
+        fields (:fields schema)
+        keyfn (get options :key-fn identity)
+        keep-set (if-let [alist (get options :column-allowlist)]
+                   (set alist)
+                   (set (lznc/map (comp keyfn :name) fields)))
+        keep-set (if-let [blist (get options :column-blocklist)]
+                   (set/difference keep-set (set blist))
+                   keep-set)
+        decompressor (if-let [compression (get record-batch :compression)]
+                       #(decompress-buffers compression %)
+                       identity)]
     (->> (:fields schema)
-         ;;parsing has to be in order non-lazy
-         (mapv #(field->column % node-iter buf-iter
-                               dict-map options))
+         (lznc/map #(let [parse-fn (preparse-field % node-iter buf-iter dict-map options)]
+                      (when (.contains ^Set keep-set (keyfn (get % :name)))
+                        parse-fn)))
+         (lznc/filter identity)
+         (lznc/map #(% decompressor))
          (ds-impl/new-dataset options))))
 
 
@@ -1805,11 +1818,48 @@ Dependent block frames are not supported!!")
 
 
 (defn- input->messages
-  [input]
+  ^Iterable [input options]
   (if (instance? InputStream input)
-    (stream-message-seq input)
-    (message-seq input)))
+    (stream-message-iterable input options)
+    (message-iterable input)))
 
+
+(defn- maybe-next
+  [^Iterator iter] (when (and iter (.hasNext iter)) (.next iter)))
+
+(deftype NextDatasetIter [schema ^Iterator messages fname
+                          ^{:unsynchronized-mutable true
+                            :tag long} idx
+                          ^:unsynchronized-mutable dict-map
+                          options]
+  Iterator
+  (hasNext [this] (.hasNext messages))
+  (next [this]
+    (loop [msg (.next messages)
+           dicts dict-map]
+      (if (identical? :dictionary-batch (get msg :message-type))
+        (recur (maybe-next messages)
+               (update dicts (get msg :id)
+                       (fn [old-val]
+                         (delay
+                           (let [new-val (dictionary->strings msg)]
+                             (if (and old-val (new-val :delta?))
+                               (update new-val :strings
+                                       (fn [new-strs]
+                                         (let [old-strs (get @old-val :strings)
+                                               new-ec (+ (count new-strs) (count old-strs))
+                                               rv (hamf/wrap-array-growable
+                                                   (make-array String new-ec)
+                                                   0)]
+                                           (.addAllReducible rv old-strs)
+                                           (.addAllReducible rv new-strs)
+                                           rv))))
+                             new-val)))))
+        (let [cur-idx idx]
+          (set! dict-map dicts)
+          (set! idx (inc cur-idx))
+          (-> (records->ds schema dict-map msg options)
+              (ds-base/set-dataset-name (format "%s-%03d" fname cur-idx))))))))
 
 (defn- discard
   [input n-bytes]
@@ -1820,34 +1870,20 @@ Dependent block frames are not supported!!")
     (dtype/sub-buffer input 8)))
 
 
-(defn- parse-next-dataset
-  [schema messages fname idx dict-map options]
-  (when (seq messages)
-    (let [dict-messages (take-while #(= (:message-type %) :dictionary-batch) messages)
-          rest-messages (drop (count dict-messages) messages)
-          dict-map (merge-with
-                    (fn [older newer]
-                      (if (newer :delta?)
-                        (update newer :strings
-                                (fn [new-strings]
-                                  (let [old-strings (dtype/clone (older :strings))]
-                                    (.addAll ^List old-strings new-strings)
-                                    old-strings)))
-                        newer))
-                    dict-map
-                    (->> dict-messages
-                         (map dictionary->strings)
-                         (map (juxt :id identity))
-                         (into {})))
-          data-record (first rest-messages)]
-      (cons
-       (-> (records->ds schema dict-map data-record options)
-           (ds-base/set-dataset-name (format "%s-%03d" fname idx)))
-       (lazy-seq (parse-next-dataset schema (rest rest-messages)
-                                     fname (inc (long idx)) dict-map options))))))
+(defn- next-dataset-iter
+  ^Iterator [input fname options]
+  (let [messages (->> (input->messages input options)
+                      (lznc/map parse-message)
+                      (iter))
+        schema (maybe-next messages)]
+    (when-not (= :schema (get schema :message-type))
+      (when (and (instance? InputStream input)
+                 (get options :close-input-stream? true))
+        (.close ^InputStream input))
+      (throw (Exception. "Initial message is not a schema message.")))
+    (NextDatasetIter. schema messages fname 0 {} options)))
 
-
-(defn stream->dataset-seq
+(defn stream->dataset-iterable
   "Loads data up to and including the first data record.  Returns the a lazy
   sequence of datasets.  Datasets can be loaded using mmapped data and when that is true
   realizing the entire sequence is usually safe, even for datasets that are larger than
@@ -1877,28 +1913,25 @@ Dependent block frames are not supported!!")
   as it changes datatypes *but* can be useful when used with `:strings-as-text?` when writing data out.
   When used like this uncompressed mmap pathways typically have the highest performance - roughly 100x
   any other method."
-  [fname & [options]]
-  (let [input (case (get options :open-type :input-stream)
-                :mmap (mmap/mmap-file fname options)
-                :input-stream (apply io/input-stream fname (apply concat (seq options))))
-        {:keys [file-type input]} (file-type input)
+  ^Iterable [fname & [options]]
+  (reify Iterable
+    (iterator [this]
+      (let [input (case (get options :open-type :input-stream)
+                    :mmap (mmap/mmap-file fname options)
+                    :input-stream (apply io/input-stream fname (apply concat (seq options))))
+            {:keys [file-type input]} (file-type input)]
+        (case file-type
+          :arrow-file
+          (next-dataset-iter (discard input 8) fname options)
+          :arrow-ipc
+          (next-dataset-iter input options)
+          :feather-v1
+          [(feather->ds input options)])))))
 
-        ipc-parse-fn
-        (fn [input]
-          (let [messages (->> (input->messages input)
-                              (sequence (map parse-message)))
-                schema (first messages)]
-            ;; (println schema)
-            (when-not (= :schema (:message-type schema))
-              (throw (Exception. "Initial message is not a schema message.")))
-            (parse-next-dataset schema (rest messages) fname 0 nil options)))]
-    (case file-type
-      :arrow-file
-      (ipc-parse-fn (discard input 8))
-      :arrow-ipc
-      (ipc-parse-fn input)
-      :feather-v1
-      [(feather->ds input options)])))
+(defn ^:no-doc stream->dataset-seq
+  "see docs for [[stream->dataset-iterable]]"
+  [fname & [options]]
+  (seq (stream->dataset-iterable fname options)))
 
 
 (defn stream->dataset
@@ -1921,9 +1954,9 @@ Dependent block frames are not supported!!")
   as datatype `:epoch-days` as opposed to `:packed-local-date`.  This means reading values
   will return integers as opposed to `java.time.LocalDate`s."
   ([fname options]
-   (let [ds-seq (stream->dataset-seq fname options)]
-     (when-let [ds (first ds-seq)]
-       (when-not (nil? (seq (rest ds-seq)))
+   (let [ds-iter (iter (stream->dataset-iterable fname options))]
+     (when-let [ds (maybe-next ds-iter)]
+       (when (.hasNext ds-iter)
          (throw (Exception. "File contains multiple record batches.
 Please use stream->dataset-seq.")))
        (vary-meta ds assoc :name fname))))
