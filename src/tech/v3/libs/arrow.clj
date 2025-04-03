@@ -106,6 +106,7 @@
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.lazy-noncaching :as lznc]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
   (:import [ham_fisted ArrayLists]
@@ -1459,7 +1460,7 @@ Dependent block frames are not supported!!")
     (fn parse-boolean-field
       [decompressor]
       ;;nil subtype means null column
-      (if 
+      (if nil-subtype?
           (col-impl/new-column
            (:name field)
            (dtype/const-reader false n-elems)
@@ -1830,33 +1831,32 @@ Dependent block frames are not supported!!")
 (deftype NextDatasetIter [schema ^Iterator messages fname
                           ^{:unsynchronized-mutable true
                             :tag long} idx
-                          ^:unsynchronized-mutable dict-map
+                          ^Map dict-map
                           options]
   Iterator
   (hasNext [this] (.hasNext messages))
   (next [this]
-    (loop [msg (.next messages)
-           dicts dict-map]
+    (loop [msg (.next messages)]
       (if (identical? :dictionary-batch (get msg :message-type))
-        (recur (maybe-next messages)
-               (update dicts (get msg :id)
-                       (fn [old-val]
-                         (delay
-                           (let [new-val (dictionary->strings msg)]
-                             (if (and old-val (new-val :delta?))
-                               (update new-val :strings
-                                       (fn [new-strs]
-                                         (let [old-strs (get @old-val :strings)
-                                               new-ec (+ (count new-strs) (count old-strs))
-                                               rv (hamf/wrap-array-growable
-                                                   (make-array String new-ec)
-                                                   0)]
-                                           (.addAllReducible rv old-strs)
-                                           (.addAllReducible rv new-strs)
-                                           rv))))
-                             new-val)))))
+        (do 
+          (.compute dict-map (get msg :id)
+                    (hamf-fn/bi-function
+                     k old-val
+                     (delay
+                       (let [new-val (dictionary->strings msg)]
+                         (if (and old-val (new-val :delta?))
+                           (let [old-strs (get @old-val :strings)
+                                 new-strs (get new-val :strings)
+                                 new-ec (+ (count new-strs) (count old-strs))
+                                 rv (hamf/wrap-array-growable
+                                     (make-array String new-ec)
+                                     0)]
+                             (.addAllReducible rv old-strs)
+                             (.addAllReducible rv new-strs)
+                             (assoc new-val :strings rv))
+                           new-val)))))
+          (recur (maybe-next messages)))
         (let [cur-idx idx]
-          (set! dict-map dicts)
           (set! idx (inc cur-idx))
           (-> (records->ds schema dict-map msg options)
               (ds-base/set-dataset-name (format "%s-%03d" fname cur-idx))))))))
@@ -1881,7 +1881,7 @@ Dependent block frames are not supported!!")
                  (get options :close-input-stream? true))
         (.close ^InputStream input))
       (throw (Exception. "Initial message is not a schema message.")))
-    (NextDatasetIter. schema messages fname 0 {} options)))
+    (NextDatasetIter. schema messages fname 0 (hamf/java-hashmap) options)))
 
 (defn stream->dataset-iterable
   "Loads data up to and including the first data record.  Returns the a lazy
@@ -1924,9 +1924,9 @@ Dependent block frames are not supported!!")
           :arrow-file
           (next-dataset-iter (discard input 8) fname options)
           :arrow-ipc
-          (next-dataset-iter input options)
+          (next-dataset-iter input fname options)
           :feather-v1
-          [(feather->ds input options)])))))
+          (iter (hamf/vector (feather->ds input options))))))))
 
 (defn ^:no-doc stream->dataset-seq
   "see docs for [[stream->dataset-iterable]]"
