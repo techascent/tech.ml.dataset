@@ -818,6 +818,19 @@ Dependent block frames are not supported!!")
   (write-message-header writer (MessageSerializer/serializeMetadata ^Schema schema)))
 
 
+(defn- LE-wrap-data
+  ^java.nio.ByteBuffer [buffer]
+  (let [^java.nio.ByteBuffer bbuf (nio-buffer/->nio-buffer buffer)]
+    (.order bbuf java.nio.ByteOrder/LITTLE_ENDIAN)))
+
+(defn- read-long
+  ^long [buffer]
+  (if (instance? NativeBuffer buffer)
+    (native-buffer/read-long buffer)
+    (-> (LE-wrap-data buffer)
+        (.getLong))))
+
+
 (defn- decompress-buffers
   [^BodyCompression compression buffers]
   (if-not compression
@@ -919,11 +932,6 @@ Dependent block frames are not supported!!")
     (dtype/set-constant! c -1)
     c))
 
-(defn- LE-wrap-data
-  ^java.nio.ByteBuffer [buffer]
-  (let [^java.nio.ByteBuffer bbuf (nio-buffer/->nio-buffer buffer)]
-    (.order bbuf java.nio.ByteOrder/LITTLE_ENDIAN)))
-
 (defn- as-shorts
   ^shorts [abuf]
   (let [bbuf (LE-wrap-data abuf)
@@ -963,15 +971,6 @@ Dependent block frames are not supported!!")
     (-> (.asDoubleBuffer bbuf)
         (.get rv))
     rv))
-
-(defn read-long
-  ^long [buffer]
-  (if (instance? NativeBuffer buffer)
-    (native-buffer/read-long buffer)
-    (-> (LE-wrap-data buffer)
-        (.getLong))))
-
-
 
 
 (defn- set-buffer-datatype
