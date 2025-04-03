@@ -109,7 +109,7 @@
             [ham-fisted.function :as hamf-fn]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
-  (:import [ham_fisted ArrayLists]
+  (:import [ham_fisted ArrayLists ArrayLists$ArrayOwner]
            [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -236,9 +236,12 @@
 (defn- create-zstd-decompressor
   []
   (fn [compbuf resbuf]
-    (Zstd/decompress ^ByteBuffer (nio-buffer/as-nio-buffer resbuf)
-                     ^ByteBuffer (nio-buffer/as-nio-buffer compbuf))
-    resbuf))
+    (if (instance? NativeBuffer compbuf)      
+      (Zstd/decompress ^ByteBuffer (nio-buffer/as-nio-buffer resbuf)
+                       ^ByteBuffer (nio-buffer/as-nio-buffer compbuf))
+      (let [dst (byte-array (dtype/ecount resbuf))]
+        (Zstd/decompress dst (dtype/->byte-array compbuf))
+        (dtype/copy! dst resbuf)))))
 
 
 #_(defn- create-apache-lz4-frame-compressor
@@ -543,7 +546,7 @@ Dependent block frames are not supported!!")
           body-len (.bodyLength new-msg)
           pad-body-len (pad body-len)
           nbuf (when-not (== 0 body-len)
-                 (dtype/make-container :native-heap :int8 pad-body-len))
+                 (dtype/make-container :int8 pad-body-len))
           read-chunk-size (* 1024 1024 100)
           read-buffer (byte-array (min body-len read-chunk-size))
           bytes-read (when nbuf
@@ -824,9 +827,12 @@ Dependent block frames are not supported!!")
         (throw (Exception. (format "Only buffer batch compression supported - got %d"
                                    (.method compression)))))
       (let [decompressor (create-decompressor (.codec compression))
+            buf-type (if (instance? NativeBuffer (hamf/first buffers))
+                       :native-heap
+                       :jvm-heap)
             buffers (mapv (fn [buffer]
                             (if (> (dtype/ecount buffer) 8)
-                              (let [orig-len (native-buffer/read-long buffer)]
+                              (let [orig-len (read-long buffer)]
                                 {:orig-len orig-len
                                  :buffer (dtype/sub-buffer buffer 8)})
                               {:orig-len (dtype/ecount buffer)
@@ -837,7 +843,7 @@ Dependent block frames are not supported!!")
                                 (lznc/remove #(== -1 (long %)))
                                 (reduce + 0)
                                 (long))
-            decomp-buf (dtype/make-container :native-heap :int8 decomp-buf-len)]
+            decomp-buf (dtype/make-container buf-type :int8 decomp-buf-len)]
         (->> buffers
              (reduce (fn [[res decomp-buf] {:keys [orig-len buffer]}]
                        ;;-1 indicates the buffer isn't actually compressed.
@@ -912,6 +918,91 @@ Dependent block frames are not supported!!")
         c (dtype/make-container :int8 n-bytes)]
     (dtype/set-constant! c -1)
     c))
+
+(defn- LE-wrap-data
+  ^java.nio.ByteBuffer [buffer]
+  (let [^java.nio.ByteBuffer bbuf (nio-buffer/->nio-buffer buffer)]
+    (.order bbuf java.nio.ByteOrder/LITTLE_ENDIAN)))
+
+(defn- as-shorts
+  ^shorts [abuf]
+  (let [bbuf (LE-wrap-data abuf)
+        rv (short-array (quot (dtype/ecount abuf)  2))]
+    (-> (.asShortBuffer bbuf)
+        (.get rv))
+    rv))
+
+(defn- as-ints
+  ^ints [abuf]
+  (let [bbuf (LE-wrap-data abuf)
+        rv (int-array (quot (dtype/ecount abuf) 4))]
+    (-> (.asIntBuffer bbuf)
+        (.get rv))
+    rv))
+
+(defn- as-longs
+  ^longs [abuf]
+  (let [bbuf (LE-wrap-data abuf)
+        rv (long-array (quot (dtype/ecount abuf) 8))]
+    (-> (.asLongBuffer bbuf)
+        (.get rv))
+    rv))
+
+(defn- as-floats
+  ^floats [abuf]
+  (let [bbuf (LE-wrap-data abuf)
+        rv (float-array (quot (dtype/ecount abuf) 4))]
+    (-> (.asFloatBuffer bbuf)
+        (.get rv))
+    rv))
+
+(defn- as-doubles
+  ^doubles [abuf]
+  (let [bbuf (LE-wrap-data abuf)
+        rv (double-array (quot (dtype/ecount abuf) 8))]
+    (-> (.asDoubleBuffer bbuf)
+        (.get rv))
+    rv))
+
+(defn read-long
+  ^long [buffer]
+  (if (instance? NativeBuffer buffer)
+    (native-buffer/read-long buffer)
+    (-> (LE-wrap-data buffer)
+        (.getLong))))
+
+
+
+
+(defn- set-buffer-datatype
+  [buffer dtype]
+  (if (instance? tech.v3.datatype.native_buffer.NativeBuffer buffer)
+    (native-buffer/set-native-datatype buffer dtype)
+    (let [abuf (dtype/->array-buffer buffer)]
+      (let [offset (.-offset abuf)
+            n-elems (.-n-elems abuf)
+            src-data (.-ary-data abuf)]
+        (case (casting/host-flatten dtype)
+          (:int8 :uint8) (ArrayBuffer. src-data offset n-elems dtype nil nil)
+          (:int16 :uint16) (ArrayBuffer. (as-shorts abuf) 0 (quot n-elems 2) dtype nil nil)
+          (:int32 :uint32) (ArrayBuffer. (as-ints abuf) 0 (quot n-elems 4) dtype nil nil)
+          (:int64 :uint64) (ArrayBuffer. (as-longs abuf) 0 (quot n-elems 8) dtype nil nil)
+          :float32 (ArrayBuffer. (as-floats abuf) 0 (quot n-elems 4) dtype nil nil)
+          :float64 (ArrayBuffer. (as-doubles abuf) 0 (quot n-elems 8) dtype nil nil))))))
+
+(defn- ->jvm-array
+  [buffer ^long off ^long len]
+  (if (instance? NativeBuffer buffer)
+    (native-buffer/->jvm-array buffer off len)
+    (let [abuf (dtype/->array-buffer buffer)
+          ary-data (.-ary-data abuf)
+          offset (.-offset abuf)
+          n-elems (.-n-elems abuf)]
+      (if (and (== (.-offset abuf) off)
+               (== (.-n-elems abuf) len))
+        (.-ary-data abuf)
+        (let [^ArrayLists$ArrayOwner owner  (ArrayLists/toList ary-data)]
+          (.copyOfRange owner offset (+ offset n-elems)))))))
 
 (defn- byte-length
   ^long [container]
@@ -1262,21 +1353,21 @@ Dependent block frames are not supported!!")
   ^List [offsets data n-elems]
   (let [n-elems (long n-elems)
         offsets (dtype/->reader offsets)]
-    (if (instance? NativeBuffer data)
-      (dtype/make-reader-fn
-       :string :string n-elems
-       (if (instance? NativeBuffer data)
+    (dtype/make-reader-fn
+     :string :string n-elems
+     (if (instance? NativeBuffer data)
+       (fn [^long idx]
+         (let [start-off (long (offsets idx))
+               end-off (long (offsets (inc idx)))]
+           (native-buffer/native-buffer->string data start-off (- end-off start-off))))
+       (let [abuf (dtype/->array-buffer data)
+             ^bytes src-data (.-ary-data abuf)
+             data-off (.-offset abuf)
+             ]
          (fn [^long idx]
-           (let [start-off (long (offsets idx))
-                 end-off (long (offsets (inc idx)))]
-             (native-buffer/native-buffer->string data start-off (- end-off start-off))))
-         (fn [^long idx]
-           (let [start-off (long (offsets idx))
-                 end-off (long (offsets (inc idx)))]
-             (-> (dtype/sub-buffer data start-off
-                                   (- end-off start-off))
-                 (dtype/->byte-array)
-                 (String.)))))))))
+           (let [start-off (.readLong offsets idx)
+                 end-off (.readLong offsets (inc idx))]
+             (String. src-data (+ start-off data-off) (- end-off start-off)))))))))
 
 (defn- offsets-data->bytedata-reader
   ^List [offsets data n-elems]
@@ -1303,9 +1394,9 @@ Dependent block frames are not supported!!")
         node (first nodes)
         [_bitwise offsets databuf] buffers
         n-elems (long (:n-elems node))
-        offsets (-> (native-buffer/set-native-datatype offsets :int32)
+        offsets (-> (set-buffer-datatype offsets :int32)
                     (dtype/sub-buffer 0 (inc n-elems)))
-        data (native-buffer/set-native-datatype databuf :int8)
+        data (set-buffer-datatype databuf :int8)
         str-data (dtype/make-list :string (offsets-data->string-reader offsets data n-elems))]
     {:id id
      :delta? delta?
@@ -1332,12 +1423,11 @@ Dependent block frames are not supported!!")
                       (get :strings))
                   nil
                   (-> (first buffers)
-                      (native-buffer/set-native-datatype
-                       (get-in encoding [:index-type :datatype]))
-                      (native-buffer/->jvm-array 0 n-elems)
+                      (set-buffer-datatype (get-in encoding [:index-type :datatype]))
+                      (->jvm-array 0 n-elems)
                       (ArrayLists/toList)))
     (let [[offsets varchar-data] buffers
-          str-rdr (offsets-data->string-reader (native-buffer/set-native-datatype
+          str-rdr (offsets-data->string-reader (set-buffer-datatype
                                                 offsets offset-buf-dtype)
                                                varchar-data n-elems)]
       (if-not (:text-as-strings? options)
@@ -1503,7 +1593,7 @@ Dependent block frames are not supported!!")
             [validity-buf offset-buf] (decompressor buffers)
             n-elems (long (:n-elems node))
             ;;For lists, int32 offsets with one extra if this works like the string buffers
-            offsets (-> (native-buffer/set-native-datatype
+            offsets (-> (set-buffer-datatype
                          offset-buf :int32)
                         (dtype/sub-buffer 0 (inc n-elems))
                         (dtype/->buffer))]
@@ -1565,7 +1655,7 @@ Dependent block frames are not supported!!")
       (let [[validity-buf data-buf] (decompressor buffers)]
         (col-impl/new-column
          (:name field)
-         (-> (native-buffer/set-native-datatype data-buf field-dtype)
+         (-> (set-buffer-datatype data-buf field-dtype)
              (dtype/sub-buffer 0 n-elems))
          (field-metadata field)
          (node-buf->missing node validity-buf))))))
