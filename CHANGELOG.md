@@ -1,4 +1,7 @@
 # Changelog
+# 7.054
+ * Upgrade dtype-next to [version 10.136](https://github.com/cnuernber/dtype-next/blob/master/CHANGELOG.md#10136).
+ 
 # 7.053
  * Column parsers are more rigorous in promoting their datatypes after clear op.
  
