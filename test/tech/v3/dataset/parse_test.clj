@@ -518,3 +518,10 @@
   (is (= [1 2 3] (get (ds/->dataset "test/data/local_date.json"
                                     {:parser-fn {:time-period :local-date}})
                       "test"))))
+
+(deftest dataset-parser-clear-packed-column
+  (let [p (ds/dataset-parser)]
+    (ds-proto/add-row p {:date (java.time.Instant/now)})
+    (ds-proto/ds-clear p)
+    (ds-proto/add-row p {:date (java.time.Instant/now)})
+    (is (= 1 (count (@p :date))))))
