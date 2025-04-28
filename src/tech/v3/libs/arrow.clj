@@ -119,7 +119,7 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary]
+            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary ArrowType$FixedSizeBinary]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]           
@@ -132,7 +132,7 @@
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
            [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
             FloatBuffer]
-           [java.util List ArrayList Map HashMap Map$Entry Iterator Set]
+           [java.util List ArrayList Map HashMap Map$Entry Iterator Set UUID]
            [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
@@ -435,6 +435,9 @@ Dependent block frames are not supported!!")
   (datafy [this] {:id (.getId this)
                   :ordered? (.isOrdered this)
                   :index-type (datafy (.getIndexType this))})
+  ArrowType$FixedSizeBinary
+  (datafy [this] {:datatype :fixed-size-binary
+                  :byte-width (.getByteWidth this)})
   ArrowType$List
   (datafy [this]
     {:datatype :list}))
@@ -710,10 +713,7 @@ Dependent block frames are not supported!!")
                  (ft-fn (ArrowType$Utf8.) encoding)
                  ;;If no encoding is provided then just save the string as text
                  (ft-fn (ArrowType$Utf8.)))
-       :uuid (do
-               (when (== 1 (long (swap! uuid-warn-counter inc)))
-                 (log/warn "Columns of type UUID are converted to type text when serializing to Arrow"))
-               (ft-fn (ArrowType$Utf8.)))
+       :uuid (ft-fn (ArrowType$FixedSizeBinary. 16))
        :text (ft-fn (ArrowType$Utf8.))
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
 
@@ -722,6 +722,9 @@ Dependent block frames are not supported!!")
   ^Field [dictionaries {strings-as-text? :strings-as-text?}
           col]
   (let [colmeta (meta col)
+        colmeta (if (identical? :uuid (get colmeta :datatype))
+                  (assoc colmeta ARROW_EXTENSION_NAME ARROW_UUID_NAME)
+                  colmeta)
         nullable? (boolean
                    (or (:nullable? colmeta)
                        (not (empty? (ds-proto/missing col)))))
@@ -1225,6 +1228,18 @@ Dependent block frames are not supported!!")
              (throw (Exception. "Numeric buffer missing concrete representation"))))])
       (case col-dt
         :boolean [(boolean-bytes cbuf)]
+        :uuid (let [data (byte-array (* 16 (dtype/ecount cbuf)))
+                    wbuf (-> (java.nio.ByteBuffer/wrap data)
+                             (.order java.nio.ByteOrder/BIG_ENDIAN))]
+                (reduce (fn [_ ^UUID v]
+                          (if v
+                            (do 
+                              (.putLong wbuf (.getMostSignificantBits v))
+                              (.putLong wbuf (.getLeastSignificantBits v)))
+                            (do
+                              (.putLong wbuf 0) (.putLong wbuf 0))))
+                        nil cbuf)
+                [(java.nio.ByteBuffer/wrap data)])
         :string (let [str-t (ds-base/ensure-column-string-table col)
                       indices (dtype-proto/->array-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
@@ -1633,8 +1648,45 @@ Dependent block frames are not supported!!")
          (field-metadata field)
          (node-buf->missing node validity-buf))))))
 
-(defmethod ^:private preparse-field :default
+(def ^{:private true
+       :tag String} ARROW_EXTENSION_NAME "ARROW:extension:name")
+(def ^{:private true
+       :tag String} ARROW_UUID_NAME "arrow.uuid")
+
+(defmethod ^:private preparse-field :fixed-size-binary
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (let [node (.next node-iter)
+        buffers [(.next buf-iter) (.next buf-iter)]        
+        n-elems (long (:n-elems node))
+        field-width (long (get-in field [:field-type :byte-width]))]
+    (fn parse-fixed-binary-field
+      [decompressor]
+      (let [[validity-buf data-buf] (decompressor buffers)
+            ^bytes data-ary (if (instance? NativeBuffer data-buf)
+                              (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
+                              (dtype/->array data-buf))
+            fm (field-metadata field)]
+        (col-impl/new-column
+         (:name field)
+         (if (= ARROW_UUID_NAME (get fm ARROW_EXTENSION_NAME))
+           (let [longsdata (-> (java.nio.ByteBuffer/wrap data-ary)
+                               (.order (java.nio.ByteOrder/BIG_ENDIAN)))]
+             (println "is uuid")
+             (dtype/make-reader :uuid n-elems
+                                (let [lidx (* idx 16)]
+                                  (java.util.UUID. (.getLong longsdata lidx)
+                                                   (.getLong longsdata (+ lidx 8))))))
+           (let [ll (ArrayLists/toList data-ary)]
+             (println "is obj")
+             (dtype/make-reader :object n-elems
+                                (let [lidx (* idx field-width)]
+                                  (.subList ll lidx (+ lidx field-width))))))
+         fm
+         (node-buf->missing node validity-buf))))))
+
+
+(defmethod ^:private preparse-field :default
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]  
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
   (let [field-dtype (get-in field [:field-type :datatype])
@@ -2094,16 +2146,7 @@ Please use stream->dataset-seq.")))
     ;;datatypes
     (reduce
      (fn [ds col]
-       (cond
-         (= :uuid (dtype/elemwise-datatype col))
-         (let [missing (ds-proto/missing col)
-               metadata (meta col)]
-           (assoc ds (metadata :name)
-                  #:tech.v3.dataset{:data (mapv (comp #(Text. %) str) col)
-                                    :missing missing
-                                    :metadata metadata
-                                    :name (metadata :name)}))
-         (and (= :string (dtype/elemwise-datatype col))
+       (if (and (= :string (dtype/elemwise-datatype col))
               (not (:strings-as-text? options)))
          (if (and (nil? prev-ds)
                   (instance? StringTable (.data ^Column col)))
@@ -2131,7 +2174,6 @@ Please use stream->dataset-seq.")))
                                           :metadata (assoc metadata
                                                            ::previous-string-table prev-str-t)
                                           :name (metadata :name)})))))
-         :else
          ds))
      ds
      (ds-base/columns ds))))

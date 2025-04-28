@@ -18,7 +18,7 @@
 (defn compile [_]
   (b/javac {:src-dirs ["java" "java_public_api"]
             :class-dir class-dir
-            :basis (b/create-basis {:project "deps.edn" :aliases [:dev-m1-mac]})
+            :basis (b/create-basis {:project "deps.edn" :aliases [:dev-mac-m1]})
             :javac-opts ["-source" "8" "-target" "8" "-Xlint:unchecked"]}))
 
 (defn jar [_]

@@ -36,3 +36,4 @@ java_test/simulation*
 .idea
 .calva
 *.iml
+.dir-locals.el

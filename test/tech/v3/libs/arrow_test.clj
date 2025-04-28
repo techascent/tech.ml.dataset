@@ -242,18 +242,26 @@
 
 
 (deftest uuid-test
+  (let [py-uuid (ds/->dataset "test/data/uuid_ext.arrow" {:key-fn keyword})]
+    
+    (is (= :uuid (dtype/elemwise-datatype (py-uuid :id))))
+    (is (= (mapv #(java.util.UUID/fromString %)
+                 ["8be643d6-0df7-4e5e-837c-f94170c87914"
+                  "24bc9cf4-e2e8-444f-bb2d-82394f33ff76"
+                  "e8149e1b-aef6-4671-b1b4-3b7a21eed92a"])
+           (py-uuid :id))))
   (try
     (let [uuid-ds (ds/->dataset "test/data/uuid.parquet"
                                 {:parser-fn {"uuids" :uuid}})
           _ (arrow/write-dataset-to-stream! uuid-ds "test-uuid.arrow")
           copying-ds (arrow/read-stream-dataset-copying "test-uuid.arrow")
           inplace-ds (arrow/read-stream-dataset-inplace "test-uuid.arrow")]
-      (is (= :text ((comp :datatype meta) (copying-ds "uuids"))))
-      (is (= :text ((comp :datatype meta) (inplace-ds "uuids"))))
+      (is (= :uuid ((comp :datatype meta) (copying-ds "uuids"))))
+      (is (= :uuid ((comp :datatype meta) (inplace-ds "uuids"))))
       (is (= (vec (copying-ds "uuids"))
              (vec (inplace-ds "uuids"))))
-      (is (= (mapv str (uuid-ds "uuids"))
-             (mapv str (copying-ds "uuids")))))
+      (is (= (vec (uuid-ds "uuids"))
+             (vec (copying-ds "uuids")))))
     (finally
       (.delete (java.io.File. "test-uuid.arrow")))))
 
