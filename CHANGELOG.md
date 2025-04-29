@@ -1,4 +1,7 @@
 # Changelog
+# 7.056
+ * Arrow support for UUID and bigdecimal types. 
+ 
 # 7.055
  * Upgrade dtype-next to [version 10.136](https://github.com/cnuernber/dtype-next/blob/master/CHANGELOG.md#10136).
  
