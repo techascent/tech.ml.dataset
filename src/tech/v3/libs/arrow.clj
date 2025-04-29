@@ -2183,28 +2183,29 @@ Please use stream->dataset-seq.")))
 (defn decimal-column-metadata
   [col]
   (let [[scale precision bit-width]
-        (reduce (fn [[scale precision bit-width] ^BigDecimal dec]
-                  (let [ss (.scale dec)
-                        pp (.precision dec)
-                        bw (inc (.bitLength (.unscaledValue dec)))]
-                    (when-not (nil? scale)
-                      (when-not (== (long scale) ss)
-                        (throw (RuntimeException. (str "column \"" (:name (meta col)) "\" has different scale than previous bigdecs
+        (reduce (fn [[scale precision bit-width :as acc] ^BigDecimal dec]
+                  (if dec 
+                    (let [ss (.scale dec)
+                          pp (.precision dec)
+                          bw (inc (.bitLength (.unscaledValue dec)))]
+                      (when-not (nil? scale)
+                        (when-not (== (long scale) ss)
+                          (throw (RuntimeException. (str "column \"" (:name (meta col)) "\" has different scale than previous bigdecs
 \texpected " scale " and got " ss)))))
-                    ;;smallest arrow java supports is 128 bit width
-                    [ss 
-                     (max pp (long (or precision 1)))
-                     (max (long (or bit-width 128)) bw)]))
-                [2 1 128]
-                col)
-        bit-width (long bit-width)
-        bit-width (if (> bit-width 128)
-                    (do 
-                      (when (> bit-width 256)
-                        (log/warn (str "Column \"" (:name (meta col)) "\" uses more bit-width than arrow supports: 
-\tMax supported - 256 - found - " bit-width)))
-                      256)
-                    bit-width)]
+                      ;;smallest arrow java supports is 128 bit width
+                      [ss 
+                       (max pp (long (or precision 1)))
+                       (max (long (or bit-width 128)) bw)])
+                    acc))
+                [nil 1 16]
+                col)        
+        ;;java.lang.IllegalArgumentException: Library only supports 128-bit and 256-bit decimal values
+        ;;ArrowType.java: 1713  org.apache.arrow.vector.types.pojo.ArrowType/getTypeForField
+        ;;Field.java:  124  org.apache.arrow.vector.types.pojo.Field/convertField
+        ;;Schema.java:  116  org.apache.arrow.vector.types.pojo.Schema/convertSchema
+        ;;MessageSerializer.java:  192  org.apache.arrow.vector.ipc.message.MessageSerializer/deserializeSchema
+        bit-width (-> (max 128 (ham_fisted.IntegerOps/nextPow2 (long bit-width)))
+                      (min 256))]
     {:scale scale
      :bit-width bit-width
      :precision precision

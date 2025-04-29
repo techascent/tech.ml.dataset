@@ -14,7 +14,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "7.056-SNAPSHOT"
+               :version "7.056"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}
@@ -74,7 +74,7 @@
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
     org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
-    org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
+    org.apache.arrow/arrow-vector {:mvn/version "18.2.0"
                                    :exclusions [commons-codec/commons-codec
                                                 com.fasterxml.jackson.core/jackson-core
                                                 com.fasterxml.jackson.core/jackson-annotations
@@ -164,7 +164,7 @@
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
     org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
-    org.apache.arrow/arrow-vector {:mvn/version "6.0.0"
+    org.apache.arrow/arrow-vector {:mvn/version "18.2.0"
                                    :exclusions [commons-codec/commons-codec
                                                 com.fasterxml.jackson.core/jackson-core
                                                 com.fasterxml.jackson.core/jackson-annotations
