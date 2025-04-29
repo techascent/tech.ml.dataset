@@ -88,6 +88,7 @@
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.ffi :as dt-ffi]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
             [tech.v3.dataset.dynamic-int-list :as dyn-int-list]
@@ -119,7 +120,8 @@
            [org.apache.arrow.vector.types.pojo Field Schema ArrowType$Int
             ArrowType$Utf8 ArrowType$Timestamp ArrowType$Time DictionaryEncoding FieldType
             ArrowType$FloatingPoint ArrowType$Bool ArrowType$Date ArrowType$Duration
-            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary ArrowType$FixedSizeBinary]
+            ArrowType$LargeUtf8 ArrowType$Null ArrowType$List ArrowType$Binary ArrowType$FixedSizeBinary
+            ArrowType$Decimal]
            [org.apache.arrow.flatbuf CompressionType]
            [org.apache.arrow.vector.types MetadataVersion]
            [org.apache.arrow.vector.ipc WriteChannel]           
@@ -132,7 +134,7 @@
            [java.io OutputStream InputStream ByteArrayOutputStream ByteArrayInputStream]
            [java.nio ByteBuffer ByteOrder ShortBuffer IntBuffer LongBuffer DoubleBuffer
             FloatBuffer]
-           [java.util List ArrayList Map HashMap Map$Entry Iterator Set UUID]
+           [java.util List ArrayList Map HashMap Map$Entry Iterator Set UUID Arrays]
            [java.util.concurrent ForkJoinTask]
            [java.time ZoneId]
            [java.nio.channels WritableByteChannel]
@@ -438,6 +440,11 @@ Dependent block frames are not supported!!")
   ArrowType$FixedSizeBinary
   (datafy [this] {:datatype :fixed-size-binary
                   :byte-width (.getByteWidth this)})
+  ArrowType$Decimal
+  (datafy [this] {:datatype :decimal
+                  :scale (.getScale this)
+                  :precision (.getPrecision this)
+                  :bit-width (.getBitWidth this)})
   ArrowType$List
   (datafy [this]
     {:datatype :list}))
@@ -664,18 +671,24 @@ Dependent block frames are not supported!!")
        (map (fn [[k v]] [(json/write-json-str k) (json/write-json-str v)]))
        (into {})))
 
-
-(defonce ^:private uuid-warn-counter (atom 0))
-
+(def ^{:private true
+       :tag String} ARROW_EXTENSION_NAME "ARROW:extension:name")
+(def ^{:private true
+       :tag String} ARROW_UUID_NAME "arrow.uuid")
 
 (defn- datatype->field-type
   (^FieldType [datatype & [nullable? metadata extra-data]]
    (let [nullable? (or nullable? (= :object (casting/flatten-datatype datatype)))
          metadata (->str-str-meta (dissoc metadata
                                           :name :datatype :categorical?
-                                          ::previous-string-table) )
+                                          ::previous-string-table
+                                          ::complex-datatype))
          ft-fn (fn [arrow-type & [dict-encoding]]
                  (field-type nullable? arrow-type dict-encoding metadata))
+         complex-datatype datatype
+         datatype (if (map? complex-datatype)
+                    (get complex-datatype :datatype)
+                    datatype)
          datatype (packing/unpack-datatype datatype)]
      (case (if #{:epoch-microseconds :epoch-milliseconds
                  :epoch-days}
@@ -697,7 +710,7 @@ Dependent block frames are not supported!!")
        :instant (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
                                              (str (:timezone extra-data))))
        :epoch-microseconds (ft-fn (ArrowType$Timestamp. TimeUnit/MICROSECOND
-                                                       (str (:timezone extra-data))))
+                                                        (str (:timezone extra-data))))
        :epoch-nanoseconds (ft-fn (ArrowType$Timestamp. TimeUnit/NANOSECOND
                                                        (str (:timezone extra-data))))
        :epoch-days (ft-fn (ArrowType$Date. DateUnit/DAY))
@@ -713,6 +726,9 @@ Dependent block frames are not supported!!")
                  (ft-fn (ArrowType$Utf8.) encoding)
                  ;;If no encoding is provided then just save the string as text
                  (ft-fn (ArrowType$Utf8.)))
+       :decimal (ft-fn (ArrowType$Decimal. (unchecked-int (get complex-datatype :precision))
+                                           (unchecked-int (get complex-datatype :scale))
+                                           (unchecked-int (get complex-datatype :bit-width))))
        :uuid (ft-fn (ArrowType$FixedSizeBinary. 16))
        :text (ft-fn (ArrowType$Utf8.))
        :encoded-text (ft-fn (ArrowType$Utf8.))))))
@@ -728,7 +744,7 @@ Dependent block frames are not supported!!")
         nullable? (boolean
                    (or (:nullable? colmeta)
                        (not (empty? (ds-proto/missing col)))))
-        col-dtype (:datatype colmeta)
+        col-dtype (or (::complex-datatype colmeta) (:datatype colmeta))
         colname (:name colmeta)
         extra-data (merge (select-keys (meta col) [:timezone])
                           (when (and (not strings-as-text?)
@@ -1240,6 +1256,24 @@ Dependent block frames are not supported!!")
                               (.putLong wbuf 0) (.putLong wbuf 0))))
                         nil cbuf)
                 [(java.nio.ByteBuffer/wrap data)])
+        :decimal (let [colmeta (meta col)
+                       {:keys [scale precision bit-width]} (get colmeta ::complex-datatype)
+                       byte-width (quot (+ (long bit-width) 7) 8)
+                       ne (.lsize cbuf)
+                       byte-data (byte-array (* ne byte-width))
+                       le? (identical? :little-endian (tech.v3.datatype.protocols/platform-endianness))]
+                   (dotimes [idx ne]
+                     (when-let [^BigDecimal d (.readObject cbuf idx)]
+                       (let [^BigInteger bb (.unscaledValue d)
+                             bb-bytes (.toByteArray bb)
+                             offset (* idx byte-width)]
+                         (if le?
+                           (let [bb-len (alength bb-bytes)]
+                             (dotimes [bidx bb-len]
+                               (let [write-pos (+ offset (- bb-len bidx 1))]
+                                 (ArrayHelpers/aset byte-data write-pos (aget bb-bytes bidx)))))
+                           (System/arraycopy bb-bytes 0 byte-data 0 (alength bb-bytes))))))
+                   [(java.nio.ByteBuffer/wrap byte-data)])
         :string (let [str-t (ds-base/ensure-column-string-table col)
                       indices (dtype-proto/->array-buffer (str-table/indices str-t))]
                   [(nio-buffer/as-nio-buffer indices)])
@@ -1648,11 +1682,6 @@ Dependent block frames are not supported!!")
          (field-metadata field)
          (node-buf->missing node validity-buf))))))
 
-(def ^{:private true
-       :tag String} ARROW_EXTENSION_NAME "ARROW:extension:name")
-(def ^{:private true
-       :tag String} ARROW_UUID_NAME "arrow.uuid")
-
 (defmethod ^:private preparse-field :fixed-size-binary
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
@@ -1671,17 +1700,56 @@ Dependent block frames are not supported!!")
          (if (= ARROW_UUID_NAME (get fm ARROW_EXTENSION_NAME))
            (let [longsdata (-> (java.nio.ByteBuffer/wrap data-ary)
                                (.order (java.nio.ByteOrder/BIG_ENDIAN)))]
-             (println "is uuid")
              (dtype/make-reader :uuid n-elems
                                 (let [lidx (* idx 16)]
                                   (java.util.UUID. (.getLong longsdata lidx)
                                                    (.getLong longsdata (+ lidx 8))))))
            (let [ll (ArrayLists/toList data-ary)]
-             (println "is obj")
              (dtype/make-reader :object n-elems
                                 (let [lidx (* idx field-width)]
                                   (.subList ll lidx (+ lidx field-width))))))
          fm
+         (node-buf->missing node validity-buf))))))
+
+(defn- copy-bytes
+  ^bytes [^bytes data ^long sidx ^long eidx]
+  (Arrays/copyOfRange data sidx eidx))
+
+(defn- copy-reverse-bytes
+  ^bytes [^bytes data ^long sidx ^long eidx]
+  (let [ne (- eidx sidx)
+        rv (byte-array ne)]
+    (loop [idx 0]
+      (when (< idx ne)
+        (ArrayHelpers/aset rv idx (aget data (- eidx idx 1)))
+        (recur (inc idx))))
+    rv))
+
+(defmethod ^:private preparse-field :decimal
+  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (let [node (.next node-iter)
+        buffers [(.next buf-iter) (.next buf-iter)]        
+        n-elems (long (:n-elems node))
+        {:keys [^long precision ^long scale ^long bit-width]} (get field :field-type)
+        byte-width (quot (+ bit-width 7) 8)]
+    (fn parse-decimal
+      [decompressor]
+      (let [[validity-buf data-buf] (decompressor buffers)
+            ^bytes data-ary (if (instance? NativeBuffer data-buf)
+                              (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
+                              (dtype/->array data-buf))
+            ;;biginteger data is always stored big endian I guess...
+            ;;https://github.com/apache/arrow-java/blob/main/vector/src/main/java/org/apache/arrow/vector/util/DecimalUtility.java#L53
+            array-copy (if (identical? :little-endian (tech.v3.datatype.protocols/platform-endianness))
+                         copy-reverse-bytes
+                         copy-bytes)]
+        (col-impl/new-column
+         (:name field)
+         (dtype/make-reader :decimal n-elems
+                            (let [idx (* idx byte-width)]
+                              (-> (BigInteger. ^bytes (array-copy data-ary idx (+ idx byte-width)))
+                                  (BigDecimal. scale))))
+         (field-metadata field)
          (node-buf->missing node validity-buf))))))
 
 
@@ -2112,6 +2180,36 @@ Please use stream->dataset-seq.")))
       :text
       datatype)))
 
+(defn decimal-column-metadata
+  [col]
+  (let [[scale precision bit-width]
+        (reduce (fn [[scale precision bit-width] ^BigDecimal dec]
+                  (let [ss (.scale dec)
+                        pp (.precision dec)
+                        bw (inc (.bitLength (.unscaledValue dec)))]
+                    (when-not (nil? scale)
+                      (when-not (== (long scale) ss)
+                        (throw (RuntimeException. (str "column \"" (:name (meta col)) "\" has different scale than previous bigdecs
+\texpected " scale " and got " ss)))))
+                    ;;smallest arrow java supports is 128 bit width
+                    [ss 
+                     (max pp (long (or precision 1)))
+                     (max (long (or bit-width 128)) bw)]))
+                [2 1 128]
+                col)
+        bit-width (long bit-width)
+        bit-width (if (> bit-width 128)
+                    (do 
+                      (when (> bit-width 256)
+                        (log/warn (str "Column \"" (:name (meta col)) "\" uses more bit-width than arrow supports: 
+\tMax supported - 256 - found - " bit-width)))
+                      256)
+                    bit-width)]
+    {:scale scale
+     :bit-width bit-width
+     :precision precision
+     :datatype :decimal}))
+
 
 (defn ^:no-doc prepare-dataset-for-write
   "Normalize schemas and convert datatypes to datatypes appropriate for arrow
@@ -2146,35 +2244,42 @@ Please use stream->dataset-seq.")))
     ;;datatypes
     (reduce
      (fn [ds col]
-       (if (and (= :string (dtype/elemwise-datatype col))
-              (not (:strings-as-text? options)))
-         (if (and (nil? prev-ds)
-                  (instance? StringTable (.data ^Column col)))
-           ds
-           (let [missing (ds-proto/missing col)
-                 metadata (meta col)]
-             (if (nil? prev-ds)
-               (assoc ds (metadata :name)
-                      #:tech.v3.dataset{:data (tech.v3.dataset.base/ensure-column-string-table col)
-                                        :missing missing
-                                        :metadata metadata
-                                        :name (metadata :name)})
-               (let [prev-col (ds-base/column prev-ds (:name metadata))
-                     prev-str-t (ds-base/ensure-column-string-table prev-col)
-                     int->str (ArrayList. ^List (.int->str prev-str-t))
-                     str->int (HashMap. ^Map (.str->int prev-str-t))
-                     n-rows (dtype/ecount col)
-                     data (StringTable. int->str str->int
-                                        (dyn-int-list/dynamic-int-list 0))]
-                 (dotimes [idx n-rows]
-                   (.add data (or (col idx) "")))
+       (let [col-dt (dtype/elemwise-datatype col)]
+         (cond
+           (and (identical? :string col-dt)
+                (not (:strings-as-text? options)))
+           (if (and (nil? prev-ds)
+                    (instance? StringTable (.data ^Column col)))
+             ds
+             (let [missing (ds-proto/missing col)
+                   metadata (meta col)]
+               (if (nil? prev-ds)
                  (assoc ds (metadata :name)
-                        #:tech.v3.dataset{:data data
+                        #:tech.v3.dataset{:data (tech.v3.dataset.base/ensure-column-string-table col)
                                           :missing missing
-                                          :metadata (assoc metadata
-                                                           ::previous-string-table prev-str-t)
-                                          :name (metadata :name)})))))
-         ds))
+                                          :metadata metadata
+                                          :name (metadata :name)})
+                 (let [prev-col (ds-base/column prev-ds (:name metadata))
+                       prev-str-t (ds-base/ensure-column-string-table prev-col)
+                       int->str (ArrayList. ^List (.int->str prev-str-t))
+                       str->int (HashMap. ^Map (.str->int prev-str-t))
+                       n-rows (dtype/ecount col)
+                       data (StringTable. int->str str->int
+                                          (dyn-int-list/dynamic-int-list 0))]
+                   (dotimes [idx n-rows]
+                     (.add data (or (col idx) "")))
+                   (assoc ds (metadata :name)
+                          #:tech.v3.dataset{:data data
+                                            :missing missing
+                                            :metadata (assoc metadata
+                                                             ::previous-string-table prev-str-t)
+                                            :name (metadata :name)})))))
+           ;;detect precision, scale and whether we need 128 or 256 bytes of accuracy
+           (identical? :decimal col-dt)
+           (assoc ds (ds-col/column-name col)
+                  (vary-meta col assoc ::complex-datatype (decimal-column-metadata col)))
+           :else
+           ds)))
      ds
      (ds-base/columns ds))))
 

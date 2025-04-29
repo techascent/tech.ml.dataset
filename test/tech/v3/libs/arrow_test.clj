@@ -31,10 +31,13 @@
                       :strings (map str (range n))
                       :text (map (comp #(Text. %) str) (range n))
                       :instants (repeatedly n dtype-dt/instant)
+                      :bigdec (repeatedly n #(BigDecimal/valueOf (+ 100 (rand-int 1700)) 2))
+                      ;; :bigint (let [rng (java.util.Random.)]
+                      ;;           (repeatedly n #(BigInteger. 256 rng )))
                       ;;external formats often don't support dash-case
                       :local_dates (repeatedly n dtype-dt/local-date)
                       :local_times (repeatedly n dtype-dt/local-time)
-                      })
+                      :uuids (repeatedly n #(java.util.UUID/randomUUID))})
        (vary-meta assoc :name :testtable)))
   ([]
    (supported-datatype-ds 10)))
@@ -304,14 +307,12 @@
     (is (= (vec (range (ds/row-count ds)))
            (vec (ds/missing (ds "nullcol")))))))
 
-
 (deftest list-datatypes-read-only
   (let [ds (ds/->dataset "test/data/arrow_list.arrow")]
     (is (= [["dog" "car"]
             ["dog" "flower"]
             ["car" "flower"]]
            (mapv vec (ds "class-name"))))))
-
 
 (deftest empty-array-dataset
   (is (nil? (arrow/stream->dataset "test/data/empty.arrow"))))
