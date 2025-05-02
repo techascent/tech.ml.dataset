@@ -1090,10 +1090,10 @@ Dependent block frames are not supported!!")
       {:compression-type (compression-kwd->file-type (comp-map :compression-type))
        ;;parallelize buffer compression
        :buffers 
-       (->> (hamf/pgroups
-             n-buffers
-             (fn [^long sidx ^long eidx]             
-               (let [buffers (subvec buffers sidx eidx)
+       (->> buffers
+            (hamf/pmap
+             (fn [buffer]
+               (let [buffers [buffer]
                      comp-fn (create-compressor comp-map)
                      os (ByteArrayOutputStream.)
                      data-len (byte-array 8)
