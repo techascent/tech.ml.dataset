@@ -1,4 +1,8 @@
 # Changelog
+# 7.057
+ * Slightly faster arrow compressed writies.
+ * column-cast no longer appends roaring bitmaps to metadata unless requested.
+ 
 # 7.056
  * Arrow support for UUID and bigdecimal types. 
  

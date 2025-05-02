@@ -1045,74 +1045,83 @@ user>
 
   Casts between numeric datatypes need no cast-fn but one may be provided.
   Casts to string need no cast-fn but one may be provided.
-  Casts from string to anything will call tech.v3.dataset.column/parse-column."
-  [dataset colname datatype]
-  (let [[src-colname dst-colname] (if (instance? Collection colname)
-                                    colname
-                                    [colname colname])
-        src-col (dataset src-colname)
-        src-dtype (dtype/get-datatype src-col)
-        [dst-dtype cast-fn] (if (instance? Collection datatype)
-                              datatype
-                              [datatype nil])]
-    (add-or-update-column
-     dataset dst-colname
-     (cond
-       (and (= src-dtype dst-dtype)
-            (nil? cast-fn))
-       (dtype/clone src-col)
-       (= src-dtype :string)
-       (ds-col/parse-column datatype src-col)
-       :else
-       (let [cast-fn (or cast-fn
-                         (cond
-                           (= dst-dtype :string)
-                           str
-                           (or (= :boolean dst-dtype)
-                               (casting/numeric-type? dst-dtype))
-                           #(casting/cast % dst-dtype)
-                           :else
-                           (throw (Exception.
-                                   (format "Cast fn must be provided for datatype %s"
-                                           dst-dtype)))))
-             ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap
-                                     (ds-col/missing src-col))
-             ^RoaringBitmap new-missing (dtype/clone missing)
-             col-reader (dtype/->reader src-col)
-             n-elems (dtype/ecount col-reader)
-             unparsed-data (ArrayList.)
-             unparsed-indexes (bitmap/->bitmap)
-             result (if (= dst-dtype :string)
-                      (str-table/make-string-table n-elems)
-                      (dtype/make-list dst-dtype n-elems))
-             missing-val (col-base/datatype->missing-value dst-dtype)]
-         (reduce (fn [^List res-writer ^long idx]
-                   (if (.contains missing idx)
-                     (.add res-writer missing-val)
-                     (let [existing-val (col-reader idx)
-                           new-val (cast-fn existing-val)]
-                       (cond
-                         (= new-val :tech.v3.dataset/missing)
-                         (locking new-missing
-                           (.add new-missing idx)
-                           (.add res-writer missing-val))
-                         (= new-val :tech.v3.dataset/parse-failure)
-                         (locking new-missing
-                           (.add res-writer missing-val)
-                           (.add new-missing idx)
-                           (.add unparsed-indexes idx)
-                           (.add unparsed-data existing-val))
-                         :else
-                         (.add res-writer new-val))))
-                   res-writer) result (hamf/range n-elems))
-         (ds-col/new-column #:tech.v3.dataset{:name dst-colname
-                                              :data result
-                                              :force-datatype? true
-                                              :missing missing
-                                              :metadata (clojure.core/assoc
-                                                         (meta src-col)
-                                                         :unparsed-indexes unparsed-indexes
-                                                         :unparsed-data unparsed-data)}))))))
+  Casts from string to anything will call tech.v3.dataset.column/parse-column.
+
+  Options:
+
+  * `:track-parse-errors` - defaults to false.  When true extra metadata keys
+  `:unparsed-indexes :unparsed-data` will be appended to the metadata.  Be aware
+  these values may not serialize as unparsed indexes is a roaring bitmap."
+  ([dataset colname datatype] (column-cast dataset colname datatype nil))
+  ([dataset colname datatype options]
+   (let [[src-colname dst-colname] (if (instance? Collection colname)
+                                     colname
+                                     [colname colname])
+         src-col (dataset src-colname)
+         src-dtype (dtype/get-datatype src-col)
+         [dst-dtype cast-fn] (if (instance? Collection datatype)
+                               datatype
+                               [datatype nil])]
+     (add-or-update-column
+      dataset dst-colname
+      (cond
+        (and (= src-dtype dst-dtype)
+             (nil? cast-fn))
+        (dtype/clone src-col)
+        (= src-dtype :string)
+        (ds-col/parse-column datatype src-col)
+        :else
+        (let [cast-fn (or cast-fn
+                          (cond
+                            (= dst-dtype :string)
+                            str
+                            (or (= :boolean dst-dtype)
+                                (casting/numeric-type? dst-dtype))
+                            #(casting/cast % dst-dtype)
+                            :else
+                            (throw (Exception.
+                                    (format "Cast fn must be provided for datatype %s"
+                                            dst-dtype)))))
+              ^RoaringBitmap missing (dtype-proto/as-roaring-bitmap
+                                      (ds-col/missing src-col))
+              ^RoaringBitmap new-missing (dtype/clone missing)
+              col-reader (dtype/->reader src-col)
+              n-elems (dtype/ecount col-reader)
+              unparsed-data (ArrayList.)
+              unparsed-indexes (bitmap/->bitmap)
+              result (if (= dst-dtype :string)
+                       (str-table/make-string-table n-elems)
+                       (dtype/make-list dst-dtype n-elems))
+              missing-val (col-base/datatype->missing-value dst-dtype)]
+          (reduce (fn [^List res-writer ^long idx]
+                    (if (.contains missing idx)
+                      (.add res-writer missing-val)
+                      (let [existing-val (col-reader idx)
+                            new-val (cast-fn existing-val)]
+                        (cond
+                          (= new-val :tech.v3.dataset/missing)
+                          (locking new-missing
+                            (.add new-missing idx)
+                            (.add res-writer missing-val))
+                          (= new-val :tech.v3.dataset/parse-failure)
+                          (locking new-missing
+                            (.add res-writer missing-val)
+                            (.add new-missing idx)
+                            (.add unparsed-indexes idx)
+                            (.add unparsed-data existing-val))
+                          :else
+                          (.add res-writer new-val))))
+                    res-writer) result (hamf/range n-elems))
+          (ds-col/new-column #:tech.v3.dataset{:name dst-colname
+                                               :data result
+                                               :force-datatype? true
+                                               :missing missing
+                                               :metadata (if (get options :track-parse-errors)
+                                                           (clojure.core/assoc
+                                                            (meta src-col)
+                                                            :unparsed-indexes unparsed-indexes
+                                                            :unparsed-data unparsed-data)
+                                                           (meta src-col))})))))))
 
 
 (defn columnwise-concat

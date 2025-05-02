@@ -251,9 +251,17 @@
 
   Casts between numeric datatypes need no cast-fn but one may be provided.
   Casts to string need no cast-fn but one may be provided.
-  Casts from string to anything will call tech.v3.dataset.column/parse-column."
+  Casts from string to anything will call tech.v3.dataset.column/parse-column.
+
+  Options:
+
+  * `:track-parse-errors` - defaults to false.  When true extra metadata keys
+  `:unparsed-indexes :unparsed-data` will be appended to the metadata.  Be aware
+  these values may not serialize as unparsed indexes is a roaring bitmap."
   ([dataset colname datatype]
-  (tech.v3.dataset-api/column-cast dataset colname datatype)))
+  (tech.v3.dataset-api/column-cast dataset colname datatype))
+  ([dataset colname datatype options]
+  (tech.v3.dataset-api/column-cast dataset colname datatype options)))
 
 
 (defn column-count

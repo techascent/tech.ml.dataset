@@ -538,7 +538,16 @@
            (->> (ds/column-cast ds :price [:int32 #(Math/round (double %))])
                 (#(ds/column % :price))
                 (take 5)
-                (vec))))))
+                (vec))))
+    (is (nil? (->> (ds/column-cast ds :price [:int32 #(Math/round (double %))])
+                   (#(ds/column % :price))
+                   (meta)
+                   (:unparsed-indexes))))
+    (is (not
+         (nil? (->> (ds/column-cast ds :price [:int32 #(Math/round (double %))] {:track-parse-errors true})
+                    (#(ds/column % :price))
+                    (meta)
+                    (:unparsed-indexes)))))))
 
 
 (deftest column-clone-double-read
