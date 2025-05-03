@@ -1,4 +1,7 @@
 # Changelog
+# 7.058
+ * faster single column reduction when you have large columns and many missing -- avoids per-idx binary search of missing set.
+ 
 # 7.057
  * Slightly faster arrow compressed writies.
  * column-cast no longer appends roaring bitmaps to metadata unless requested.

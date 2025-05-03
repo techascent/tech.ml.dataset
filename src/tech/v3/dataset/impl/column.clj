@@ -16,6 +16,7 @@
             [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
+            [ham-fisted.function :as hamf-fn]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
   (:import [java.util Arrays]
@@ -44,36 +45,57 @@
   (let [sidx (long sidx)
         eidx (long eidx)
         ^RoaringBitmap missing missing
-        ^Buffer src (dtype-proto/->buffer src)]
+        ^Buffer src (dtype-proto/->buffer src)
+        int-iter (.getIntIterator ^RoaringBitmap
+                                  (if (and (== 0 sidx) (== (.lsize src) eidx))
+                                    missing
+                                    (RoaringBitmap/and missing (bitmap/->bitmap sidx eidx))))
+        ^java.util.function.LongBinaryOperator next-missing
+        (hamf-fn/long-binary-operator
+         sidx next-missing-idx
+         (if (== sidx next-missing-idx)
+           (long (if (.hasNext int-iter) (Integer/toUnsignedLong (.next int-iter)) -1))
+           next-missing-idx))
+        missing-idx (.applyAsLong next-missing 0 0)]
     (cond
       (instance? IFn$OLO rfn)
       (let [primitive-missing-value (Casts/longCast primitive-missing-value)]
-        (Reductions/serialReduction (hamf-rf/long-accumulator
-                                     acc idx
-                                     (.invokePrim ^IFn$OLO rfn acc
-                                                  (if (.contains missing idx)
-                                                    primitive-missing-value
-                                                    (.readLong src idx))))
-                                    acc
-                                    (hamf/range sidx eidx)))
+        (loop [sidx sidx
+               acc acc
+               missing-idx missing-idx]
+          (if (< sidx eidx)
+            (let [acc (.invokePrim ^IFn$OLO rfn acc (if (== sidx missing-idx)
+                                                      primitive-missing-value
+                                                      (.readLong src sidx)))]
+              (if (reduced? acc)
+                (deref acc)
+                (recur (unchecked-inc sidx) acc (.applyAsLong next-missing sidx missing-idx))))
+            acc)))
       (instance? IFn$ODO rfn)
       (let [primitive-missing-value (Casts/doubleCast primitive-missing-value)]
-        (Reductions/serialReduction (hamf-rf/long-accumulator
-                                       acc idx
-                                       (.invokePrim ^IFn$ODO rfn acc
-                                                    (if (.contains missing idx)
+        (loop [sidx sidx
+               acc acc
+               missing-idx missing-idx]
+          (if (< sidx eidx)
+            (let [acc (.invokePrim ^IFn$ODO rfn acc (if (== sidx missing-idx)
                                                       primitive-missing-value
-                                                      (.readDouble src idx))))
-                                      acc
-                                      (hamf/range sidx eidx)))
+                                                      (.readDouble src sidx)))]
+              (if (reduced? acc)
+                (deref acc)
+                (recur (unchecked-inc sidx) acc (.applyAsLong next-missing sidx missing-idx))))
+            acc)))
       :else
-      (Reductions/serialReduction (hamf-rf/long-accumulator
-                                   acc idx
-                                   (rfn acc (if (.contains missing idx)
-                                              nil
-                                              (.readObject src idx))))
-                                  acc
-                                  (hamf/range sidx eidx)))))
+      (loop [sidx sidx
+             acc acc
+             missing-idx missing-idx]
+        (if (< sidx eidx)
+          (let [acc (rfn acc (if (== sidx missing-idx)
+                               nil
+                               (.readObject src sidx)))]
+            (if (reduced? acc)
+              (deref acc)
+              (recur (unchecked-inc sidx) acc (.applyAsLong next-missing sidx missing-idx))))
+          acc)))))
 
 
 (defn ^:no-doc make-column-buffer
