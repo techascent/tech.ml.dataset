@@ -1,4 +1,7 @@
 # Changelog
+# 7.059
+ * dtype-next upgrade to fix clone-after-filter issue.
+ 
 # 7.058
  * faster single column reduction when you have large columns and many missing -- avoids per-idx binary search of missing set.
  

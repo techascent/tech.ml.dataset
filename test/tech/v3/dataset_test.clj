@@ -1799,6 +1799,15 @@
             distinct
             count))))
 
+(deftest clone-causes-filter-fail
+  (let [ds (-> (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
+               (ds/filter (fn [row]
+                            (and 
+                             (.isAfter ^LocalDate (get row :date) (LocalDate/parse "2009-06-01"))
+                             (= (get row :symbol) "AMZN")))))]
+    (is (= (vec (:date ds))
+           (vec (:date (dtype/clone ds)))))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
