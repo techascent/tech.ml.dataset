@@ -282,8 +282,7 @@
                         (== row-cnt (.getCardinality missing))
                         (if (and (= :value strategy)
                                  (not (instance? IFn value)))
-                          (ds-base/add-or-update-column
-                           ds (replace-missing-with-strategy col missing strategy value))
+                          (assoc ds (:name (meta col)) (dtype/const-reader value (ds-base/row-count ds)))
                           (do
                             (log/warnf "Column has no values and strategy (%s) is dependent upon existing values"
                                        strategy)

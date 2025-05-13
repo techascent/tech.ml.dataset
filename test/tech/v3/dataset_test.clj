@@ -1808,6 +1808,19 @@
     (is (= (vec (:date ds))
            (vec (:date (dtype/clone ds)))))))
 
+(deftest replace-missing-empty-column-issue-458
+  (is (= [100 100 100]
+         (-> (ds/->dataset [{:name "fred"
+                             :age nil}
+                            {:name "ethel"
+                             :age nil}
+                            {:name "sally"
+                             :age nil}])
+             (ds/replace-missing  [:age] :value 100)
+             (ds/column :age)
+             vec)))
+  )
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))

@@ -1,4 +1,8 @@
 # Changelog
+# 7.060
+ * Fixes [issue 458](https://github.com/techascent/tech.ml.dataset/issues/458) - replace missing with a value 
+   works correctly when a column contains all missing values.
+ 
 # 7.059
  * dtype-next upgrade to fix clone-after-filter issue.
  
