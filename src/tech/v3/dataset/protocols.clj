@@ -16,15 +16,22 @@
 (defprotocol PMissing
   (missing [this]))
 
+(defprotocol PValidRows
+  (valid-rows [this]))
+
 (defprotocol PSelectRows
   (select-rows [this rowidxs]))
+
+(defprotocol PRowFilter
+  (row-filter [this pred?]))
 
 (defprotocol PSelectColumns
   (select-columns [this colnames]))
 
 (defprotocol PColumn
   (is-column? [col])
-  (column-buffer [col]))
+  (column-buffer [col])
+  (empty-column? [col]))
 
 
 (defprotocol PDataset

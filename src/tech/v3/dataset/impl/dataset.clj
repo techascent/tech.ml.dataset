@@ -21,7 +21,6 @@
             IFn$LOO]
            [java.util Map List LinkedHashSet LinkedHashMap HashSet]
            [tech.v3.datatype ObjectReader FastStruct Buffer]
-           [tech.v3.dataset.impl.column Column]
            [org.roaringbitmap RoaringBitmap]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiConsumer]))
@@ -254,7 +253,12 @@
 
   ds-proto/PMissing
   (missing [this]
-    (RoaringBitmap/or (.iterator ^Iterable (lznc/map ds-proto/missing (vals this)))))
+    (RoaringBitmap/or (.iterator ^Iterable (lznc/map ds-proto/missing (.values this)))))
+
+  ds-proto/PValidRows
+  (valid-rows [this]
+    (RoaringBitmap/or (.iterator ^Iterable (lznc/map (comp bitmap/->bitmap ds-proto/valid-rows)
+                                                     (.values this)))))
 
   ds-proto/PSelectRows
   (select-rows [dataset rowidxs]
@@ -366,7 +370,7 @@
                      (.put colnamemap cname idx)
                      colnamemap)
                     colnamemap
-                    (lznc/map #(get (.-metadata ^Column %) :name) columns))
+                    (lznc/map #(ds-proto/column-name %) columns))
           n-rows (dtype/ecount rvecs)
           nil-missing? (get options :nil-missing?)
           ^RoaringBitmap ds-missing (when (not nil-missing?) (ds-proto/missing ds))
@@ -476,10 +480,6 @@
                               (hamf/mut-map)
                               columns))
              metadata 0 0)))
-
-
-
-
 
 (defn new-dataset
   "Create a new dataset from a sequence of columns.  Data will be converted

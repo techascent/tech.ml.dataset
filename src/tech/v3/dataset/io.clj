@@ -244,9 +244,10 @@
            (instance? Map dataset)
            (parse-mapseq-colmap/column-map->dataset options dataset)
            :else
-           (if (nil? (seq dataset))
-             (ds-impl/new-dataset options nil)
-             (parse-mapseq-colmap/mapseq->dataset options dataset)))]
+           (let [rv (parse-mapseq-colmap/mapseq->dataset options dataset)]
+             (if (tech.v3.dataset.impl.dataset/dataset? rv)
+               rv
+               (ds-impl/empty-dataset))))]
      (if dataset-name
        (vary-meta dataset assoc :name dataset-name)
        dataset)))

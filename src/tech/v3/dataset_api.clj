@@ -221,7 +221,7 @@ user> (ds/rowvec-at stocks -1)
   [ds]
   (let [rc (row-count ds)]
     (->> (columns ds)
-         (lznc/map #(when (== rc (long (dtype/ecount (missing %))))
+         (lznc/map #(when (ds-proto/empty-column? %)
                       (:name (meta %))))
          (lznc/remove nil?))))
 

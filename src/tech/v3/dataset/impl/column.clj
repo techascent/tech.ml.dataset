@@ -97,6 +97,35 @@
               (recur (unchecked-inc sidx) acc (.applyAsLong next-missing sidx missing-idx))))
           acc)))))
 
+(defn- kv-reduce-column-buffer
+  [rfn acc src missing primitive-missing-value sidx eidx]
+  (let [sidx (long sidx)
+        eidx (long eidx)
+        ^RoaringBitmap missing missing
+        ^Buffer src (dtype-proto/->buffer src)
+        int-iter (.getIntIterator ^RoaringBitmap
+                                  (if (and (== 0 sidx) (== (.lsize src) eidx))
+                                    missing
+                                    (RoaringBitmap/and missing (bitmap/->bitmap sidx eidx))))
+        ^java.util.function.LongBinaryOperator next-missing
+        (hamf-fn/long-binary-operator
+         sidx next-missing-idx
+         (if (== sidx next-missing-idx)
+           (long (if (.hasNext int-iter) (Integer/toUnsignedLong (.next int-iter)) -1))
+           next-missing-idx))
+        missing-idx (.applyAsLong next-missing 0 0)]
+    (loop [sidx sidx
+           acc acc
+           missing-idx missing-idx]
+      (if (< sidx eidx)
+        (let [acc (if (not (== sidx missing-idx))
+                    (rfn acc sidx (.readObject src sidx))
+                    acc)]
+          (if (reduced? acc)
+            (deref acc)
+            (recur (unchecked-inc sidx) acc (.applyAsLong next-missing sidx missing-idx))))
+        acc))))
+
 
 (defn ^:no-doc make-column-buffer
   (^Buffer [^RoaringBitmap missing data dtype op-dtype]
@@ -141,7 +170,9 @@
                  (readObject [rdr idx] (.readObject this (+ idx sidx)))
                  (reduce [this rfn acc]
                    (reduce-column-buffer rfn acc src missing
-                                         primitive-missing-value sidx eidx))))))
+                                         primitive-missing-value sidx eidx))
+                 (kvreduce [this rfn acc]
+                   (kv-reduce-column-buffer rfn acc src missing primitive-missing-value sidx eidx))))))
          (readLong [this idx]
            (if (.contains missing idx)
              (Casts/longCast primitive-missing-value)
@@ -167,7 +198,10 @@
              (.add missing (unchecked-int idx))))
          (reduce [this rfn acc]
            (reduce-column-buffer rfn acc src missing primitive-missing-value
-                                 0 (.lsize src))))))))
+                                 0 (.lsize src)))
+         (kvreduce [this rfn acc]
+           (kv-reduce-column-buffer rfn acc src missing primitive-missing-value
+                                    0 (.lsize src))))))))
 
 
 (defmacro cached-buffer!
@@ -347,6 +381,8 @@
   (row-count [this] (dtype/ecount data))
   ds-proto/PMissing
   (missing [this] missing)
+  ds-proto/PValidRows
+  (valid-rows [this] (.xor (->bitmap (hamf/range (dtype/ecount this))) missing))
   ds-proto/PSelectRows
   (select-rows [this rowidxs]
     (let [rowidxs (simplify-row-indexes (dtype/ecount this) rowidxs)
@@ -363,6 +399,7 @@
   ds-proto/PColumn
   (is-column? [_this] true)
   (column-buffer [_this] data)
+  (empty-column? [this] (== (dtype/ecount this) (dtype/ecount missing)))
   ds-proto/PColumnName
   (column-name [this] (get metadata :name))
   IMutList
@@ -395,6 +432,7 @@
              {}
              nil))
   (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))
+  (kvreduce [this rfn init] (.kvreduce (cached-buffer!) rfn init))
   (parallelReduction [this init-val-fn rfn merge-fn options]
     (.parallelReduction (cached-buffer!) init-val-fn rfn merge-fn options))
   Object

@@ -1,4 +1,8 @@
 # Changelog
+# 7.061
+ * Upgrade to hamf to fix pmap with custom pool issue and initial cut at sparse columns.  There is no serialization
+   yet as that requires significant changes to arrow to work for our intended use case.
+ 
 # 7.060
  * Fixes [issue 458](https://github.com/techascent/tech.ml.dataset/issues/458) - replace missing with a value 
    works correctly when a column contains all missing values.

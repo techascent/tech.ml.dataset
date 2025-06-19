@@ -1685,7 +1685,7 @@ Dependent block frames are not supported!!")
 (defmethod ^:private preparse-field :fixed-size-binary
   [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
-        buffers [(.next buf-iter) (.next buf-iter)]        
+        buffers [(.next buf-iter) (.next buf-iter)]
         n-elems (long (:n-elems node))
         field-width (long (get-in field [:field-type :byte-width]))]
     (fn parse-fixed-binary-field
