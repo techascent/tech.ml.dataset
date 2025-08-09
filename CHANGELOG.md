@@ -1,72 +1,75 @@
 # Changelog
+# 7.062
+ * hamf bugfix in apply-concat.
+
 # 7.061
  * Upgrade to hamf to fix pmap with custom pool issue and initial cut at sparse columns.  There is no serialization
    yet as that requires significant changes to arrow to work for our intended use case.
- 
+
 # 7.060
- * Fixes [issue 458](https://github.com/techascent/tech.ml.dataset/issues/458) - replace missing with a value 
+ * Fixes [issue 458](https://github.com/techascent/tech.ml.dataset/issues/458) - replace missing with a value
    works correctly when a column contains all missing values.
- 
+
 # 7.059
  * dtype-next upgrade to fix clone-after-filter issue.
- 
+
 # 7.058
  * faster single column reduction when you have large columns and many missing -- avoids per-idx binary search of missing set.
- 
+
 # 7.057
  * Slightly faster arrow compressed writies.
  * column-cast no longer appends roaring bitmaps to metadata unless requested.
- 
+
 # 7.056
- * Arrow support for UUID and bigdecimal types. 
- 
+ * Arrow support for UUID and bigdecimal types.
+
 # 7.055
  * Upgrade dtype-next to [version 10.136](https://github.com/cnuernber/dtype-next/blob/master/CHANGELOG.md#10136).
- 
+
 # 7.053
  * Column parsers are more rigorous in promoting their datatypes after clear op.
- 
+
 # 7.052
  * Fixing update-values - found untested (on mac) pathway that failed when run in cloud.
- 
+
 # 7.051
  * Much faster string table clone and much faster arrow write of string tables.
- 
+
 # 7.050
  * fix bug in stringtable clone.
- 
+
 # 7.049
  * Optimizations to string table clone, string table create and arrow serialization.
- 
+
 # 7.047
  * hamf bugfix for update-values.
- 
+
 # 7.046
  * dataset parsers return something that is not a dataset when the internal datasets have no columns.
- 
+
 # 7.045
  * Bulk add-constant! method used for adding missing values.
- 
+
 # 7.044
  * initial support for clearing dataset parsers - resets their row count but does not reset the schema.  Use tech.v3.dataset.protocols/ds-clear.
- 
-# 7.043 
+
+# 7.043
  * Legacy smile -- 2.6.0 -- support was removed.  Support for later smile versions has moved to the [scicloj system](https://github.com/scicloj/scicloj.ml.smile) and operations like PCA are best implemented at this time using neanderthal.
- 
+
 # 7.042
  * Upgrade hamf to get new api methods - lines and re-matches.
- 
+
 # 7.041
  * Slightly faster promotional object parser.
- 
+
 # 7.040
  * Fix for [issue 450](https://github.com/techascent/tech.ml.dataset/issues/450) - emapped columns could reduce as
-   a different type than declared in the emap declaration. 
+   a different type than declared in the emap declaration.
  * Small perf improvements for unique-by.
- 
+
 # 7.039
  * Fix error in dtype-next/native-buffer/native-buffer->byte-array
- 
+
 # 7.038
  * Upgrade to hamf 2.020.
  * Fix for [issue 447](https://github.com/techascent/tech.ml.dataset/issues/447) - filter column by keyword.
@@ -74,24 +77,24 @@
 # 7.037
  * Nippy loading is about 2x faster in the case of large string tables.
  * Arrow read pathways support :text-as-strings? to mirror :strings-as-text? on the write side so you can save out uncompressed data in the fastest-to-read format.
- 
+
 # 7.036
  * Major optimization (>9x!) loading of arrow files when large string tables/dictionaries are used.
- 
+
 # 7.035
  * Latest dtype-next (10.124) - contains upgrades to ham-fisted which allow pmap et al. to accept arbitrary executor services.
  * Fix for [issue 438](https://github.com/techascent/tech.ml.dataset/issues/438) - keyword dataset names in tribuo.
  * Fix for [issue 435](https://github.com/techascent/tech.ml.dataset/issues/435) - pd-merge's outer must accept empty datasets.
  * Fix for issues 432 and 371 - select-row-type operations don't remove `:print-index-range :all` metadata.
- 
- 
- 
+
+
+
 # 7.034
  * Reverted transit encoding of instant back to milliseconds since epoch as js api doesn't support microseconds since epoch.
 
 # 7.033
  * [issue-434](https://github.com/techascent/tech.ml.dataset/issues/413) - bad transit encoding - packed instants are microseconds since epoch and have been for a while - not milliseconds since epoch.
- 
+
 # 7.031
  * [issue-413](https://github.com/techascent/tech.ml.dataset/issues/413) - reduce with packed columns.
  * [issue-414](https://github.com/techascent/tech.ml.dataset/issues/414) - categorical maps are now integers.
