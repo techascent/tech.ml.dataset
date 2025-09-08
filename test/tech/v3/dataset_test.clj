@@ -1802,7 +1802,7 @@
 (deftest clone-causes-filter-fail
   (let [ds (-> (ds/->dataset "test/data/stocks.csv" {:key-fn keyword})
                (ds/filter (fn [row]
-                            (and 
+                            (and
                              (.isAfter ^LocalDate (get row :date) (LocalDate/parse "2009-06-01"))
                              (= (get row :symbol) "AMZN")))))]
     (is (= (vec (:date ds))
@@ -1818,8 +1818,42 @@
                              :age nil}])
              (ds/replace-missing  [:age] :value 100)
              (ds/column :age)
-             vec)))
-  )
+             vec))))
+
+(defn rolling-off-edge-fn
+  []
+  (let [ds-fn (fn [relative-window-position]
+                (-> (ds/->dataset {:x (concat (repeat 20 1)
+                                              (repeat 20 0))})
+                    (ds-roll/rolling 10 {:mean-x (ds-roll/mean :x)} {:relative-window-position relative-window-position})
+                    (ds/print-all)))]
+    (is (not= (ds-fn :left)
+              (ds-fn :center)))
+    (is (not= (ds-fn :center)
+              (ds-fn :right)))
+    (is (not= (ds-fn :left)
+              (ds-fn :right)))))
+
+(deftest rolling-off-edge
+  (rolling-off-edge-fn))
+
+(defn stacked-rolling-fn
+  []
+  (let [ds0 (-> (ds/->dataset {:y (repeat 20 2)
+                               :x (range)
+                               :t 0})
+                (ds-roll/rolling 10 {:mean-y (ds-roll/mean :y)} {:relative-window-position :left}))
+        ds1 (-> (ds/->dataset {:y (repeat 40 1)
+                               :x (range)
+                               :t 1})
+                (ds-roll/rolling 10 {:mean-y (ds-roll/mean :y)} {:relative-window-position :left}))
+        ds (-> (ds/concat ds0 ds1)
+               (ds/print-all))]
+    ;; HH: 2025-09-08 - My condolences if this fails on your architecture
+    (is (every? #{1.0 2.0} (:mean-y ds)))))
+
+(deftest stacked-rolling
+  (stacked-rolling-fn))
 
 (comment
   (require '[criterium.core :as crit])
