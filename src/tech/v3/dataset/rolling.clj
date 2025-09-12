@@ -270,13 +270,13 @@ test/data/stocks.csv [5 6]:
 |    AMZN | 2000-01-01 |  64.56 |    60.09222222 |        106.11 |         28.66 |
 |    AAPL | 2000-02-01 |  28.66 |    57.56583333 |        106.11 |         28.37 |
 ```"
-  ([ds window reducer-map _options]
+  ([ds window reducer-map options]
    (let [n-rows (ds-base/row-count ds)
-         window-data (if (integer? window)
-                       {:window-size window
-                        :relative-position :center
-                        :window-type :fixed}
-                       window)
+         window-data (merge (if (integer? window)
+                              {:window-size window
+                               :window-type :fixed}
+                              window)
+                            options)
          windows
          (case (:window-type window-data :fixed)
            :fixed
