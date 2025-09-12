@@ -1,4 +1,9 @@
 # Changelog
+# 7.063
+ * Hamf upgrade - fast merge iterators, better sort operator
+ * Bugfix in tech.v3.dataset.rolling - options map was ignored - now all options should be respected
+ * Major arrow upgrade - support for sparse columns save/load in arrow.  See [test/tech/v3/libs/arrow_tests.clj]
+ 
 # 7.062
  * hamf bugfix in apply-concat.
 
