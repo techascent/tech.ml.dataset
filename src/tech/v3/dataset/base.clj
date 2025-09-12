@@ -858,9 +858,7 @@
     (throw (Exception.
             (format "Column %s does not have :string datatype"
                     (ds-col/column-name col)))))
-  (if (not (instance? StringTable (.data ^Column col)))
-    (str-table/string-table-from-strings col)
-    (.data ^Column col)))
+  (str-table/->string-table (ds-proto/column-data col)))
 
 
 (defn ensure-dataset-string-tables

@@ -88,6 +88,8 @@
             [tech.v3.datatype.array-buffer :as array-buffer]
             [tech.v3.datatype.ffi :as dt-ffi]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.impl.sparse-column :as sparse-col]
+            [tech.v3.dataset.impl.column-base :as col-base]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.dataset :as ds-impl]
@@ -110,7 +112,7 @@
             [ham-fisted.function :as hamf-fn]
             [ham-fisted.set :as set]
             [ham-fisted.protocols :as hamf-proto])
-  (:import [ham_fisted ArrayLists ArrayLists$ArrayOwner]
+  (:import [ham_fisted ArrayLists ArrayLists$ArrayOwner IMutList]
            [org.apache.arrow.vector.ipc.message MessageSerializer]
            [org.apache.arrow.flatbuf Message DictionaryBatch RecordBatch
             FieldNode Buffer BodyCompression BodyCompressionMethod Footer Block]
@@ -806,13 +808,20 @@ Dependent block frames are not supported!!")
         ;; _ (println schema)
         fields
         (->> (.getFields schema)
-             (mapv datafy-field))]
+             (mapv datafy-field))
+        metadata (when-let [metadata (.getCustomMetadata schema)]
+                   (into {} metadata))
+        sparse-columns (when-let [sparse-columns (get metadata "sparse-columns")]
+                         (->> (.split ^String sparse-columns ",")
+                              (map #(Long/parseLong %))
+                              (hamf/java-hashset)))]
     {:fields fields
      :encodings (->> (map :dictionary-encoding fields)
                      (remove nil?)
                      (map (juxt :id identity))
                      (into {}))
-     :metadata (.getCustomMetadata schema)}))
+     :metadata metadata
+     :sparse-columns sparse-columns}))
 
 
 (defn- write-message-header
@@ -1194,16 +1203,17 @@ Dependent block frames are not supported!!")
     (ArrayHelpers/aset data idx (unchecked-byte (bit-xor existing (bit-shift-left 1 bit)))))
   data)
 
-
-(defn- missing-bytes
-  ^bytes [^RoaringBitmap bmp ^bytes all-valid-buf]
-  (let [nbuf (-> (dtype/clone all-valid-buf)
-                 (dtype/->byte-array))]
-    ;;Roaring bitmap's recommended way of iterating through all its values.
-    (.forEach bmp (reify org.roaringbitmap.IntConsumer
-                    (accept [this data]
-                      (toggle-bit nbuf (Integer/toUnsignedLong data)))))
-    nbuf))
+(defn validity-info
+  "returns [byte-array n-missing]"
+  [col ^bytes all-valid-buf]
+  (let [nbuf all-valid-buf
+        n-missing (ds-proto/missing-count col)]
+    [(if (== 0 n-missing)
+       nbuf       
+       (if (sparse-col/is-sparse? col)
+         (reduce toggle-bit (byte-array (alength nbuf)) (first (ds-proto/column-buffer col)))
+         (reduce toggle-bit (Arrays/copyOf nbuf (alength nbuf)) (ds-proto/missing col))))
+     n-missing]))
 
 (defn ^:no-doc boolean-bytes
   ^bytes [data]
@@ -1217,12 +1227,24 @@ Dependent block frames are not supported!!")
 
 
 (defn col->buffers
-  [col options]
+  [col ^long col-idx options]
   (let [col-dt (casting/un-alias-datatype (dtype/elemwise-datatype col))
         col-dt (if (and (:strings-as-text? options) (= col-dt :string))
                  :text
                  col-dt)
-        cbuf (tech.v3.datatype.protocols/->buffer col)]
+        cbuf (tech.v3.datatype.protocols/->buffer col)
+        sparse? (contains? (get options :sparse-columns) col-idx)
+        ^tech.v3.datatype.Buffer cbuf
+        (if sparse?                    
+          (if (sparse-col/is-sparse? col)
+            (tech.v3.datatype.protocols/->buffer (ds-proto/column-data col))
+            (let [c (col-base/make-container (dtype/elemwise-datatype col))
+                  ^RoaringBitmap missing (ds-proto/missing col)]
+              (dotimes [idx (dtype/ecount col)]
+                (when-not (.contains missing (unchecked-int idx))
+                  (.add c (.readObject cbuf idx))))
+              (dtype/->buffer c)))
+          cbuf)]
     ;;Get the data as a datatype safe for conversion into a
     ;;nio buffer.
     (if (casting/numeric-type? col-dt)
@@ -1300,13 +1322,10 @@ Dependent block frames are not supported!!")
                           (dtype/->byte-array))
         nodes-buffs-lens
         (->> (.values ^Map dataset)
-             (hamf/pmap (fn [col]
-                          (let [col-missing (ds-proto/missing col)
-                                n-missing (dtype/ecount col-missing)
-                                valid-buf (if (== 0 n-missing)
-                                            all-valid-buf
-                                            (missing-bytes col-missing all-valid-buf))
-                                buffers (hamf/concatv [valid-buf] (col->buffers col options))
+             (map-indexed vector)
+             (hamf/pmap (fn [[col-idx col]]
+                          (let [[valid-buf n-missing] (validity-info col all-valid-buf)
+                                buffers (hamf/concatv [valid-buf] (col->buffers col col-idx options))
                                 lengths (hamf/mapv (comp pad byte-length) buffers)
                                 col-len (long (reduce + 0 lengths))]
                             {:node {:n-elems n-rows
@@ -1482,35 +1501,19 @@ Dependent block frames are not supported!!")
         (string-reader->text-reader str-rdr)
         str-rdr))))
 
+(defn validity->missing
+  ^RoaringBitmap [validity ^long n-elems]
+  (hamf-rf/reduce-reducer
+   (hamf-rf/long-consumer-reducer
+    #(tech.v3.dataset.ByteValidity$MissingIndexReducer. n-elems (* 8 (dtype/ecount validity))))
+   validity))
 
-(defn- int8-buf->missing
-  ^RoaringBitmap [data-buf ^long n-elems]
-  (let [data-buf (dtype/->reader data-buf)
-        ^RoaringBitmap missing (bitmap/->bitmap)
-        n-bytes (len->bitwise-len n-elems)]
-    (dotimes [idx n-bytes]
-      (let [offset (pmath/* 8 idx)
-            data (unchecked-int (.readByte data-buf idx))]
-        (when-not (== data -1)
-          ;;TODO - find more elegant way of pulling this off
-          (when (== 0 (pmath/bit-and data 1))
-            (.add missing offset))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 1)))
-            (.add missing (pmath/+ offset 1)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 2)))
-            (.add missing (pmath/+ offset 2)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 3)))
-            (.add missing (pmath/+ offset 3)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 4)))
-            (.add missing (pmath/+ offset 4)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 5)))
-            (.add missing (pmath/+ offset 5)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 6)))
-            (.add missing (pmath/+ offset 6)))
-          (when (== 0 (pmath/bit-and data (pmath/bit-shift-left 1 7)))
-            (.add missing (pmath/+ offset 7))))))
-    (set/intersection missing (range n-elems))))
-
+(defn validity->indexes
+  ^IMutList [validity ^long n-elems]
+  (->> validity
+       (hamf-rf/reduce-reducer
+        (hamf-rf/long-consumer-reducer
+         #(tech.v3.dataset.ByteValidity$ValidityIndexReducer. n-elems (* 8 (dtype/ecount validity)))))))
 
 (defn ^:no-doc byte-buffer->bitwise-boolean-buffer
   ^Buffer[bitbuffer ^long n-elems]
@@ -1522,95 +1525,82 @@ Dependent block frames are not supported!!")
                            true
                            false)))))
 
-
 (defn- field-node-count
   [field]
   (apply + 1 (map field-node-count
                   (get field :children))))
 
-
-;;Work around the defmulti-failed to redefine dispatch issue
-#_(def  field->column-data nil)
-
-
-(defn- node-buf->missing
-  [node validity-buf]
-  (if (== 0 (long (:n-null-entries node)))
-    (bitmap/->bitmap)
-    (int8-buf->missing
-     validity-buf
-     (:n-elems node))))
-
 (defn- field-metadata
   [field]
   (-> (into (dissoc (:field-type field) :datatype) (:metadata field))
       ;;Fixes issue 330
-      (with-meta nil)))
+      (with-meta nil)
+      (assoc :name (:name field))))
 
 (defmulti ^:private preparse-field
   "Transform a field into a column."
-  (fn [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  (fn [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
     (get-in field [:field-type :datatype])))
 
+(defn construct-column
+  [sparse? node field buffers col-data-fn]
+  (let [rc (long (:n-elems node))
+        n-missing (long (:n-null-entries node))
+        metadata (field-metadata field)
+        validity-buf (nth buffers 0)
+        data-buffers (subvec buffers 1)]    
+    (if sparse?
+      (let [^IMutList indexes (validity->indexes validity-buf rc)]
+        (sparse-col/construct-sparse-col indexes (col-data-fn (.size indexes) data-buffers) rc metadata))
+      (col-impl/construct-column (if (== 0 n-missing)
+                                   (bitmap/->bitmap)
+                                   (validity->missing validity-buf rc))
+                                 (col-data-fn rc data-buffers)
+                                 metadata))))
 
 (defmethod ^:private preparse-field :string
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
   (let [encoding (get field :dictionary-encoding)
         buffers (if (nil? encoding)
                   [(.next buf-iter) (.next buf-iter) (.next buf-iter)]
                   [(.next buf-iter) (.next buf-iter)])
-        node (.next node-iter)]
+        node (.next node-iter)
+        col-data-fn (fn [n-elems data-buffers]
+                      (string-data->column-data
+                       dict-map encoding
+                       (get-in field [:field-type :offset-buffer-datatype])
+                       data-buffers
+                       n-elems
+                       options))]
     (fn parse-string-field
       [decompressor]
-      (let [buffers (decompressor buffers)
-            validity-buf (nth buffers 0)
-            data-buffers (subvec buffers 1)]         
-        (col-impl/new-column
-         (:name field)
-         (string-data->column-data
-          dict-map encoding
-          (get-in field [:field-type :offset-buffer-datatype])
-          data-buffers
-          (:n-elems node)
-          options)
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+      (construct-column sparse? node field (decompressor buffers) col-data-fn))))
 
 (defmethod ^:private preparse-field :boolean
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
   (let [field-dtype (get-in field [:field-type :datatype])
-        field-dtype (if-not (:integer-datetime-types? options)
-                      (case field-dtype
-                        :time-microseconds :packed-local-time
-                        :epoch-microseconds :packed-instant
-                        :epoch-days :packed-local-date
-                        field-dtype)
-                      field-dtype)
         node (.next node-iter)
-        n-elems (long (:n-elems node))
         nil-subtype? (identical? :null (get-in field [:field-type :subtype]))
         buffers (when-not nil-subtype?
-                  [(.next buf-iter) (.next buf-iter)])]
+                  [(.next buf-iter) (.next buf-iter)])
+        col-data-fn (fn [n-elems data-buffers]
+                      (byte-buffer->bitwise-boolean-buffer
+                       (first data-buffers) n-elems))]
     (fn parse-boolean-field
       [decompressor]
       ;;nil subtype means null column
       (if nil-subtype?
+        (let [n-elems (long (:n-elems node))]
           (col-impl/new-column
            (:name field)
            (dtype/const-reader false n-elems)
            (field-metadata field)
-           (bitmap/->bitmap (range n-elems)))
-        (let [[validity-buf data-buf] (decompressor buffers)]
-          (col-impl/new-column
-           (:name field)
-           (byte-buffer->bitwise-boolean-buffer
-            data-buf n-elems)
-           (field-metadata field)
-           (node-buf->missing node validity-buf)))))))
+           (bitmap/->bitmap (range n-elems))))
+        (construct-column sparse? node field (decompressor buffers) col-data-fn)))))
 
 
 (defn- clone-downcast-text
@@ -1621,13 +1611,14 @@ Dependent block frames are not supported!!")
 
 
 (defmethod ^:private preparse-field :list
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [buffers [(.next buf-iter) (.next buf-iter)]
         node (.next node-iter)
         _ (assert (== 1 (count (:children field)))
                   (format "List types are expected to have exactly 1 child - found %d"
                           (count (:children field))))
-        sub-column-parse-fn (preparse-field (first (:children field)) node-iter buf-iter dict-map options)]
+        ;;L
+        sub-column-parse-fn (preparse-field (first (:children field)) false node-iter buf-iter dict-map options)]
     (fn parse-list-field
       [decompressor]
       (let [sub-column (-> (sub-column-parse-fn decompressor)
@@ -1638,78 +1629,67 @@ Dependent block frames are not supported!!")
                            ;;an overloaded clone pathway.
                            (clone-downcast-text)
                            (dtype/->buffer))
-            [validity-buf offset-buf] (decompressor buffers)
-            n-elems (long (:n-elems node))
-            ;;For lists, int32 offsets with one extra if this works like the string buffers
-            offsets (-> (set-buffer-datatype
-                         offset-buf :int32)
-                        (dtype/sub-buffer 0 (inc n-elems))
-                        (dtype/->buffer))]
-        (col-impl/new-column
-         (:name field)
-         (dtype/make-reader :object n-elems
-                            (let [sidx (.readLong offsets idx)]
-                              (dtype/sub-buffer sub-column
-                                                sidx
-                                                (- (.readLong offsets (unchecked-inc idx))
-                                                   sidx))))
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+            col-data-fn (fn [^long n-elems data-buffers]
+                          (let [offset-buf (first data-buffers)
+                                offsets (-> (set-buffer-datatype
+                                             offset-buf :int32)
+                                            (dtype/sub-buffer 0 (inc n-elems))
+                                            (dtype/->buffer))]
+                            (dtype/make-reader :object n-elems
+                                               (let [sidx (.readLong offsets idx)]
+                                                 (dtype/sub-buffer sub-column
+                                                                   sidx
+                                                                   (- (.readLong offsets (unchecked-inc idx))
+                                                                      sidx))))))]
+        (construct-column sparse? node field (decompressor buffers) col-data-fn)))))
 
 (defmethod ^:private preparse-field :binary
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
         buffers [(.next buf-iter) (.next buf-iter) (.next buf-iter)]
-        
-        n-elems (long (:n-elems node))]
+        col-data-fn (fn [^long n-elems data-buffers]
+                      (let [[offset-buf data-buf] data-buffers
+                            offsets (-> (native-buffer/set-native-datatype
+                                         offset-buf :int32)
+                                        (dtype/sub-buffer 0 (inc n-elems))
+                                        (dtype/->buffer))
+                            data-buf (-> (dtype/clone data-buf)
+                                         (dtype/->buffer))]
+                        (dtype/make-reader :object n-elems
+                                           (let [sidx (.readLong offsets idx)]
+                                             (dtype/sub-buffer data-buf
+                                                               sidx
+                                                               (- (.readLong offsets (unchecked-inc idx))
+                                                                  sidx))))))]
     (fn parse-binary-field
       [decompressor]
-      (let [[validity-buf offset-buf data-buf] (decompressor buffers)
-            offsets (-> (native-buffer/set-native-datatype
-                         offset-buf :int32)
-                        (dtype/sub-buffer 0 (inc n-elems))
-                        (dtype/->buffer))
-            data-buf (-> (dtype/clone data-buf)
-                         (dtype/->buffer))]
-        (col-impl/new-column
-         (:name field)
-         (dtype/make-reader :object n-elems
-                            (let [sidx (.readLong offsets idx)]
-                              (dtype/sub-buffer data-buf
-                                                sidx
-                                                (- (.readLong offsets (unchecked-inc idx))
-                                                   sidx))))
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+      (construct-column sparse? node field (decompressor buffers) col-data-fn))))
 
 (defmethod ^:private preparse-field :fixed-size-binary
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
         buffers [(.next buf-iter) (.next buf-iter)]
-        n-elems (long (:n-elems node))
-        field-width (long (get-in field [:field-type :byte-width]))]
+        field-width (long (get-in field [:field-type :byte-width]))
+        fm (field-metadata field)
+        col-data-fn (fn [n-elems data-buffers]
+                      (let [data-buf (first data-buffers)
+                            ^bytes data-ary (if (instance? NativeBuffer data-buf)
+                                              (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
+                                              (dtype/->array data-buf))]
+                        (if (= ARROW_UUID_NAME (get fm ARROW_EXTENSION_NAME))
+                          (let [longsdata (-> (java.nio.ByteBuffer/wrap data-ary)
+                                              (.order (java.nio.ByteOrder/BIG_ENDIAN)))]
+                            (dtype/make-reader :uuid n-elems
+                                               (let [lidx (* idx 16)]
+                                                 (java.util.UUID. (.getLong longsdata lidx)
+                                                                  (.getLong longsdata (+ lidx 8))))))
+                          (let [ll (ArrayLists/toList data-ary)]
+                            (dtype/make-reader :object n-elems
+                                               (let [lidx (* idx field-width)]
+                                                 (.subList ll lidx (+ lidx field-width))))))))]
     (fn parse-fixed-binary-field
       [decompressor]
-      (let [[validity-buf data-buf] (decompressor buffers)
-            ^bytes data-ary (if (instance? NativeBuffer data-buf)
-                              (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
-                              (dtype/->array data-buf))
-            fm (field-metadata field)]
-        (col-impl/new-column
-         (:name field)
-         (if (= ARROW_UUID_NAME (get fm ARROW_EXTENSION_NAME))
-           (let [longsdata (-> (java.nio.ByteBuffer/wrap data-ary)
-                               (.order (java.nio.ByteOrder/BIG_ENDIAN)))]
-             (dtype/make-reader :uuid n-elems
-                                (let [lidx (* idx 16)]
-                                  (java.util.UUID. (.getLong longsdata lidx)
-                                                   (.getLong longsdata (+ lidx 8))))))
-           (let [ll (ArrayLists/toList data-ary)]
-             (dtype/make-reader :object n-elems
-                                (let [lidx (* idx field-width)]
-                                  (.subList ll lidx (+ lidx field-width))))))
-         fm
-         (node-buf->missing node validity-buf))))))
+      (construct-column sparse? node field (decompressor buffers) col-data-fn))))
 
 (defn- copy-bytes
   ^bytes [^bytes data ^long sidx ^long eidx]
@@ -1726,35 +1706,33 @@ Dependent block frames are not supported!!")
     rv))
 
 (defmethod ^:private preparse-field :decimal
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]
   (let [node (.next node-iter)
-        buffers [(.next buf-iter) (.next buf-iter)]        
-        n-elems (long (:n-elems node))
+        buffers [(.next buf-iter) (.next buf-iter)]
         {:keys [^long precision ^long scale ^long bit-width]} (get field :field-type)
-        byte-width (quot (+ bit-width 7) 8)]
+        byte-width (quot (+ bit-width 7) 8)
+        col-data-fn
+        (fn [n-elems data-buffers]
+          (let [data-buf (first data-buffers)
+                ^bytes data-ary (if (instance? NativeBuffer data-buf)
+                                  (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
+                                  (dtype/->array data-buf))
+                ;;biginteger data is always stored big endian I guess...
+                ;;https://github.com/apache/arrow-java/blob/main/vector/src/main/java/org/apache/arrow/vector/util/DecimalUtility.java#L53
+                array-copy (if (identical? :little-endian (tech.v3.datatype.protocols/platform-endianness))
+                             copy-reverse-bytes
+                             copy-bytes)]
+            (dtype/make-reader :decimal n-elems
+                               (let [idx (* idx byte-width)]
+                                 (-> (BigInteger. ^bytes (array-copy data-ary idx (+ idx byte-width)))
+                                     (BigDecimal. scale))))))]
     (fn parse-decimal
       [decompressor]
-      (let [[validity-buf data-buf] (decompressor buffers)
-            ^bytes data-ary (if (instance? NativeBuffer data-buf)
-                              (native-buffer/->jvm-array data-buf 0 (dtype/ecount data-buf))
-                              (dtype/->array data-buf))
-            ;;biginteger data is always stored big endian I guess...
-            ;;https://github.com/apache/arrow-java/blob/main/vector/src/main/java/org/apache/arrow/vector/util/DecimalUtility.java#L53
-            array-copy (if (identical? :little-endian (tech.v3.datatype.protocols/platform-endianness))
-                         copy-reverse-bytes
-                         copy-bytes)]
-        (col-impl/new-column
-         (:name field)
-         (dtype/make-reader :decimal n-elems
-                            (let [idx (* idx byte-width)]
-                              (-> (BigInteger. ^bytes (array-copy data-ary idx (+ idx byte-width)))
-                                  (BigDecimal. scale))))
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+      (construct-column sparse? node field (decompressor buffers) col-data-fn))))
 
 
 (defmethod ^:private preparse-field :default
-  [field ^Iterator node-iter ^Iterator buf-iter dict-map options]  
+  [field sparse? ^Iterator node-iter ^Iterator buf-iter dict-map options]  
   (assert (= 0 (count (:children field)))
           (format "Field %s cannot be parsed with default parser" field))
   (let [field-dtype (get-in field [:field-type :datatype])
@@ -1768,16 +1746,14 @@ Dependent block frames are not supported!!")
         node (.next node-iter)
         buffers [(.next buf-iter)
                  (.next buf-iter)]
-        n-elems (long (:n-elems node))]
+        col-data-fn
+        (fn [n-elems data-buffers]
+          (let [data-buf (first data-buffers)]
+            (-> (set-buffer-datatype data-buf field-dtype)
+                (dtype/sub-buffer 0 n-elems))))]
     (fn parse-default-field
       [decompressor]
-      (let [[validity-buf data-buf] (decompressor buffers)]
-        (col-impl/new-column
-         (:name field)
-         (-> (set-buffer-datatype data-buf field-dtype)
-             (dtype/sub-buffer 0 n-elems))
-         (field-metadata field)
-         (node-buf->missing node validity-buf))))))
+      (construct-column sparse? node field (decompressor buffers) col-data-fn))))
 
 (defn- iter ^Iterator [^Iterable i] (when i (.iterator i)))
 
@@ -1799,9 +1775,11 @@ Dependent block frames are not supported!!")
                        #(decompress-buffers compression %)
                        identity)]
     (->> (:fields schema)
-         (lznc/map #(let [parse-fn (preparse-field % node-iter buf-iter dict-map options)]
-                      (when (.contains ^Set keep-set (keyfn (get % :name)))
-                        parse-fn)))
+         (lznc/map-indexed #(let [col-idx (long %1)
+                                  sparse? (contains? (get options :sparse-columns) col-idx)
+                                  parse-fn (preparse-field %2 sparse? node-iter buf-iter dict-map options)]
+                              (when (.contains ^Set keep-set (keyfn (get %2 :name)))
+                                parse-fn)))
          (lznc/filter identity)
          (lznc/map #(% decompressor))
          (ds-impl/new-dataset options))))
@@ -1909,7 +1887,7 @@ Dependent block frames are not supported!!")
                                       (pad (quot (+ nrows 7) 8)))
                         missing
                         (if-not (== 0 n-missing)
-                          (int8-buf->missing (dtype/sub-buffer nbuf data-off missing-len)
+                          (validity->missing (dtype/sub-buffer nbuf data-off missing-len)
                                              nrows)
                           (bitmap/->bitmap))
                         buffers-len (- data-len missing-len)
@@ -2078,7 +2056,6 @@ Dependent block frames are not supported!!")
       input)
     (dtype/sub-buffer input 8)))
 
-
 (defn- next-dataset-iter
   ^Iterator [input fname options]
   (let [messages (->> (input->messages input options)
@@ -2090,7 +2067,8 @@ Dependent block frames are not supported!!")
                  (get options :close-input-stream? true))
         (.close ^InputStream input))
       (throw (Exception. "Initial message is not a schema message.")))
-    (NextDatasetIter. schema messages fname 0 (hamf/java-hashmap) options)))
+    (NextDatasetIter. schema messages fname 0 (hamf/java-hashmap)
+                      (assoc options :sparse-columns (:sparse-columns schema)))))
 
 (defn stream->dataset-iterable
   "Loads data up to and including the first data record.  Returns the a lazy
@@ -2249,32 +2227,20 @@ Please use stream->dataset-seq.")))
          (cond
            (and (identical? :string col-dt)
                 (not (:strings-as-text? options)))
-           (if (and (nil? prev-ds)
-                    (instance? StringTable (.data ^Column col)))
-             ds
-             (let [missing (ds-proto/missing col)
-                   metadata (meta col)]
-               (if (nil? prev-ds)
-                 (assoc ds (metadata :name)
-                        #:tech.v3.dataset{:data (tech.v3.dataset.base/ensure-column-string-table col)
-                                          :missing missing
-                                          :metadata metadata
-                                          :name (metadata :name)})
-                 (let [prev-col (ds-base/column prev-ds (:name metadata))
-                       prev-str-t (ds-base/ensure-column-string-table prev-col)
-                       int->str (ArrayList. ^List (.int->str prev-str-t))
-                       str->int (HashMap. ^Map (.str->int prev-str-t))
-                       n-rows (dtype/ecount col)
-                       data (StringTable. int->str str->int
-                                          (dyn-int-list/dynamic-int-list 0))]
-                   (dotimes [idx n-rows]
-                     (.add data (or (col idx) "")))
-                   (assoc ds (metadata :name)
-                          #:tech.v3.dataset{:data data
-                                            :missing missing
-                                            :metadata (assoc metadata
-                                                             ::previous-string-table prev-str-t)
-                                            :name (metadata :name)})))))
+           (let [missing (ds-proto/missing col)
+                 metadata (meta col)
+                 str-table-column-data
+                 (fn [prev-ds data] 
+                   (if (nil? prev-ds)
+                     (str-table/->string-table data)
+                     (let [prev-col (ds-base/column prev-ds (:name metadata))
+                           ^StringTable prev-str-t (ds-proto/column-data prev-col)
+                           container (str-table/fast-string-container (HashMap. ^Map (.str->int prev-str-t))
+                                                                      (ArrayList. ^List (.int->str prev-str-t)))]
+                       (str-table/string-table-from-strings container data))))]
+             (assoc ds (metadata :name) (->> (ds-proto/column-data col)
+                                             (str-table-column-data prev-ds)
+                                             (ds-proto/with-column-data col))))
            ;;detect precision, scale and whether we need 128 or 256 bytes of accuracy
            (identical? :decimal col-dt)
            (assoc ds (ds-col/column-name col)
@@ -2307,17 +2273,21 @@ Please use stream->dataset-seq.")))
   ^Iterator [options ds-seq]
   (PrepDsIter. nil nil (.iterator ^Iterable (hamf-proto/->iterable ds-seq)) options))
 
-
 (defn ^:no-doc ds->schema
   "Return a map of :schema, :dictionaries where :schema is an Arrow schema
   and dictionaries is a list of {:byte-data :offsets}.  Dataset must be prepared first
   - [[prepare-dataset-for-write]] to ensure that columns have the appropriate datatypes."
   ([ds options]
-   (let [dictionaries (ArrayList.)]
+   (let [dictionaries (ArrayList.)
+         col-vals (.values ^Map ds)
+         sparse-columns (get options :sparse-columns)]
      {:schema
       (Schema. ^Iterable
-               (->> (ds-base/columns ds)
-                    (map (partial col->field dictionaries options))))
+               (->> col-vals
+                    (map (partial col->field dictionaries options)))
+               (if-not (empty? sparse-columns)
+                 {"sparse-columns" (String/join "," ^"[Ljava.lang.String;" (into-array String (map str sparse-columns)))}
+                 {}))
       :dictionaries dictionaries}))
   ([ds]
    (ds->schema ds {})))
@@ -2432,7 +2402,15 @@ Please use stream->dataset-seq.")))
               (.next ds-seq-iter))
          file-tag? (= :file (get options :format :file))
          dict-blocks (ArrayList.)
-         record-blocks (ArrayList.)]
+         record-blocks (ArrayList.)
+         sparse-columns (if-let [sparse-col (get options :sparse-columns)]
+                          (into #{} sparse-col)
+                          #{})
+         colvec (.values ^Map ds)
+         sparse-columns (->> (range (ds-base/column-count ds))
+                             (filter #(sparse-col/is-sparse? (colvec %)))
+                             (reduce conj sparse-columns))
+         options (assoc options :sparse-columns sparse-columns)]
      ;;Any native mem allocated in this context will be released
      (with-open [ostream (io/output-stream! path)]
        (let [writer (arrow-output-stream-writer ostream)

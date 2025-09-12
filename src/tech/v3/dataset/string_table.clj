@@ -189,24 +189,28 @@
     (StringTable. (hamf/vec int->str) (.clone str->int)
                   (compress-indexes indexes (long (.size str->int))))))
 
-(defn fast-string-container []
-  (let [str->int (hamf/java-hashmap)
-        int->str (ArrayList.)
-        _ (do (.put str->int "" 0)
-              (.add int->str ""))]
-    (FastStringContainer. (hamf/long-array-list)
-                          int->str str->int)))
+(defn fast-string-container
+  ([str->int int->str]
+   (FastStringContainer. (hamf/long-array-list)
+                         int->str str->int))
+  ([]
+   (let [str->int (hamf/java-hashmap)
+         int->str (ArrayList.)]
+     (.put str->int "" 0)
+     (.add int->str "")
+     (fast-string-container str->int int->str))))
 
 (defn string-table-from-strings
-  [str-data]
-  (hamf-rf/reduce-reducer (hamf-rf/consumer-reducer fast-string-container) str-data))
+  ([str-data] (string-table-from-strings (fast-string-container) str-data))
+  ([fast-string-container str-data]
+   (hamf-rf/reduce-reducer (hamf-rf/consumer-reducer (constantly fast-string-container)) str-data)))
 
 
 (defn ->string-table
   ^StringTable [str-t]
-  (errors/when-not-errorf (instance? StringTable str-t)
-                          "string table is wrong type: %s" str-t)
-  str-t)
+  (if (instance? StringTable str-t)
+    str-t
+    (string-table-from-strings str-t)))
 
 
 (defn indices

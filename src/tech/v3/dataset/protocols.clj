@@ -14,7 +14,12 @@
   (^long column-count [this]))
 
 (defprotocol PMissing
-  (missing [this]))
+  (missing [this])
+  (num-missing [this])
+  (any-missing? [this]))
+
+(defn missing-count
+  ^long [this] (num-missing this))
 
 (defprotocol PValidRows
   (valid-rows [this]))
@@ -30,9 +35,13 @@
 
 (defprotocol PColumn
   (is-column? [col])
-  (column-buffer [col])
-  (empty-column? [col]))
-
+  (column-buffer [col]
+    "Return either the backing dataset for dense columns or tuple of [indexes,data] for sparse columns")
+  (empty-column? [col])
+  (column-data [col]
+    "Return the backing data store.  Note for sparse columns this may be much shorter than the column")
+  (with-column-data [col new-data]
+    "new data must be same length as old data"))
 
 (defprotocol PDataset
   (is-dataset? [item])

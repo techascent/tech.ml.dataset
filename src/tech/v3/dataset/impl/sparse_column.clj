@@ -7,6 +7,7 @@
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
+            [tech.v3.dataset.string-table :as str-t]
             [ham-fisted.set :as set]
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
@@ -18,7 +19,7 @@
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
-(declare scol->reader reduce-scol kv-reduce-scol)
+(declare scol->reader reduce-scol kv-reduce-scol construct-sparse-col)
 
 (defn- index-bin-search
   ^clojure.lang.IFn$LL [^IMutList indexes]
@@ -87,12 +88,16 @@
         (let [miss-data (set/difference (bitmap/->bitmap (hamf/range rc)) (bitmap/->bitmap indexes))]
           (set! (.-msng this) miss-data)
           miss-data))))
+  (num-missing [this] (- rc (.size indexes)))
+  (any-missing? [this] (not (== rc (.size indexes))))
   ds-proto/PValidRows
   (valid-rows [this] indexes)
   ds-proto/PColumn
   (is-column? [this] true)
   (column-buffer [this] [indexes data])
   (empty-column? [this] (.isEmpty indexes))
+  (column-data [this] data)
+  (with-column-data [this new-data] (construct-sparse-col indexes new-data rc metadata))
   ds-proto/PColumnName
   (column-name [this] (get metadata :name))
   ds-proto/PRowCount
@@ -280,9 +285,6 @@
               nil valid-indexes)
       (SparseCol. valid-indexes data rc (meta col) nil nil))))
 
-(defn is-scol? [sc] (instance? SparseCol sc))
-(defn as-scol ^SparseCol [sc] (when (instance? SparseCol sc) sc))
-
 (defn scol->reader
   (^Buffer [^SparseCol scol] (scol->reader scol 0 (.-rc scol)))
   (^Buffer [^SparseCol scol ^long sidx ^long eidx]
@@ -356,14 +358,18 @@
          (ChunkedList/sublistCheck ssidx seidx rc)
          (sparse-rows ds (+ sidx ssidx) (+ sidx seidx)))))))
 
-(defn ds->sparse-ds
-  [ds]
-  (let [rc (long (ds-proto/row-count ds))]
-    (reduce (fn [ds col]
-              (if (> (dt/ecount (ds/missing col)) (quot rc 2))
-                (assoc ds (ds-proto/column-name col) (->scol col))
-                ds))
-            ds (.values ^java.util.Map ds))))
+(defn ->sparse-ds
+  ([ds] (->sparse-ds ds 0.5))
+  ([ds missing-frac]
+   (let [rc (long (ds-proto/row-count ds))
+         missing-cutoff (long (* rc (double missing-frac)))]
+     (reduce (fn [ds col]
+               (if (>= (dt/ecount (ds-proto/missing col)) missing-cutoff)
+                 (assoc ds (ds-proto/column-name col) (->scol col))
+                 ds))
+             ds (.values ^java.util.Map ds)))))
+
+(defn is-sparse? [col] (instance? SparseCol col))
 
 (comment
   (require '[tech.v3.dataset :as ds])

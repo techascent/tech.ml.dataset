@@ -2,6 +2,7 @@
   (:require [tech.v3.libs.arrow :as arrow]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column :as ds-col]
+            [tech.v3.dataset.impl.sparse-column :as sparse-col]
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.datatype :as dtype]
             [tech.v3.libs.parquet]
@@ -10,6 +11,7 @@
             [clojure.test :refer [deftest is]])
   (:import [java.time LocalTime]
            [tech.v3.dataset Text]
+           [java.util Map]
            [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
 
@@ -90,11 +92,36 @@
       (.delete (java.io.File. "alldtypes.arrow")))))
 
 
+(deftest base-sparse-datatype-test
+  (try
+    (resource/stack-resource-context
+      (let [ds (sparse-col/->sparse-ds (supported-datatype-ds) 0.0)
+            _ (arrow/dataset->stream! ds "alldtypes-sparse.arrow")
+            mmap-ds (arrow/stream->dataset "alldtypes-sparse.arrow" {:open-type :mmap
+                                                                     :key-fn keyword})
+            copy-ds (arrow/stream->dataset "alldtypes-sparse.arrow" {:key-fn keyword})]
+        (is (every? sparse-col/is-sparse? (.values ^Map ds)))
+        (is (every? sparse-col/is-sparse? (.values ^Map mmap-ds)))
+        (is (every? sparse-col/is-sparse? (.values ^Map copy-ds)))
+        (doseq [col (vals ds)]
+          (let [cname ((meta col) :name)
+                dt (dtype/elemwise-datatype col)
+                inp-col (mmap-ds cname)
+                cp-col (copy-ds cname)]
+            (is (= dt (dtype/elemwise-datatype inp-col)) (str "inplace failure " cname))
+            (is (= dt (dtype/elemwise-datatype cp-col)) (str "copy failure " cname))
+
+            (is (= (vec col) (vec inp-col)) (str "inplace failure " cname))
+            (is (= (vec col) (vec cp-col)) (str "copy failure " cname))))))
+    (finally
+      (.delete (java.io.File. "alldtypes-sparse.arrow")))))
+
+
 (deftest arrow-file-types
   ;;lz4 compression
-  (let [all-files ["test/data/alldtypes.arrow-feather" ;lz4
+  (let [all-files ["test/data/alldtypes.arrow-feather"            ;lz4
                    "test/data/alldtypes.arrow-feather-compressed" ;zstd
-                   "test/data/alldtypes.arrow-feather-v1" ;v1
+                   "test/data/alldtypes.arrow-feather-v1"         ;v1
                    ]]
     (doseq [file all-files]
       (is (= 1000 (ds/row-count (arrow/stream->dataset file)))))
@@ -188,20 +215,29 @@
                                                              ;;default is 3
                                                              :level 5}})
           _ (arrow/dataset->stream! ames "ames-lz4.arrow" {:compression :lz4})
+          _ (arrow/dataset->stream! (sparse-col/->sparse-ds ames)
+                                    "ames-sparse-zstd.arrow" {:compression
+                                                              {:compression-type :zstd
+                                                               ;;default is 3
+                                                               :level 5}})
           file-len (fn [path] (.length (java.io.File. (str path))))
-          _ (println (ds/->dataset {:save-type [:uncompressed :zstd :lz4]
+          _ (println (ds/->dataset {:save-type [:uncompressed :zstd :sparse-zstd :lz4]
                                     :file-size [(file-len "ames-uncompressed.arrow")
                                                 (file-len "ames-zstd.arrow")
+                                                (file-len "ames-sparse-zstd.arrow")
                                                 (file-len "ames-lz4.arrow")]}))
           uncomp (arrow/stream->dataset "ames-uncompressed.arrow")
           zstd (arrow/stream->dataset "ames-zstd.arrow")
+          sparse-zstd (arrow/stream->dataset "ames-sparse-zstd.arrow")
           lz4 (arrow/stream->dataset "ames-lz4.arrow")]
       (System/gc)
       (is (dfn/equals (uncomp "SalePrice") (zstd "SalePrice")))
+      (is (dfn/equals (uncomp "LotFrontage") (sparse-zstd "LotFrontage")))
       (is (dfn/equals (uncomp "SalePrice") (lz4 "SalePrice"))))
     (finally
       (.delete (java.io.File. "ames-uncompressed.arrow"))
       (.delete (java.io.File. "ames-zstd.arrow"))
+      (.delete (java.io.File. "ames-sparse-zstd.arrow"))
       (.delete (java.io.File. "ames-lz4.arrow")))))
 
 

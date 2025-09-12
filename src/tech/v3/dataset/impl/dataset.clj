@@ -254,6 +254,10 @@
   ds-proto/PMissing
   (missing [this]
     (RoaringBitmap/or (.iterator ^Iterable (lznc/map ds-proto/missing (.values this)))))
+  (num-missing [this]
+    (dtype/ecount (ds-proto/missing this)))
+  (any-missing? [this]
+    (boolean (some ds-proto/any-missing? (.values this))))
 
   ds-proto/PValidRows
   (valid-rows [this]

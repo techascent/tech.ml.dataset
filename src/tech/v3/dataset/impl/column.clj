@@ -30,7 +30,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 
-(declare new-column)
+(declare new-column construct-column)
 
 
 (defn ->persistent-map
@@ -381,6 +381,8 @@
   (row-count [this] (dtype/ecount data))
   ds-proto/PMissing
   (missing [this] missing)
+  (num-missing [this] (dtype/ecount missing))
+  (any-missing? [this] (boolean (not (.isEmpty missing))))
   ds-proto/PValidRows
   (valid-rows [this] (.xor (->bitmap (hamf/range (dtype/ecount this))) missing))
   ds-proto/PSelectRows
@@ -400,6 +402,8 @@
   (is-column? [_this] true)
   (column-buffer [_this] data)
   (empty-column? [this] (== (dtype/ecount this) (dtype/ecount missing)))
+  (column-data [_this] data)
+  (with-column-data [this new-data] (construct-column missing new-data metadata))
   ds-proto/PColumnName
   (column-name [this] (get metadata :name))
   IMutList
