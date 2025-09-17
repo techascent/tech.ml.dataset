@@ -1,4 +1,7 @@
 # Changelog
+# 7.064
+ * Small perf optimizations around sparse columns and arrow.
+ 
 # 7.063
  * Hamf upgrade - fast merge iterators, better sort operator
  * Bugfix in tech.v3.dataset.rolling - options map was ignored - now all options should be respected
