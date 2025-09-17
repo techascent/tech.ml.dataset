@@ -1513,7 +1513,16 @@ Dependent block frames are not supported!!")
   (->> validity
        (hamf-rf/reduce-reducer
         (hamf-rf/long-consumer-reducer
-         #(tech.v3.dataset.ByteValidity$ValidityIndexReducer. n-elems (* 8 (dtype/ecount validity)))))))
+         #(tech.v3.dataset.ByteValidity$ValidityIndexReducer. (cond
+                                                                (< n-elems Byte/MAX_VALUE)
+                                                                (hamf/byte-array-list)
+                                                                (< n-elems Short/MAX_VALUE)
+                                                                (hamf/short-array-list)
+                                                                (< n-elems Integer/MAX_VALUE)
+                                                                (hamf/int-array-list)
+                                                                :else
+                                                                (hamf/long-array-list))
+                                                              n-elems)))))
 
 (defn ^:no-doc byte-buffer->bitwise-boolean-buffer
   ^Buffer[bitbuffer ^long n-elems]

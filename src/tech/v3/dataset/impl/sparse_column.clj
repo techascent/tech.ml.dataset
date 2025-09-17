@@ -8,6 +8,7 @@
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as col-impl]
             [tech.v3.dataset.string-table :as str-t]
+            [tech.v3.dataset.dynamic-int-list :as int-list]
             [ham-fisted.set :as set]
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
@@ -15,7 +16,8 @@
             [ham-fisted.iterator :as hamf-iter])
   (:import [ham_fisted IMutList ArrayLists ITypedReduce ChunkedList]
            [tech.v3.datatype Buffer ObjectReader ElemwiseDatatype LongReader DoubleReader]
-           [java.util Arrays Iterator Map]))
+           [java.util Arrays Iterator Map List]
+           [tech.v3.dataset.string_table StringTable]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -30,8 +32,8 @@
                 idx (Arrays/binarySearch ^bytes idx-ary (unchecked-byte idx)))
       :int16 (hamf-fn/long-unary-operator
                  idx (Arrays/binarySearch ^shorts idx-ary (unchecked-short idx)))
-      :int32 (hamf-fn/long-unary-operator                 
-                 idx (Arrays/binarySearch ^shorts idx-ary (unchecked-short idx)))
+      :int32 (hamf-fn/long-unary-operator
+                 idx (Arrays/binarySearch ^ints idx-ary (unchecked-int idx)))
       (hamf-fn/long-unary-operator
           idx (Arrays/binarySearch ^longs idx-ary (unchecked-long idx))))))
 
@@ -258,6 +260,11 @@
   ^SparseCol [indexes data ^long rc metadata]
   (SparseCol. indexes data rc metadata nil nil))
 
+(defn- as-string-table
+  ^StringTable [d] (when (and (instance? StringTable d)
+                              (.-str->int ^StringTable d))
+                     d))
+
 (defn ->scol
   ^SparseCol [col]
   (cond
@@ -277,11 +284,21 @@
                            :else
                            (hamf/long-array valid-indexes)))
           col-dt (dt/elemwise-datatype col)
-          buf-rdr (dt/->reader col)
-          data (dt/make-container col-dt (.size valid-indexes))
-          dst (dt/->buffer data)]
-      (reduce (hamf-rf/indexed-long-accum _acc dst-idx src-idx
-                (.writeObject dst dst-idx (.readObject buf-rdr src-idx)))
+          buf-rdr (dt/->reader (ds-proto/column-data col))
+          ^IMutList data (if (identical? :string col-dt)
+                           (if-let [^StringTable strt (as-string-table (ds-proto/column-data col))]
+                             (StringTable. (.-int->str strt)
+                                           (.-str->int strt)
+                                           (int-list/dynamic-int-list (dt/ecount valid-indexes)))
+                             (str-t/make-string-table))
+                           (dt/make-list col-dt (.size valid-indexes)))]
+      (reduce (case (tech.v3.datatype.casting/simple-operation-space col-dt)
+                :int64 (fn [_acc ^long src-idx]
+                         (.addLong data (.readLong buf-rdr src-idx)))
+                :float64 (fn [_acc ^long src-idx]
+                           (.addDouble data (.readDouble buf-rdr src-idx)))
+                (fn [_acc ^long src-idx]
+                  (.add data (.readObject buf-rdr src-idx))))
               nil valid-indexes)
       (SparseCol. valid-indexes data rc (meta col) nil nil))))
 
