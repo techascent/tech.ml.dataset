@@ -183,10 +183,11 @@
     (Double/isNaN (Casts/doubleCast value))
     (not (instance? Number value))
     (or (nil? value)
-        (.equals "" value)
         (identical? value :tech.v3.dataset/missing)
-        (and (not disable-na-as-missing?)
-             (string? value) (.equalsIgnoreCase ^String value "na")))))
+        (and (string? value)
+             (or (.equals "" value)
+                 (and (not disable-na-as-missing?)
+                      (.equalsIgnoreCase ^String value "na")))))))
 
 
 (deftype FixedTypeParser [^IMutList container
@@ -488,6 +489,7 @@
                                   ^:unsynchronized-mutable ^long last-idx
                                   ^:unsynchronized-mutable ^long max-idx
                                   ^:unsynchronized-mutable ^long mc
+                                  disable-na-as-missing?
                                   options]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
@@ -509,7 +511,7 @@
   PParser
   (addValue [_p idx value]
     (set! max-idx idx)
-    (when-not (missing-value? value options)
+    (when-not (missing-value? value disable-na-as-missing?)
       (let [val-dtype (fast-dtype value)]
         ;;setup container for new data
         (when-not (identical? container-dtype val-dtype)
@@ -563,4 +565,5 @@
                             -1
                             -1
                             0
+                            (get options :disable-na-as-missing?)
                             options))

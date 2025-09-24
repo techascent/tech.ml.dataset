@@ -67,6 +67,7 @@ user> (ds-reduce/group-by-column-agg
   (:import [tech.v3.datatype Buffer]
            [java.util List HashSet ArrayList LinkedHashMap Map]
            [java.util.concurrent ConcurrentHashMap]
+           [java.util.concurrent.locks ReentrantLock]
            [java.util.function LongConsumer Consumer LongPredicate]
            [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype LongReader BooleanReader ObjectReader DoubleReader
@@ -484,15 +485,19 @@ _unnamed [4 5]:
        ([agg-map]
         (if (get options :skip-finalize?)
           agg-map
-          (let [c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer options)))]
+          (let [c ((hamf-proto/->init-val-fn (io-mapseq/mapseq-reducer options)))
+                ll (ReentrantLock.)]
             ;;Also possible to parse N datasets in parallel and do a concat-copying
             ;;operation but in my experience this steps takes up nearly no time.
             (.forEach ^ConcurrentHashMap agg-map 32
                       (hamf-fn/bi-consumer
                        k v
-                       (do
-                         (let [vv (finalize-fn v)]
-                           (locking c (.accept ^Consumer c vv))))))
+                       (let [vv (finalize-fn v)]
+                         (.lock ll)
+                         (try 
+                           (.accept ^Consumer c vv)
+                           (finally
+                             (.unlock ll))))))
             @c)))))))
 
 

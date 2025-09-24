@@ -1,4 +1,9 @@
 # Changelog
+# 7.065
+ * hamf persistent vector upgrade
+ * promotional object parser fix for na-as-missing? option
+ * Switch from object locking to reentrant locks in group-by-column-agg
+ 
 # 7.064
  * Small perf optimizations around sparse columns and arrow.
  
