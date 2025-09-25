@@ -4,7 +4,7 @@
         techascent/tech.io {:mvn/version "4.31"
                             :exclusions [org.apache.commons/commons-compress]}
         org.apache.datasketches/datasketches-java {:mvn/version "4.2.0"}
-        com.cnuernber/charred {:mvn/version "1.034"}}
+        com.cnuernber/charred {:mvn/version "1.035"}}
  :aliases
  {:codox
   {:extra-deps {codox-theme-rdash/codox-theme-rdash {:mvn/version "0.1.2"}
@@ -14,7 +14,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "7.065"
+               :version "7.066"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}

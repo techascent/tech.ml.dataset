@@ -1,4 +1,7 @@
 # Changelog
+# 7.066
+ * hamf bugfix
+ 
 # 7.065
  * hamf persistent vector upgrade
  * promotional object parser fix for na-as-missing? option
