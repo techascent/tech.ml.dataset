@@ -197,7 +197,8 @@
                           ^IMutList failed-values
                           ^RoaringBitmap failed-indexes
                           column-name
-                          ^:unsynchronized-mutable ^long max-idx]
+                          ^:unsynchronized-mutable ^long max-idx
+                          disable-na-as-missing?]
   dtype-proto/PECount
   (ecount [_this] (inc max-idx))
   Indexed
@@ -216,7 +217,7 @@
       ;;be in the space of the container or it could require the parse-fn
       ;;to make it.
       (let [parsed-value (cond
-                           (missing-value? value false)
+                           (missing-value? value disable-na-as-missing?)
                            :tech.v3.dataset/missing
                            (and (identical? (dtype/datatype value) container-dtype)
                                 (not (instance? String value)))
@@ -299,19 +300,17 @@
         missing (bitmap/->bitmap)]
     (FixedTypeParser. container dtype missing-value parse-fn
                       missing failed-values failed-indexes
-                      cname -1)))
-
+                      cname -1
+                      (get options :disable-na-as-missing?))))
 
 (defn parser-kwd-list->parser-tuples
   [kwd-list]
   (mapv parser-entry->parser-tuple kwd-list))
 
-
 (def default-parser-datatype-sequence
   [:bool :int16 :int32 :int64 :float64 :uuid
    :packed-duration :packed-local-date
    :zoned-date-time :string :text :boolean])
-
 
 (defn- promote-container
   ^IMutList [old-container ^RoaringBitmap missing new-dtype options]
