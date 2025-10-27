@@ -134,6 +134,19 @@ user> (ds-reduce/group-by-column-agg
     hamf-proto/Finalize
     (finalize [this v] (deref v))))
 
+(defn maximum-rf
+  ([]
+   Double/NaN)
+  ([eax v]
+   (if (Double/isNaN eax)
+     v
+     (max (double v) (double eax))))
+  ([eax]
+   eax))
+
+(defn maximum
+  [colname]
+  (reducer->column-reducer maximum-rf colname))
 
 (deftype BitmapConsumer [^RoaringBitmap bitmap]
   LongConsumer
@@ -494,7 +507,7 @@ _unnamed [4 5]:
                        k v
                        (let [vv (finalize-fn v)]
                          (.lock ll)
-                         (try 
+                         (try
                            (.accept ^Consumer c vv)
                            (finally
                              (.unlock ll))))))

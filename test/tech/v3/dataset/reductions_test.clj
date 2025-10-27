@@ -370,6 +370,14 @@
 
     ))
 
+(deftest maximum-test
+  (let [ds (ds/->dataset {:x (repeatedly 100 rand)})
+        ev (last (:x (ds/sort-by-column ds :x)))
+        out-ds (ds-reduce/aggregate {:max-x (ds-reduce/maximum :x)} ds)]
+    (is (= 1 (ds/row-count out-ds)))
+    (is (= (first (:max-x out-ds))
+           ev))))
+
 (comment
 
   (do
@@ -435,7 +443,7 @@
 
 
   (dotimes [idx 100]
-    (time 
+    (time
      (ds-reduce/group-by-column-agg
       :a
       (into {} (for [col (-> one-hot :one-hot-table vals)
