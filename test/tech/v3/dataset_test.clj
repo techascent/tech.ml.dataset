@@ -1756,6 +1756,12 @@
     (is (= expected-column (:a ds1)))
     (is (= expected-column (:a ds2)))))
 
+(deftest fixed-type-disable-na-as-missing
+  (let [data [{:a "no"} {:a "NA"} {:a "na"}]
+        ds1 (ds/->dataset data {:parser-fn :string :disable-na-as-missing? true})
+        ds2 (ds/->dataset data {:parser-fn :string :disable-na-as-missing? false})]
+    (is (= ["no" "NA" "na"] (:a ds1)))
+    (is (= ["no" nil nil] (:a ds2)))))
 
 (deftest sub-buffer-col-incorrect-missing
   (let [ds (-> (ds/->dataset {:a (range 20)})
