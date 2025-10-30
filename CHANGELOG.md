@@ -1,4 +1,8 @@
 # Changelog
+# 7.067
+ * :disable-na-as-missing for fixed types too
+ * new `maximum` reducer for reductions namespace
+ 
 # 7.066
  * hamf bugfix
  
