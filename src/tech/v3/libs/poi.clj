@@ -18,6 +18,7 @@
   (:require [tech.v3.io :as io]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.hamf-proto :as dtype-hamf-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.datetime :as dtype-dt]
             [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
@@ -47,7 +48,7 @@
 (defn- wrap-cell
   [^Cell cell]
   (reify
-    dtype-proto/PElemwiseDatatype
+    dtype-hamf-proto/PElemwiseDatatype
     (elemwise-datatype [this]
       (let [cell-type (.getCellType cell)]
         (if (or (= cell-type CellType/FORMULA)
@@ -62,7 +63,7 @@
     (getColumnNum [this] (.. cell getAddress getColumn))
     (missing [this] (identical? :none (dtype/get-datatype this)))
     (value [this]
-      (case (dtype-proto/elemwise-datatype this)
+      (case (dtype/elemwise-datatype this)
         :none nil
         :string (.getStringCellValue cell)
         :boolean (.getBooleanCellValue cell)

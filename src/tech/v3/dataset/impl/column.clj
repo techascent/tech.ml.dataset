@@ -421,7 +421,7 @@
   (invoke [this idx def-val] (.invoke (cached-buffer!) idx def-val))
   (meta [this] (assoc metadata
                       :datatype (dtype-hamf-proto/elemwise-datatype this)
-                      :n-elems (dtype-proto/ecount this)))
+                      :n-elems (.size this)))
   (withMeta [_this new-meta] (Column. missing
                                      data
                                      new-meta

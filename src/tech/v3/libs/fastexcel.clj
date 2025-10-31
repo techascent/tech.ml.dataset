@@ -20,6 +20,7 @@
 ```"
   (:require [tech.v3.io :as io]
             [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.hamf-proto :as dtype-hamf-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.dataset.io.spreadsheet :as parse-spreadsheet]
@@ -59,7 +60,7 @@
 (defn- wrap-cell
   [^Cell cell]
   (reify
-    dtype-proto/PElemwiseDatatype
+    dtype-hamf-proto/PElemwiseDatatype
     (elemwise-datatype [this]
       (let [cell-type (.getType cell)]
         (if (formula-type? cell-type)
@@ -73,7 +74,7 @@
     (value [this]
       (if (formula-type? (.getType cell))
         (try-parse-double cell)
-        (case (dtype-proto/elemwise-datatype this)
+        (case (dtype/elemwise-datatype this)
           :none nil
           :string (.getRawValue cell)
           :boolean (.asBoolean cell)

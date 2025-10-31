@@ -1,6 +1,7 @@
 (ns tech.v3.dataset.protocols
   (:require [tech.v3.datatype.protocols :as dtype-proto]
-            [ham-fisted.protocols :as hamf-proto])
+            [ham-fisted.protocols :as hamf-proto]
+            [tech.v3.datatype :as dtype])
   (:import [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer]
            [clojure.lang IDeref])
@@ -74,7 +75,7 @@
   PColumn
   (is-column? [item] false)
   PRowCount
-  (row-count [this] (dtype-proto/ecount this))
+  (row-count [this] (dtype/ecount this))
   PColumnCount
   (column-count [this] 0)
   PMissing

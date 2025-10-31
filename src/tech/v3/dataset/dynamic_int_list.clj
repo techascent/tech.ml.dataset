@@ -2,6 +2,7 @@
   "An int-list implementation that resizes its backing store as it is required to hold
   wider data."
   (:require [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.hamf-proto :as dtype-hamf-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.base :as dtype-base]
             [tech.v3.datatype.errors :as errors]
@@ -44,7 +45,7 @@
   (->native-buffer [_item]
     (dtype-proto/->native-buffer backing-store))
   LongBuffer
-  (elemwiseDatatype [_this] (dtype-proto/elemwise-datatype backing-store))
+  (elemwiseDatatype [_this] (dtype/elemwise-datatype backing-store))
   (clear [this]
     (set! backing-store (abuf/as-growable-list (dtype/make-list :int8 1500) 0))
     (set! int-width 8))
