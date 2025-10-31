@@ -1,6 +1,7 @@
 (ns ^:no-doc tech.v3.dataset.impl.column
   (:require [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.datatype.protocols :as dtype-proto]
+            [tech.v3.datatype.hamf-proto :as dtype-hamf-proto]
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.casting :as casting]
@@ -299,13 +300,13 @@
          (dtype-proto/convertible-to-native-buffer? data)))
   (->native-buffer [_this]
     (dtype-proto/->native-buffer data))
-  dtype-proto/PElemwiseDatatype
-  (elemwise-datatype [_this] (dtype-proto/elemwise-datatype data))
+  dtype-hamf-proto/PElemwiseDatatype
+  (elemwise-datatype [_this] (dtype-hamf-proto/elemwise-datatype data))
   dtype-proto/POperationalElemwiseDatatype
   (operational-elemwise-datatype [this]
     (if (.isEmpty missing)
-      (dtype-proto/elemwise-datatype this)
-      (let [ewise-dt (dtype-proto/elemwise-datatype data)]
+      (dtype-hamf-proto/elemwise-datatype this)
+      (let [ewise-dt (dtype-hamf-proto/elemwise-datatype data)]
         (cond
           (packing/packed-datatype? ewise-dt)
           (packing/unpack-datatype ewise-dt)
@@ -324,12 +325,12 @@
                nil)))
   dtype-proto/PElemwiseReaderCast
   (elemwise-reader-cast [this new-dtype]
-    (if (= new-dtype (dtype-proto/elemwise-datatype data))
+    (if (= new-dtype (dtype-hamf-proto/elemwise-datatype data))
       (cached-buffer!)
       (make-column-buffer missing (dtype-proto/elemwise-reader-cast data new-dtype)
                           new-dtype new-dtype)))
-  dtype-proto/PECount
-  (ecount [this] (dtype-proto/ecount data))
+  dtype-hamf-proto/PECount
+  (ecount [this] (dtype-hamf-proto/ecount data))
   dtype-proto/PToBuffer
   (convertible-to-buffer? [_this] true)
   (->buffer [this]
@@ -419,7 +420,7 @@
   (invoke [this idx] (.invoke (cached-buffer!) idx))
   (invoke [this idx def-val] (.invoke (cached-buffer!) idx def-val))
   (meta [this] (assoc metadata
-                      :datatype (dtype-proto/elemwise-datatype this)
+                      :datatype (dtype-hamf-proto/elemwise-datatype this)
                       :n-elems (dtype-proto/ecount this)))
   (withMeta [_this new-meta] (Column. missing
                                      data
@@ -432,7 +433,7 @@
   (equiv [this o] (if (identical? this o) true (.equiv (cached-buffer!) o)))
   (empty [this]
     (Column. (->bitmap)
-             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
+             (column-base/make-container (dtype-hamf-proto/elemwise-datatype this) 0)
              {}
              nil))
   (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))

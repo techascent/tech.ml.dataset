@@ -199,9 +199,8 @@
                           column-name
                           ^:unsynchronized-mutable ^long max-idx
                           disable-na-as-missing?]
-  dtype-proto/PECount
-  (ecount [_this] (inc max-idx))
   Indexed
+  (count [this] (inc max-idx))
   (nth [this idx] (.nth this idx nil))
   (nth [this idx dv]
     (let [cec (.size container)]
@@ -387,9 +386,8 @@
                                   ^:unsynchronized-mutable ^long last-idx
                                   options
                                   disable-na-as-missing?]
-  dtype-proto/PECount
-  (ecount [_this] (inc last-idx))
   Indexed
+  (count [this] (inc last-idx))
   (nth [this idx] (.nth this idx nil))
   (nth [this idx dv]
     (let [cec (.size container)]
@@ -490,9 +488,8 @@
                                   ^:unsynchronized-mutable ^long mc
                                   disable-na-as-missing?
                                   options]
-  dtype-proto/PECount
-  (ecount [_this] (inc max-idx))
   Indexed
+  (count [this] (inc max-idx))
   (nth [this idx] (.nth this idx nil))
   (nth [this idx dv]
     (let [cec (.size container)]
