@@ -230,9 +230,7 @@
   [ds]
   (->> (ds/row-mapcat ds tally-days-as-year-months
                       ;;generate a sequence of datasets
-                      {:result-type :as-seq
-                       :parser-fn {:count :int32
-                                   :year-month :object}})
+                      {:result-type :as-seq})
        ;;sequence of datasets
        (ds-reduce/group-by-column-agg
         [:simulation :placement :year-month]
