@@ -1494,7 +1494,7 @@
         fin-ds (ds-roll/rolling ds 10 {:c {:column-name [:a :b]
                                            :reducer (fn [a b]
                                                       (+ (dfn/sum a) (dfn/sum b)))
-                                           :datatype :int16}})]
+                                           :datatype :float64}})]
     (is (= :float64 (dtype/elemwise-datatype (fin-ds :c))))
     (is (= [20.0 30.0 42.0 56.0 72.0]
            (vec (take 5 (fin-ds :c)))))))
