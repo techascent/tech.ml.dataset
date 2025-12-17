@@ -1,6 +1,6 @@
 {:paths ["src" "resources" "target/classes"]
  :deps {;;org.clojure/clojure {:mvn/version "1.11.1"}
-        cnuernber/dtype-next {:mvn/version "11.000-SNAPSHOT"}
+        cnuernber/dtype-next {:mvn/version "11.001"}
         techascent/tech.io {:mvn/version "4.31"
                             :exclusions [org.apache.commons/commons-compress]}
         org.apache.datasketches/datasketches-java {:mvn/version "4.2.0"}
