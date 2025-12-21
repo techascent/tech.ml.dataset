@@ -21,12 +21,14 @@
             [ham-fisted.set :as set]
             [ham-fisted.api :as hamf]
             [ham-fisted.function :as hamf-fn]
+            [ham-fisted.defprotocol :refer [extend-type]]
             [clj-commons.primitive-math :as pmath]
             [clojure.tools.logging :as log]
             [clojure.set :as c-set])
   (:import [org.apache.commons.math3.analysis.interpolation LoessInterpolator]
            [tech.v3.datatype DoubleReader]
-           [org.roaringbitmap RoaringBitmap]))
+           [org.roaringbitmap RoaringBitmap])
+  (:refer-clojure :exclude [extend-type]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* true)

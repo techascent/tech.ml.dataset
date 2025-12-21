@@ -25,7 +25,9 @@
             [tech.v3.datatype.functional :as dfn]
             [tech.v3.tensor :as dtt]
             [tech.v3.parallel.for :as pfor]
-            [clojure.tools.logging :as log]))
+            [ham-fisted.defprotocol :refer [extend-type]]
+            [clojure.tools.logging :as log])
+  (:refer-clojure :exclude [extend-type]))
 
 
 (defn dataset->dense

@@ -15,7 +15,9 @@
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.bitmap :as bitmap]
             [ham-fisted.lazy-noncaching :as lznc]
-            [ham-fisted.set :as set]))
+            [ham-fisted.set :as set]
+            [ham-fisted.defprotocol :refer [extend-type]])
+  (:refer-clojure :exclude [extend-type]))
 
 
 (defn- indiscrete-mapping

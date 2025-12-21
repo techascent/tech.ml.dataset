@@ -1,10 +1,11 @@
 (ns tech.v3.dataset.protocols
   (:require [tech.v3.datatype.protocols :as dtype-proto]
-            [ham-fisted.protocols :as hamf-proto])
+            [ham-fisted.protocols :as hamf-proto]
+            [ham-fisted.defprotocol :refer [defprotocol extend-type extend-protocol]])
   (:import [org.roaringbitmap RoaringBitmap]
            [tech.v3.datatype Buffer]
            [clojure.lang IDeref])
-  (:refer-clojure :exclude [merge]))
+  (:refer-clojure :exclude [merge defprotocol extend-type extend-protocol]))
 
 
 (defprotocol PRowCount
@@ -128,11 +129,7 @@
 
 (extend-type Object
   PDatasetReducer
-  (ds->reducer [this ds] this)
-  (finalize-ds-reduced [this ctx]
-    (if (instance? IDeref ctx)
-      (.deref ^IDeref ctx)
-      ctx)))
+  (ds->reducer [this ds] this))
 
 ;;For large reductions we may want to combine reducers on a single column when
 ;;possible.
