@@ -76,7 +76,7 @@
    (if-let [rv (get-in options [:datatype-parsers dtype])]
      (rv dtype options)
      (case dtype
-       :string (str-table/make-string-table 0 "")
+       :string (str-table/fast-string-container)
        :text
        (let [^IMutList list-data
              (try

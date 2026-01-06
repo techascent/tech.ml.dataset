@@ -191,6 +191,8 @@
 
 (defn fast-string-container
   ([str->int int->str]
+   (when-not (instance? java.util.HashMap str->int)
+     (throw (RuntimeException. "Invalid creation of fast string container")))
    (FastStringContainer. (hamf/long-array-list)
                          int->str str->int))
   ([]

@@ -451,8 +451,8 @@
             (.add container parsed-value)
             (catch Exception e
               (throw (RuntimeException. (str "Parse failure of datatype: "
-                                             (dtype/elemwise-datatype container)
-                                             e)))))))))
+                                             (dtype/elemwise-datatype container))
+                                        e))))))))
   (finalize [_p rowcount]
     (finalize-parser-data! container missing nil nil missing-value rowcount)))
 
