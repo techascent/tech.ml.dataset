@@ -1,4 +1,8 @@
 # Changelog
+
+# 8.002
+ * small dtype-next and hamf upgrades.
+ 
 # 8.001
  * Moved to new hamf,dtype using the hamf protocols.  See hamf's defprotocol namespace for reasons.  If you are
    extending dataset protocols via extend, extend-type or extend-protocol you need to use defprotocol's drop-in
