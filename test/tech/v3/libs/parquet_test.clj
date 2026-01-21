@@ -26,7 +26,6 @@
       (.delete (java.io.File. "stocks.parquet")))))
 
 
-
 (deftest userdata1-test
   (try
     (let [testd (ds/->dataset "test/data/parquet/userdata1.parquet")

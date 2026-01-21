@@ -162,6 +162,7 @@
     com.cnuernber/benchmark {:mvn/version "1.000-beta-2"}
     org.apache.poi/poi-ooxml {:mvn/version "5.2.3"
                               :exclusions [commons-codec/commons-codec]}
+    dev.hardwoodhq/hardwood-core {:mvn/version "1.0.0-SNAPSHOT"}
     com.univocity/univocity-parsers {:mvn/version "2.9.0"}
     org.dhatim/fastexcel-reader {:mvn/version "0.16.4"
                                  :exclusions [org.apache.poi/poi-ooxml]}
