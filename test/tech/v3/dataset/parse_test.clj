@@ -7,6 +7,7 @@
             [tech.v3.dataset.zip :as zip]
             [tech.v3.dataset.column :as ds-col]
             [tech.v3.dataset.protocols :as ds-proto]
+            [tech.v3.dataset.io.nippy]
             [tech.v3.libs.arrow :as arrow]
             [tech.v3.libs.clj-transit :as ds-transit]
             [taoensso.nippy :as nippy]

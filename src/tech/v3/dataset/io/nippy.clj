@@ -36,7 +36,7 @@
      (ds-base/data->column)))
 
 
-(defmethod ds-io/data->dataset :nippy
+(defn load-nippy
   [data options]
   (ds-io/wrap-stream-fn
    data (:gzipped? options)
@@ -49,7 +49,7 @@
        retval))))
 
 
-(defmethod ds-io/dataset->data! :nippy
+(defn write-nippy!
   [dataset output options]
   (if (:gzipped? options)
     (with-open [os (io/gzip-output-stream! output)]

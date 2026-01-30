@@ -1,5 +1,8 @@
 # Changelog
 
+# 8.003
+ * hamf fixes, charred fixes, and 30% less require times when run from repl.
+ 
 # 8.002
  * small dtype-next and hamf upgrades.
  

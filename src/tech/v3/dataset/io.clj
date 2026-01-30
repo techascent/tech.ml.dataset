@@ -104,6 +104,14 @@
            (readers/mapseq-reader data)
            (apply concat (seq options)))))
 
+(defmethod data->dataset :nippy
+  [data options]
+  ((requiring-resolve 'tech.v3.dataset.io.nippy/load-nippy) data options))
+
+(defmethod dataset->data! :nippy
+  [dataset output options]
+  ((requiring-resolve 'tech.v3.dataset.io.nippy/write-nippy!) dataset output options))
+
 
 (defmethod dataset->data! :default
   [_ds _output options]
@@ -184,7 +192,7 @@
      be useful in some contexts to use the `:string` parser with sequences of maps or
      maps of columns.
   - `:parser-fn` -
-      - `keyword?` - all columns parsed to this datatype. For example:
+  v      - `keyword?` - all columns parsed to this datatype. For example:
         `{:parser-fn :string}`
       - `map?` - `{column-name parse-method}` parse each column with specified
         `parse-method`.

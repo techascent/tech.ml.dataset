@@ -91,7 +91,7 @@
      be useful in some contexts to use the `:string` parser with sequences of maps or
      maps of columns.
   - `:parser-fn` -
-      - `keyword?` - all columns parsed to this datatype. For example:
+  v      - `keyword?` - all columns parsed to this datatype. For example:
         `{:parser-fn :string}`
       - `map?` - `{column-name parse-method}` parse each column with specified
         `parse-method`.

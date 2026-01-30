@@ -24,7 +24,6 @@
             [tech.v3.dataset.utils :as ds-utils]
             [tech.v3.dataset.io.mapseq-colmap :as io-mapseq]
             ;;csv/tsv load/save provided by default
-            [tech.v3.dataset.io.nippy]
             [tech.v3.dataset.io.csv]
             [tech.v3.dataset.zip]
             [ham-fisted.api :as hamf]
