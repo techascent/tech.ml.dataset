@@ -1861,6 +1861,14 @@
 (deftest stacked-rolling
   (stacked-rolling-fn))
 
+(deftest issue-469-emap-read-sub-buffer
+  (let [df2 (ds/->dataset (repeat 1024 {:a 1 :b 2 :c 3}))]
+    (is (= (vec (repeat 5 {:a 1 :b 2 :c 3 :d 1}))
+           (vec (ds/rows (ds/head (ds/column-map df2 :d (fn [a b c] 1) [:a :b :c]) 5)))))
+    (is (= (vec (repeat 5 {:a 1 :b 2 :c 3 :d 1}))
+           (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^long [a b c] 1) [:a :b :c]) 5)))))
+    (is (= (vec (repeat 5 {:a 1 :b 2 :c 3 :d 1.0}))
+           (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^double [a b c] 1.0) [:a :b :c]) 5)))))))
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
