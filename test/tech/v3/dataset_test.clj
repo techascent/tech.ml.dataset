@@ -1299,7 +1299,7 @@
   (let [src-ds (ds/->dataset {:a [1 2 nil 4]})
         dst-ds (assoc src-ds :b (dfn/+ (:a src-ds ) 1))]
     (is (= 1 (dtype/ecount (ds/missing (dst-ds :b)))))
-    (is (= [2.0 3.0 nil 5.0]
+    (is (= [2.0 3.0 ##NaN 5.0]
            (vec (dst-ds :b))))))
 
 
@@ -1869,6 +1869,13 @@
            (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^long [a b c] 1) [:a :b :c]) 5)))))
     (is (= (vec (repeat 5 {:a 1 :b 2 :c 3 :d 1.0}))
            (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^double [a b c] 1.0) [:a :b :c]) 5)))))))
+
+(deftest tc-issue-200
+  (let [ds (ds/->dataset {:a [0 Double/NaN 2]})
+        ]))
+
+
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))

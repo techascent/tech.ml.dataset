@@ -315,9 +315,12 @@
       retval
       (throw (RuntimeException. (str "Column not found: " cname)))))
 
-  (rowvecs [ds options]
+  (rowvecs [ds {:keys [datatype] :as options}]
     (let [readers (hamf/object-array-list
-                   (lznc/map dtype/->reader columns))
+                   (lznc/map (if datatype
+                               #(dtype-proto/elemwise-reader-cast % datatype)
+                               dtype/->reader)
+                             columns))
           n-cols (count readers)
           n-rows (long (ds-proto/row-count ds))
           copying? (get options :copying? true)
@@ -335,24 +338,24 @@
               8 (row-vec-copying 8)
               (let [crange (hamf/range n-cols)]
                 (hamf-fn/long->obj
-                 row-idx
-                 (->> crange
-                      (lznc/map (hamf-fn/long->obj
-                                 col-idx (.readObject ^Buffer (.get readers col-idx) row-idx)))
-                      (hamf/vec)))))
+                    row-idx
+                    (->> crange
+                         (lznc/map (hamf-fn/long->obj
+                                       col-idx (.readObject ^Buffer (.get readers col-idx) row-idx)))
+                         (hamf/vec)))))
             ;;Non-copying in-place reader
             (let [crange (hamf/range n-cols)]
               (hamf-fn/long->obj
-               row-idx
-               (reify ObjectReader
-                 (lsize [this] n-cols)
-                 (readObject [this col-idx]
-                   (.readObject ^Buffer (.get readers col-idx) row-idx))
-                 (reduce [this rfn acc]
-                   (reduce (hamf-rf/long-accumulator
-                            acc col-idx (rfn acc ((.get readers col-idx) row-idx)))
-                           acc
-                           crange))))))]
+                  row-idx
+                  (reify ObjectReader
+                    (lsize [this] n-cols)
+                    (readObject [this col-idx]
+                      (.readObject ^Buffer (.get readers col-idx) row-idx))
+                    (reduce [this rfn acc]
+                      (reduce (hamf-rf/long-accumulator
+                                  acc col-idx (rfn acc ((.get readers col-idx) row-idx)))
+                              acc
+                              crange))))))]
       (reify ObjectReader
         (lsize [rdr] n-rows)
         (readObject [rdr row-idx] (.invokePrim row-fn row-idx))
@@ -361,8 +364,8 @@
               (ds-proto/rowvecs options)))
         (reduce [rdr rfn acc]
           (reduce (hamf-rf/long-accumulator
-                   acc row-idx
-                   (rfn acc (.invokePrim row-fn row-idx)))
+                      acc row-idx
+                      (rfn acc (.invokePrim row-fn row-idx)))
                   acc (hamf/range n-rows))))))
 
 

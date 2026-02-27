@@ -41,7 +41,7 @@
 
 
 (defn- reduce-column-buffer
-  [rfn acc src missing primitive-missing-value sidx eidx]
+  [rfn acc src missing primitive-missing-value missing-value sidx eidx]
   (let [sidx (long sidx)
         eidx (long eidx)
         ^RoaringBitmap missing missing
@@ -52,10 +52,10 @@
                                     (RoaringBitmap/and missing (bitmap/->bitmap sidx eidx))))
         ^java.util.function.LongBinaryOperator next-missing
         (hamf-fn/long-binary-operator
-         sidx next-missing-idx
-         (if (== sidx next-missing-idx)
-           (long (if (.hasNext int-iter) (Integer/toUnsignedLong (.next int-iter)) -1))
-           next-missing-idx))
+            sidx next-missing-idx
+            (if (== sidx next-missing-idx)
+              (long (if (.hasNext int-iter) (Integer/toUnsignedLong (.next int-iter)) -1))
+              next-missing-idx))
         missing-idx (.applyAsLong next-missing 0 0)]
     (cond
       (instance? IFn$OLO rfn)
@@ -90,7 +90,7 @@
              missing-idx missing-idx]
         (if (< sidx eidx)
           (let [acc (rfn acc (if (== sidx missing-idx)
-                               nil
+                               missing-value
                                (.readObject src sidx)))]
             (if (reduced? acc)
               (deref acc)
@@ -98,7 +98,7 @@
           acc)))))
 
 (defn- kv-reduce-column-buffer
-  [rfn acc src missing primitive-missing-value sidx eidx]
+  [rfn acc src missing primitive-missing-value missing-value op-dtype sidx eidx]
   (let [sidx (long sidx)
         eidx (long eidx)
         ^RoaringBitmap missing missing
@@ -130,7 +130,8 @@
 (defn ^:no-doc make-column-buffer
   (^Buffer [^RoaringBitmap missing data dtype op-dtype]
    (let [^Buffer src (dtype-proto/->buffer data)
-         missing-value (column-base/datatype->missing-value dtype)
+         missing-value (when (identical? dtype op-dtype)
+                         (column-base/datatype->missing-value dtype))
          primitive-missing-value (column-base/datatype->packed-missing-value dtype)]
      ;;Sometimes we can utilize a pure passthrough.
      (if (.isEmpty missing)
@@ -170,7 +171,8 @@
                  (readObject [rdr idx] (.readObject this (+ idx sidx)))
                  (reduce [this rfn acc]
                    (reduce-column-buffer rfn acc src missing
-                                         primitive-missing-value sidx eidx))
+                                         primitive-missing-value missing-value
+                                         sidx eidx))
                  (kvreduce [this rfn acc]
                    (kv-reduce-column-buffer rfn acc src missing primitive-missing-value sidx eidx))))))
          (readLong [this idx]
@@ -182,7 +184,8 @@
              Double/NaN
              (.readDouble src idx)))
          (readObject [this idx]
-           (when-not (.contains missing idx)
+           (if (.contains missing idx)
+             missing-value
              (.readObject src idx)))
          (writeLong [this idx val]
            (.remove missing (unchecked-int idx))
@@ -197,7 +200,7 @@
                (.writeObject src idx val))
              (.add missing (unchecked-int idx))))
          (reduce [this rfn acc]
-           (reduce-column-buffer rfn acc src missing primitive-missing-value
+           (reduce-column-buffer rfn acc src missing primitive-missing-value missing-value
                                  0 (.lsize src)))
          (kvreduce [this rfn acc]
            (kv-reduce-column-buffer rfn acc src missing primitive-missing-value
