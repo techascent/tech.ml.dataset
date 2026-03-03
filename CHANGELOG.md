@@ -1,7 +1,7 @@
 # Changelog
-
-# 8.003
+# 8.007
  * hamf fixes, charred fixes, and 30% less require times when run from repl.
+ * dytpe upgrades for tensor fixes
  
 # 8.002
  * small dtype-next and hamf upgrades.
