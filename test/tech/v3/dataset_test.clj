@@ -1869,6 +1869,10 @@
            (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^long [a b c] 1) [:a :b :c]) 5)))))
     (is (= (vec (repeat 5 {:a 1 :b 2 :c 3 :d 1.0}))
            (vec (ds/rows (ds/head (ds/column-map df2 :d (fn ^double [a b c] 1.0) [:a :b :c]) 5)))))))
+
+(deftest issue-470-print-const-column-fails
+  (is (string? (str (tech.v3.dataset/->dataset {:a (tech.v3.datatype/const-reader 1.0e10 10)})))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
