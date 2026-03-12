@@ -67,7 +67,7 @@
   [matrix]
   (->> (n-core/cols matrix)
        (map dtt/ensure-tensor)
-       (ds-impl/new-dataset :neandtheral)))
+       (ds-impl/new-dataset :neanderthal)))
 
 
 (defn fit-pca!
