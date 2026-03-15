@@ -1,4 +1,7 @@
 # Changelog
+# 8.008
+ * hamf fix for lazy noncaching concat, apply-concat
+
 # 8.007
  * hamf fixes, charred fixes, and 30% less require times when run from repl.
  * dytpe upgrades for tensor fixes
