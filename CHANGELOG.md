@@ -1,4 +1,7 @@
 # Changelog
+# 8.009
+ * hamf upgrade - fix for pmap-io with empty sequences.
+ 
 # 8.008
  * hamf fix for lazy noncaching concat, apply-concat
 
