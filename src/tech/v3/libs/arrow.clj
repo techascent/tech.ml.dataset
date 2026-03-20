@@ -144,7 +144,6 @@
            [com.github.luben.zstd Zstd]
            [org.apache.commons.compress.compressors.lz4 FramedLZ4CompressorInputStream
             FramedLZ4CompressorOutputStream]
-           [net.jpountz.lz4 LZ4Factory]
            ;;feather support
            [java.io RandomAccessFile BufferedInputStream ByteArrayInputStream
             ByteArrayOutputStream]
@@ -199,7 +198,6 @@
               (.position bb (+ (.position bb) written))
               written)))
         (WriteChannel.))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Compression -
@@ -266,18 +264,7 @@
 
 (defn- create-jpnz-lz4-frame-compressor
   [comp-map]
-  (assert (= :lz4 (get comp-map :compression-type)))
-  (fn [compbuf dstbuf]
-    (let [^ByteArrayOutputStream dstbuf (or dstbuf (ByteArrayOutputStream.))
-          os (net.jpountz.lz4.LZ4FrameOutputStream. dstbuf)
-          srcbuf (ensure-bytes-array-buffer compbuf)
-          ^bytes src-data (.ary-data srcbuf)]
-      (.write os src-data (unchecked-int (.offset srcbuf)) (unchecked-int (.n-elems srcbuf)))
-      (.close os)
-      (let [final-bytes (.toByteArray dstbuf)]
-        (.reset dstbuf)
-        {:writer-cache dstbuf
-         :dst-buffer final-bytes}))))
+  ((requiring-resolve 'tech.v3.libs.arrow.jpnz-lz4/create-jpnz-lz4-frame-compressor) comp-map))
 
 
 (defonce ^:private init-liblz4* (delay ((requiring-resolve 'tech.v3.libs.arrow.liblz4/initialize!))))

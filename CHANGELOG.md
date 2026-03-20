@@ -1,4 +1,7 @@
 # Changelog
+# 8.013
+ * Remove direct dependency on jpounz lz4 wrapper for arrow - load when necessary.
+ 
 # 8.012
  * Fix for tc issue 203 - failed unary application of binary operator
  
