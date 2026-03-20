@@ -301,15 +301,7 @@
              (dtype/copy! n-dstbuf dstbuf))
            dstbuf))))
     (catch Exception e
-      (log/warn "Unable to load native lz4 library, falling back to jpountz.
-Dependent block frames are not supported!!")
-      (fn [srcbuf dstbuf]
-        (let [src-byte-data (dtype/->byte-array srcbuf)
-              bis (ByteArrayInputStream. src-byte-data)
-              is (net.jpountz.lz4.LZ4FrameInputStream. bis)
-              temp-dstbuf (byte-array (dtype/ecount dstbuf))]
-          (.read is temp-dstbuf)
-          (dtype/copy! temp-dstbuf dstbuf))))))
+      ((requiring-resolve 'tech.v3.libs.arrow.jpnz-lz4/create-jpnz-lz4-decompressor)))))
 
 
 (def ^:private compression-info
