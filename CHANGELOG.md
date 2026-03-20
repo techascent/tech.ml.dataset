@@ -1,5 +1,8 @@
 # Changelog
-# 8.009
+# 8.012
+ * Fix for tc issue 203 - failed unary application of binary operator
+ 
+# 8.011
  * hamf upgrade - fix for pmap-io with empty sequences.
  
 # 8.008
