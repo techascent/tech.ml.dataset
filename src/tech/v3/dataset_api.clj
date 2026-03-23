@@ -601,7 +601,7 @@ test/data/stocks.csv [10 3]:
   [col missing scalar-val]
   (let [missing (bitmap/->bitmap missing)]
     (if (.isEmpty missing)
-      col      
+      col
       (let [cbuf (dtype/->buffer (ds-proto/column-buffer col))
             col-dt (dtype/elemwise-datatype col)
             ec (.lsize cbuf)]
@@ -1468,6 +1468,27 @@ _unnamed [4 5]:
                                                 cnames
                                                 (column-names final-ds))))))))))
 
+
+(defn transpose-by-key
+  "Transposes a dataset by turning the values in column `k` into new column headers.
+
+  The remaining columns are rotated such that their original names become a
+  metadata column (defaulting to `:col`).
+
+  Arguments:
+  * `ds`: The source dataset (tech.ml.dataset).
+  * `k`: The column key whose row values will become the new column names.
+  * `options`: (Optional) A map where `:column-name` specifies the name of the
+    newly created column containing the old header names. Defaults to `:col`.
+
+  Returns a new dataset where rows have been flipped to columns based on `k`."
+  ([ds k] (transpose-by-key ds k nil))
+  ([ds k options]
+   (column ds k)
+   (let [sub-ds (dissoc ds k)]
+     (->> (lznc/map hamf/vector (column ds k) (rowvecs sub-ds))
+          (into {(get options :column-name :col) (column-names sub-ds)})
+          (->>dataset)))))
 
 
 (comment
