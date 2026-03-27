@@ -1,4 +1,7 @@
 # Changelog
+# 8.015
+ * dtype-next upgrade and new api fn - transpose-by-key
+ 
 # 8.014
  * Remove direct dependency on jpounz lz4 wrapper for arrow - load when necessary.
  

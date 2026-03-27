@@ -1333,6 +1333,25 @@ user> (take 5 (ds/rowvecs stocks))
   (tech.v3.dataset.metamorph-api/train-test-split )))
 
 
+(defn transpose-by-key
+  "Transposes a dataset by turning the values in column `k` into new column headers.
+
+  The remaining columns are rotated such that their original names become a
+  metadata column (defaulting to `:col`).
+
+  Arguments:
+  * `ds`: The source dataset (tech.ml.dataset).
+  * `k`: The column key whose row values will become the new column names.
+  * `options`: (Optional) A map where `:column-name` specifies the name of the
+    newly created column containing the old header names. Defaults to `:col`.
+
+  Returns a new dataset where rows have been flipped to columns based on `k`."
+  ([k]
+  (tech.v3.dataset.metamorph-api/transpose-by-key k))
+  ([k options]
+  (tech.v3.dataset.metamorph-api/transpose-by-key k options)))
+
+
 (defn unique-by
   "Map-fn function gets passed map for each row, rows are grouped by the
   return value.  Keep-fn is used to decide the index to keep.
