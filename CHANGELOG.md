@@ -1,4 +1,7 @@
 # Changelog
+# 8.016
+ * Fix for https://github.com/techascent/tech.ml.dataset/issues/474
+ 
 # 8.015
  * dtype-next upgrade and new api fn - transpose-by-key
  
