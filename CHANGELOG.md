@@ -1,4 +1,7 @@
 # Changelog
+# 8.017
+ * Dtype, hamf fixes.
+ 
 # 8.016
  * Fix for https://github.com/techascent/tech.ml.dataset/issues/474
  
