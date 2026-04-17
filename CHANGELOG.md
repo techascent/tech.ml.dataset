@@ -1,4 +1,7 @@
 # Changelog
+# 8.018
+ * hamf upgrade
+ 
 # 8.017
  * Dtype, hamf fixes.
  
