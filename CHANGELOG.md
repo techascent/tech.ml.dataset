@@ -1,4 +1,7 @@
 # Changelog
+# 8.019
+ * hamf, dtype-next and tech.io upgrades
+ 
 # 8.018
  * hamf upgrade
  
