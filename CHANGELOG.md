@@ -1,4 +1,7 @@
 # Changelog
+# 8.020
+ * hamf upgrade for better spliterator and fork join pool support.
+ 
 # 8.019
  * hamf, dtype-next and tech.io upgrades
  
