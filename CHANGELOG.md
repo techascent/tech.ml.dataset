@@ -1,4 +1,8 @@
 # Changelog
+# 8.021
+ * Added compress namespace to do simple generic column-based compression.  Could be expanded to support btrblocks-type compression
+   for numeric columns.  Currently undocumented - use compress-ds or compress-column.
+ 
 # 8.020
  * hamf upgrade for better spliterator and fork join pool support.
  

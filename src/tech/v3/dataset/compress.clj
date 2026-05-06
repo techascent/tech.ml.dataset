@@ -3,11 +3,10 @@
             [tech.v3.datatype :as dt]
             [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.casting :as casting]
+            [tech.v3.datatype.packing :as packing]
             [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.impl.column :as ds-col]
-            [tech.v3.datatype.bitmap :as dt-bitmap]
-            [ham-fisted.print :refer [implement-tostring-print]]
-            [ham-fisted.set :as hamf-set])
+            [ham-fisted.print :refer [implement-tostring-print]])
   (:import [ham_fisted IMutList ArrayLists]
            [tech.v3.datatype LongBuffer DoubleBuffer ObjectBuffer Buffer]
            [java.util Map Set]))
@@ -30,33 +29,36 @@
   dt-proto/PSubBuffer (sub-buffer [_ off len]
                         (let [off (long off) len (long len)
                               ^IMutList ll (-> (ArrayLists/toList data)
-                                               (.subList off (+ (long off) (long len))))]
+                                               (.subList off (+ off len)))]
                           (OffsetBuffer. offset dtype (long (.size ll)) (.toNativeArray ll))))
   dt-proto/PToBuffer
   (convertible-to-buffer? [_] true)
   (->buffer [_]
-    (let [mm (ArrayLists/toList data)]
-      (case dtype
-        :int8 (reify LongBuffer
-                (elemwiseDatatype [_] dtype)
-                (lsize [_] n-elems)
-                (readLong [_ idx] (+ offset (.getLong mm idx)))
-                (readObject [t idx] (unchecked-byte (.readLong t idx))))
-        (:int16 :uint8) (reify LongBuffer
-                          (elemwiseDatatype [_] dtype)
-                          (lsize [_] n-elems)
-                          (readLong [_ idx] (+ offset (.getLong mm idx)))
-                          (readObject [t idx] (unchecked-short (.readLong t idx))))
-        (:int32 :uint16) (reify LongBuffer
-                           (elemwiseDatatype [_] dtype)
-                           (lsize [_] n-elems)
-                           (readLong [_ idx] (+ offset (.getLong mm idx)))
-                           (readObject [t idx] (unchecked-int (.readLong t idx))))
-        (reify LongBuffer
-          (elemwiseDatatype [_] dtype)
-          (lsize [_] n-elems)
-          (readLong [_ idx] (+ offset (.getLong mm idx)))
-          (readObject [t idx] (.readLong t idx))))))
+    (let [mm (ArrayLists/toList data)
+          rv (case dtype
+               :int8 (reify LongBuffer
+                       (elemwiseDatatype [_] dtype)
+                       (lsize [_] n-elems)
+                       (readLong [_ idx] (+ offset (.getLong mm idx)))
+                       (readObject [t idx] (unchecked-byte (.readLong t idx))))
+               (:int16 :uint8) (reify LongBuffer
+                                 (elemwiseDatatype [_] dtype)
+                                 (lsize [_] n-elems)
+                                 (readLong [_ idx] (+ offset (.getLong mm idx)))
+                                 (readObject [t idx] (unchecked-short (.readLong t idx))))
+               (:int32 :uint16) (reify LongBuffer
+                                  (elemwiseDatatype [_] dtype)
+                                  (lsize [_] n-elems)
+                                  (readLong [_ idx] (+ offset (.getLong mm idx)))
+                                  (readObject [t idx] (unchecked-int (.readLong t idx))))
+               (reify LongBuffer
+                 (elemwiseDatatype [_] dtype)
+                 (lsize [_] n-elems)
+                 (readLong [_ idx] (+ offset (.getLong mm idx)))
+                 (readObject [t idx] (.readLong t idx))))]
+      (if (packing/packed-datatype? dtype)
+        (packing/unpack rv)
+        rv)))
   ToMap
   (toMap [_] {:compressed-buffer-type :offset-buffer :offset offset :dtype dtype :n-elems n-elems :data data
               :data-dtype (dt/elemwise-datatype data)})
@@ -253,14 +255,23 @@
 (defn compress-ds
   [ds & {:as opts}]
   (when ds
-    (->> (.keySet ^Map ds)
-         (reduce (fn [ds cname]
-                   (update ds cname #(compress-column % opts)))
+    (->> (.values ^Map ds)
+         (hamf/pmap #(compress-column % opts))
+         (reduce (fn [ds col]
+                   (assoc ds (ds-proto/column-name col) col))
                  ds))))
 
 (comment
   (require '[tech.v3.dataset :as ds])
-  (def ds (ds/->dataset {:a (vec (range 100))
-                         :b (repeat 100 :a)
-                         :c (take 100 (cycle [:a :b :c]))}))
+
+  (def ds (ds/->dataset {:a (-> (vec (range 100))
+                                (assoc 1 nil 30 nil))
+                         :b (-> (vec (repeat 100 :a))
+                                (assoc 3 nil 98 nil))
+                         :c (take 100 (cycle [:a :b :c]))
+                         :d (vec (tech.v3.datatype.datetime.operations/plus-temporal-amount
+                                  (dt/make-container :packed-local-date (repeat 100 (java.time.LocalDate/now)))
+                                  (range 100)
+                                  :days))}))
+  (def cds (compress-ds ds))
   :-)
