@@ -10,6 +10,19 @@
 
 (set! *warn-on-reflection* true)
 
+(defn- smallest-integer [^long n]
+  (cond
+    (and (>= n Byte/MIN_VALUE) (<= n Byte/MAX_VALUE)) (unchecked-byte n)
+    (and (>= n Short/MIN_VALUE) (<= n Short/MAX_VALUE)) (unchecked-short n)
+    (and (>= n Integer/MIN_VALUE) (<= n Integer/MAX_VALUE)) (unchecked-int n)
+    :else n))
+
+(defn maybe-coerce-number
+  [n]
+  (if (number? n)
+    (let [n (double n)]
+      (if (= n (double (long n))) (smallest-integer (long n)) n))
+    n))
 
 (defn sheet->dataset
   [^Spreadsheet$Sheet sheet
@@ -35,7 +48,7 @@
                        (let [column-number (.getColumnNum cell)]
                          [column-number (.value cell)])))
                 (into {}))
-            (rest rows)]
+           (rest rows)]
           [{} rows])
         {:keys [parsers col-idx->parser]}
         (parse-context/options->col-idx-parse-context options :object header-row)
@@ -47,8 +60,8 @@
             (when-not (.missing cell)
               (case (dtype/elemwise-datatype cell)
                 :boolean (column-parsers/add-value! parser row-num (.boolValue cell))
-                :float64 (column-parsers/add-value! parser row-num (.doubleValue cell))
-                (column-parsers/add-value! parser row-num (.value cell))))))))
+                :float64 (column-parsers/add-value! parser row-num (maybe-coerce-number (.doubleValue cell)))
+                (column-parsers/add-value! parser row-num (maybe-coerce-number (.value cell)))))))))
     ;;Fill out columns that only have missing values
     (when-not (== 0 (count parsers))
       (let [max-col-idx (->> parsers

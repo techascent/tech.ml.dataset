@@ -21,7 +21,7 @@
            (set (ds/column-names ds))))
     (is (= #{"column-0" "Age" "Country" "First Name" "Gender" "Date" "Last Name" "Id"}
            (set (ds/column-names ds2))))
-    (is (= #{:float64 :string}
+    (is (= #{:int16 :int8 :string}
            (set (map dtype/get-datatype (ds/columns ds)))))
     (is (= 1000 (ds/row-count ds)))
     (is (= 1000 (ds/row-count ds2)))
@@ -37,7 +37,7 @@
     (is (= 8 (ds/column-count ds)))
     (is (every? #(= (set (range 8)) %)
                 (map (comp set ds-col/missing ds) ["column-0" "a" "column-6"])))
-    (is (= [1.0 1.0 1.0 "a" 2.0 23.0]
+    (is (= [1 1 1 "a" 2 23]
            (->> (ds/columns ds)
                 (mapcat (comp dtype/->reader ds/drop-missing))
                 vec)))))
