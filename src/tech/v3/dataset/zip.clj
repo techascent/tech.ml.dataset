@@ -57,7 +57,7 @@
   [data options]
   (let [ds-seq (zipfile->dataset-seq data options)
         rv (first ds-seq)]
-    (when (rest ds-seq)
+    (when (next ds-seq)
       ;;forces the input stream to close.
       (dorun ds-seq)
       (log/warnf "Multiple entries found in zipfile"))
