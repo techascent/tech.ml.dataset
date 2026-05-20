@@ -1,4 +1,7 @@
 # Changelog
+# 8.022
+ * Fixes for issues https://github.com/techascent/tech.ml.dataset/issues/476 & https://github.com/techascent/tech.ml.dataset/issues/477
+ 
 # 8.021
  * Added compress namespace to do simple generic column-based compression.  Could be expanded to support btrblocks-type compression
    for numeric columns.  Currently undocumented - use compress-ds or compress-column.
