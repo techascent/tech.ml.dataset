@@ -1,4 +1,8 @@
 # Changelog
+# 8.023 
+ * Fix for clj-kondo configs for dtype-next
+ * Fix for hamf's process system
+ 
 # 8.022
  * Fixes for issues https://github.com/techascent/tech.ml.dataset/issues/476 & https://github.com/techascent/tech.ml.dataset/issues/477
  
