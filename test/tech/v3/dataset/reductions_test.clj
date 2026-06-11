@@ -376,6 +376,18 @@
     (is (= (first (:max-x out-ds))
            ev))))
 
+(deftest issue-478
+  (let [bs 5000
+        n  (* 80 bs)
+        d  (ds/->dataset {:g (map #(quot % bs) (range n))
+                          :v (range n)})
+        out (ds-reduce/group-by-column-agg :g {:first (ds-reduce/first-value :v) ;; expected: g*bs
+                                               :min   (ds-reduce/minimum :v)} ;; control: always correct
+                                           d)
+        ff (seq (filter (fn [{:keys [g first]}] (not= (long first) (* (long g) bs)))
+                        (ds/rows out)))]
+    (is (nil? ff))))
+
 (comment
 
   (do

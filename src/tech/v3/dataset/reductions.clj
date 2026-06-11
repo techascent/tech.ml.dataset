@@ -87,22 +87,29 @@ user> (ds-reduce/group-by-column-agg
   ([reducer op-space cname]
    (impl/reducer->column-reducer reducer op-space cname)))
 
-
 (defn first-value
   [colname]
-  (reify ds-proto/PDatasetReducer
-    (ds->reducer [this ds]
-      (let [col (ds-base/column ds colname)]
-        (reify
-          hamf-proto/Reducer
-          (->init-val-fn [r] (constantly nil))
-          (->rfn [r] (fn [acc ^long v] (if acc acc (clojure.lang.Box. (.nth ^clojure.lang.Indexed col v)))))
-          hamf-proto/ParallelReducer
-          (->merge-fn [r] (fn [l r] l)))))
-    (merge [this l r] l)
-    hamf-proto/Finalize
-    (finalize [this v] (if v (.-val ^clojure.lang.Box v) v))))
-
+  (let [keep-earlier (fn [l r]
+                       (cond (nil? l) r
+                             (nil? r) l
+                             (<= (long (key l)) (long (key r))) l
+                             :else r))]
+    (reify ds-proto/PDatasetReducer
+      (ds->reducer [this ds]
+        (let [col (ds-base/column ds colname)]
+          (reify
+            hamf-proto/Reducer
+            (->init-val-fn [r] (constantly nil))
+            ;; keep the entry with the SMALLEST row index, not the first seen
+            (->rfn [r] (fn [acc ^long v]
+                         (if (and acc (<= (long (key acc)) v))
+                           acc
+                           (clojure.lang.MapEntry/create v (.nth ^clojure.lang.Indexed col v)))))
+            hamf-proto/ParallelReducer
+            (->merge-fn [r] keep-earlier))))
+      (merge [this l r] (keep-earlier l r))            ;; commutative, not (fn [l r] l)
+      hamf-proto/Finalize
+      (finalize [this v] (when v (val v))))))
 
 (defn sum
   "Create a double consumer which will sum the values."
@@ -147,6 +154,20 @@ user> (ds-reduce/group-by-column-agg
 (defn maximum
   [colname]
   (reducer->column-reducer maximum-rf colname))
+
+(defn minimum-rf
+  ([]
+   Double/NaN)
+  ([eax v]
+   (if (Double/isNaN eax)
+     v
+     (min (double v) (double eax))))
+  ([eax]
+   eax))
+
+(defn minimum
+  [colname]
+  (reducer->column-reducer minimum-rf colname))
 
 (deftype BitmapConsumer [^RoaringBitmap bitmap]
   LongConsumer
