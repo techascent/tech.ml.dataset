@@ -187,7 +187,11 @@
   clojure.lang.IDeref
   (deref [this]
     (StringTable. (hamf/vec int->str) (.clone str->int)
-                  (compress-indexes indexes (long (.size str->int))))))
+                  (compress-indexes indexes (long (.size str->int)))))
+  Object
+  (toString [this] (ham_fisted.Transformables/sequenceToString this)))
+
+(ham-fisted.print/implement-tostring-print FastStringContainer)
 
 (defn fast-string-container
   ([str->int int->str]

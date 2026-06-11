@@ -1,4 +1,18 @@
 # Changelog
+# 8.023 
+ * Fix for clj-kondo configs for dtype-next
+ * Fix for hamf's process system
+ 
+# 8.022
+ * Fixes for issues https://github.com/techascent/tech.ml.dataset/issues/476 & https://github.com/techascent/tech.ml.dataset/issues/477
+ 
+# 8.021
+ * Added compress namespace to do simple generic column-based compression.  Could be expanded to support btrblocks-type compression
+   for numeric columns.  Currently undocumented - use compress-ds or compress-column.
+ 
+# 8.020
+ * hamf upgrade for better spliterator and fork join pool support.
+ 
 # 8.019
  * hamf, dtype-next and tech.io upgrades
  

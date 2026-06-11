@@ -2,10 +2,13 @@
   "Transit bindings for the jvm version of tech.v3.dataset."
   (:require [tech.v3.dataset :as ds]
             [tech.v3.dataset.impl.dataset :as ds-impl]
+            [tech.v3.dataset.protocols :as ds-proto]
             [tech.v3.dataset.io :as ds-io]
             [tech.v3.dataset.dynamic-int-list :as int-list]
+            [tech.v3.dataset.compress :as ds-compress]
             [tech.v3.io :as io]
             [tech.v3.datatype :as dtype]
+            [tech.v3.datatype.protocols :as dt-proto]
             [tech.v3.datatype.errors :as errors]
             [tech.v3.datatype.casting :as casting]
             [tech.v3.datatype.packing :as packing]
@@ -121,7 +124,8 @@
 
 (defn- col->data
   [col]
-  (let [col-dt (packing/unpack-datatype (dtype/elemwise-datatype col))]
+  (let [col-dt (packing/unpack-datatype (dtype/elemwise-datatype col))
+        cbuf (ds-proto/column-buffer col)]
     {:metadata (assoc (meta col) :datatype col-dt)
      :missing (vec (-> (ds/missing col)
                        (bitmap/->random-access)
@@ -129,11 +133,13 @@
                        vec))
      :data
      (cond
+       (ds-compress/compressed-buffer? cbuf)
+       (ds-compress/compressed-buffer->map cbuf)
        (casting/numeric-type? col-dt)
        (numeric-data->b64 col)
        (= :boolean col-dt)
        (numeric-data->b64 (dtype/make-reader  :uint8 (count col)
-                                             (if (col idx) 1 0)))
+                                              (if (col idx) 1 0)))
        (= :string col-dt)
        (string-col->data col)
        (= :text col-dt)
@@ -204,45 +210,50 @@
            (Text. (.substring buffer prev-offset (.readLong offsets idx))))))))
 
 
+(def ddd (atom nil))
 (defn ^:no-doc data->dataset
   [{:keys [columns] :as ds-data}]
+  (reset! ddd ds-data)
   (let [ds-meta (:metadata ds-data)]
     (errors/when-not-errorf
-      (and ds-meta columns)
-      "Passed in data does not appear to have metadata or columns")
-    (->> (:columns ds-data)
-         (map
-           (fn [{:keys [metadata missing data]}]
-             (let [dtype (:datatype metadata)]
-               #:tech.v3.dataset{:metadata metadata
-                                 :missing (bitmap/->bitmap missing)
-                                 ;;do not re-scan data.
-                                 :force-datatype? true
-                                 :data
-                                  (cond
-                                    (casting/numeric-type? dtype)
-                                    (b64->numeric-data data dtype)
-                                    (= :boolean dtype)
-                                    (let [ibuf (b64->numeric-data data :int8)]
-                                      (dtype/make-reader :boolean (count ibuf)
-                                                         (if (== 0 (unchecked-long (ibuf idx)))
-                                                           false true)))
-                                    (= :string dtype)
-                                    (str-data->coldata data)
-                                    (= :text dtype)
-                                    (text-data->coldata data)
-                                    (= :local-date dtype)
-                                    (-> (b64->numeric-data data :int32)
-                                        (dtype/->array-buffer)
-                                        (abuf/set-datatype :packed-local-date))
-                                    (= :instant dtype)
-                                    (-> (b64->numeric-data data :int64)
-                                        (dtype/->array-buffer)
-                                        (abuf/set-datatype :packed-milli-instant))
-                                    :else
-                                    (dtype/make-container dtype data))
-                                 :name            (:name metadata)})))
-         (ds-impl/new-dataset {:dataset-name (:name ds-meta)} ds-meta))))
+     (and ds-meta columns)
+     "Passed in data does not appear to have metadata or columns")
+    (->>
+     (:columns ds-data)
+     (map
+      (fn [{:keys [metadata missing data]}]
+        (let [dtype (:datatype metadata)]
+          #:tech.v3.dataset{:metadata metadata
+                            :missing (bitmap/->bitmap missing)
+                            ;;do not re-scan data.
+                            :force-datatype? true
+                            :data
+                            (cond
+                              (map? data)
+                              (ds-compress/map->compressed-buffer data)
+                              (casting/numeric-type? dtype)
+                              (b64->numeric-data data dtype)
+                              (= :boolean dtype)
+                              (let [ibuf (b64->numeric-data data :int8)]
+                                (dtype/make-reader :boolean (count ibuf)
+                                                   (if (== 0 (unchecked-long (ibuf idx)))
+                                                     false true)))
+                              (= :string dtype)
+                              (str-data->coldata data)
+                              (= :text dtype)
+                              (text-data->coldata data)
+                              (= :local-date dtype)
+                              (-> (b64->numeric-data data :int32)
+                                  (dtype/->array-buffer)
+                                  (abuf/set-datatype :packed-local-date))
+                              (= :instant dtype)
+                              (-> (b64->numeric-data data :int64)
+                                  (dtype/->array-buffer)
+                                  (abuf/set-datatype :packed-milli-instant))
+                              :else
+                              (dtype/make-container dtype data))
+                            :name            (:name metadata)})))
+     (ds-impl/new-dataset {:dataset-name (:name ds-meta)} ds-meta))))
 
 (comment
   ;; verify that metadata is preserved

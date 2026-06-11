@@ -4,16 +4,12 @@
             [tech.v3.datatype :as dtype]
             [tech.v3.datatype.unary-pred :as un-pred]
             [tech.v3.datatype.casting :as casting]
-            [tech.v3.datatype.functional :as dfn]
-            [tech.v3.datatype.statistics :as stats]
             [tech.v3.datatype.pprint :as dtype-pp]
             [tech.v3.datatype.bitmap :refer [->bitmap] :as bitmap]
             [tech.v3.datatype.packing :as packing]
             [tech.v3.datatype.argops :as argops]
-            [tech.v3.tensor :as dtt]
             [tech.v3.dataset.impl.column-base :as column-base]
             [tech.v3.dataset.impl.column-data-process :as column-data-process]
-            [ham-fisted.lazy-noncaching :as lznc]
             [ham-fisted.api :as hamf]
             [ham-fisted.reduce :as hamf-rf]
             [ham-fisted.function :as hamf-fn]
@@ -384,7 +380,7 @@
   (num-missing [this] (dtype/ecount missing))
   (any-missing? [this] (boolean (not (.isEmpty missing))))
   ds-proto/PValidRows
-  (valid-rows [this] (.xor (->bitmap (hamf/range (dtype/ecount this))) missing))
+  (valid-rows [this] (RoaringBitmap/xor (->bitmap (hamf/range (dtype/ecount this))) missing))
   ds-proto/PSelectRows
   (select-rows [this rowidxs]
     (let [rowidxs (simplify-row-indexes (dtype/ecount this) rowidxs)
