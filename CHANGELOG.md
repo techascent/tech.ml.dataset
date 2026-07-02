@@ -1,4 +1,7 @@
 # Changelog
+# 8.024
+ * clojure.core/empty works on columns
+ 
 # 8.023 
  * Fix for clj-kondo configs for dtype-next
  * Fix for hamf's process system

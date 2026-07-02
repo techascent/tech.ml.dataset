@@ -18,13 +18,12 @@
   (:import [java.util Arrays]
            [ham_fisted Reductions Casts ChunkedList IMutList]
            [org.roaringbitmap RoaringBitmap]
-           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO Named]
+           [clojure.lang IPersistentMap Counted IFn IObj Indexed ILookup IFn$OLO IFn$ODO Named
+            IPersistentCollection IPersistentVector]
            [tech.v3.datatype Buffer LongBuffer]))
-
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
-
 
 (declare new-column construct-column)
 
@@ -426,15 +425,15 @@
   ;;should be the same as using hash-unorded-coll, effectively.
   (hasheq [this]   (.hasheq (cached-buffer!)))
   (equiv [this o] (if (identical? this o) true (.equiv (cached-buffer!) o)))
-  (empty [this]
-    (Column. (->bitmap)
-             (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
-             {}
-             nil))
   (reduce [this rfn init] (.reduce (cached-buffer!) rfn init))
   (kvreduce [this rfn init] (.kvreduce (cached-buffer!) rfn init))
   (parallelReduction [this init-val-fn rfn merge-fn options]
     (.parallelReduction (cached-buffer!) init-val-fn rfn merge-fn options))
+  IPersistentCollection
+  (empty [this]
+    (construct-column (->bitmap)
+                      (column-base/make-container (dtype-proto/elemwise-datatype this) 0)
+                      (meta this)))
   Object
   (toString [item]
     (let [n-elems (dtype/ecount data)

@@ -1873,6 +1873,9 @@
 (deftest issue-470-print-const-column-fails
   (is (string? (str (tech.v3.dataset/->dataset {:a (tech.v3.datatype/const-reader 1.0e10 10)})))))
 
+(deftest empty-on-column
+  (is (ds-proto/is-column? (empty ((ds/->dataset {:a [1 2 3]}) :a)))))
+
 (comment
   (require '[criterium.core :as crit])
   (def data (vec (repeatedly 100000 (fn [] {:a (rand-int 20) :b (rand) :c (rand)}))))
