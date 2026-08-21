@@ -115,7 +115,7 @@ Many of the functions above come in `->column` variants, which can be faster by 
 
 Functions in the `tech.v3.datatype.functional` namespace operate elementwise on a column, lazily returning a new column. It is highly recommended to remove all missing values before using element-wise arithmetic as the `functional` namespace has no knowledge of missing values. Integer columns with missing values will be upcast to float or double columns in order to support a missing value indicator.
 
-Note the use of `dfn` from `(require [tech.v3.datatype.functional :as dfn])`:
+Note the use of `dfn` from `(require '[tech.v3.datatype.functional :as dfn])`:
 
 ```clojure
 (assoc ds :value (dtype/elemwise-cast (ds :value) :int64)
