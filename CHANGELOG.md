@@ -1,4 +1,7 @@
 # Changelog
+# 8.025
+ * Nippy 3.7 compatibility
+
 # 8.024
  * clojure.core/empty works on columns
  
