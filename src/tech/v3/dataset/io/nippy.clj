@@ -13,7 +13,7 @@
 (nippy/extend-freeze
  Dataset :tech.ml/dataset
  [ds out]
- (nippy/-freeze-without-meta! (ds-base/dataset->data ds) out))
+ (nippy/freeze-to-out! out (ds-base/dataset->data ds)))
 
 
 (nippy/extend-thaw
@@ -26,7 +26,7 @@
 (nippy/extend-freeze
  Column :tech.ml.dataset/column
  [col out]
- (nippy/-freeze-without-meta! (ds-base/column->data col) out))
+ (nippy/freeze-to-out! out (ds-base/column->data col)))
 
 
 (nippy/extend-thaw
