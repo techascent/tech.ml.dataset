@@ -1,5 +1,5 @@
 # Changelog
-# 8.025
+# 8.026
  * Nippy 3.7 compatibility
 
 # 8.024
