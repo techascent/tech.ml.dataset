@@ -1,6 +1,7 @@
 {:paths ["src" "resources" "target/classes"]
  :deps {;;org.clojure/clojure {:mvn/version "1.11.1"}
-        cnuernber/dtype-next {:mvn/version "11.026"}
+        cnuernber/dtype-next {:mvn/version "11.027"}
+        com.cnuernber/charred {:mvn/version "1.043"}
         techascent/tech.io {:mvn/version "4.34"}
         org.apache.datasketches/datasketches-java {:mvn/version "4.2.0"}}
  :aliases

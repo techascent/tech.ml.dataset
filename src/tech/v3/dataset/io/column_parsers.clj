@@ -16,6 +16,7 @@
            [tech.v3.dataset Text]
            [tech.v3.datatype Buffer]
            [ham_fisted IMutList Casts]
+           [charred NumberParser]
            [org.roaringbitmap RoaringBitmap]
            [clojure.lang IFn Indexed]
            [java.time.format DateTimeFormatter]))
@@ -49,6 +50,38 @@
        ~parse-code
        (catch Throwable _e#
          parse-failure))))
+
+
+;;charred's NumberParser is bit-identical to the JDK parsers for anything it parses
+;;and returns UNPARSED otherwise (whitespace, leading '+', NaN, Infinity, etc.) so we
+;;fall back to the JDK in those cases.
+(defn- parse-long-str
+  [^String v]
+  (let [n-chars (.length v)
+        parsed (if (== 0 n-chars)
+                 NumberParser/UNPARSED
+                 (NumberParser/parse (.toCharArray v) 0 n-chars false))]
+    (cond
+      (instance? Long parsed) parsed
+      ;;Valid floating point number - avoid the exception from Long/parseLong
+      (identical? Boolean/FALSE parsed) parse-failure
+      :else (Long/parseLong v))))
+
+
+(defn- parse-double-str
+  ^double [^String v]
+  (let [n-chars (.length v)
+        parsed (if (== 0 n-chars)
+                 NumberParser/UNPARSED
+                 (NumberParser/parse (.toCharArray v) 0 n-chars true))]
+    (cond
+      (instance? Double parsed)
+      (unchecked-double parsed)
+      ;;Exclude 0 so "-0" parses to -0.0
+      (and (instance? Long parsed) (not (== 0 (unchecked-long parsed))))
+      (double (unchecked-long parsed))
+      :else
+      (Double/parseDouble v))))
 
 
 (def default-coercers
@@ -86,7 +119,7 @@
                                      (Integer/parseInt v)
                                      (int v)))
     :int64 (make-safe-parser int64 (if (string? v)
-                                       (Long/parseLong v)
+                                       (parse-long-str v)
                                        (long v)))
     :float32 (make-safe-parser float32 (if (string? v)
                                          (let [fval (Float/parseFloat v)]
@@ -95,7 +128,7 @@
                                              fval))
                                          (float v)))
     :float64 (make-safe-parser float64 (if (string? v)
-                                         (let [dval (Double/parseDouble v)]
+                                         (let [dval (parse-double-str v)]
                                            (if (Double/isNaN dval)
                                              missing
                                              dval))

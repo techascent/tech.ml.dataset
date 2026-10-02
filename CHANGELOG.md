@@ -1,4 +1,9 @@
 # Changelog
+# 8.027
+ * dtype-next 11.027, charred 1.043.
+ * int64 and float64 column parsing uses charred's NumberParser - ~2x faster double parsing and
+   float-looking strings fail int64 parsing without throwing.
+
 # 8.026
  * Nippy 3.7 compatibility
 
