@@ -13,7 +13,7 @@
    :exec-fn codox.main/-main
    :exec-args {:group-id "techascent"
                :artifact-id "tech.ml.dataset"
-               :version "8.026"
+               :version "8.027"
                :name "TMD"
                :description "A Clojure high performance data processing system"
                :metadata {:doc/format :markdown}
